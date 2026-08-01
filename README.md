@@ -40,6 +40,11 @@ frontmatter, and `docs.json` owns navigation, theme, and OpenAPI wiring.
 Endpoint pages are generated from `api-reference/openapi.yaml`. Edit the spec,
 never a per-endpoint MDX file.
 
+## How this site deploys
+
+`docs.relayapp.im` deploys from `main` of this repository through Mintlify's
+GitHub app. A push to `main` publishes.
+
 ## Contributing
 
 Corrections are welcome, especially anywhere the docs disagree with the API's

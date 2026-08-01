@@ -1,0 +1,42 @@
+name: Validate docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Links, build, and OpenAPI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check docs.json is valid JSON
+        run: python3 -m json.tool docs.json > /dev/null
+
+      - name: Lint the OpenAPI spec
+        run: npx --yes @redocly/cli@latest lint api-reference/openapi.yaml
+
+      - name: Check for broken links
+        run: npx --yes mint@latest broken-links
+
+      - name: Validate the build
+        run: npx --yes mint@latest validate
+
+      - name: Block internal references and placeholders
+        run: |
+          set -euo pipefail
+          # This repository is public. Nothing internal may land in it.
+          if grep -rnE 'PRODUCT\.md|/tmp/|research/|source-archive|TECHNICAL-SHEET|companion-inc|TODO:' \
+               --include='*.mdx' --include='*.md' --include='*.json' --include='*.yaml' \
+               --exclude-dir=.github . ; then
+            echo "::error::Found an internal reference or TODO placeholder in published content."
+            exit 1
+          fi
+          echo "No internal references or placeholders found."
