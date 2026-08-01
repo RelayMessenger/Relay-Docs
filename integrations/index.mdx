@@ -1,68 +1,54 @@
 ---
 title: "Integrations"
 sidebarTitle: "Overview"
-description: "Connect an agent you already run to Relay, whether it lives on your laptop, in a framework, or inside another host runtime."
-keywords: ["integrations", "claude code", "codex", "hermes", "openclaw", "vercel ai sdk", "cli", "bridge"]
+description: "Every way to connect an agent you already run to Relay, and what each one supports today."
+keywords: ["integrations", "claude code", "codex", "hermes", "openclaw", "vercel ai sdk", "cli", "bridge", "channels"]
 ---
 
-Relay does not host your agent. Pick the path that matches where your agent
-already runs.
+Relay does not host your agent. Each integration below connects an agent that
+already runs somewhere else, and Relay carries the messages, media, approval
+cards, and receipts between it and the person texting it.
 
-## Text an agent running on your computer
+Four of them run the agent on your own computer and install through the same
+CLI. The rest connect a server or a host runtime you operate.
 
-`relaymessenger` connects a local coding agent to a Relay conversation. Relay
-carries messages, approval cards, and final replies; the engine keeps running on
-your machine with its own credentials, tools, files, and session state.
+## Supported integrations
+
+- [Claude Code](/integrations/claude-code) - drive Claude Code on your computer over ACP, or push messages into an open Claude session (bundled adapter, plus a research-preview channel plugin).
+- [Codex](/integrations/codex) - drive Codex on your computer over ACP, or add Relay tools to normal Codex runs (bundled adapter, plus optional MCP and hooks).
+- [Hermes Agent](/integrations/hermes) - bridge the `hermes acp` command you already have installed (external binary, you own installation and upgrades).
+- [OpenClaw](/integrations/openclaw) - install Relay as a native OpenClaw channel inside your gateway (bundled plugin).
+- [Vercel AI SDK](/integrations/vercel-ai-sdk) - verify signed webhooks and pipe `streamText` output into one message from your own server (published package).
+- [Your own runtime](/integrations/channel-plugin) - the contract for giving a host runtime you maintain its own Relay channel (reference, not a package).
+
+The four local engines share one install path:
 
 ```bash
 npm install -g @relaymessenger/cli
 relaymessenger pair
-relaymessenger start --engine claude
 ```
 
-<Columns cols={2}>
-  <Card title="Claude Code" icon="terminal" href="/integrations/claude-code">
-    A headless ACP bridge, or a native channel plugin that pushes messages into an already-open Claude session.
-  </Card>
-  <Card title="Codex" icon="square-code" href="/integrations/codex">
-    A headless ACP bridge, or project-scoped notify, MCP, and permission hooks inside normal Codex runs.
-  </Card>
-  <Card title="Hermes Agent" icon="workflow" href="/integrations/hermes">
-    Bridges the `hermes acp` command you already have installed, keeping Hermes sessions and permissions.
-  </Card>
-  <Card title="OpenClaw" icon="plug" href="/integrations/openclaw">
-    A native OpenClaw channel, for when OpenClaw owns the runtime and Relay is one of its channels.
-  </Card>
-</Columns>
+See [the CLI](/integrations/cli) for what pairing creates, what Relay never
+receives, and the approval guarantees all four share.
 
-## Connect a backend or framework
+## Delivery notes
 
-<Columns cols={2}>
-  <Card title="Vercel AI SDK" icon="triangle" href="/integrations/vercel-ai-sdk">
-    Verify signed webhooks and pipe `streamText` output into one canonical Relay message.
-  </Card>
-  <Card title="Embed Relay in your own runtime" icon="blocks" href="/integrations/channel-plugin">
-    For maintainers of an agent host runtime. Not needed to use any integration above.
-  </Card>
-</Columns>
+- Signed webhooks and long polling are mutually exclusive per Agent Token. Enabling one disables the other, and polling while a webhook is active returns `409 conflict`.
+- Give every active consumer its own Relay agent and token. Two consumers on one token terminate each other with `409 terminated_by_other_consumer`.
+- Approval cards are owner-only. A non-owner message is dropped before its content is interpreted.
+- Approvals are denied rather than shown when the exact operation does not fit in the security preview. Claude Code hits this most often, because its permission preview is truncated.
+- Agent and tool turns are at-most-once. A crash cannot silently repeat a deploy, deletion, command, or external send.
+- OpenClaw is direct conversations only today. Reactions and receipts do not start agent turns there.
 
-## Choosing between them
+## Notes
 
-| Integration | Relay path | Best when |
-| --- | --- | --- |
-| Claude Code | `relaymessenger start --engine claude` over ACP, or the native Claude channel plugin | You want a headless bridge, or messages pushed into an already-open Claude session |
-| Codex | `relaymessenger start --engine codex` over ACP, plus optional notify, MCP, and permission hooks | You want a headless conversation, or project-scoped Relay tools in normal Codex runs |
-| Hermes Agent | `relaymessenger start --engine hermes` over `hermes acp` | You already run Hermes locally and want its persisted sessions and permission flow in Relay |
-| OpenClaw | Native OpenClaw channel installed by `relaymessenger install-openclaw` | OpenClaw owns the agent runtime and Relay should be one of its messaging channels |
-| Vercel AI SDK | Your own HTTPS backend | You are building the agent yourself and want streamed output to arrive as one message |
-| Your own runtime | Long polling, one Agent Token per agent | You maintain a host runtime that runs many agents for many users |
-
-OpenClaw is intentionally not an ACP engine preset. Its channel plugin runs
-inside OpenClaw's gateway lifecycle and uses OpenClaw's routing, session, and
-durable outbound APIs.
+- Relay never receives your engine provider keys, SSH keys, or full parent process environment.
+- Claude and Codex adapters are pinned at exact versions inside `relaymessenger`, launched directly with Node, with no shell and no mutable `npx latest` lookup. Hermes is the exception: you install and upgrade it yourself.
+- `relaymessenger doctor` is the first step for any local-engine problem. It checks pairing, token permissions, API reachability, durable state, and each adapter entrypoint.
+- Running more than one integration at once is fine, as long as each has its own agent and token.
 
 ## Next steps
 
 - [The relaymessenger CLI](/integrations/cli) for pairing, the credential boundary, and approval safety
 - [Delivery model](/guides/delivery-model) for how events reach any of these paths
-- [Authentication](/authentication)
+- [Authentication](/authentication) for Agent Token handling

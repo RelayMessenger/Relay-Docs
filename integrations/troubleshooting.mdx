@@ -1,0 +1,106 @@
+---
+title: "Integration troubleshooting"
+sidebarTitle: "Troubleshooting"
+description: "Triage a connected integration that is behaving wrong, by symptom, across every engine and transport."
+keywords: ["troubleshooting", "doctor", "401", "409", "410", "pairing", "conflict", "cursor expired", "failure signatures"]
+---
+
+Use this page when an integration is connected but behaving wrong. It covers
+breadth; each integration's own page covers depth.
+
+## Start here
+
+```bash
+relaymessenger doctor
+```
+
+A healthy baseline reports all of:
+
+- Node version supported
+- Pairing valid, with the owner user id pinned
+- Token file present with owner-only permissions
+- API origin reachable
+- Durable state readable
+- Each adapter entrypoint resolving, and for Hermes, `hermes acp --check` passing
+
+Anything red here explains most symptoms below. Fix it before reading further.
+
+## Cross-integration failure signatures
+
+These apply to every integration, because they come from Relay's API rather than
+the engine.
+
+| Symptom | Fastest check | Fix |
+| --- | --- | --- |
+| Every request fails with `401` | `relaymessenger doctor` pairing line | Terminal. Run `relaymessenger pair` again. Relay never retries a `401` forever |
+| Polling returns `409 conflict` | Is a webhook enabled for this token? | Webhooks and long polling are mutually exclusive per Agent Token. Disable one |
+| `409 terminated_by_other_consumer` | How many consumers share this token? | Run exactly one consumer per Agent Token. Give each its own Relay agent |
+| `410 cursor_expired` | Cursor age against the 7-day ceiling | Reconcile from [conversation history](/guides/conversation-history). Do not reset the cursor to zero |
+| `422 invalid_request` on a poll | `error.details.highest_delivered_cursor` | Your cursor is ahead of Relay's ledger. Resume from that value after reconciling |
+| A non-owner's message is ignored | Owner pin in `relaymessenger doctor` | Working as intended. Only the pinned owner can drive the agent or answer approvals |
+
+## Claude Code failure signatures
+
+| Symptom | Fastest check | Fix |
+| --- | --- | --- |
+| Channel events stop arriving | Is that Claude session still open? | Channel events flow only while the session is open. Use the ACP bridge for a session-independent conversation |
+| The plugin will not load | Did you pass `--dangerously-load-development-channels`? | Custom channels need the flag unless the org allowlists the plugin. Team and Enterprise orgs must also enable channels |
+| An approval offers only Deny | Is the permission preview complete JSON? | The preview was truncated, so Relay withheld remote Allow. Approve at the keyboard |
+| `install-claude` refuses to run | Configured identity in the channel `.env` | Deliberate. A different Relay identity is configured; remove it before replacing |
+
+Full detail: [Claude Code](/integrations/claude-code).
+
+## Codex failure signatures
+
+| Symptom | Fastest check | Fix |
+| --- | --- | --- |
+| Codex asks you to trust a hook handler | Expected right after `install-codex` | Accept it once at the keyboard |
+| Nothing arrives for one project | Is the root listed in `~/.relaymessenger/codex-notify.json`? | Run `relaymessenger install-codex` from that project. Opt-in is per project root |
+| An approval offers only Deny | Could the operation be represented in full? | Relay denies rather than offering a blind Allow. Approve at the keyboard |
+| A retried MCP send posted twice | Is `send_id` caller-stable? | `send_id` must be stable across retries so Relay can reuse the idempotency key |
+
+Full detail: [Codex](/integrations/codex).
+
+## Hermes Agent failure signatures
+
+| Symptom | Fastest check | Fix |
+| --- | --- | --- |
+| The bridge will not start | `hermes acp --check` | Fix the Hermes installation. Relay will not start against an installation that reports itself unready |
+| An approval was denied without you answering | Did 55 seconds pass? | Relay denies at 55 seconds to answer before Hermes's 60-second timeout. Answer sooner, or approve at the keyboard |
+| Behavior differs from the documented contract | Installed version in `relaymessenger doctor` | The audited reference is Hermes Agent 0.18.2. You own installation and upgrades |
+
+Full detail: [Hermes Agent](/integrations/hermes).
+
+## OpenClaw failure signatures
+
+| Symptom | Fastest check | Fix |
+| --- | --- | --- |
+| Reactions or receipts do not wake the agent | Expected today | Reactions and receipts do not start agent turns in this channel |
+| The agent cannot read an attachment | Is the part a capability URL? | Inbound media arrives as a fetchable URL, not inline. The agent must fetch it |
+| A group conversation does nothing | Is the conversation direct? | The channel's scope today is direct conversations only |
+| The installer refuses to overwrite | Relay fields in `~/.openclaw/openclaw.json` | Deliberate. A different Relay identity is configured; remove it first |
+
+Full detail: [OpenClaw](/integrations/openclaw).
+
+## Still stuck
+
+- Reconcile state from [conversation history](/guides/conversation-history) rather than replaying delivery attempts.
+- Check the full status and code table in [Errors](/reference/errors).
+- Confirm you are inside the [limits](/reference/limits) for parts, attachment size, and retention.
+
+## Next steps
+
+<Columns cols={2}>
+  <Card title="CLI" icon="square-terminal" href="/integrations/cli">
+    Pairing, the credential boundary, and the approval guarantees.
+  </Card>
+  <Card title="Delivery model" icon="git-branch" href="/guides/delivery-model">
+    Transports, watermarks, idempotency, and recovery.
+  </Card>
+  <Card title="Errors" icon="triangle-alert" href="/reference/errors">
+    Every status and code Relay returns.
+  </Card>
+  <Card title="Integrations" icon="blocks" href="/integrations">
+    Back to the integration list.
+  </Card>
+</Columns>

@@ -67,18 +67,82 @@ approvals, and the final reply.
   </Tab>
 </Tabs>
 
-## Diagnose
+## Feature reference
 
-```bash
-relaymessenger doctor
-```
+<AccordionGroup>
+  <Accordion title="Adapter pinning">
+    The exact bundled `@agentclientprotocol/codex-acp` adapter drives Codex's
+    app-server protocol, launched directly with Node. There is no shell and no
+    mutable `npx latest` lookup.
+  </Accordion>
 
-`doctor` verifies the exact Codex adapter entrypoint along with pairing, token
-permissions, API reachability, and durable state.
+  <Accordion title="Streaming and sessions">
+    Relay preserves streamed text, per-conversation session bindings, and
+    cancellation across the bridge.
+  </Accordion>
+
+  <Accordion title="File-change approvals carry the real diff">
+    The bridge combines Codex's earlier tool-call diff with the later permission
+    request, so the phone sees the exact old and new text rather than a summary.
+    If the operation cannot be represented in full, Relay denies instead of
+    offering a blind Allow.
+  </Accordion>
+
+  <Accordion title="Idempotent MCP sends">
+    MCP sends require a caller-stable `send_id`, so a retry with an unknown
+    outcome reuses the same Relay idempotency key and cannot post twice.
+  </Accordion>
+
+  <Accordion title="Per-project opt-in">
+    `install-codex` records the project root in
+    `~/.relaymessenger/codex-notify.json`. Other projects stay suppressed until
+    you opt them in separately, so installing once does not start notifying for
+    every repository on the machine.
+  </Accordion>
+
+  <Accordion title="Non-destructive config merge">
+    The installer adds `[mcp_servers.relay]` and a `notify` command to
+    `~/.codex/config.toml`, and a `PermissionRequest` hook to
+    `~/.codex/hooks.json`, without clobbering the rest of your configuration.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+Start with `relaymessenger doctor`, then
+[integration troubleshooting](/integrations/troubleshooting) for symptoms shared
+with every other integration. These are specific to this one.
+
+<AccordionGroup>
+  <Accordion title="Codex asks you to trust a hook handler">
+    Expected after `install-codex`. Codex prompts before running a newly
+    installed `PermissionRequest` hook. Accept it once at the keyboard.
+  </Accordion>
+
+  <Accordion title="Nothing arrives for a project">
+    That project root is not opted in. `install-codex` opts in only the
+    directory you ran it from; run it again from the project you want.
+  </Accordion>
+
+  <Accordion title="An approval shows Deny only">
+    The operation could not be represented in full, so Relay withheld Allow
+    rather than offering a blind approval. Approve at the keyboard.
+  </Accordion>
+</AccordionGroup>
 
 ## Next steps
 
-- [The relaymessenger CLI](/integrations/cli) for pairing, credentials, and approval safety
-- [Claude Code](/integrations/claude-code) to bridge a second engine
-- [Agent permission request](/components/agent_permission_request) for the approval card
-- [Delivery model](/guides/delivery-model) for long polling and recovery
+<Columns cols={2}>
+  <Card title="CLI" icon="square-terminal" href="/integrations/cli">
+    Pairing, the credential boundary, and the approval guarantees.
+  </Card>
+  <Card title="Claude Code" icon="terminal" href="/integrations/claude-code">
+    Bridge a second engine from the same computer.
+  </Card>
+  <Card title="Agent permission request" icon="shield-check" href="/components/agent_permission_request">
+    The approval card your phone receives.
+  </Card>
+  <Card title="Delivery model" icon="git-branch" href="/guides/delivery-model">
+    Long polling, watermarks, and recovery.
+  </Card>
+</Columns>

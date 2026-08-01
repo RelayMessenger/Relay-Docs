@@ -80,18 +80,86 @@ authentication and form elicitation are not proxied through Relay.
   </Tab>
 </Tabs>
 
-## Diagnose
+## Feature reference
 
-```bash
-relaymessenger doctor
-```
+<AccordionGroup>
+  <Accordion title="Adapter pinning">
+    `relaymessenger` launches its exact bundled
+    `@agentclientprotocol/claude-agent-acp` entrypoint directly with Node. There
+    is no shell and no mutable `npx latest` lookup, so the adapter version cannot
+    change under you between runs.
+  </Accordion>
 
-`doctor` verifies the exact Claude adapter entrypoint along with pairing, token
-permissions, API reachability, and durable state.
+  <Accordion title="Session persistence">
+    Conversation-to-session bindings survive bridge restarts when the adapter
+    supports session loading. Where it does not, a restart begins a new session.
+  </Accordion>
+
+  <Accordion title="Permission previews">
+    Claude currently supplies only a bounded permission input preview. Relay
+    offers remote Allow only when that preview is complete JSON below Claude's
+    truncation boundary. Otherwise the phone can deny, and approval must happen
+    at the keyboard.
+  </Accordion>
+
+  <Accordion title="Channel plugin tools">
+    The plugin follows Claude's MCP channel contract: it emits
+    `notifications/claude/channel`, exposes retry-safe `reply` and `acknowledge`
+    tools, and relays permission notifications.
+  </Accordion>
+
+  <Accordion title="Identity protection">
+    `relaymessenger install-claude` refuses to replace a different configured
+    identity. It validates the bundled marketplace, copies it into the paired
+    account's private runtime directory, and writes the token, API origin, and
+    owner pin to an owner-only channel `.env`.
+  </Accordion>
+
+  <Accordion title="What is not proxied">
+    Claude must already be authenticated on the computer. Interactive terminal
+    authentication and form elicitation do not pass through Relay.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+Start with `relaymessenger doctor`, then
+[integration troubleshooting](/integrations/troubleshooting) for symptoms shared
+with every other integration. These are specific to this one.
+
+<AccordionGroup>
+  <Accordion title="Channel events stop arriving">
+    Channel events arrive only while that Claude session remains open. Closing
+    the session ends delivery. Use the headless ACP bridge instead if you want a
+    conversation that survives without a terminal.
+  </Accordion>
+
+  <Accordion title="The plugin will not load">
+    Custom channels require the development-channel flag unless an organization
+    explicitly allowlists the plugin, and Team and Enterprise organizations must
+    also enable channels. Claude Code channels remain a research preview.
+  </Accordion>
+
+  <Accordion title="Approvals only offer Deny">
+    The permission preview was truncated or was not complete JSON, so Relay
+    withheld remote Allow rather than offering a blind approval. Approve at the
+    keyboard for that operation.
+  </Accordion>
+</AccordionGroup>
 
 ## Next steps
 
-- [The relaymessenger CLI](/integrations/cli) for pairing, credentials, and approval safety
-- [Codex](/integrations/codex) to bridge a second engine
-- [Agent permission request](/components/agent_permission_request) for the approval card
-- [Delivery model](/guides/delivery-model) for long polling and recovery
+<Columns cols={2}>
+  <Card title="CLI" icon="square-terminal" href="/integrations/cli">
+    Pairing, the credential boundary, and the approval guarantees.
+  </Card>
+  <Card title="Codex" icon="square-code" href="/integrations/codex">
+    Bridge a second engine from the same computer.
+  </Card>
+  <Card title="Agent permission request" icon="shield-check" href="/components/agent_permission_request">
+    The approval card your phone receives.
+  </Card>
+  <Card title="Delivery model" icon="git-branch" href="/guides/delivery-model">
+    Long polling, watermarks, and recovery.
+  </Card>
+</Columns>
