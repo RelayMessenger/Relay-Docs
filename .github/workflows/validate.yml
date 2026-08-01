@@ -29,6 +29,36 @@ jobs:
       - name: Validate the build
         run: npx --yes mint@latest validate
 
+      - name: Check every icon name exists in Lucide
+        run: |
+          set -euo pipefail
+          # docs.json sets icons.library to lucide, so a Font Awesome name
+          # renders nothing at all rather than failing the build.
+          npm pack lucide-static@latest --silent > /dev/null
+          tar -tzf lucide-static-*.tgz \
+            | grep '^package/icons/.*\.svg$' \
+            | sed 's|package/icons/||; s|\.svg$||' \
+            | sort > /tmp/lucide-names.txt
+          echo "Lucide exports $(wc -l < /tmp/lucide-names.txt) icons."
+
+          { grep -rhoE 'icon="[^"]+"' --include='*.mdx' . || true; } \
+            | sed 's/icon="//; s/"//' > /tmp/used.txt
+          { grep -oE '"icon": "[^"]+"' docs.json || true; } \
+            | sed 's/"icon": "//; s/"//' >> /tmp/used.txt
+
+          missing=0
+          while read -r icon; do
+            [ -z "$icon" ] && continue
+            if ! grep -qx "$icon" /tmp/lucide-names.txt; then
+              echo "::error::Icon '$icon' is not a Lucide icon and will render as blank."
+              missing=1
+            fi
+          done < <(sort -u /tmp/used.txt)
+
+          rm -f lucide-static-*.tgz
+          [ "$missing" -eq 0 ] && echo "All icon names are valid Lucide icons."
+          exit "$missing"
+
       - name: Block internal references and placeholders
         run: |
           set -euo pipefail
