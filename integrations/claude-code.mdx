@@ -1,0 +1,97 @@
+---
+title: "Claude Code"
+description: "Drive Claude Code from your phone through a headless ACP bridge or a native Claude channel plugin."
+keywords: ["claude code", "claude", "acp", "channel plugin", "bridge", "coding agent", "phone"]
+---
+
+Claude Code keeps running on your computer with its own credentials, tools, and
+files. Relay carries the messages, the permission cards, and the final reply.
+
+Claude must already be authenticated on the computer. Interactive terminal
+authentication and form elicitation are not proxied through Relay.
+
+<Steps>
+  <Step title="Pair this computer">
+    ```bash
+    npm install -g @relaymessenger/cli
+    relaymessenger pair
+    ```
+
+    Scan the terminal QR code or enter its short code in Relay. See
+    [the CLI](/integrations/cli) for what pairing creates and what it never sends.
+  </Step>
+
+  <Step title="Choose a path">
+    Use the headless bridge for a conversation that runs without a terminal open,
+    or the channel plugin to push messages into a Claude session you are already
+    sitting in.
+  </Step>
+
+  <Step title="Text the agent">
+    A message, or a quick burst of messages, becomes one turn. Relay shows the
+    agent typing while it works, posts one final reply, and presents supported
+    tool permission requests as owner-only Allow and Deny cards.
+  </Step>
+</Steps>
+
+<Tabs>
+  <Tab title="Headless ACP bridge">
+    ```bash
+    relaymessenger start --engine claude --dir ~/code/my-project
+    ```
+
+    `relaymessenger` launches its exact bundled
+    `@agentclientprotocol/claude-agent-acp` entrypoint directly with Node, with no
+    shell and no mutable `npx latest` lookup.
+
+    Conversation-to-session bindings survive bridge restarts when the adapter
+    supports session loading.
+  </Tab>
+
+  <Tab title="Native channel plugin">
+    ```bash
+    relaymessenger install-claude
+    claude --dangerously-load-development-channels plugin:relay@relaymessenger-bundled
+    ```
+
+    The installer validates the bundled marketplace, copies it into the paired
+    account's private runtime directory, installs
+    `relay@relaymessenger-bundled`, and writes the token, API origin, and owner
+    pin to an owner-only channel `.env`. It refuses to replace a different
+    configured identity.
+
+    The plugin follows Claude's MCP channel contract: it emits
+    `notifications/claude/channel`, exposes retry-safe `reply` and `acknowledge`
+    tools, and relays permission notifications.
+
+    <Warning>
+    Claude Code channels are a research preview. Custom channels require the
+    development-channel flag unless an organization explicitly allowlists the
+    plugin, and Team and Enterprise organizations must also enable channels.
+    Channel events arrive only while that Claude session remains open.
+    </Warning>
+
+    <Info>
+    Claude currently supplies only a bounded permission input preview. Relay
+    offers remote Allow only when that preview is complete JSON below Claude's
+    truncation boundary. Otherwise the phone can deny, and approval must happen
+    locally.
+    </Info>
+  </Tab>
+</Tabs>
+
+## Diagnose
+
+```bash
+relaymessenger doctor
+```
+
+`doctor` verifies the exact Claude adapter entrypoint along with pairing, token
+permissions, API reachability, and durable state.
+
+## Next steps
+
+- [The relaymessenger CLI](/integrations/cli) for pairing, credentials, and approval safety
+- [Codex](/integrations/codex) to bridge a second engine
+- [Agent permission request](/components/agent_permission_request) for the approval card
+- [Delivery model](/guides/delivery-model) for long polling and recovery

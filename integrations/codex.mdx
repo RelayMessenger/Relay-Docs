@@ -1,0 +1,84 @@
+---
+title: "Codex"
+description: "Drive Codex from your phone through a headless ACP bridge, or add project-scoped Relay tools to normal Codex runs."
+keywords: ["codex", "acp", "mcp", "notify", "hooks", "bridge", "coding agent", "phone"]
+---
+
+Codex keeps running on your computer. Relay carries the messages, the file-change
+approvals, and the final reply.
+
+<Steps>
+  <Step title="Pair this computer">
+    ```bash
+    npm install -g @relaymessenger/cli
+    relaymessenger pair
+    ```
+
+    See [the CLI](/integrations/cli) for what pairing creates and what it never sends.
+  </Step>
+
+  <Step title="Choose a path">
+    Use the headless bridge for a standalone conversation, or the project-scoped
+    integration to get Relay tools inside the Codex runs you already do.
+  </Step>
+</Steps>
+
+<Tabs>
+  <Tab title="Headless ACP bridge">
+    ```bash
+    relaymessenger start --engine codex --dir ~/code/my-project
+    ```
+
+    The exact bundled `@agentclientprotocol/codex-acp` adapter drives Codex's
+    app-server protocol. Relay preserves streamed text, per-conversation session
+    bindings, cancellation, and permission options.
+
+    For file-change approvals, the bridge combines Codex's earlier tool-call diff
+    with the later permission request, so the phone sees the exact old and new
+    text.
+
+    <Warning>
+    If an operation cannot be represented in full, Relay denies it rather than
+    offering a blind Allow.
+    </Warning>
+  </Tab>
+
+  <Tab title="Project-scoped integration">
+    ```bash
+    cd ~/code/my-project
+    relaymessenger install-codex
+    ```
+
+    This merges into your existing configuration without clobbering it:
+
+    | File | What is added |
+    | --- | --- |
+    | `~/.codex/config.toml` | `[mcp_servers.relay]` and a completion `notify` command |
+    | `~/.codex/hooks.json` | A `PermissionRequest` hook |
+    | `~/.relaymessenger/codex-notify.json` | A local opt-in for this project root |
+
+    Other projects stay suppressed until you opt them in separately. Codex may
+    ask you to trust a newly installed hook handler.
+
+    <Info>
+    MCP sends require a caller-stable `send_id`, so a retry with an unknown
+    outcome can reuse the same Relay idempotency key without posting twice.
+    </Info>
+  </Tab>
+</Tabs>
+
+## Diagnose
+
+```bash
+relaymessenger doctor
+```
+
+`doctor` verifies the exact Codex adapter entrypoint along with pairing, token
+permissions, API reachability, and durable state.
+
+## Next steps
+
+- [The relaymessenger CLI](/integrations/cli) for pairing, credentials, and approval safety
+- [Claude Code](/integrations/claude-code) to bridge a second engine
+- [Agent permission request](/components/agent_permission_request) for the approval card
+- [Delivery model](/guides/delivery-model) for long polling and recovery
