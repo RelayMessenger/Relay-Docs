@@ -4,8 +4,7 @@ description: "Register an HTTPS receiver, verify signatures, and process at-leas
 keywords: ["webhooks", "standard webhooks", "signature", "whsec", "retries", "rotation", "event filters"]
 ---
 
-Relay sends each agent event to its registered HTTPS endpoints. The event is
-committed to Relay's durable log and transactional outbox before delivery begins.
+Relay sends each agent event to its registered HTTPS endpoints.
 
 ## Register an endpoint
 
@@ -19,13 +18,14 @@ curl -sS -X POST "https://api.relayapp.im/v1/webhooks" \
   }'
 ```
 
-Production endpoints must use public HTTPS URLs. Relay returns a `whsec_...`
-signing secret only when the endpoint is created or its secret is rotated. Store
-it in a secret manager. An agent may register up to five endpoints.
+Production endpoints must use public HTTPS URLs. An agent may register up to five
+endpoints.
+
+Relay returns a `whsec_...` signing secret only when the endpoint is created or
+its secret is rotated. Store it in a secret manager.
 
 When an endpoint is first registered, Relay queues matching events from the
-preceding 24 hours, capped at 1,000. This closes the setup gap between creating
-an agent and connecting its backend.
+preceding 24 hours, capped at 1,000.
 
 ## Verify every request
 
@@ -49,7 +49,7 @@ signatures in constant time and reject timestamps more than five minutes from th
 current time. Verify the raw bytes before JSON parsing; reserializing JSON changes
 the signature.
 
-The official Standard Webhooks libraries implement this contract. In JavaScript:
+In JavaScript:
 
 ```bash
 npm install standardwebhooks
@@ -66,23 +66,21 @@ const event = new Webhook(env.RELAY_WEBHOOK_SECRET).verify(rawBody, {
 });
 ```
 
-<Accordion title="Verifying on Cloudflare Agents">
-Verify in `onRequest()`, enqueue the event with the Agent SDK's durable
-`this.queue()`, and return `202` before model or tool work. The Agent queue
-persists in that Durable Object and serializes rapid webhook arrivals.
-</Accordion>
+On Cloudflare Agents: verify in `onRequest()`, enqueue with the Agent SDK's
+`this.queue()`, and return `202` before model or tool work.
 
 ## Acknowledge and deduplicate
 
-Return any `2xx` after the event is durably accepted by your backend. Requests
-time out after 10 seconds. Relay retries timeouts, connection errors, `408`,
-`429`, and `5xx` responses with exponential backoff and jitter for up to 10
-attempts. Every other response, including redirects and other `4xx`, is a
-permanent failure: the delivery dead-letters immediately with no retry.
+Return any `2xx` once your backend has stored the event. Requests time out after
+10 seconds.
 
-Delivery is at least once. Store `event_id` as a unique key before producing side
-effects. Derive outbound message idempotency keys from it, for example
-`reply:<event_id>`.
+Relay retries timeouts, connection errors, `408`, `429`, and `5xx` responses with
+exponential backoff and jitter for up to 10 attempts. Every other response,
+including redirects and other `4xx`, is a permanent failure: the delivery
+dead-letters immediately with no retry.
+
+Store `event_id` as a unique key before producing side effects. Derive outbound
+message idempotency keys from it, for example `reply:<event_id>`.
 
 A successful `message.received` delivery advances the agent's delivered watermark.
 Mark the message read only after your backend consumes it.
@@ -134,17 +132,12 @@ These are the filters you can subscribe to today:
 | `group.invite.joined` / `group.invite.declined` | One invited person answered a group invite |
 | `group.invite.completed` / `group.invite.expired` | A group invite reached its terminal state |
 
-There is no component-specific side channel: ordinary component taps arrive as
-`message.received` events. Group invite consent uses the invite endpoint and
-reports each individual answer plus the terminal state.
+Component taps arrive as `message.received` events. Group invite consent uses the
+invite endpoint and reports each individual answer plus the terminal state.
 
 <Warning>
-Ignore unknown event types. Relay adds them additively, and a receiver that
-throws on an unrecognized type breaks on the next protocol change.
+Ignore unknown event types.
 </Warning>
-
-See [Event types](/reference/events) for payloads and [Delivery model](/guides/delivery-model)
-for the durable-state boundary.
 
 ## Next steps
 

@@ -4,10 +4,13 @@ description: "Install Relay as a native OpenClaw channel so OpenClaw keeps the r
 keywords: ["openclaw", "channel", "plugin", "gateway", "runtime", "integration"]
 ---
 
-OpenClaw owns the agent runtime. Relay becomes one of its messaging channels,
-installed as a native plugin rather than an ACP engine preset, because the plugin
-runs inside OpenClaw's gateway lifecycle and uses OpenClaw's routing, session, and
-durable outbound APIs.
+Give an agent your OpenClaw gateway already runs a Relay conversation people can
+text. OpenClaw keeps the runtime, and Relay becomes one of its messaging
+channels.
+
+Relay ships this as a native plugin rather than an ACP engine preset, because the
+plugin runs inside OpenClaw's gateway lifecycle and uses OpenClaw's own routing,
+session, and outbound APIs.
 
 ```bash
 npm install -g @relaymessenger/cli
@@ -24,18 +27,12 @@ plugin installer, adds only the Relay plugin and channel fields to
 Unrelated OpenClaw configuration is preserved, and a different existing Relay
 identity is never overwritten.
 
-## How the plugin behaves
-
-It follows OpenClaw's current channel SDK: setup discovery stays network-free,
-installed packages load built JavaScript runtime entrypoints, inbound events use
-stable ingress and envelope helpers, and replies use the durable outbound path.
-
 ## Current scope
 
 | Surface | State |
 | :---: | --- |
 | ✅ | Direct conversations |
-| ⚠️ | Inbound media and voice memos arrive as a fetchable capability URL, so the agent does not see the file inline |
+| ⚠️ | Inbound media and voice memos arrive as a fetchable capability URL |
 | ❌ | Reactions and receipts do not start agent turns |
 | ❌ | Group conversations |
 
@@ -45,72 +42,32 @@ model-training corpora, and any response outside the conversation that supplied
 them.
 </Warning>
 
-## Feature reference
+## How it behaves
 
-<AccordionGroup>
-  <Accordion title="Network-free setup discovery">
-    Setup discovery makes no network calls. Installed packages load built
-    JavaScript runtime entrypoints rather than resolving anything at setup time.
-  </Accordion>
-
-  <Accordion title="Ingress and envelopes">
-    Inbound events use OpenClaw's stable ingress and envelope helpers, so Relay
-    messages enter the same routing path as any other OpenClaw channel.
-  </Accordion>
-
-  <Accordion title="Durable outbound">
-    Replies use OpenClaw's durable outbound path, so a reply that is accepted
-    survives a gateway restart.
-  </Accordion>
-
-  <Accordion title="Media arrives as a capability URL">
-    Inbound media and voice memos arrive as a fetchable capability URL. The
-    agent does not see the file inline and must fetch it.
-  </Accordion>
-
-  <Accordion title="Configuration is additive">
-    The installer adds only the Relay plugin and channel fields to
-    `~/.openclaw/openclaw.json`. Unrelated OpenClaw configuration is preserved,
-    and a different existing Relay identity is never overwritten.
-  </Accordion>
-</AccordionGroup>
+| | Behavior |
+| --- | --- |
+| Network-free setup discovery | Setup discovery makes no network calls. Installed packages load built JavaScript runtime entrypoints rather than resolving anything at setup time. |
+| Ingress and envelopes | Inbound events use OpenClaw's stable ingress and envelope helpers, so Relay messages enter the same routing path as any other OpenClaw channel. |
+| Replies survive a gateway restart | Replies go out through OpenClaw's own outbound path, so a reply that Relay accepted still sends after the gateway restarts. |
 
 ## Troubleshooting
 
-Start with `relaymessenger doctor`, then
-[integration troubleshooting](/integrations/troubleshooting) for symptoms shared
-with every other integration. These are specific to this one.
+```bash
+relaymessenger doctor
+```
 
-<AccordionGroup>
-  <Accordion title="Reactions or receipts do not wake the agent">
-    Expected. Reactions and receipts do not start agent turns in this channel
-    today.
-  </Accordion>
+See [integration troubleshooting](/integrations/troubleshooting) for the `401`,
+`409`, and `410` symptoms shared with every other integration. These are
+specific to this one.
 
-  <Accordion title="The agent cannot read an attachment">
-    Media arrives as a capability URL rather than inline content. The agent has
-    to fetch the URL. See [Attachments](/guides/attachments).
-  </Accordion>
-
-  <Accordion title="The installer refuses to overwrite">
-    A different Relay identity is already configured. That refusal is
-    deliberate. Remove the existing identity first if you intend to replace it.
-  </Accordion>
-</AccordionGroup>
+| Symptom | Cause and fix |
+| --- | --- |
+| The agent cannot read an attachment | Media arrives as a capability URL rather than inline content, so the agent has to fetch the URL. See [Attachments](/guides/attachments). |
+| The installer refuses to overwrite | A different Relay identity is already configured, and that refusal is deliberate. Remove the existing identity first if you intend to replace it. |
 
 ## Next steps
 
-<Columns cols={2}>
-  <Card title="CLI" icon="square-terminal" href="/integrations/cli">
-    Pairing, the credential boundary, and the approval guarantees.
-  </Card>
-  <Card title="Your own runtime" icon="blocks" href="/integrations/channel-plugin">
-    The same contract, for a host runtime you maintain.
-  </Card>
-  <Card title="Attachments" icon="paperclip" href="/guides/attachments">
-    How capability URLs work.
-  </Card>
-  <Card title="Delivery model" icon="git-branch" href="/guides/delivery-model">
-    Long polling, watermarks, and recovery.
-  </Card>
-</Columns>
+- [The relaymessenger CLI](/integrations/cli) for pairing and the approval guarantees
+- [Your own runtime](/integrations/channel-plugin) for the same contract in a host runtime you maintain
+- [Attachments](/guides/attachments) for how capability URLs work
+- [Delivery model](/guides/delivery-model) for long polling, watermarks, and recovery

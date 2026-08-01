@@ -1,7 +1,7 @@
 ---
 title: "The relaymessenger CLI"
 sidebarTitle: "CLI"
-description: "Pair a computer, understand the credential boundary, and rely on the CLI's approval and delivery guarantees."
+description: "Pair a computer, see what Relay never receives, and rely on the CLI's approval and delivery guarantees."
 keywords: ["relaymessenger", "cli", "pair", "pairing", "doctor", "agent token", "approvals", "credentials"]
 ---
 
@@ -37,7 +37,7 @@ Pairing is a device-code flow:
 Pairing pins your Relay user id as the only default sender allowed to drive the
 agent.
 
-## Credential boundary
+## What Relay never receives
 
 <Warning>
 Relay never receives your engine provider keys, SSH keys, or full parent process
@@ -53,11 +53,11 @@ for the supported engines, and variables you add explicitly through
 | Guarantee | What it prevents |
 | --- | --- |
 | Only the pinned owner can create prompts or answer approval cards | A non-owner message is dropped before its content is interpreted |
-| Each approval is a durable create-once file | A replayed approval cannot run twice |
+| Each approval is a create-once file on disk | A replayed approval cannot run twice |
 | The exact operation must fit in the security preview | Incomplete or oversized operations are denied instead of blindly allowed |
-| The event cursor advances atomically with the durable pending queue | A crash cannot acknowledge an event that was never recorded |
+| The event cursor advances in the same atomic write as the pending queue | A crash cannot acknowledge an event that was never recorded |
 | Agent and tool turns are at-most-once | A crash cannot silently repeat a deploy, deletion, command, or external send |
-| Completed replies use a durable outbox and stable idempotency key | Delivery retries without rerunning the agent turn |
+| Completed replies use an on-disk outbox and a stable idempotency key | Delivery retries without rerunning the agent turn |
 
 <Warning>
 Event long-polling is exclusive per Agent Token and mutually exclusive with
@@ -71,24 +71,23 @@ relaymessenger doctor
 ```
 
 `doctor` verifies Node, pairing and owner pinning, token permissions, API
-reachability, durable state, the exact Claude and Codex adapter entrypoints, and
+reachability, saved state, the exact Claude and Codex adapter entrypoints, and
 the installed Hermes binary and readiness check.
 
-A `401` is terminal and requires re-pairing. It is never retried forever.
+See [integration troubleshooting](/integrations/troubleshooting) for what each
+red line means.
 
 ## Local files
 
-<Accordion title="What the CLI writes to disk">
 ```text
 ~/.relaymessenger/config.json                        paired token, origin, owner (0600)
 ~/.relaymessenger/codex-notify.json                  project roots opted into Codex notify
-~/.relaymessenger/accounts/<identity>/state.json     durable cursor, queue, outbox
+~/.relaymessenger/accounts/<identity>/state.json     saved cursor, queue, outbox
 ~/.relaymessenger/accounts/<identity>/approvals/     one file per approval
 ~/.relaymessenger/accounts/<identity>/sessions.json  conversation to ACP sessions
-~/.relaymessenger/accounts/<identity>/mcp-sends/     durable Codex MCP logical sends
+~/.relaymessenger/accounts/<identity>/mcp-sends/     Codex MCP logical sends, one file each
 ~/.relaymessenger/accounts/<identity>/installed-plugins/ stable plugin copies
 ```
-</Accordion>
 
 ## Next steps
 
@@ -96,4 +95,5 @@ A `401` is terminal and requires re-pairing. It is never retried forever.
 - [Codex](/integrations/codex)
 - [Hermes Agent](/integrations/hermes)
 - [OpenClaw](/integrations/openclaw)
+- [Integration troubleshooting](/integrations/troubleshooting) for symptoms by failure signature
 - [Authentication](/authentication) for Agent Token handling

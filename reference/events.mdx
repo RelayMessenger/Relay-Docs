@@ -42,9 +42,10 @@ synthesized `origin.kind: "data_action"` object or the option's original origin.
 ### `message.edited`
 
 The original sender replaced a text-bearing message within its 15-minute edit
-window. `data.message` is the full updated canonical message. `edited_at` marks
-the latest edit, and `revisions` contains each prior `parts` and
-`fallback_text` snapshot from oldest to newest. `data.revision_count` is the
+window. `data.message` is the full updated message.
+
+`edited_at` marks the latest edit, and `revisions` contains each prior `parts`
+and `fallback_text` snapshot from oldest to newest. `data.revision_count` is the
 number of stored revisions, from 1 through 5.
 
 ```json
@@ -152,28 +153,19 @@ A participant added or removed a reaction from the agent's message.
 
 ### `conversation.added`, `conversation.updated`, and `conversation.removed`
 
-Relay emits these when a human group member adds or removes the authenticated
-agent. Membership alone does not disclose ambient messages. Group history is
-limited to messages explicitly delivered through that agent's invocations and
-its corresponding replies. Removed agents receive no future group events, and
-pending invocation IDs from an ended membership period cannot be reused after
-re-addition.
+Relay emits these to every active group agent when a human adds or removes the
+authenticated agent, renames the group, or changes its avatar. A removed agent
+receives no further group events, and pending invocation IDs from an ended
+membership period cannot be reused after re-addition.
 
-Relay emits `conversation.updated` to every active group agent when a human
-renames the group or changes its avatar.
+An agent's group history stays limited to the messages that invoked it and its
+own replies. No lifecycle event adds access to the rest of the conversation.
 
-The payload carries the human `actor`, the current `membership_version`, a
-structured old and new `system_mutation`, and the canonical system `message`. It
-omits `affected_participant`, because metadata updates do not target one member.
-
-<Warning>
-No lifecycle event grants ambient transcript access.
-</Warning>
-
-Lifecycle `data` is typed and self-contained: `conversation_id`, the human
-`actor`, the affected participant when the mutation targets one, the current `membership_version`, the
-structured `system_mutation` with old/new fields, and the same canonical
-system `message` stored in the conversation.
+`data` carries `conversation_id`, the human `actor`, the affected participant
+when the mutation targets one, the current `membership_version`, the
+`system_mutation` with old and new fields, and the system `message` stored in
+the conversation. A `conversation.updated` payload omits `affected_participant`,
+because metadata updates do not target one member.
 
 <CodeGroup>
 
@@ -271,16 +263,16 @@ system `message` stored in the conversation.
 Both variants carry the mutation twice on the system message: once as a
 human-readable text part and once as a structured `data` part.
 
-People manage group membership and metadata from the Relay app. A backend
-receives the lifecycle events above but cannot create a group or change its
-membership; see [API availability](/roadmap).
+A backend receives these lifecycle events but cannot create a group or change
+its membership; see [API availability](/roadmap).
 
 ### `group.invite.joined` / `group.invite.declined`
 
-Each invited user answers individually. `group.invite.joined` fires on every
-accept and carries `invite_id`, the `conversation_id` that person is now in,
-and their `user_id`. The first accept creates that conversation, and later
-accepts join it. `group.invite.declined` carries `invite_id` and `user_id`.
+`group.invite.joined` fires on every accept and carries `invite_id`, the
+`conversation_id` that person is now in, and their `user_id`. The first accept
+creates that conversation, and later accepts join it.
+
+`group.invite.declined` carries `invite_id` and `user_id`.
 
 ```json
 {
@@ -313,15 +305,15 @@ alone.
 A decline closes that person's card alone. It leaves the conversation and the
 rest of the invite untouched.
 
-Group mutations are an off-by-default preview. Existing canonical group
-history remains readable if availability is turned off; the gate prevents new
-membership and metadata writes.
+Group mutations are an off-by-default preview. Existing group history remains
+readable if availability is turned off; the gate prevents new membership and
+metadata writes.
 
 ## Specified, coming soon
 
-The Relay contract also defines `message.failed`, durable typing events,
-`attachment.available`, install events, and the `call.*` family. These are
-**not emitted by v0**. See [API availability](/roadmap).
+The Relay contract also defines `message.failed`, typing events that enter the
+event log, `attachment.available`, install events, and the `call.*` family.
+These are **not emitted by v0**. See [API availability](/roadmap).
 
 ## See also
 

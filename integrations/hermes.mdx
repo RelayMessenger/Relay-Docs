@@ -4,9 +4,8 @@ description: "Bridge a locally installed Hermes Agent to Relay over its own herm
 keywords: ["hermes", "hermes agent", "acp", "bridge", "coding agent", "sessions", "permissions"]
 ---
 
-Relay bridges the `hermes acp` command already installed on your machine. Hermes
-configuration, provider credentials, and `~/.hermes/state.db` stay entirely under
-Hermes ownership.
+Text the Hermes Agent already installed on your machine. Relay bridges its
+`hermes acp` command and carries messages, tool activity, and permission cards.
 
 Install and authenticate Hermes using its official setup first.
 
@@ -16,8 +15,7 @@ Install and authenticate Hermes using its official setup first.
     hermes acp --check
     ```
 
-    The readiness check, rather than a version-string cutoff, decides whether the
-    local installation can start.
+    This check must pass before Relay can start.
   </Step>
 
   <Step title="Pair and start">
@@ -26,8 +24,6 @@ Install and authenticate Hermes using its official setup first.
     relaymessenger pair
     relaymessenger start --engine hermes --dir ~/code/my-project
     ```
-
-    Relay launches `hermes acp` shell-free.
   </Step>
 </Steps>
 
@@ -44,72 +40,33 @@ The current Hermes ACP server supports:
 | Plan updates | Surface in the conversation |
 | Permission choices | Presented as owner-only Allow and Deny cards |
 
-<Info>
-Hermes waits 60 seconds for an ACP permission decision, so Relay uses a
-55-second phone window and denies on timeout or transport failure.
-</Info>
+## How it behaves
 
-## Feature reference
-
-<AccordionGroup>
-  <Accordion title="Hermes owns its own state">
-    Relay launches `hermes acp` shell-free and leaves Hermes configuration,
-    provider credentials, and `~/.hermes/state.db` entirely under Hermes
-    ownership. Relay reads none of them.
-  </Accordion>
-
-  <Accordion title="Readiness, not version strings">
-    `hermes acp --check` decides whether the local installation can start,
-    rather than an unverified version-string cutoff. The reference
-    implementation audited for this release is Hermes Agent 0.18.2, but the
-    check is what gates startup.
-  </Accordion>
-
-  <Accordion title="Permission window">
-    Hermes waits 60 seconds for an ACP permission decision, so Relay uses a
-    55-second phone window and denies on timeout or transport failure. The
-    shorter window guarantees Relay answers Hermes before Hermes gives up.
-  </Accordion>
-
-  <Accordion title="You own installation and upgrades">
-    Unlike the Claude and Codex adapters, which are pinned inside
-    `relaymessenger`, Hermes is a binary you install and upgrade yourself
-    through its official setup.
-  </Accordion>
-</AccordionGroup>
+| | Behavior |
+| --- | --- |
+| Hermes keeps its own state | Relay launches `hermes acp` shell-free. Hermes configuration, provider credentials, and `~/.hermes/state.db` stay with Hermes, and Relay reads none of them. |
+| Readiness, not version strings | `hermes acp --check` decides whether the local installation can start, rather than an unverified version-string cutoff. The reference implementation audited for this release is Hermes Agent 0.18.2, but the check is what gates startup. |
+| Permission window | Hermes waits 60 seconds for an ACP permission decision, so Relay uses a 55-second phone window and denies on timeout or transport failure. The shorter window means Relay always answers Hermes before Hermes gives up. |
+| You own installation and upgrades | Unlike the Claude and Codex adapters, which are pinned inside `relaymessenger`, Hermes is a binary you install and upgrade yourself through its official setup. |
 
 ## Troubleshooting
 
-Start with `relaymessenger doctor`, then
-[integration troubleshooting](/integrations/troubleshooting) for symptoms shared
-with every other integration. These are specific to this one.
+```bash
+relaymessenger doctor
+```
 
-<AccordionGroup>
-  <Accordion title="The bridge will not start">
-    Run `hermes acp --check` on its own. If the readiness check fails, fix the
-    Hermes installation first: Relay will not start against an installation
-    that reports itself unready.
-  </Accordion>
+See [integration troubleshooting](/integrations/troubleshooting) for the `401`,
+`409`, and `410` symptoms shared with every other integration. These are
+specific to this one.
 
-  <Accordion title="Approvals are denied without you answering">
-    An approval that goes unanswered for 55 seconds is denied, as is one that
-    hits a transport failure. Answer sooner, or approve at the keyboard.
-  </Accordion>
-</AccordionGroup>
+| Symptom | Cause and fix |
+| --- | --- |
+| The bridge will not start | Run `hermes acp --check` on its own. If the readiness check fails, fix the Hermes installation: Relay will not start against an installation that reports itself unready. |
+| Approvals are denied without you answering | The 55-second window passed, or the transport failed. Answer sooner, or approve at the keyboard. |
 
 ## Next steps
 
-<Columns cols={2}>
-  <Card title="CLI" icon="square-terminal" href="/integrations/cli">
-    Pairing, the credential boundary, and the approval guarantees.
-  </Card>
-  <Card title="Claude Code" icon="terminal" href="/integrations/claude-code">
-    Bridge a second engine from the same computer.
-  </Card>
-  <Card title="Agent permission request" icon="shield-check" href="/components/agent_permission_request">
-    The approval card your phone receives.
-  </Card>
-  <Card title="Delivery model" icon="git-branch" href="/guides/delivery-model">
-    Long polling, watermarks, and recovery.
-  </Card>
-</Columns>
+- [The relaymessenger CLI](/integrations/cli) for pairing and the approval guarantees
+- [Claude Code](/integrations/claude-code) to bridge a second engine from the same computer
+- [Agent permission request](/components/agent_permission_request) for the approval card your phone receives
+- [Delivery model](/guides/delivery-model) for long polling, watermarks, and recovery

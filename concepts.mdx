@@ -6,8 +6,8 @@ keywords: ["concepts", "data model", "agent", "conversation", "message", "parts"
 
 ## Agents and users
 
-A **user** is a person using Relay. An **agent** is the identity they message;
-its external backend supplies the model, tools, and memory.
+An **agent** is the identity a user messages; its external backend supplies the
+model, tools, and memory.
 
 See [Your agent](/guides/your-agent) for creation, identity, distribution, and installation.
 
@@ -23,17 +23,9 @@ See [Conversation lifecycle](/guides/conversation-lifecycle) for how direct thre
 
 ## Messages and ordered parts
 
-A message carries an ordered `parts[]` array. Relay assigns each stored part a zero-based `part_index`. Keep the array order: it is presentation order and provides a stable target for replies and future interactions.
+A message carries an ordered `parts[]` array. Relay assigns each stored part a zero-based `part_index`. Order is presentation order.
 
-| Type | Shape | Meaning |
-| --- | --- | --- |
-| `text` | `{ "type": "text", "text": "Hello" }` | Text content. |
-| `link_preview` | `{ "type": "link_preview", "url": "https://example.com" }` | An HTTPS URL rendered as a native preview card. |
-| `data` | `{ "type": "data", "data": { ... } }` | Structured JSON content. |
-| `media` | `{ "type": "media", "url": "https://…" }` or `{ "type": "media", "attachment_id": "att_..." }` | Media by public URL or attachment reference. Exactly one of the two. |
-| `voice_memo` | `{ "type": "voice_memo", "url": "https://…" }` or `{ "type": "voice_memo", "attachment_id": "att_..." }` | Recorded audio rendered in the inline player. Exactly one source. |
-
-The send route accepts 1–32 parts. Text is limited to 8 KB per part and data parts to 16 KB. Upload files up to 100 MB to create an `attachment_id`, or send media and voice memos by public HTTPS `url`.
+The send route accepts 1–32 parts. Five part types: `text`, `link_preview`, `data`, `media`, `voice_memo`. Shapes and limits are in [Sending messages](/guides/sending-messages).
 
 Stored messages include:
 
@@ -58,28 +50,25 @@ Stored messages include:
 
 ## Edit and unsend
 
-Only a message's original sender can mutate it. Use
-`PATCH /v1/messages/{message_id}` within 15 minutes to replace all parts, up to
-five times. Edits must remain text-bearing and cannot involve attachment parts.
-Each successful edit preserves the prior canonical parts and fallback text in
-`revisions`, sets `edited_at`, and keeps the original conversation sequence.
+Only a message's original sender can mutate it. Every other actor receives `404`.
+
+Use `PATCH /v1/messages/{message_id}` within 15 minutes to replace all parts, up
+to five times. Edits must remain text-bearing and cannot involve attachment
+parts. Each successful edit appends the prior parts and `fallback_text` to
+`revisions`, sets `edited_at`, and keeps the original `sequence`.
 
 Use `DELETE /v1/messages/{message_id}` within two minutes to unsend. Relay
 removes the stored parts but keeps a bare `status: "deleted"` tombstone with
 the original id, sequence, sender, and creation time. Neither operation sends a
 push notification.
 
-Agent-sent messages use the sending agent's token. User-sent messages use the
-sending user's Relay session. Every other actor receives `404`.
-
 ## Delivery and recovery
 
-`message.sequence` orders messages inside one conversation. A webhook `event_id`
-identifies one durable change for deduplication. They are different values.
+`message.sequence` orders messages inside one conversation. Deduplicate on
+`event_id`; order on `sequence`. Never use one for the other.
 
-Relay delivers webhook events at least once and accepts message writes
-idempotently. See [Delivery model](/guides/delivery-model) for webhook
-acknowledgement, deduplication, receipt, and recovery rules.
+See [Delivery model](/guides/delivery-model) for webhook acknowledgement,
+deduplication, receipt, and recovery rules.
 
 <Note>
 Socket mode and calls are specified for Relay and ship after the v0 developer

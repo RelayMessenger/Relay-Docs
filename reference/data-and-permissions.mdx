@@ -4,7 +4,7 @@ description: "What an agent backend can access, what stays private, and what rem
 keywords: ["data", "permissions", "retention", "capability url", "deletion", "boundary"]
 ---
 
-An Agent Token is scoped to exactly one Relay agent. It grants no access to a
+An Agent Token is scoped to a single Relay agent. It grants no access to a
 Relay user account, the directory, another agent, or Relay's database.
 
 ## What the backend receives
@@ -19,32 +19,22 @@ Your backend receives this for an active conversation:
 | ✅ | Delivery and read watermarks |
 | ✅ | Attachment references included in messages |
 | ✅ | Timestamps and ordering sequences |
-| ✅ | Name and verified phone number of a user in an active conversation, via `GET /v1/users/{user_id}` — [guide](/guides/identifying-users) |
+| ✅ | Name and verified phone number of a user in an active conversation, via `GET /v1/users/{user_id}`. See [Identifying users](/guides/identifying-users) |
 | ❌ | Email address or address book |
 | ❌ | The user's other agents or unrelated conversations |
 | ❌ | Ambient group content the agent was not invoked on |
 
-Relay exposes a stable Relay user ID inside message and receipt payloads, and
-`GET /v1/users/{user_id}` resolves that ID to the user's name and verified
-phone number while you share an active conversation. See
-[Identifying users](/guides/identifying-users).
+Message and receipt payloads carry a stable Relay user ID.
 
 ## Conversation access
-
-Access depends on the conversation type.
 
 | Conversation | What the backend can read |
 | --- | --- |
 | Direct | Events and history, only while the agent holds the relationship the endpoint requires |
 | Group | Explicitly invoked human messages, plus the agent's own replies |
 
-<Warning>
-Group membership is not transcript authority. Relay never sends ambient group
-content to a backend, no matter how long the agent has been a member.
-</Warning>
-
-Request only the history the current task needs. A conversation in Relay does
-not grant permission for indefinite retention in an external system.
+Request only the history the current task needs; a conversation in Relay does
+not authorize indefinite retention in an external system.
 
 ## Contact discovery
 
@@ -62,8 +52,6 @@ caller's number.
 
 ## Agent visibility
 
-Visibility is one authoritative setting.
-
 | Setting | Store | Exact handle | Share profile |
 | --- | :---: | :---: | :---: |
 | **Public** | ✅ after the listing is approved and published | ✅ | ✅ |
@@ -73,8 +61,7 @@ Visibility is one authoritative setting.
 `GET /v1/contacts/{handle}/profile` returns displayable identity only for public
 and unlisted agents: handle, name, tagline, avatar, accent color, and visibility.
 
-The Store catalog is a separate read model. Changing visibility never installs
-or removes an agent for a user.
+Changing visibility never installs or removes an agent for a user.
 
 <Info>
 Tokens, owner identity, system prompts, provider configuration, and backend
@@ -112,27 +99,27 @@ account-deletion events. Install lifecycle events are on the
 
 ## Retention and deletion
 
-Relay stores the canonical transcript needed to operate the messenger. Your
-backend is an independent system: any message, attachment, or derived memory
-copied there is governed by your own retention and deletion behavior.
+Relay stores the transcript needed to operate the messenger. Your backend is an
+independent system: any message, attachment, or derived memory copied there is
+governed by your own retention and deletion behavior.
 
-Account deletion commits canonical database removal before returning, then
-attempts external R2 and agent-runtime cleanup. The response reports which stage
-it reached:
+Account deletion commits database removal before returning, then attempts
+external R2 and agent-runtime cleanup. The response reports which stage it
+reached:
 
 | `cleanup.status` | Meaning |
 | --- | --- |
 | `completed` | Every external target is cleared |
-| `pending` | Durable retry still owns unfinished targets |
+| `pending` | A retry job still owns unfinished targets |
 
 Each response includes a non-secret `cleanup.receipt_id`. A pending receipt is
-not completion: Relay retains a de-identified, operationally inspectable retry
-record until every target is cleared.
+not completion: Relay retains a de-identified retry record until every target is
+cleared.
 
 <Warning>
 Relay cannot erase copies your backend holds. Until Relay exposes a
-developer-facing deletion event, state that boundary in your retention policy
-and give users a direct deletion path for the data you store.
+developer-facing deletion event, state that in your retention policy and give
+users a direct deletion path for the data you store.
 </Warning>
 
 ## See also

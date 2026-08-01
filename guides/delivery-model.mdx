@@ -4,24 +4,22 @@ description: "How Relay stores messages, delivers events, prevents duplicates, a
 keywords: ["delivery", "at-least-once", "idempotency", "webhooks", "long polling", "cursor", "watermark", "receipts", "recovery"]
 ---
 
-Relay separates canonical conversation state from live presentation. Knowing
-which is which tells you what you can rely on after a failure.
+What survives a restart, and what does not.
 
-| State | Durable | Examples |
+| | Stored | Examples |
 | --- | :---: | --- |
-| Canonical | ✅ | Final messages, ordered history, webhook events, reactions, receipt watermarks |
-| Live | ❌ | Typing indicators, in-flight stream deltas |
+| Survives a restart | ✅ | Messages, ordered history, webhook events, reactions, receipt watermarks |
+| Does not | ❌ | Typing indicators, in-flight stream deltas |
 
 ## Incoming messages
 
-When a user sends a message, Relay commits it to the conversation before adding
-`message.received` to the agent's durable event log. An agent consumes that log
-through exactly one transport.
+Use webhooks or long polling, not both. Polling with a webhook enabled returns
+`409 conflict`.
 
 ```mermaid
 flowchart LR
   U["User sends"] --> C["Commit to<br/>conversation"]
-  C --> L["Durable<br/>event log"]
+  C --> L["Event log<br/>(kept 7 days)"]
   L --> W["Signed webhook<br/>Relay pushes"]
   L --> P["Long poll<br/>you pull"]
   W --> B["Your backend"]
@@ -42,24 +40,16 @@ returns `409 conflict`.
 <Tabs>
   <Tab title="Signed webhooks">
     <Steps>
-      <Step title="Relay writes the event">
-        The event and one outbox row per matching active endpoint are written in the
-        same transaction.
-      </Step>
-      <Step title="Relay signs and POSTs it">
-        The exact JSON body is signed and sent to your registered HTTPS URL.
-      </Step>
-      <Step title="Your backend verifies and deduplicates">
+      <Step title="Verify and deduplicate">
         Verify the signature before parsing, then deduplicate on `event_id`.
       </Step>
-      <Step title="Your backend accepts durably">
-        Enqueue the event and return `2xx` quickly.
+      <Step title="Accept, then work">
+        Save the event and return `2xx` within 10 seconds. Do model or tool work after.
       </Step>
     </Steps>
 
-    Delivery is at least once, so an event may arrive again after a timeout or an
-    ambiguous response. A successful `message.received` webhook advances the agent's
-    delivered watermark; mark it read separately once your backend has consumed it.
+    A successful `message.received` webhook advances the delivered watermark. Mark it
+    read separately once your backend has consumed it.
 
     See [Webhooks](/guides/webhooks) for registration, signature verification, and
     secret rotation.
@@ -84,28 +74,27 @@ returns `409 conflict`.
     through it and governs redelivery.
 
     <Info>
-    The sender-visible delivered receipt advances as soon as Relay hands the page to
-    the consumer. The durable acknowledgement remains the redelivery watermark.
+    Redelivery is governed by the cursor you send next, not by the delivered receipt.
     </Info>
 
     Cursors are scoped to the agent, not the token. Rotating an Agent Token never
     resets the ledger.
 
-    <Accordion title="Long-poll error codes">
-      | Status | Code | What happened | What to do |
+    Long-poll error codes:
+
+    | Status | Code | What happened | What to do |
       | --- | --- | --- | --- |
       | `422` | `invalid_request` | Your cursor is ahead of Relay's delivered ledger | Resume from `error.details.highest_delivered_cursor` after reconciling history over REST |
-      | `409` | `terminated_by_other_consumer` | A newer poll took over the token | Run exactly one consumer per Agent Token |
+      | `409` | `terminated_by_other_consumer` | A newer poll took over the token | Run one poller per Agent Token; a second poll terminates the first |
       | `409` | `conflict` | A webhook is enabled | Disable the webhook or use it instead |
       | `410` | `cursor_expired` | The cursor is behind the seven-day retention ceiling | Stop and reconcile from history. Do not reset to zero |
-    </Accordion>
   </Tab>
 </Tabs>
 
 ## Outgoing messages
 
-`POST /v1/messages` commits the message and returns `202 Accepted`. That means
-Relay accepted the canonical write, not that the user has received or read it.
+`POST /v1/messages` returns `202 Accepted`. That means Relay stored the message.
+Delivery and read arrive later as `message.delivered` and `message.read`.
 
 Every send requires an `Idempotency-Key`.
 
@@ -131,9 +120,9 @@ watermarks onto each message.
 
 ## Live state
 
-Typing indicators are pushed to active devices and never enter the durable event
-log. A native UI message stream writes no partial transcript rows; its semantic
-finish commits the authoritative message and sends one notification.
+Typing indicators never appear in `GET /v1/events` or webhooks. A streaming reply
+writes no partial rows: Relay stores one message when the stream finishes, and
+sends one notification.
 
 <Warning>
 If generation aborts, errors, or disconnects before completion, Relay commits
@@ -142,10 +131,8 @@ nothing. Retry the complete stream with the same idempotency key.
 
 ## Recovery rule
 
-Events tell your backend what changed. Conversation history is the source of
-truth for what the thread contains. After any uncertainty, reconcile from
-history rather than reconstructing state from delivery attempts or retry
-responses.
+After any uncertainty, reconcile from [conversation history](/guides/conversation-history).
+Do not rebuild state from delivery attempts or retry responses.
 
 ## Next steps
 

@@ -4,9 +4,9 @@ description: "Receive explicit invocations in a group, reply to them, and follow
 keywords: ["groups", "group conversations", "invocation", "invocation_id", "mention", "invites"]
 ---
 
-People create groups in the Relay app and add agents to them. Your backend
-receives an event only when a human explicitly invokes your agent, and replies
-to that invocation with the ID Relay supplied.
+An agent added to a group receives only the messages that invoke it, plus its
+own replies. It never receives the rest of the conversation, including anything
+the group said before the agent was added.
 
 ```mermaid
 flowchart TB
@@ -20,22 +20,6 @@ flowchart TB
   M3 ==>|"message.received<br/>+ invocation_id"| X
   X ==>|"POST /v1/messages<br/>+ invocation_id"| G
 ```
-
-## The invocation boundary
-
-Group membership is not transcript authority. This is the single rule that
-shapes everything else on this page.
-
-| Your backend receives | Your backend does not receive |
-| --- | --- |
-| Messages that explicitly invoke your agent | Ambient group conversation |
-| Your agent's own replies, in history | Messages between other participants |
-| Membership and metadata lifecycle events | Any message from before it was added |
-
-<Warning>
-An agent added to a group yesterday cannot read what the group said this
-morning. Only invocations reach you.
-</Warning>
 
 ## Receive an invocation
 
@@ -61,13 +45,13 @@ usual message envelope.
 }
 ```
 
-Treat `invocation_id` as required state for the reply. Store it with the
-`event_id` you are already deduplicating on.
+Store `invocation_id` with the `event_id` you are already deduplicating on. The
+reply is rejected without it.
 
 ## Reply to an invocation
 
-Reply exactly as you would in a direct conversation, and pass the
-`invocation_id` through.
+Reply as you would in a direct conversation, and pass the `invocation_id`
+through.
 
 ```bash
 curl -sS -X POST "$RELAY_API_URL/v1/messages" \
@@ -93,6 +77,9 @@ curl -sS -X POST \
   --data-binary @reply.sse
 ```
 
+An invocation is consumed once. Reuse the same `Idempotency-Key` to retry a
+reply safely; do not reuse the `invocation_id` for a second, different message.
+
 ### Invocation errors
 
 | Status | Message | Cause |
@@ -104,14 +91,9 @@ curl -sS -X POST \
 | `403 forbidden` | `message is outside this agent's invocation scope` | The reply targets content you were never invoked on |
 | `422 invalid_request` | `invocation_id must be a Relay invocation id` | Malformed ID |
 
-<Warning>
-An invocation is consumed once. Reuse the same `Idempotency-Key` to retry a
-reply safely; do not reuse the `invocation_id` for a second, different message.
-</Warning>
+## Lifecycle events
 
-## Membership and metadata events
-
-Relay emits lifecycle events to every active group agent.
+Relay emits these to every active group agent.
 
 | Event | Emitted when |
 | --- | --- |
@@ -119,17 +101,10 @@ Relay emits lifecycle events to every active group agent.
 | `conversation.updated` | A human renames the group or changes its avatar |
 | `conversation.removed` | A human removes your agent |
 
-Each payload is typed and self-contained: `conversation_id`, the human `actor`,
-the affected participant when the mutation targets one, the current
-`membership_version`, a structured `system_mutation` with old and new values,
-and the canonical system `message`.
-
-Full payloads are in [event types](/reference/events).
-
-<Warning>
-A lifecycle event grants no transcript access. `conversation.added` tells you
-that you are a member, not what the group has been saying.
-</Warning>
+Each payload carries `conversation_id`, the human `actor`, the affected
+participant when the mutation targets one, the current `membership_version`, a
+`system_mutation` with old and new values, and the system `message`. Full
+payloads are in [event types](/reference/events).
 
 ## Propose a group
 
@@ -166,10 +141,9 @@ invite stays open for whoever has not answered yet.
 | `accepted` | Joined the live conversation |
 | `declined` | Answered no, and stays out of the conversation |
 
-Read one member's `state` to know whether that person is in the conversation.
-A `conversation_id` on a `pending` invite names the destination group your
-agent proposed into, so it tells you where the invite leads rather than who
-consented.
+Read one member's `state` to know whether that person is in the conversation. A
+`conversation_id` on a `pending` invite names the destination group your agent
+proposed into, so it tells you where the invite leads rather than who consented.
 
 | Event | Emitted when |
 | --- | --- |
@@ -210,10 +184,7 @@ person's Relay session. There is no Agent Token route for them.
 | Accept or decline an invite | A person, in the app |
 
 <Note>
-Direct membership writes stay human. A backend can propose with an invite card,
-and the `group.invite.*` events report each answer and the terminal state, but
-only a person's consent changes who is in a group. Fuller agent-initiated
-management is on the [roadmap](/roadmap).
+Fuller agent-initiated group management is on the [roadmap](/roadmap).
 </Note>
 
 ## Next steps
