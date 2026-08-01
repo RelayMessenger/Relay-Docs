@@ -1,0 +1,115 @@
+---
+title: "Card component"
+description: "Send a slot-based media card with a title, captions, link, and up to two actions."
+keywords: ["card", "component", "rich card", "interactive message"]
+---
+
+## Abstract
+
+Use `card` for one rich object whose image, title, metadata, destination, and actions belong together. Its slots follow the compact message-card grammar rather than a dashboard layout.
+
+## Wire example
+
+```json
+{
+  "send": {
+    "conversation_id": "cnv_01JZC7K4RQ",
+    "parts": [{
+      "type": "data",
+      "data": {
+        "kind": "card",
+        "media": { "url": "https://example.com/osteria.jpg" },
+        "title": "Osteria Mozza",
+        "subtitle": "Italian · $$$",
+        "caption": "Tue 2:00pm",
+        "trailing_caption": "2 seats",
+        "url": "https://example.com/restaurants/osteria-mozza",
+        "options": [{ "id": "reserve", "label": "Reserve", "style": "primary" }]
+      }
+    }]
+  },
+  "stored_part": {
+    "part_index": 0,
+    "type": "data",
+    "data": {
+      "kind": "card",
+      "media": { "url": "https://example.com/osteria.jpg" },
+      "title": "Osteria Mozza",
+      "subtitle": "Italian · $$$",
+      "caption": "Tue 2:00pm",
+      "trailing_caption": "2 seats",
+      "url": "https://example.com/restaurants/osteria-mozza",
+      "options": [{ "id": "reserve", "label": "Reserve", "style": "primary" }],
+      "fallback": "Osteria Mozza\n1. Reserve"
+    }
+  },
+  "tap_result": {
+    "parts": [{
+      "type": "data",
+      "data": {
+        "origin": {
+          "kind": "data_action",
+          "message_id": "msg_01JZM6Q9VN",
+          "part_index": 0,
+          "option_id": "reserve",
+          "source_kind": "card"
+        },
+        "option_id": "reserve",
+        "label": "Reserve"
+      }
+    }],
+    "fallback_text": "Reserve"
+  }
+}
+```
+
+## Schema table
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `kind` | `"card"` | Yes | Selects this renderer |
+| `media` | object | No | Exactly one `attachment_id` or credential-free HTTPS `url` |
+| `title` | string | Yes | 1–60 characters |
+| `subtitle` | string | No | Up to 60 characters |
+| `caption` | string | No | Up to 60 characters |
+| `trailing_caption` | string | No | Up to 60 characters |
+| `url` | string | No | Credential-free HTTPS card destination |
+| `options` | option[] | No | Up to 2 actions |
+| `fallback` | string | No | Synthesized when omitted |
+
+Card options use all [common option fields](/components#common-option-fields), including the optional 72-character description.
+
+## Examples per state
+
+| State | Repository artifact |
+| --- | --- |
+| Send request | `examples/components/card-send.json` |
+| Canonical stored message | `examples/components/card-stored.json` |
+| Tap-result user message | `examples/components/card-tap-result.json` |
+
+## Constraints
+
+| Violation | Result |
+| --- | --- |
+| Missing, empty, or over-60-character title | `422 invalid_request` |
+| Subtitle or caption over 60 characters | `422 invalid_request` |
+| More than 2 options | `422 invalid_request` |
+| Both or neither media source inside `media` | `422 invalid_request` |
+| Non-HTTPS media or card URL | `422 invalid_request` |
+| Message targets a group conversation | `422 invalid_request` |
+
+## iOS rendering notes
+
+Render `ComponentCard` at normal message width with slots for media, title,
+subtitle, captions, and actions.
+
+- Reserve the media slot while an image resolves, then collapse it if metadata has no usable URL or the image fails to load.
+- Keep the card as transcript content, without dashboard chrome.
+- Use the existing attachment path for `attachment_id` media.
+- Style link-out options as navigation rather than postback choices.
+
+## See also
+
+- [Message components](/components)
+- [Attachments](/guides/attachments)
+- [Buttons](/components/buttons)

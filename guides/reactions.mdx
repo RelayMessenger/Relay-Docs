@@ -1,0 +1,66 @@
+---
+title: "Reactions"
+description: "Add and remove tapback-style reactions, target a specific part, and receive reaction events."
+keywords: ["reactions", "tapback", "emoji", "reaction.added", "reaction.removed"]
+---
+
+A reaction targets a whole message or one part of it. Relay emits an event when a user adds or removes a reaction from the agent's message.
+
+## Add or remove a reaction
+
+Use `operation` to add or remove the reaction:
+
+```bash
+curl -sS -X POST "https://api.relayapp.im/v1/messages/msg_01JZM3T8AH/reactions" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "operation": "add", "type": "love" }'
+```
+
+| Field | Values |
+| --- | --- |
+| `operation` | `add` \| `remove` |
+| `type` | `love` \| `like` \| `dislike` \| `laugh` \| `emphasize` \| `question` \| `emoji` |
+| `emoji` | required if and only if `type` is `"emoji"`. Any single emoji, e.g. `"🔥"` |
+| `part_index` | optional; omit to react to the whole message |
+
+```bash
+# Arbitrary emoji on part 1 of a multi-part message
+curl -sS -X POST "https://api.relayapp.im/v1/messages/msg_01JZM3T8AH/reactions" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "operation": "add", "type": "emoji", "emoji": "🔥", "part_index": 1 }'
+```
+
+The response returns the stored reaction. Removing a missing reaction or adding an existing one is an idempotent no-op. A reaction outside the agent's conversations returns `403 forbidden`.
+
+## Receiving reaction events
+
+When a user reacts to the agent's message, each matching registered webhook
+receives `reaction.added` or `reaction.removed`:
+
+```json
+{
+  "event_id": "evt_01JZR3ACT10N",
+  "event_type": "reaction.added",
+  "agent_id": "agt_01JZRELAY",
+  "created_at": "2026-07-13T20:02:11.000Z",
+  "data": {
+    "reaction": {
+      "message_id": "msg_01JZM4Q9VN",
+      "part_index": null,
+      "type": "love",
+      "actor": { "kind": "user", "id": "usr_01JZU1F0BD" },
+      "operation": "add"
+    }
+  }
+}
+```
+
+Use a reaction when acknowledgment is enough, for example, `like` a “thanks” instead of sending another message.
+
+## Next steps
+
+- [Event types](/reference/events)
+- [Sending messages](/guides/sending-messages)
+- [Message components](/components)

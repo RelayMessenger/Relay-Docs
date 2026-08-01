@@ -1,0 +1,2959 @@
+openapi: 3.1.0
+info:
+  title: Relay developer API
+  version: "0.1"
+  description: >
+    Add Relay as a channel for your agent, receive messages, and reply with
+    plain HTTPS and JSON. Authenticate every request with an Agent Token unless
+    the endpoint is marked public. The postback_interactions sync feature controls whether clients render message
+    components interactively; component data parts can always be sent.
+  x-relay-feature-availability:
+    postback_interactions: off-by-default-preview
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: https://api.relayapp.im
+    description: Production
+security:
+  - agentToken: []
+tags:
+  - name: Agent
+    description: Inspect the agent controlled by the current Agent Token.
+  - name: Messages
+    description: Send finalized messages, pipe native agent output, and react.
+  - name: Groups
+    description: Propose consent-based groups and observe their terminal state.
+  - name: Events
+    description: >
+      Receive durable inbound events, either through signed webhook receivers
+      or by long-polling `GET /v1/events`. The two modes are mutually
+      exclusive per agent, enforced per request; around a webhook
+      registration or disable there is a brief transition window in which
+      both paths can observe the same events. Delivery is at least once
+      everywhere — always deduplicate by `event_id`.
+  - name: Pairing
+    description: >
+      Device-code pairing for terminal bridges: create a pairing code on a
+      computer, let the Relay app claim it, and recover the minted Agent Token
+      only with that computer's poll credential. The token never travels to
+      the phone.
+  - name: Public
+    description: Read approved Store agents and share profiles without authentication.
+  - name: Invites
+    description: >
+      Relay signup is invite-only. A session whose account has not redeemed an
+      invite is rejected with `403` and `error.code: invite_required` on every
+      state-creating surface (conversation, DM, and group creation, message
+      send, contact discovery, agent creation, pairing claim) until it redeems
+      a code. Read-only session surfaces keep working so the app can render
+      the gate. Agent Tokens are never invite-gated.
+
+paths:
+  /v1/agents/me:
+    get:
+      tags: [Agent]
+      summary: Verify the agent token
+      description: Verify an Agent Token and read the agent profile it controls.
+      operationId: getAgentMe
+      responses:
+        "200":
+          description: The authenticated agent profile.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [agent]
+                properties:
+                  agent:
+                    $ref: "#/components/schemas/AgentProfile"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/users/{user_id}:
+    get:
+      tags: [Agent]
+      summary: Get a user
+      description: >
+        Resolve a human participant your agent is in conversation with. Every
+        `message.received` event carries `data.message.sender.id` (a `usr_…`
+        id); pass it here to read that sender's name and messaging phone
+        number — enough to greet them or match them to an existing account.
+
+
+        Scope: the user must currently share an active conversation (direct or
+        group) with your agent. Any other id — unknown, or a user you have no
+        active conversation with — returns `404` so the endpoint can neither
+        enumerate accounts nor confirm who owns a phone number.
+      operationId: getUser
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The `sender.id` from a `message.received` event.
+          example: usr_01JZU1F0BD
+      responses:
+        "200":
+          description: The resolved user profile.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user:
+                    $ref: "#/components/schemas/UserProfile"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/messages:
+    post:
+      tags: [Messages]
+      summary: Send a message
+      description: >
+        Send a message as the authenticated agent. Requires an
+        `Idempotency-Key` header of 8–255 characters; reusing the same key with
+        the same request returns the original message. To pipe native agent output, set
+        `stream=true` and pipe a Vercel AI SDK UIMessageStream v1 SSE body into
+        this same request. Relay commits one canonical message after the
+        stream's semantic `finish` event; recipients receive that final
+        committed message.
+      operationId: sendMessage
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: stream
+          in: query
+          schema: { type: boolean, default: false }
+          description: Set true when the request body is a Vercel AI SDK UIMessageStream v1.
+        - name: conversation_id
+          in: query
+          schema: { type: string }
+          description: Required when `stream=true`; use the conversation id from `message.received`.
+        - name: reply_to
+          in: query
+          schema: { type: string }
+          description: Optional message id to reply to when `stream=true`.
+        - name: reply_to_part_index
+          in: query
+          schema: { type: integer, minimum: 0 }
+          description: Optional part target used with `reply_to`.
+        - name: invocation_id
+          in: query
+          schema:
+            $ref: "#/components/schemas/InvocationId"
+          description: Required for a streaming reply to an agent invocation in a group.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [conversation_id]
+              properties:
+                conversation_id:
+                  type: string
+                  description: Conversation to send into, from `message.received`.
+                  example: cnv_01JZC7K4RQ
+                invocation_id:
+                  $ref: "#/components/schemas/InvocationId"
+                  description: >
+                    Required when this agent replies in a group. Echo the
+                    invocation id from Relay's `message.received` event.
+                parts:
+                  type: array
+                  minItems: 1
+                  maxItems: 32
+                  description: Ordered message parts.
+                  items:
+                    $ref: "#/components/schemas/PartInput"
+                reply_to:
+                  $ref: "#/components/schemas/ReplyRef"
+                suggestions:
+                  type: array
+                  maxItems: 8
+                  description: >
+                    Quick-reply chips shown while this message is the newest in
+                    the conversation. Tapping a chip sends its `text` back as an
+                    ordinary user text message, delivered to the agent as a
+                    normal `message.received` event.
+                  items:
+                    $ref: "#/components/schemas/Suggestion"
+          text/event-stream:
+            schema:
+              type: string
+              description: >
+                Vercel AI SDK UIMessageStream v1: `data: <UIMessageChunk>` SSE
+                frames ending with `data: [DONE]`. Also send
+                `x-vercel-ai-ui-message-stream: v1`.
+      responses:
+        "202":
+          description: Message accepted and committed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message_id, message]
+                properties:
+                  message_id:
+                    type: string
+                    example: msg_01JZM4Q9VN
+                  message:
+                    $ref: "#/components/schemas/Message"
+                  stream:
+                    type: object
+                    properties:
+                      protocol: { type: string, const: vercel-ai-ui-message-stream-v1 }
+                      source_message_id: { type: string }
+                      finish_reason: { type: string }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: The agent is not an active participant or is not installed for the user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: The conversation does not exist, or a requested preview message part is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: The idempotency key was already used with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: The key, conversation ID, parts, attachment reference, or reply target is invalid, or component data parts target a group conversation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/messages/{message_id}:
+    patch:
+      tags: [Messages]
+      summary: Edit a message
+      description: >
+        Replace the authenticated sender's message parts without changing its
+        conversation sequence. User-sent messages require that user's session.
+        Agent-sent messages require that agent's token. Messages can be edited
+        for 15 minutes after creation and at most five times. Both the stored
+        message and replacement must be text-bearing and cannot contain
+        attachment parts. Relay does not send a push notification for edits.
+      operationId: editMessage
+      security:
+        - agentToken: []
+        - userSession: []
+      parameters:
+        - $ref: "#/components/parameters/MessageId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageEditInput"
+      responses:
+        "200":
+          description: Canonical edited message with revision history from oldest to newest.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageEditResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: The message does not exist or was not sent by this actor.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: The 15-minute edit window or five-revision limit has passed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: The replacement is invalid, is not text-bearing, or contains attachment parts.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags: [Messages]
+      summary: Unsend a message
+      description: >
+        Unsend the authenticated sender's message within two minutes of
+        creation. Relay keeps its id and conversation sequence as a deleted
+        tombstone, removes its stored parts, and does not send a push
+        notification. User-sent messages require that user's session.
+        Agent-sent messages require that agent's token.
+      operationId: unsendMessage
+      security:
+        - agentToken: []
+        - userSession: []
+      parameters:
+        - $ref: "#/components/parameters/MessageId"
+      responses:
+        "200":
+          description: Bare deleted-message tombstone.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageUnsendResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: The message does not exist or was not sent by this actor.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: The two-minute unsend window has passed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/messages/{message_id}/reactions:
+    post:
+      tags: [Messages]
+      summary: Add or remove a reaction
+      description: >
+        Add or remove a tapback or emoji on a message or a specific part.
+        Recipients receive `reaction.added` / `reaction.removed` events.
+      operationId: reactToMessage
+      parameters:
+        - $ref: "#/components/parameters/MessageId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [operation, type]
+              properties:
+                operation:
+                  type: string
+                  enum: [add, remove]
+                type:
+                  type: string
+                  enum: [love, like, dislike, laugh, emphasize, question, emoji]
+                emoji:
+                  type: string
+                  description: Required iff `type` is `emoji`.
+                  example: "🔥"
+                part_index:
+                  type: integer
+                  description: Target a specific part instead of the whole message.
+      responses:
+        "200":
+          description: Reaction state updated.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: The message does not exist or is not visible to this actor.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: The operation, type, emoji, or part target is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/groups/invites:
+    post:
+      tags: [Groups]
+      summary: Propose a group
+      description: >
+        Ask verified users who have installed the authenticated agent to join
+        a new group or an existing group that already contains the agent.
+        Relay commits one consent card into each target's direct conversation
+        with the agent. The agent never changes membership directly. The first
+        accept makes the conversation live, each later accept joins that same
+        conversation, and the invite stays open for whoever has not answered
+        until everyone answers or it expires.
+      operationId: createGroupInvite
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupInviteCreateInput"
+      responses:
+        "201":
+          description: Invite created, or the original response for an idempotent replay.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupInviteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >
+            A target has not installed the agent, has blocked it, or the agent
+            is not an active participant in the destination group.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: >
+            The idempotency key conflicts, or an unexpired open invite
+            already exists for the same agent, targets, and destination.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: The request shape, target set, TTL, existing membership, or group cap is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/conversations:
+    get:
+      tags: [Conversations]
+      summary: List conversations
+      description: >
+        List conversations where the authenticated agent is an active
+        participant. Results are ordered by `last_message_at` descending, with
+        conversations that have no messages last. Pass the opaque
+        `next_cursor` unchanged to read the next page.
+      operationId: listConversations
+      parameters:
+        - name: cursor
+          in: query
+          schema:
+            type: string
+          description: Opaque `next_cursor` from the previous page.
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: Conversations visible to this agent.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentConversationListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          description: Cursor or limit is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/groups/invites/{invite_id}:
+    get:
+      tags: [Groups]
+      summary: Get a group invite
+      description: Read the current member acceptance states for an invite created by the authenticated agent.
+      operationId: getGroupInvite
+      parameters:
+        - $ref: "#/components/parameters/GroupInviteId"
+      responses:
+        "200":
+          description: Current invite snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupInviteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: No invite with this id belongs to the authenticated agent.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/conversations/{conversation_id}:
+    get:
+      tags: [Conversations]
+      summary: Get a conversation
+      description: >
+        Read one conversation where the authenticated agent is an active
+        participant. Unknown conversations and conversations outside the
+        agent's active membership both return 404.
+      operationId: getConversation
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^cnv_"
+      responses:
+        "200":
+          description: The conversation visible to this agent.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentConversationResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/groups/invites/{invite_id}/accept:
+    post:
+      tags: [Groups]
+      summary: Accept a group invite
+      description: >
+        Accept as one invited Relay user, with immediate effect. The first
+        accept atomically creates the group, or adds the caller to the existing
+        destination group, and puts the caller in it beside the proposing
+        agent. Every later accept joins that same conversation. Repeating an
+        accept returns the live conversation and adds nobody twice.
+      operationId: acceptGroupInvite
+      security:
+        - userSession: []
+      parameters:
+        - $ref: "#/components/parameters/GroupInviteId"
+      responses:
+        "200":
+          description: Current invite state, plus the conversation_id the caller joined.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [invite]
+                properties:
+                  invite:
+                    $ref: "#/components/schemas/GroupInvite"
+                  conversation_id:
+                    type: string
+                    pattern: "^cnv_"
+        "401":
+          description: A Relay user session is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: The invite does not exist or the caller is not a target.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: >
+            The invite is closed, the caller already declined, or the caller
+            failed relationship, block, membership, or group-cap revalidation.
+            A refusal here applies to the caller alone and leaves the invite
+            open for everyone else.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/groups/invites/{invite_id}/decline:
+    post:
+      tags: [Groups]
+      summary: Decline a group invite
+      description: >
+        Decline as one invited Relay user. Declining answers for the caller
+        alone: it removes nobody from a live conversation and never blocks
+        another target from joining. Once every target has answered, the invite
+        reaches its terminal state.
+      operationId: declineGroupInvite
+      security:
+        - userSession: []
+      parameters:
+        - $ref: "#/components/parameters/GroupInviteId"
+      responses:
+        "200":
+          description: Current invite state. Repeating a decline is a no-op.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupInviteResponse"
+        "401":
+          description: A Relay user session is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: The invite does not exist or the caller is not a target.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: The invite is closed, or the caller already joined the conversation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/conversations/direct:
+    post:
+      tags: [Conversations]
+      summary: Create or reuse a human direct conversation
+      description: >
+        Creates the single direct conversation for the authenticated Relay
+        user and a verified target user, or reuses the existing conversation
+        for that normalized pair.
+      operationId: createDirectConversation
+      security:
+        - userSession: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [user_id]
+              properties:
+                user_id:
+                  type: string
+                  pattern: "^usr_"
+                  description: Verified Relay user to message.
+      responses:
+        "200":
+          description: Existing conversation for this user pair.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DirectConversationResponse"
+        "201":
+          description: New conversation for this user pair.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DirectConversationResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/InviteRequired"
+        "404":
+          description: The feature is unavailable or the verified target user does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Idempotency-Key or a valid non-self user_id is missing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/waitlist:
+    post:
+      tags: [Invites, Public]
+      summary: Join the waitlist
+      description: >
+        Public, unauthenticated endpoint behind the relayapp.im waitlist form.
+        Accepts an email address or E.164 phone number, dedupes by contact,
+        and always answers `202` for a well-formed contact — including
+        duplicates — so the endpoint cannot be used to probe who is already on
+        the list. Aggressively rate limited per client IP.
+      operationId: joinWaitlist
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contact]
+              properties:
+                contact:
+                  type: string
+                  maxLength: 254
+                  description: Email address or E.164 phone number.
+                  example: person@example.com
+                source:
+                  type: string
+                  enum: [web, app]
+                  default: web
+      responses:
+        "202":
+          description: Accepted (whether or not the contact was already listed).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accepted]
+                properties:
+                  accepted:
+                    type: boolean
+                    const: true
+        "422":
+          description: The contact is not a valid email address or phone number.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/invites/redeem:
+    post:
+      tags: [Invites]
+      summary: Redeem an invite code
+      description: >
+        Activates the calling account with a friend's invite code. Codes are 8
+        characters of unambiguous base32 (no 0/O/1/I) and match
+        case-insensitively. Idempotent once the account is activated: further
+        calls answer `200` with `already_activated: true` regardless of code.
+      operationId: redeemInvite
+      security:
+        - userSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  minLength: 8
+                  maxLength: 8
+                  pattern: "^[A-HJ-NP-Za-hj-np-z2-9]{8}$"
+                  example: KQ7MPX4Z
+      responses:
+        "200":
+          description: The account is activated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [activated, already_activated, account]
+                properties:
+                  activated:
+                    type: boolean
+                    const: true
+                  already_activated:
+                    type: boolean
+                    description: True when the account was activated before this call.
+                  account:
+                    $ref: "#/components/schemas/AccountGate"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Unknown invite code.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: The invite code was already used by another account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Missing or malformed code.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/me/invites:
+    get:
+      tags: [Invites]
+      summary: List my invite codes
+      description: >
+        Lists the caller's invite codes with used state, lazily minting the
+        full batch of 5 the first time an activated account asks. Grandfathered
+        accounts (activated by migration, never through a code) mint on their
+        first read too. Unactivated accounts are rejected with
+        `invite_required`.
+      operationId: listMyInvites
+      security:
+        - userSession: []
+      responses:
+        "200":
+          description: The caller's 5 invite codes.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [invites]
+                properties:
+                  invites:
+                    type: array
+                    minItems: 5
+                    maxItems: 5
+                    items:
+                      type: object
+                      required: [code, url, used, used_at, created_at]
+                      properties:
+                        code:
+                          type: string
+                          example: KQ7MPX4Z
+                        url:
+                          type: string
+                          format: uri
+                          example: https://relayapp.im/invite/KQ7MPX4Z
+                        used:
+                          type: boolean
+                        used_at:
+                          type: [string, "null"]
+                          format: date-time
+                        created_at:
+                          type: string
+                          format: date-time
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/InviteRequired"
+
+  /v1/conversations/{conversation_id}/messages:
+    get:
+      tags: [Messages]
+      summary: Read conversation history
+      description: >
+        Read a conversation's messages, newest first. The authenticated agent
+        must be a participant. Page backwards with `before_sequence`.
+      operationId: listConversationMessages
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Conversation id from `message.received`.
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: before_sequence
+          in: query
+          schema:
+            type: integer
+          description: Return only messages with a lower sequence.
+      responses:
+        "200":
+          description: Messages, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [messages]
+                properties:
+                  messages:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Message"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: The actor is not a participant in this conversation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/webhooks:
+    get:
+      tags: [Events]
+      summary: List webhooks
+      description: List the authenticated agent's webhook endpoints. Signing secrets are never returned.
+      operationId: listWebhooks
+      responses:
+        "200":
+          description: Registered webhook endpoints.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [webhooks]
+                properties:
+                  webhooks:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WebhookEndpoint"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Events]
+      summary: Register a webhook
+      description: >
+        Register a public HTTPS receiver. The signing secret is returned only
+        in this response. Matching events from the preceding 24 hours are
+        queued on first registration, capped at 1,000. An agent may have up to
+        five enabled endpoints.
+      operationId: createWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookCreateInput"
+      responses:
+        "201":
+          description: Webhook registered; store the signing secret now.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookSecretResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: URL already registered or five enabled endpoints already exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Invalid URL or event filter.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          $ref: "#/components/responses/WebhookDeliveryUnavailable"
+
+  /v1/webhooks/{webhook_id}:
+    parameters:
+      - name: webhook_id
+        in: path
+        required: true
+        schema: { type: string, pattern: "^wh_" }
+    patch:
+      tags: [Events]
+      summary: Update a webhook
+      description: Change the URL, event filters, or enabled state.
+      operationId: updateWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookUpdateInput"
+      responses:
+        "200":
+          description: Updated endpoint.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [webhook]
+                properties:
+                  webhook:
+                    $ref: "#/components/schemas/WebhookEndpoint"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Webhook not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: URL already registered or five enabled endpoints already exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Invalid update.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags: [Events]
+      summary: Delete a webhook
+      description: Permanently deletes the endpoint and stops new deliveries to it.
+      operationId: deleteWebhook
+      responses:
+        "204":
+          description: Webhook deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Webhook not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/webhooks/{webhook_id}/rotate-secret:
+    parameters:
+      - name: webhook_id
+        in: path
+        required: true
+        schema: { type: string, pattern: "^wh_" }
+    post:
+      tags: [Events]
+      summary: Rotate a webhook secret
+      description: >
+        Returns a new signing secret once. For 24 hours Relay includes
+        signatures from both the new and previous secret for zero-downtime rotation.
+      operationId: rotateWebhookSecret
+      responses:
+        "200":
+          description: Secret rotated; store the new secret now.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookSecretResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Webhook not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          $ref: "#/components/responses/WebhookDeliveryUnavailable"
+
+  /v1/events:
+    get:
+      tags: [Events]
+      summary: Long-poll for events
+      description: >
+        Drain the agent's durable event log past `cursor` (Telegram getUpdates
+        model). When no newer events exist the request holds open up to
+        `timeout` seconds and returns as soon as one lands. Passing a cursor
+        durably acknowledges every event at or below it. Before making the
+        next request, atomically persist this page's events to the engine queue
+        together with `next_cursor`; never advance the cursor before the events
+        are durable. While any webhook endpoint is enabled this endpoint
+        returns `409 conflict`; the check runs per request and on every wake,
+        so around a registration or disable both paths may briefly observe the
+        same events — deduplicate by `event_id`. One consumer per agent:
+        starting a newer poll terminates an older held-open request with
+        `409 terminated_by_other_consumer`.
+      operationId: pollEvents
+      parameters:
+        - name: cursor
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+          description: >
+            The `next_cursor` from a previous response. It durably acknowledges
+            that handed-out page and advances message delivery receipts; Relay
+            rejects values above the highest cursor it has delivered. `0`
+            starts from the beginning of the retained log.
+        - name: timeout
+          in: query
+          required: true
+          schema: { type: integer, minimum: 0, maximum: 30 }
+          description: >-
+            Seconds to hold the request open when no events are pending.
+            0 returns immediately with any pending events (nonblocking poll).
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 100 }
+      responses:
+        "200":
+          description: Events past the cursor, oldest first, and the cursor to persist.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [events, next_cursor]
+                properties:
+                  events:
+                    type: array
+                    maxItems: 100
+                    items:
+                      $ref: "#/components/schemas/Event"
+                  next_cursor:
+                    type: integer
+                    description: Pass as `cursor` on the next poll; equal to the request cursor when empty.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: >
+            `conflict` — a webhook endpoint is enabled; disable or delete your
+            webhooks to poll. `terminated_by_other_consumer` — a newer poll
+            with this Agent Token took over the consumer slot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "410":
+          description: >
+            `cursor_expired` — the requested cursor precedes the seven-day
+            retained event log. Reconcile canonical conversation history,
+            persist the recovered state, and resume from a current cursor.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: >
+            Cursor, timeout, or limit does not satisfy its exact integer
+            bounds, or cursor acknowledges a sequence Relay has not delivered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/pairings:
+    post:
+      tags: [Pairing]
+      summary: Create a pairing
+      description: >
+        Start device-code pairing from a terminal. No authentication; the
+        source IP is rate-limited. Show the returned `code` (and a QR of
+        `url`) to the user, then long-poll the pairing with `poll_token` until
+        the Relay app claims it. Codes are single-use and expire after
+        `expires_in` seconds. If a JSON body is present it must be an object
+        containing only the documented fields.
+      operationId: createPairing
+      security: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                device_name:
+                  type: string
+                  minLength: 1
+                  maxLength: 80
+                  pattern: ".*\\S.*"
+                  description: Shown on the phone's claim sheet, e.g. the computer's hostname.
+                  example: Advait's MacBook Pro
+                engine:
+                  type: string
+                  pattern: "^[a-z0-9][a-z0-9._-]{0,39}$"
+                  description: Bridge engine identifier shown on the claim sheet.
+                  example: claude
+      responses:
+        "201":
+          description: Pairing created; poll it until claimed.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [pairing_id, code, url, poll_token, expires_in]
+                properties:
+                  pairing_id:
+                    type: string
+                    pattern: ^pair_
+                    example: pair_01jz9x2m8ktqv4
+                  code:
+                    type: string
+                    pattern: "^[A-Z]+-[A-Z]+-[A-Z]+-[0-9]{4}$"
+                    description: Human-typable single-use code the user enters in the Relay app.
+                    example: AMBER-KITE-ROYAL-0472
+                  url:
+                    type: string
+                    format: uri
+                    description: Universal link that opens the claim sheet directly.
+                    example: https://relayapp.im/pair/AMBER-KITE-ROYAL-0472
+                  poll_token:
+                    type: string
+                    pattern: ^rlyp_
+                    description: >
+                      Bearer credential for `GET /v1/pairings/{pairing_id}`
+                      only. It never authorizes the platform API.
+                  expires_in:
+                    type: integer
+                    const: 600
+                    description: Seconds until the code stops being claimable.
+                    example: 600
+        "422":
+          description: Invalid device_name or engine.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Too many pairings created from this address.
+          headers:
+            Retry-After:
+              description: Whole seconds until another pairing may be created.
+              schema:
+                type: integer
+                minimum: 1
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/pairings/code/{code}:
+    get:
+      tags: [Pairing]
+      summary: Preview a pairing claim
+      description: >
+        App-internal authenticated preview used before the user confirms Add.
+        Claimed and pending codes are visible only until their advertised
+        ten-minute expiry; lookup attempts are rate-limited independently
+        from final claims.
+      operationId: previewPairing
+      security:
+        - userSession: []
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[A-Za-z]+-[A-Za-z]+-[A-Za-z]+-[0-9]{4}$"
+      responses:
+        "200":
+          description: Pairing metadata for the claim sheet.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [pairing]
+                properties:
+                  pairing:
+                    $ref: "#/components/schemas/PairingPreview"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Unknown or expired pairing code.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Too many pairing previews for this user or address.
+          headers:
+            Retry-After:
+              description: Whole seconds before another preview attempt.
+              schema: { type: integer, minimum: 1 }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/pairings/{code}/claim:
+    post:
+      tags: [Pairing]
+      summary: Claim a pairing
+      description: >
+        App-internal authenticated claim. Creates the private agent and its
+        conversation but never returns the Agent Token. Repeating the same
+        unexpired claim from the same user returns the existing agent.
+      operationId: claimPairing
+      security:
+        - userSession: []
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[A-Za-z]+-[A-Za-z]+-[A-Za-z]+-[0-9]{4}$"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PairingClaimInput"
+      responses:
+        "200":
+          description: Idempotent replay by the user who already claimed this pairing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PairingClaimResponse"
+        "201":
+          description: Pairing claimed and agent created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PairingClaimResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Unknown or expired pairing code.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Pairing belongs to another user, or the requested handle is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Body is malformed, contains unknown fields, or fails field validation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Too many pairing claims for this user or address.
+          headers:
+            Retry-After:
+              description: Whole seconds before another claim attempt.
+              schema: { type: integer, minimum: 1 }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          $ref: "#/components/responses/PairingDeliveryUnavailable"
+
+  /v1/pairings/{pairing_id}:
+    get:
+      tags: [Pairing]
+      summary: Poll a pairing
+      description: >
+        Poll pairing state with the pairing's `poll_token` as the bearer
+        credential. With `wait=true` the request holds open (≤30 s) and
+        returns as soon as the pairing is claimed. After a claim, the computer
+        receives the minted Agent Token. A lost response is recoverable: the
+        same poll credential receives the same token until its first successful
+        Agent API use or ten minutes after first delivery. Then Relay scrubs
+        the recovery copy and returns `410`. An expired unclaimed pairing
+        returns `404`. A newer concurrent poll terminates the older one with
+        `409 terminated_by_other_consumer`.
+      operationId: pollPairing
+      security:
+        - pollToken: []
+      parameters:
+        - name: pairing_id
+          in: path
+          required: true
+          schema: { type: string, pattern: ^pair_ }
+        - name: wait
+          in: query
+          schema: { type: boolean, default: false }
+          description: Hold the request open until claimed or ~25 s pass.
+      responses:
+        "200":
+          description: Current pairing state.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - title: Pending
+                    type: object
+                    additionalProperties: false
+                    required: [status]
+                    properties:
+                      status: { type: string, const: pending }
+                  - title: Claimed
+                    type: object
+                    additionalProperties: false
+                    required: [status, agent_token, agent]
+                    properties:
+                      status: { type: string, const: claimed }
+                      agent_token:
+                        type: string
+                        pattern: ^rly_live_
+                        description: Recoverably re-delivered only during the bounded delivery window; store it now.
+                      agent:
+                        $ref: "#/components/schemas/AgentProfile"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Unknown pairing, or the code expired before it was claimed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: A newer pairing poll took over this request's consumer slot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "410":
+          description: The Agent Token was used, revoked, or aged out of its delivery-recovery window.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: The wait query parameter is not exactly true or false.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Too many concurrent/long-lived pairing polls from this address.
+          headers:
+            Retry-After:
+              description: Whole seconds before another long poll.
+              schema: { type: integer, minimum: 1 }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          $ref: "#/components/responses/PairingDeliveryUnavailable"
+
+  /v1/attachments:
+    post:
+      operationId: uploadAttachment
+      summary: Upload an attachment
+      description: >-
+        Streams one raw request body directly to Relay storage, up to 100 MB.
+        `Content-Length` is required and Relay verifies it against the stored
+        object size. `Content-Type` sets the stored MIME type;
+        `X-Relay-Filename` names downloads. Agent tokens and user sessions both
+        work; the attachment is private to its uploader.
+      tags: [Attachments]
+      parameters:
+        - in: header
+          name: Content-Length
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 104857600
+          description: Exact raw request-body size in bytes.
+        - in: header
+          name: Content-Type
+          schema: { type: string }
+          example: image/png
+        - in: header
+          name: X-Relay-Filename
+          schema: { type: string }
+          example: chart.png
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "201":
+          description: Stored and available.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  attachment:
+                    type: object
+                    required: [id, url, content_type, size_bytes]
+                    properties:
+                      id: { type: string, example: att_01KXGWNZFR }
+                      url: { type: string, description: Capability download URL. }
+                      content_type: { type: string, example: image/png }
+                      size_bytes: { type: integer }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "413":
+          description: The declared attachment size exceeds 100 MB.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Content-Length is missing or invalid, the body is empty, or the stored size does not match the declaration.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/attachments/{attachment_id}:
+    get:
+      operationId: getAttachment
+      summary: Get attachment metadata
+      description: Uploader-only. Others receive 404.
+      tags: [Attachments]
+      parameters:
+        - in: path
+          name: attachment_id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Metadata and download URL.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  attachment:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      state: { type: string, enum: [pending, available, failed] }
+                      content_type: { type: string }
+                      size_bytes: { type: integer }
+                      url: { type: [string, "null"] }
+                      created_at: { type: string, format: date-time }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Not found or not the uploader.
+  /v1/conversations/{conversation_id}/typing:
+    post:
+      operationId: setTyping
+      summary: Start or stop the typing indicator
+      description: >-
+        Ephemeral — pushed to the user's live devices, never enters the event
+        log. `label` (≤ 80 chars) renders a short status line while started.
+      tags: [Conversations]
+      parameters:
+        - in: path
+          name: conversation_id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [started]
+              properties:
+                started: { type: boolean, default: true }
+                label: { type: string, maxLength: 80, example: "Searching the web…" }
+                invocation_id:
+                  $ref: "#/components/schemas/InvocationId"
+                  description: Required for typing in a group; must name this agent's pending invocation.
+      responses:
+        "204":
+          description: Accepted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Agent is not a participant.
+  /v1/conversations/{conversation_id}/read:
+    post:
+      operationId: markRead
+      summary: Advance the read watermark
+      description: >-
+        Marks everything through `message_id` read for the caller. Read implies
+        delivered; older or repeated targets are idempotent no-ops.
+      tags: [Conversations]
+      parameters:
+        - in: path
+          name: conversation_id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message_id]
+              properties:
+                message_id: { type: string, example: msg_01JZM3T8AH }
+      responses:
+        "200":
+          description: Watermark state after the call.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          description: message_id missing or malformed.
+  /v1/agents:
+    get:
+      tags: [Public]
+      summary: List Store agents
+      description: >
+        Returns active public agents whose Store listing is approved and
+        published. Public visibility alone does not put an agent in this
+        catalog. This read never installs an agent or creates a conversation.
+        Consumer projections never expose an owner, prompt, provider, model,
+        runtime, credential, or backend configuration.
+      operationId: listStoreAgents
+      security: []
+      responses:
+        "200":
+          description: Effective Store catalog.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [agents]
+                properties:
+                  agents:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Agent"
+        default:
+          description: Unexpected server or gateway error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/contacts/{handle}/profile:
+    get:
+      tags: [Public]
+      summary: Public agent profile
+      description: >
+        The profile behind a public or unlisted share link
+        (`relayapp.im/handle`). Private handles return 404. Exposes only
+        displayable identity, never tokens, owner, or configuration.
+      operationId: getContactProfile
+      security: []
+      parameters:
+        - name: handle
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Agent handle without the leading `@`.
+      responses:
+        "200":
+          description: Displayable agent identity.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [agent]
+                properties:
+                  agent:
+                    type: object
+                    additionalProperties: false
+                    required: [handle, display_name, tagline, avatar_url, accent_color, visibility]
+                    properties:
+                      handle:
+                        type: string
+                      display_name:
+                        type: string
+                      tagline:
+                        type: string
+                      avatar_url:
+                        type: [string, "null"]
+                        format: uri
+                        maxLength: 2048
+                        pattern: "^https://(?![^/?#]*@)"
+                      accent_color:
+                        type: [string, "null"]
+                      visibility:
+                        type: string
+                        enum: [unlisted, public]
+        "404":
+          description: No agent with that handle.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+webhooks:
+  agentEvent:
+    post:
+      tags: [Events]
+      summary: Receive an agent event
+      operationId: receiveAgentEventWebhook
+      description: >
+        Relay sends this request to each matching enabled endpoint. Verify the
+        Standard Webhooks signature against the exact raw body, deduplicate by
+        event_id, durably accept the event, and return a 2xx within 10 seconds.
+      security: []
+      parameters:
+        - name: webhook-id
+          in: header
+          required: true
+          schema: { type: string }
+          description: Stable event ID; unchanged across retries.
+        - name: webhook-timestamp
+          in: header
+          required: true
+          schema: { type: integer }
+          description: Unix seconds when this delivery attempt was signed.
+        - name: webhook-signature
+          in: header
+          required: true
+          schema: { type: string }
+          description: Space-separated Standard Webhooks signatures such as `v1,<base64>`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Event"
+      responses:
+        "204":
+          description: Event accepted.
+
+components:
+  securitySchemes:
+    agentToken:
+      type: http
+      scheme: bearer
+      description: Agent Token (`rly_live_…`), shown once at agent creation.
+    pollToken:
+      type: http
+      scheme: bearer
+      description: >
+        Pairing poll token (`rlyp_…`) from `POST /v1/pairings`. Authorizes
+        only polling that pairing, never the platform API.
+    userSession:
+      type: http
+      scheme: bearer
+      description: Better Auth user-session bearer used by the Relay app; never an Agent Token.
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 255
+      description: Deriving it from the triggering `event_id` makes a retry safe.
+    MessageId:
+      name: message_id
+      in: path
+      required: true
+      schema:
+        type: string
+      example: msg_01JZM4Q9VN
+    GroupInviteId:
+      name: invite_id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^inv_"
+      example: inv_01K1M8FOUNDERSDINNER
+
+  responses:
+    Unauthorized:
+      description: Token is absent or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    WebhookDeliveryUnavailable:
+      description: Relay's webhook signing service is temporarily unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    PairingDeliveryUnavailable:
+      description: Relay's pairing-token encryption service is temporarily unavailable; retry safely.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: The resource does not exist or is not visible to this agent.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InviteRequired:
+      description: >
+        The session's account has not redeemed an invite
+        (`error.code: invite_required`). Redeem a code with
+        `POST /v1/invites/redeem` to unlock state-creating surfaces.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: The per-conversation message-write ceiling was reached.
+      headers:
+        Retry-After:
+          description: Whole seconds until Relay can admit another new canonical write.
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              example: invalid_request
+            message:
+              type: string
+              example: conversation_id is required
+
+    AccountGate:
+      type: object
+      description: >
+        Invite-gate account state. `/v1/sync` (top level and inside
+        `bootstrap`) and `POST /v1/invites/redeem` return it so the app can
+        render the gate screen and the Invite Friends sheet.
+      required: [activated, waitlist_position, invite_codes_remaining]
+      properties:
+        activated:
+          type: boolean
+        waitlist_position:
+          type: [integer, "null"]
+          minimum: 1
+          description: >
+            1-based rank by signup time among unactivated accounts; null once
+            activated.
+        invite_codes_remaining:
+          type: [integer, "null"]
+          minimum: 0
+          maximum: 5
+          description: >
+            Unused invite codes the account can still share; null until
+            activated.
+
+    DirectConversationResponse:
+      type: object
+      additionalProperties: false
+      required: [conversation]
+      properties:
+        conversation:
+          $ref: "#/components/schemas/DirectConversationSnapshot"
+
+    AgentConversationListResponse:
+      type: object
+      additionalProperties: false
+      required: [conversations]
+      properties:
+        conversations:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/AgentConversation"
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page. Omitted on the final page.
+
+    AgentConversationResponse:
+      type: object
+      additionalProperties: false
+      required: [conversation]
+      properties:
+        conversation:
+          $ref: "#/components/schemas/AgentConversation"
+
+    AgentConversation:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - kind
+        - title
+        - counterpart_user
+        - participant_count
+        - last_sequence
+        - last_message_at
+        - created_at
+      properties:
+        id: { type: string, pattern: "^cnv_" }
+        kind: { type: string, enum: [direct, group] }
+        title: { type: [string, "null"] }
+        counterpart_user:
+          description: The active human in a direct user-agent conversation; null for groups.
+          oneOf:
+            - $ref: "#/components/schemas/CounterpartUser"
+            - type: "null"
+        participant_count: { type: integer, minimum: 1 }
+        last_sequence: { type: integer, minimum: 0 }
+        last_message_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+
+    DirectConversationSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - kind
+        - title
+        - avatar_url
+        - membership_version
+        - participants
+        - contact_id
+        - counterpart_user
+        - created_at
+        - last_message_at
+        - last_message_preview
+        - last_sequence
+        - unread
+        - messages
+      properties:
+        id: { type: string, pattern: "^cnv_" }
+        kind: { type: string, const: direct }
+        title: { type: [string, "null"] }
+        avatar_url: { type: [string, "null"], format: uri }
+        membership_version: { type: integer, minimum: 1 }
+        participants:
+          type: array
+          maxItems: 0
+        contact_id:
+          type: [string, "null"]
+          pattern: "^agt_"
+        counterpart_user:
+          oneOf:
+            - $ref: "#/components/schemas/CounterpartUser"
+            - type: "null"
+        created_at: { type: string, format: date-time }
+        last_message_at: { type: [string, "null"], format: date-time }
+        last_message_preview: { type: string }
+        last_sequence: { type: integer, minimum: 0 }
+        unread: { type: integer, minimum: 0 }
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+
+    CounterpartUser:
+      type: object
+      additionalProperties: false
+      required: [id, display_name, avatar_url]
+      properties:
+        id: { type: string, pattern: "^usr_" }
+        display_name: { type: string }
+        avatar_url: { type: [string, "null"], format: uri }
+
+    AgentProfile:
+      type: object
+      additionalProperties: false
+      required: [id, handle, display_name, tagline, avatar_url, visibility, owner_user_id, created_at]
+      properties:
+        id:
+          type: string
+          example: agt_01JZRELAY
+        handle:
+          type: string
+          example: scheduler
+        display_name:
+          type: string
+          example: Scheduler
+        tagline:
+          type: string
+          example: Finds a time that works
+        avatar_url:
+          type: [string, "null"]
+          format: uri
+          maxLength: 2048
+          pattern: "^https://(?![^/?#]*@)"
+        visibility:
+          type: string
+          enum: [private, unlisted, public]
+        owner_user_id:
+          type: [string, "null"]
+          description: >
+            The user who created and owns this agent. Gate inbound senders
+            against this id instead of trusting the first sender seen. Null
+            only for Relay system agents or after the owner deleted their
+            account.
+          example: usr_01JZU1F0BD
+        created_at:
+          type: string
+          format: date-time
+
+    UserProfile:
+      type: object
+      additionalProperties: false
+      description: >
+        A human participant your agent shares a conversation with. `name` is
+        canonical; `first_name`/`last_name` are a convenience split of `name`
+        on the first space (a two-word given name puts its tail in
+        `last_name`), so greet with them but store `name` if you need the exact
+        value.
+      required: [id, name, first_name, last_name, phone_number, avatar_url, created_at]
+      properties:
+        id:
+          type: string
+          example: usr_01JZU1F0BD
+        name:
+          type: string
+          example: Rushil Kagithala
+        first_name:
+          type: string
+          example: Rushil
+        last_name:
+          type: string
+          description: Empty when the name is a single word.
+          example: Kagithala
+        phone_number:
+          type: [string, "null"]
+          description: >
+            The user's verified messaging number in E.164. Null only for a
+            demo or email-only account.
+          example: "+13135550123"
+        avatar_url:
+          type: [string, "null"]
+          format: uri
+          maxLength: 2048
+        created_at:
+          type: string
+          format: date-time
+
+    Agent:
+      type: object
+      description: >
+        Consumer-safe agent identity. Installation is present only on an
+        installed-agent projection. Owner identity, prompts, provider/model,
+        runtime, credentials, and backend configuration are never included.
+      additionalProperties: false
+      required:
+        - id
+        - handle
+        - displayName
+        - tagline
+        - capabilities
+        - visibility
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          pattern: ^agt_
+          example: agt_01JZRELAY
+        handle:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{2,31}$
+          example: relay
+        displayName:
+          type: string
+          example: Relay
+        tagline:
+          type: string
+          example: Your built-in Relay agent
+        avatarUrl:
+          type: string
+          format: uri
+          maxLength: 2048
+          pattern: "^https://(?![^/?#]*@)"
+        accentColor:
+          type: string
+          example: "#0B75FF"
+        capabilities:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum: [text, image, voice, video, files]
+        visibility:
+          type: string
+          enum: [private, unlisted, public]
+        installation:
+          $ref: "#/components/schemas/AgentInstallation"
+        status:
+          type: string
+          enum: [active, suspended, retired]
+        createdAt:
+          type: string
+          format: date-time
+
+    PairingPreview:
+      type: object
+      additionalProperties: false
+      required: [pairing_id, code, status, device_name, engine, expires_at]
+      properties:
+        pairing_id: { type: string, pattern: ^pair_ }
+        code: { type: string, pattern: "^[A-Z]+-[A-Z]+-[A-Z]+-[0-9]{4}$" }
+        status: { type: string, enum: [pending, claimed] }
+        device_name: { type: [string, "null"], minLength: 1, maxLength: 80 }
+        engine: { type: [string, "null"], pattern: "^[a-z0-9][a-z0-9._-]{0,39}$" }
+        expires_at: { type: string, format: date-time }
+
+    PairingClaimInput:
+      type: object
+      additionalProperties: false
+      required: [display_name]
+      properties:
+        display_name: { type: string, minLength: 1, maxLength: 80, pattern: ".*\\S.*" }
+        handle: { type: string, pattern: "^[a-z][a-z0-9_]{2,31}$" }
+        avatar_url:
+          type: [string, "null"]
+          format: uri
+          maxLength: 2048
+          pattern: "^https://(?![^/?#]*@)"
+
+    PairingClaimResponse:
+      type: object
+      additionalProperties: false
+      required: [pairing_id, status, agent, conversation_id]
+      properties:
+        pairing_id: { type: string, pattern: ^pair_ }
+        status: { type: string, const: claimed }
+        agent:
+          allOf:
+            - $ref: "#/components/schemas/Agent"
+            - type: object
+              required: [installation]
+        conversation_id: { type: string, pattern: ^cnv_ }
+
+    AgentInstallation:
+      type: object
+      description: >
+        User-agent messaging relationship, not a runtime connection. A false
+        canRemove hides and rejects ordinary removal; Block and Report remain
+        available as safety overrides.
+      additionalProperties: false
+      required: [id, state, source, conversationId, canRemove]
+      properties:
+        id:
+          type: string
+          pattern: ^ins_
+        state:
+          type: string
+          enum: [installed, removed]
+        source:
+          type: string
+          enum: [system, owner_create, store, share_link, exact_handle]
+        conversationId:
+          type: string
+          pattern: ^cnv_
+        canRemove:
+          type: boolean
+
+    GroupInviteCreateInput:
+      type: object
+      additionalProperties: false
+      required: [title, user_ids]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: ".*\\S.*"
+        user_ids:
+          type: array
+          minItems: 1
+          maxItems: 24
+          uniqueItems: true
+          items:
+            type: string
+            pattern: "^usr_"
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 200
+          pattern: ".*\\S.*"
+        conversation_id:
+          type: string
+          pattern: "^cnv_"
+          description: Existing group in which the authenticated agent is active. Omit to propose a new group.
+        ttl_seconds:
+          type: integer
+          default: 259200
+          description: Requested lifetime in seconds. Relay clamps it to 600 through 604800.
+
+    GroupInviteMember:
+      type: object
+      additionalProperties: false
+      required: [user_id, display_name, avatar_url, state]
+      properties:
+        user_id:
+          type: string
+          pattern: "^usr_"
+        display_name:
+          type: string
+        avatar_url:
+          type: [string, "null"]
+        state:
+          type: string
+          enum: [invited, accepted, declined]
+          description: >
+            invited has not answered yet, accepted is in the live conversation,
+            and declined answered no.
+
+    GroupInvite:
+      type: object
+      additionalProperties: false
+      required: [id, state, title, expires_at, created_at, members]
+      properties:
+        id:
+          type: string
+          pattern: "^inv_"
+        state:
+          type: string
+          enum: [pending, active, completed, expired]
+          description: >
+            pending is open with nobody joined yet, active is open with the
+            conversation already live, completed is closed with a live
+            conversation, and expired is closed without one.
+        title:
+          type: string
+          minLength: 1
+          maxLength: 100
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 200
+        conversation_id:
+          type: string
+          pattern: "^cnv_"
+          description: >
+            The live conversation once the state is active or completed. On an
+            invite into an existing group it also carries the destination while
+            the state is pending, so read the caller's own member state before
+            offering to open it.
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        members:
+          type: array
+          minItems: 1
+          maxItems: 24
+          items:
+            $ref: "#/components/schemas/GroupInviteMember"
+
+    GroupInviteResponse:
+      type: object
+      additionalProperties: false
+      required: [invite]
+      properties:
+        invite:
+          $ref: "#/components/schemas/GroupInvite"
+
+    GroupInviteComponentData:
+      type: object
+      additionalProperties: false
+      description: >
+        Internal consent card committed by POST /v1/groups/invites. Ordinary
+        agent message sends cannot supply this component.
+      required: [type, invite_id, title, expires_at, members]
+      properties:
+        type:
+          type: string
+          const: group_invite
+        invite_id:
+          type: string
+          pattern: "^inv_"
+        title:
+          type: string
+          minLength: 1
+          maxLength: 100
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 200
+        expires_at:
+          type: string
+          format: date-time
+        conversation:
+          type: object
+          additionalProperties: false
+          required: [id, title]
+          properties:
+            id:
+              type: string
+              pattern: "^cnv_"
+            title:
+              type: string
+              minLength: 1
+              maxLength: 100
+        members:
+          type: array
+          minItems: 1
+          maxItems: 24
+          items:
+            $ref: "#/components/schemas/GroupInviteMember"
+
+    PartInput:
+      oneOf:
+        - $ref: "#/components/schemas/TextPartInput"
+        - $ref: "#/components/schemas/MediaPartInput"
+        - $ref: "#/components/schemas/VoiceMemoPartInput"
+        - $ref: "#/components/schemas/LinkPreviewPartInput"
+        - $ref: "#/components/schemas/DataPartInput"
+      discriminator:
+        propertyName: type
+
+    EditablePartInput:
+      oneOf:
+        - $ref: "#/components/schemas/TextPartInput"
+        - $ref: "#/components/schemas/LinkPreviewPartInput"
+        - $ref: "#/components/schemas/DataPartInput"
+      discriminator:
+        propertyName: type
+
+    MessageEditInput:
+      type: object
+      additionalProperties: false
+      required: [parts]
+      properties:
+        parts:
+          type: array
+          minItems: 1
+          maxItems: 32
+          description: >
+            Full replacement for the stored parts. At least one text part is
+            required. Media, voice memo, and all attachment references are
+            rejected.
+          items:
+            $ref: "#/components/schemas/EditablePartInput"
+          contains:
+            $ref: "#/components/schemas/TextPartInput"
+          minContains: 1
+
+    TextPartInput:
+      type: object
+      additionalProperties: false
+      required: [type, text]
+      properties:
+        type: { type: string, const: text }
+        text:
+          type: string
+          minLength: 1
+          description: UTF-8 text, limited to 8 KB by the server.
+
+    MediaPartInput:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type: { type: string, const: media }
+        url:
+          type: string
+          format: uri
+          pattern: "^https://"
+          description: Public HTTPS source URL.
+        attachment_id:
+          type: string
+          pattern: "^att_"
+          description: Available attachment created by `POST /v1/attachments`.
+        width:
+          type: integer
+          minimum: 1
+          maximum: 100000
+          description: >
+            Optional pixel width, provided together with height. Clients use
+            the pair to reserve the true aspect ratio before the media bytes
+            download. When omitted for an uploaded image attachment, the
+            server derives both values from the stored bytes.
+        height:
+          type: integer
+          minimum: 1
+          maximum: 100000
+          description: Optional pixel height, provided together with width.
+      dependentRequired:
+        width: [height]
+        height: [width]
+      oneOf:
+        - properties: { url: {} }
+          required: [url]
+        - properties: { attachment_id: {} }
+          required: [attachment_id]
+
+    VoiceMemoPartInput:
+      type: object
+      additionalProperties: false
+      required: [type]
+      description: Audio rendered with Relay's native inline voice-memo player.
+      properties:
+        type: { type: string, const: voice_memo }
+        url:
+          type: string
+          format: uri
+          pattern: "^https://"
+          description: Public HTTPS audio URL.
+        attachment_id:
+          type: string
+          pattern: "^att_"
+          description: Available `audio/*` attachment created by `POST /v1/attachments`.
+        duration_ms:
+          type: integer
+          minimum: 0
+          description: Optional playback duration metadata in milliseconds.
+      oneOf:
+        - properties: { url: {} }
+          required: [url]
+        - properties: { attachment_id: {} }
+          required: [attachment_id]
+
+    LinkPreviewPartInput:
+      type: object
+      additionalProperties: false
+      required: [type, url]
+      description: URL rendered as a native rich preview when metadata is available.
+      properties:
+        type: { type: string, const: link_preview }
+        url:
+          type: string
+          format: uri
+          pattern: "^https://"
+          maxLength: 2048
+
+    DataPartInput:
+      type: object
+      additionalProperties: false
+      required: [type, data]
+      properties:
+        type: { type: string, const: data }
+        data:
+          description: >
+            Integration-defined JSON, limited to 16 KB by the server. Relay
+            validates recognized component kinds (buttons, select, card,
+            confirm, and agent_permission_request), synthesizes their fallback
+            string when absent, and leaves unknown kinds unchanged for client
+            fallback rendering. Consumers must ignore unknown fields inside
+            known kinds. The option_ids array name is reserved for a future
+            multi-select tap-result shape; v1 does not implement multi-select.
+            Component parts are valid only in 1:1 conversations. See the
+            Message components documentation. group_invite is a separate
+            internal component committed only by the invite endpoint;
+            ordinary agent message sends that contain it return 422.
+
+    Part:
+      oneOf:
+        - $ref: "#/components/schemas/TextPart"
+        - $ref: "#/components/schemas/MediaPart"
+        - $ref: "#/components/schemas/VoiceMemoPart"
+        - $ref: "#/components/schemas/LinkPreviewPart"
+        - $ref: "#/components/schemas/DataPart"
+      discriminator:
+        propertyName: type
+
+    TextPart:
+      type: object
+      additionalProperties: false
+      required: [part_index, type, text]
+      properties:
+        part_index: { type: integer, minimum: 0 }
+        type: { type: string, const: text }
+        text: { type: string }
+
+    MediaPart:
+      type: object
+      additionalProperties: false
+      required: [part_index, type, url]
+      properties:
+        part_index: { type: integer, minimum: 0 }
+        type: { type: string, const: media }
+        url: { type: string, format: uri }
+        attachment_id: { type: string, pattern: "^att_" }
+        width:
+          type: integer
+          minimum: 1
+          description: >
+            Pixel width, present when the sender declared dimensions or the
+            server derived them from an uploaded image. Always paired with
+            height; reserve the balloon at width/height before downloading.
+        height: { type: integer, minimum: 1 }
+
+    VoiceMemoPart:
+      type: object
+      additionalProperties: false
+      required: [part_index, type, url]
+      properties:
+        part_index: { type: integer, minimum: 0 }
+        type: { type: string, const: voice_memo }
+        url: { type: string, format: uri }
+        attachment_id: { type: string, pattern: "^att_" }
+        duration_ms: { type: integer, minimum: 0 }
+
+    LinkPreviewPart:
+      type: object
+      additionalProperties: false
+      required: [part_index, type, url]
+      properties:
+        part_index: { type: integer, minimum: 0 }
+        type: { type: string, const: link_preview }
+        url: { type: string, format: uri, maxLength: 2048 }
+
+    DataPart:
+      type: object
+      additionalProperties: false
+      required: [part_index, type, data]
+      properties:
+        part_index: { type: integer, minimum: 0 }
+        type: { type: string, const: data }
+        data:
+          anyOf:
+            - $ref: "#/components/schemas/GroupInviteComponentData"
+            - description: Other integration-defined JSON data.
+
+    Suggestion:
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 96
+          description: Chip label; also the exact text sent when the user taps it.
+          example: Everyone
+
+    ReplyRef:
+      type: [object, "null"]
+      properties:
+        message_id:
+          type: string
+          example: msg_01JZM3T8AH
+        part_index:
+          type: integer
+          example: 0
+
+    Sender:
+      type: object
+      required: [kind, id]
+      properties:
+        kind:
+          type: string
+          enum: [user, agent, system]
+        id:
+          type: string
+          example: usr_01JZU1F0BD
+
+    MessageRevision:
+      type: object
+      additionalProperties: false
+      required: [parts, fallback_text, replaced_at]
+      properties:
+        parts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Part"
+        fallback_text:
+          type: string
+        replaced_at:
+          type: string
+          format: date-time
+          description: Time this snapshot stopped being the canonical content.
+
+    ProjectedReaction:
+      type: object
+      additionalProperties: false
+      required: [part_index, emoji, actor_kind, actor_id]
+      properties:
+        part_index:
+          type: [integer, "null"]
+          minimum: 0
+        emoji:
+          type: string
+        actor_kind:
+          type: string
+          enum: [user, contact]
+        actor_id:
+          type: string
+          pattern: "^(usr|agt)_"
+
+    VisibleMessage:
+      type: object
+      additionalProperties: false
+      required: [id, conversation_id, sequence, sender, parts, fallback_text, status, created_at]
+      properties:
+        id:
+          type: string
+          example: msg_01JZM3T8AH
+        conversation_id:
+          type: string
+          example: cnv_01JZC7K4RQ
+        sequence:
+          type: integer
+          description: Order inside the conversation. It is unrelated to webhook event IDs.
+        sender:
+          $ref: "#/components/schemas/Sender"
+        parts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Part"
+        reply_to:
+          $ref: "#/components/schemas/ReplyRef"
+        invoked_agents:
+          type: array
+          uniqueItems: true
+          items: { type: string }
+          description: Agents explicitly invoked by this human group message.
+        suggestions:
+          type: array
+          maxItems: 8
+          description: >
+            Agent-attached quick-reply chips. Clients render them only while
+            this message is the newest in the conversation.
+          items:
+            $ref: "#/components/schemas/Suggestion"
+        reactions:
+          type: array
+          description: Current reactions. History and bootstrap projections include this array.
+          items:
+            $ref: "#/components/schemas/ProjectedReaction"
+        fallback_text:
+          type: string
+          description: Plain-language representation used by notifications and search.
+        status:
+          type: string
+          enum: [sent, delivered, read, completed, failed]
+          example: sent
+        delivered_at:
+          type: string
+          format: date-time
+        read_at:
+          type: string
+          format: date-time
+        edited_at:
+          type: string
+          format: date-time
+          description: Time of the latest edit. Omitted when the message has never been edited.
+        revisions:
+          type: array
+          maxItems: 5
+          description: >
+            Prior canonical parts and fallback text, ordered from oldest to
+            newest. History and bootstrap projections include an empty array
+            for unedited messages.
+          items:
+            $ref: "#/components/schemas/MessageRevision"
+        created_at:
+          type: string
+          format: date-time
+
+    EditedMessage:
+      allOf:
+        - $ref: "#/components/schemas/VisibleMessage"
+        - type: object
+          required: [edited_at, revisions]
+          properties:
+            edited_at:
+              type: string
+              format: date-time
+            revisions:
+              type: array
+              minItems: 1
+              maxItems: 5
+              items:
+                $ref: "#/components/schemas/MessageRevision"
+
+    DeletedMessageTombstone:
+      type: object
+      additionalProperties: false
+      required: [id, conversation_id, sequence, sender, status, created_at]
+      properties:
+        id:
+          type: string
+          example: msg_01JZM3T8AH
+        conversation_id:
+          type: string
+          example: cnv_01JZC7K4RQ
+        sequence:
+          type: integer
+          minimum: 1
+        sender:
+          $ref: "#/components/schemas/Sender"
+        status:
+          type: string
+          const: deleted
+        created_at:
+          type: string
+          format: date-time
+
+    Message:
+      oneOf:
+        - $ref: "#/components/schemas/VisibleMessage"
+        - $ref: "#/components/schemas/DeletedMessageTombstone"
+
+    MessageEditResponse:
+      type: object
+      additionalProperties: false
+      required: [message]
+      properties:
+        message:
+          $ref: "#/components/schemas/EditedMessage"
+
+    MessageUnsendResponse:
+      type: object
+      additionalProperties: false
+      required: [message]
+      properties:
+        message:
+          $ref: "#/components/schemas/DeletedMessageTombstone"
+
+    WebhookEventType:
+      type: string
+      enum:
+        - message.received
+        - message.edited
+        - message.unsent
+        - conversation.added
+        - conversation.updated
+        - conversation.removed
+        - reaction.added
+        - reaction.removed
+        - message.delivered
+        - message.read
+        - group.invite.joined
+        - group.invite.declined
+        - group.invite.completed
+        - group.invite.expired
+
+    WebhookEndpoint:
+      type: object
+      required: [id, url, events, enabled, secret_prefix, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          example: wh_01JZWEBHOOK
+        url:
+          type: string
+          format: uri
+          example: https://agent.example/webhooks/relay
+        events:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/WebhookEventType"
+        enabled:
+          type: boolean
+        secret_prefix:
+          type: string
+          description: Non-secret prefix for identifying the configured signing key.
+          example: whsec_MfKQ9r8G…
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    WebhookCreateInput:
+      type: object
+      additionalProperties: false
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+          pattern: "^https://"
+          maxLength: 2048
+          description: Public HTTPS receiver URL.
+        events:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          description: Omit to subscribe to every current event type.
+          items:
+            $ref: "#/components/schemas/WebhookEventType"
+
+    WebhookUpdateInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        url:
+          type: string
+          format: uri
+          pattern: "^https://"
+          maxLength: 2048
+        events:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/WebhookEventType"
+        enabled:
+          type: boolean
+
+    WebhookSecretResponse:
+      type: object
+      required: [webhook, signing_secret]
+      properties:
+        webhook:
+          $ref: "#/components/schemas/WebhookEndpoint"
+        signing_secret:
+          type: string
+          pattern: "^whsec_"
+          description: Base64-encoded 256-bit HMAC key. Returned only on create or rotation.
+          example: whsec_EXAMPLEKEYDONOTUSE0000000000000000
+
+    Event:
+      type: object
+      additionalProperties: false
+      required: [event_id, event_type, agent_id, created_at, data]
+      properties:
+        event_id:
+          type: string
+          description: Deduplicate on this — delivery is at least once.
+          example: evt_01JZE9M2XW
+        event_type:
+          $ref: "#/components/schemas/WebhookEventType"
+          example: message.received
+        agent_id:
+          type: string
+          example: agt_01JZRELAY
+        created_at:
+          type: string
+          format: date-time
+        data:
+          oneOf:
+            - $ref: "#/components/schemas/MessageEventData"
+            - $ref: "#/components/schemas/MessageEditedEventData"
+            - $ref: "#/components/schemas/MessageUnsentEventData"
+            - $ref: "#/components/schemas/GroupLifecycleEventData"
+            - $ref: "#/components/schemas/GroupInviteEventData"
+            - $ref: "#/components/schemas/ReactionEventData"
+            - $ref: "#/components/schemas/ReceiptEventData"
+
+    MessageEventData:
+      type: object
+      additionalProperties: false
+      required: [message]
+      properties:
+        message:
+          $ref: "#/components/schemas/Message"
+        invocation_id:
+          $ref: "#/components/schemas/InvocationId"
+
+    MessageEditedEventData:
+      type: object
+      additionalProperties: false
+      required: [message, revision_count]
+      properties:
+        message:
+          $ref: "#/components/schemas/EditedMessage"
+        revision_count:
+          type: integer
+          minimum: 1
+          maximum: 5
+
+    MessageUnsentEventData:
+      type: object
+      additionalProperties: false
+      required: [message_id, conversation_id, sequence]
+      properties:
+        message_id:
+          type: string
+          pattern: "^msg_"
+        conversation_id:
+          type: string
+          pattern: "^cnv_"
+        sequence:
+          type: integer
+          minimum: 1
+
+    GroupLifecycleEventData:
+      type: object
+      additionalProperties: false
+      required: [conversation_id, actor, membership_version, system_mutation, message]
+      properties:
+        conversation_id: { type: string, pattern: "^cnv_" }
+        actor:
+          type: object
+          required: [kind, id]
+          properties:
+            kind: { type: string, const: user }
+            id: { type: string, pattern: "^usr_" }
+        affected_participant:
+          type: object
+          description: Present when the lifecycle mutation adds, removes, or records the departure of one participant; omitted for metadata updates.
+          required: [kind, id]
+          properties:
+            kind: { type: string, enum: [user, agent] }
+            id: { type: string, pattern: "^(usr|agt)_" }
+        membership_version: { type: integer, minimum: 1 }
+        system_mutation:
+          type: object
+          required: [type, mutation, actor, changes]
+          properties:
+            type: { type: string, const: group.mutation }
+            mutation:
+              type: string
+              enum: [group.created, metadata.updated, membership.added, membership.removed, membership.left]
+            actor: { type: object }
+            affected_participant: { type: object }
+            changes: { type: object }
+        message:
+          $ref: "#/components/schemas/Message"
+
+    GroupInviteEventData:
+      oneOf:
+        - title: Group invite join
+          type: object
+          additionalProperties: false
+          required: [invite_id, conversation_id, user_id]
+          properties:
+            invite_id:
+              type: string
+              pattern: "^inv_"
+            conversation_id:
+              type: string
+              pattern: "^cnv_"
+            user_id:
+              type: string
+              pattern: "^usr_"
+        - title: Group invite decline
+          type: object
+          additionalProperties: false
+          required: [invite_id, user_id]
+          properties:
+            invite_id:
+              type: string
+              pattern: "^inv_"
+            user_id:
+              type: string
+              pattern: "^usr_"
+        - title: Completed group invite
+          type: object
+          additionalProperties: false
+          required: [invite_id, conversation_id]
+          properties:
+            invite_id:
+              type: string
+              pattern: "^inv_"
+            conversation_id:
+              type: string
+              pattern: "^cnv_"
+        - title: Expired group invite
+          type: object
+          additionalProperties: false
+          required: [invite_id]
+          properties:
+            invite_id:
+              type: string
+              pattern: "^inv_"
+
+    ReactionEventData:
+      type: object
+      additionalProperties: false
+      required: [reaction]
+      properties:
+        reaction: { type: object }
+
+    ReceiptEventData:
+      type: object
+      additionalProperties: true
+      required: [message_id, conversation_id, through_sequence, at]
+      properties:
+        message_id: { type: string, pattern: "^msg_" }
+        conversation_id: { type: string, pattern: "^cnv_" }
+        through_sequence: { type: integer, minimum: 1 }
+        at: { type: string, format: date-time }
+
+    InvocationId:
+      type: string
+      pattern: "^ivk_[0-9a-hjkmnp-tv-z]{26}$"
+      example: ivk_01k1m4q9vn2r7t9b4c6qdh8xwy
+      description: >
+        One pending, agent-specific group invocation. It is bound to the
+        agent's current membership period and becomes invalid on removal.

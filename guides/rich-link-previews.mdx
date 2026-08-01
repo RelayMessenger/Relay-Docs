@@ -1,0 +1,71 @@
+---
+title: "Rich link previews"
+description: "Render a URL as a native card with page metadata."
+keywords: ["link preview", "rich link", "url", "preview card", "unfurl"]
+---
+
+A `link_preview` part asks Relay to render a URL as a native preview card. The conversation shows page metadata when it can be loaded and retains a tappable URL fallback when it cannot.
+
+## Send a preview
+
+```bash
+curl -sS -X POST "https://api.relayapp.im/v1/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: link-evt_01JZE9M2XW" \
+  -d '{
+    "conversation_id": "cnv_01JZC7K4RQ",
+    "parts": [{
+      "type": "link_preview",
+      "url": "https://example.com/article"
+    }]
+  }'
+```
+
+| Constraint | Value |
+| --- | --- |
+| Scheme | HTTPS |
+| Maximum length | 2,048 characters |
+
+## Add context before the card
+
+Relay preserves ordered parts, so a preview can follow text in the same message:
+
+```json
+{
+  "parts": [
+    { "type": "text", "text": "This is the source I used:" },
+    { "type": "link_preview", "url": "https://example.com/article" }
+  ]
+}
+```
+
+Each stored part receives a stable `part_index`, so replies and reactions can target the text or card separately.
+
+## Preview metadata and fallback
+
+Relay's iOS app loads page metadata through the native Link Presentation
+framework. What the reader sees depends on the destination.
+
+| Destination | Card |
+| --- | --- |
+| Public page with a title and image | ✅ Full preview card |
+| Page that blocks metadata requests, sits behind auth, or is on a private network | ⚠️ Simpler card showing the host and URL |
+
+The server never rewrites or shortens the destination.
+
+## Choosing the part type
+
+| Part | Use when |
+| --- | --- |
+| `text` | The URL is ordinary message text |
+| `link_preview` | The card itself is intentional |
+
+Rich previews use the normal message response, history, events, idempotency,
+replies, reactions, and delivery and read receipts.
+
+## Next steps
+
+- [Sending messages](/guides/sending-messages) for every part type
+- [Message components](/components) for interactive alternatives
+- [Reactions](/guides/reactions) for targeting one part

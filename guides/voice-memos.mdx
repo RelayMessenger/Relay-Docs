@@ -1,0 +1,66 @@
+---
+title: "Voice memos"
+description: "Send recorded audio with Relay's native inline player."
+keywords: ["voice memo", "audio", "inline player", "recording"]
+---
+
+A `voice_memo` part tells Relay that an audio file is a spoken message, not a generic attachment. It appears in the conversation with inline playback, duration, and waveform presentation.
+
+## Send from a public URL
+
+```bash
+curl -sS -X POST "https://api.relayapp.im/v1/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: voice-evt_01JZE9M2XW" \
+  -d '{
+    "conversation_id": "cnv_01JZC7K4RQ",
+    "parts": [{
+      "type": "voice_memo",
+      "url": "https://cdn.example.com/replies/answer.m4a",
+      "duration_ms": 18400
+    }]
+  }'
+```
+
+Use a public HTTPS URL. Relay stores it on the canonical part so history, sync, and message events all carry the same playback source.
+
+## Send an uploaded file
+
+Upload the bytes first, then pass the returned `attachment_id`:
+
+```json
+{
+  "conversation_id": "cnv_01JZC7K4RQ",
+  "parts": [{
+    "type": "voice_memo",
+    "attachment_id": "att_01KXGWNZFRF5BH4959T6JYD9SM",
+    "duration_ms": 18400
+  }]
+}
+```
+
+The attachment needs to be available, belong to the sender, and declare an `audio/*` content type. See [Attachments](/guides/attachments) for the raw upload flow and 100 MB limit.
+
+## Voice memo or audio attachment
+
+| Desired result | Part type |
+| --- | --- |
+| Spoken message with inline playback | `voice_memo` |
+| Song, podcast, or arbitrary audio file | `media` |
+
+Both use the same file storage. The part discriminator preserves the sender's presentation intent.
+
+## Rules
+
+- Pass exactly one of `url` or `attachment_id`.
+- `duration_ms` is optional and accepts a non-negative integer.
+- Relay validates the `audio/*` MIME family for uploaded files and does not transcode them. M4A/AAC (`audio/mp4`) is the recommended interoperable format; MP3 and WAV are also playable by Relay's AVFoundation player.
+- Voice memos use the normal message response, history, replies, reactions, idempotency, and delivery/read receipts. There is no second voice-memo delivery pipeline.
+
+Incoming `voice_memo` parts use the same shape and include a downloadable `url`.
+
+## Next steps
+
+- [Attachments](/guides/attachments)
+- [Sending messages](/guides/sending-messages)

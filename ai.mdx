@@ -1,0 +1,180 @@
+---
+title: "Build with AI"
+description: "Give coding agents a compact, machine-readable Relay contract."
+keywords: ["build with ai", "llms.txt", "llms-full.txt", "mcp server", "coding agent", "integration brief", "machine readable"]
+---
+
+Relay publishes every page as Markdown, the full site as one file, and the API contract as OpenAPI.
+
+## Machine-readable docs
+
+| Artifact | URL | Use it for |
+| --- | --- | --- |
+| Docs index | [`/llms.txt`](https://docs.relayapp.im/llms.txt) | Discover every page before exploring |
+| Full docs | [`/llms-full.txt`](https://docs.relayapp.im/llms-full.txt) | Load the site into RAG or a long-context model |
+| Any page as Markdown | append `.md` to any page URL | Fetch exactly the page you need, no HTML |
+| OpenAPI spec | [`/api-reference/openapi.yaml`](https://docs.relayapp.im/api-reference/openapi.yaml) | The canonical machine-readable endpoint contract |
+| MCP server | `https://docs.relayapp.im/mcp` | Live docs search from Claude, Cursor, VS Code, or any MCP client |
+
+Use the text files when feeding Relay docs into a build pipeline, RAG system,
+or system prompt: fetch `llms-full.txt` at build time or runtime. Use the MCP
+server when an assistant should search the docs interactively. The page menu on
+every doc can also copy the page as Markdown or open it in ChatGPT, Claude, or
+Cursor.
+
+## Install the Relay skill
+
+One command teaches Claude Code, Cursor, Codex, or any skills-aware agent the
+complete Relay integration, offline:
+
+```bash
+npx skills add https://github.com/relaymessenger/skills --skill relay
+```
+
+The skill covers the quickstart loop, Agent Tokens, signed webhooks, typed
+message parts, streaming, interactive components, groups, receipts, limits,
+and errors. Its topic files are generated from these docs, so the two never
+disagree.
+
+## Connect the MCP server
+
+The server at `https://docs.relayapp.im/mcp` speaks streamable HTTP and exposes
+docs search and retrieval tools. No authentication is required.
+
+<CodeGroup>
+
+```bash Claude Code
+claude mcp add --transport http relay-docs https://docs.relayapp.im/mcp
+```
+
+```json Cursor (.cursor/mcp.json)
+{
+  "mcpServers": {
+    "relay-docs": {
+      "url": "https://docs.relayapp.im/mcp"
+    }
+  }
+}
+```
+
+```json VS Code (.vscode/mcp.json)
+{
+  "servers": {
+    "relay-docs": {
+      "type": "http",
+      "url": "https://docs.relayapp.im/mcp"
+    }
+  }
+}
+```
+
+</CodeGroup>
+
+Once connected, ask the assistant to search Relay docs before writing
+integration code; the server returns current page content with source links.
+
+## The integration brief
+
+Paste this into a coding agent or save it beside an existing integration. It
+covers the current v0 HTTPS contract.
+
+````markdown
+# Relay agent integration brief
+
+Relay is a native messenger for AI agents. The integration uses HTTPS at
+https://api.relayapp.im and one public HTTPS webhook; no SDK is required.
+
+## Authentication
+Read `RELAY_AGENT_TOKEN` from the environment and send it as
+`Authorization: Bearer <token>`. Verify with GET /v1/agents/me. Update the credential before retrying a 401.
+
+## Receive (signed webhook)
+Register with POST /v1/webhooks { "url": "https://..." } using the Agent Token.
+Store the returned signing_secret; it is shown only on create or rotation.
+- Relay POSTs the event as raw JSON with webhook-id, webhook-timestamp, and
+  webhook-signature headers. Verify HMAC-SHA256 over
+  `<webhook-id>.<webhook-timestamp>.<raw-body>` using the base64-decoded bytes after whsec_.
+- Reject timestamps outside a 5-minute window and compare signatures in constant time.
+- Return 2xx only after durable acceptance. Delivery is at-least-once; deduplicate on event_id.
+- Envelope: { event_id, event_type, agent_id, created_at, data }.
+- Event types today: message.received (data.message = full message),
+  message.edited (data.message + revision_count), message.unsent
+  (data.message_id + conversation_id + sequence), message.delivered /
+  message.read (receipt watermarks: data.through_sequence), reaction.added /
+  reaction.removed (data.reaction), conversation.added / conversation.updated /
+  conversation.removed (group lifecycle), group.invite.joined /
+  group.invite.declined (one person's answer, joined carries conversation_id
+  and user_id), group.invite.completed / group.invite.expired (terminal state).
+  Ignore unknown types.
+- Relay retries timeouts, connection errors, 408, 429, and 5xx with exponential
+  backoff for up to 10 attempts. Any other non-2xx response is a permanent
+  failure and is dead-lettered immediately.
+- A successful message.received delivery automatically marks it Delivered.
+
+## Send
+POST /v1/messages with the required Idempotency-Key header (8-255 chars; derive it from
+the inbound event_id so retries are safe; reuse the same key when you retry).
+Body: { "conversation_id": "cnv_…", "parts": [...], "reply_to"?: { "message_id", "part_index"? } }
+Part types (1-32 parts, order = presentation order):
+- { "type": "text", "text": "…" }                     (≤ 8 KB per part)
+- { "type": "link_preview", "url": "https://…" }
+- { "type": "data", "data": { any JSON } }            (≤ 16 KB)
+- { "type": "media", "url" | "attachment_id" }        (exactly one of the two)
+- { "type": "voice_memo", "url": "https://…", "duration_ms": 18400 }
+- { "type": "voice_memo", "attachment_id": "att_…", "duration_ms": 18400 }
+Response 202 { message_id, message }; parts come back with dense part_index.
+
+## Stream an existing agent reply
+POST /v1/messages?stream=true&conversation_id=cnv_… with:
+- Content-Type: text/event-stream
+- x-vercel-ai-ui-message-stream: v1
+- the required Idempotency-Key
+- the SSE body returned by Vercel AI SDK toUIMessageStreamResponse()
+Relay consumes the stream and commits one canonical message only after
+the UIMessageStream `finish` event. `[DONE]` closes the transport but is not
+semantic completion. Abort, error, malformed ordering, or early EOF commits
+nothing. Relay presents tool state but never executes tools; the external agent
+continues to own its model and tool loop.
+
+## Messaging state
+- Typing: POST /v1/conversations/{id}/typing { "started": true, "label"?: "Searching…" }
+  (204; send {started:false} if you end up not replying; label ≤ 80 chars)
+- Read receipts: POST /v1/conversations/{id}/read { "message_id" }; read implies
+  delivered; watermarks are monotonic and idempotent.
+- Reactions: POST /v1/messages/{id}/reactions
+  { "operation": "add"|"remove", "type": "love|like|dislike|laugh|emphasize|question|emoji",
+    "emoji"? (iff type=emoji), "part_index"? }
+- Edit: PATCH /v1/messages/{id} { "parts": [...] } within 15 minutes, at most
+  five revisions. Only the original user session or Agent Token can edit.
+  Replacement and stored content must be text-bearing with no attachments.
+- Unsend: DELETE /v1/messages/{id} within two minutes. Only the original
+  sender can unsend. History keeps a bare status=deleted tombstone.
+- History: GET /v1/conversations/{id}/messages?limit=50&before_sequence=N,
+  newest first. Visible messages include receipt-projected status, reactions,
+  edited_at, and revisions. Unsent messages project as bare tombstones.
+- Media: POST /v1/attachments (raw body ≤ 100 MB, Content-Type + X-Relay-Filename
+  headers) → { attachment: { id: "att_…", url } }; send the id in a media/voice_memo part.
+  Attachments are private to their uploader.
+
+## Errors
+Envelope: { "error": { "code", "message" } }. Codes: unauthorized(401), forbidden(403),
+not_found(404), invalid_request(422), idempotency_conflict(409),
+internal_error(500). Retry only 429/5xx/network,
+with backoff, reusing the same Idempotency-Key.
+
+## Coming later
+Treat these surfaces as unavailable in the current preview:
+Agent-initiated group management, socket mode, and calls.
+Full matrix: https://docs.relayapp.im/roadmap.md
+````
+
+The [quickstart](/quickstart) is intentionally curl-first, and the [streaming
+guide](/guides/streaming) shows the direct AI SDK handoff without introducing a
+Relay SDK or a second agent runtime.
+
+## Next steps
+
+- [Quickstart, the curl-first receive-and-reply loop](/quickstart)
+- [Streaming replies, the direct AI SDK handoff](/guides/streaming)
+- [Text your coding agent](/guides/coding-agents)
+- [API availability](/roadmap)

@@ -1,0 +1,183 @@
+---
+title: "Sending messages"
+description: "Send ordered parts with POST /v1/messages, reply to a message or a part, and make retries safe."
+keywords: ["send message", "parts", "text", "media", "voice memo", "data", "reply_to", "idempotency"]
+---
+
+Send a message with `conversation_id`, an ordered `parts[]` array, and an `Idempotency-Key`:
+
+```bash
+curl -sS -X POST "https://api.relayapp.im/v1/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: reply-evt_01JZE9M2XW" \
+  -d '{
+    "conversation_id": "cnv_01JZC7K4RQ",
+    "parts": [
+      { "type": "text", "text": "Found three options. The best one:" },
+      { "type": "link_preview", "url": "https://example.com/listing/42" }
+    ]
+  }'
+```
+
+Relay returns `202 Accepted` with `message_id` and the stored message. Each stored part includes its assigned `part_index`.
+
+## Part types
+
+A message carries 1–32 parts. Order is presentation order.
+
+| Type | Shape | Limits |
+| --- | --- | --- |
+| `text` | `{ "type": "text", "text": "Hello" }` | 8 KB per part |
+| `link_preview` | `{ "type": "link_preview", "url": "https://example.com" }` | public HTTPS URL, up to 2,048 characters |
+| `data` | `{ "type": "data", "data": { ... } }` | any JSON, 16 KB; recognized component kinds get additional validation |
+| `media` | `{ "type": "media", "url": "https://…" }` or `{ "attachment_id": "att_…" }` | exactly one of `url` \| `attachment_id`; optional `width` + `height` in pixels (always together) |
+| `voice_memo` | `{ "type": "voice_memo", "url": "https://…" }` or `{ "type": "voice_memo", "attachment_id": "att_…" }` | exactly one source; `duration_ms` is optional |
+
+<Tip>
+Upload a file to get an `attachment_id`, or pass a public `url`. See [Attachments](/guides/attachments).
+</Tip>
+
+`data` parts carry integration-defined JSON such as tool results and artifacts.
+Relay also recognizes the v1 [message component](/components) kinds: `buttons`,
+`select`, `card`, `confirm`, and `agent_permission_request`.
+
+| Case | Behavior |
+| --- | --- |
+| Missing component `data.fallback` | Synthesized before storage |
+| Unknown kind | Passes through unchanged, so older clients render the fallback instead of dropping the part |
+| `group_invite` kind | Reserved for cards committed by `POST /v1/groups/invites`; sending it through the ordinary message endpoint returns `422 invalid_request` |
+
+Clients that cannot render a part use its component fallback when present, then the message's `fallback_text`, derived from the first text part, first link preview, data fallback, `Voice memo`, or `[attachment]`.
+
+Use [Voice memos](/guides/voice-memos) when audio should appear in the inline voice player, and [Rich link previews](/guides/rich-link-previews) when a URL should render as a preview card.
+
+## Quick replies
+
+Attach up to 8 `suggestions` to a message when a short list of answers covers what you need next:
+
+```bash
+curl -sS -X POST "https://api.relayapp.im/v1/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: reply-evt_01JZE9M2XW" \
+  -d '{
+    "conversation_id": "cnv_01JZC7K4RQ",
+    "parts": [
+      { "type": "text", "text": "Who are you trying to date?" }
+    ],
+    "suggestions": [
+      { "text": "Women" },
+      { "text": "Men" },
+      { "text": "Nonbinary" },
+      { "text": "Everyone" }
+    ]
+  }'
+```
+
+Each suggestion is `{ "text": "…" }` with 1 to 96 characters.
+
+| Behavior | Detail |
+| --- | --- |
+| Placement | Chips render above the composer while your message is the newest in the conversation |
+| Lifetime | They disappear once anything newer arrives |
+| On tap | The `text` is sent back as an ordinary user text message |
+| Your handling | A normal [`message.received`](/guides/webhooks) event, no extra code |
+
+The user can always type a free-form answer instead.
+
+Relay lays the options out for you: a short set renders as inline rows in the transcript, and a longer set collapses into a single card that opens a full-height picker sheet. You don't choose the presentation.
+
+<Note>
+Quick-reply suggestions are separate from message components. Suggestions are transient presentation on the newest message and send a text part. Components are durable `data` parts in the transcript and return an origin-tagged data message.
+</Note>
+
+## Message components
+
+Use a component data part when the choices must remain attached to their source message or the tap must carry a stable option identity:
+
+```bash
+curl -sS -X POST "https://api.relayapp.im/v1/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: booking-evt_01JZE9M2XW" \
+  -d '{
+    "conversation_id": "cnv_01JZC7K4RQ",
+    "parts": [
+      { "type": "data", "data": {
+        "kind": "buttons",
+        "prompt": "Pick your booking slot",
+        "options": [
+          { "id": "slot_fri_7", "label": "Friday 7pm", "style": "primary" },
+          { "id": "slot_sat_8", "label": "Saturday 8pm" }
+        ]
+      } }
+    ]
+  }'
+```
+
+Tapping `slot_sat_8` sends a normal user message through the existing message pipeline:
+
+```json
+{
+  "parts": [{
+    "type": "data",
+    "data": {
+      "origin": {
+        "kind": "data_action",
+        "message_id": "msg_01JZM4Q9VN",
+        "part_index": 0,
+        "option_id": "slot_sat_8",
+        "source_kind": "buttons"
+      },
+      "option_id": "slot_sat_8",
+      "label": "Saturday 8pm"
+    }
+  }],
+  "fallback_text": "Saturday 8pm"
+}
+```
+
+The agent receives this as the next ordinary `message.received` event. Normal message idempotency covers retries. The client marks the successful choice selected and disables its siblings; your agent should still treat `option_id` as idempotent because stale taps are possible.
+
+See the catalog and per-kind wire contracts in [Message components](/components), [Buttons](/components/buttons), [Select](/components/select), [Card](/components/card), [Confirm](/components/confirm), and [Agent permission request](/components/agent_permission_request).
+
+## Replying to a message or a part
+
+In a group, Relay invokes an agent only when a human explicitly selects it or
+replies to one of its messages. The resulting `message.received` event includes
+an `invocation_id`; echo that value as `invocation_id` in the finalized JSON
+request, or as the query parameter for a streamed reply. Ambient group context
+is not delivered to agent backends and does not appear in agent history.
+
+`reply_to` targets a whole message or a single part:
+
+```json
+{ "reply_to": { "message_id": "msg_01JZM3T8AH" } }
+{ "reply_to": { "message_id": "msg_01JZM3T8AH", "part_index": 1 } }
+```
+
+Use the `part_index` from the stored message in `message.received`. Part indexes are dense, zero-based, and stable.
+
+## Idempotency
+
+The `Idempotency-Key` header is **required** and accepts 8–255 characters. Derive it from the inbound `event_id`:
+
+- Same key + same request → Relay returns the original message instead of sending twice.
+- Same key + different request → `409 idempotency_conflict`.
+
+Generate the key once per logical send and reuse it across retries.
+
+## Long replies
+
+Split content longer than the per-part limit across `text` parts or messages. Each part renders as its own bubble.
+
+Next: pipe your agent's existing output with [Streaming](/guides/streaming), or react
+to a user's message with [Reactions](/guides/reactions).
+
+## Next steps
+
+- [Streaming replies](/guides/streaming)
+- [Attachments](/guides/attachments)
+- [Message components](/components)
+- [Delivery model](/guides/delivery-model)

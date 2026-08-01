@@ -1,0 +1,94 @@
+---
+title: "Core concepts"
+description: "Relay agents, conversations, messages, parts, and delivery semantics."
+keywords: ["concepts", "data model", "agent", "conversation", "message", "parts", "part_index", "sequence", "fallback_text"]
+---
+
+## Agents and users
+
+A **user** is a person using Relay. An **agent** is the identity they message;
+its external backend supplies the model, tools, and memory.
+
+See [Your agent](/guides/your-agent) for creation, identity, distribution, and installation.
+
+## Conversations and participants
+
+A conversation has a stable `conversation_id` and a set of participants. A
+direct conversation normally contains one user and one agent. The backend can
+send only while its agent is an active participant and installed for that user.
+
+Use the `conversation_id` from `message.received` for replies and history reads.
+
+See [Conversation lifecycle](/guides/conversation-lifecycle) for how direct threads begin, remain authorized, and recover.
+
+## Messages and ordered parts
+
+A message carries an ordered `parts[]` array. Relay assigns each stored part a zero-based `part_index`. Keep the array order: it is presentation order and provides a stable target for replies and future interactions.
+
+| Type | Shape | Meaning |
+| --- | --- | --- |
+| `text` | `{ "type": "text", "text": "Hello" }` | Text content. |
+| `link_preview` | `{ "type": "link_preview", "url": "https://example.com" }` | An HTTPS URL rendered as a native preview card. |
+| `data` | `{ "type": "data", "data": { ... } }` | Structured JSON content. |
+| `media` | `{ "type": "media", "url": "https://…" }` or `{ "type": "media", "attachment_id": "att_..." }` | Media by public URL or attachment reference. Exactly one of the two. |
+| `voice_memo` | `{ "type": "voice_memo", "url": "https://…" }` or `{ "type": "voice_memo", "attachment_id": "att_..." }` | Recorded audio rendered in the inline player. Exactly one source. |
+
+The send route accepts 1–32 parts. Text is limited to 8 KB per part and data parts to 16 KB. Upload files up to 100 MB to create an `attachment_id`, or send media and voice memos by public HTTPS `url`.
+
+Stored messages include:
+
+```json
+{
+  "id": "msg_01JZM3T8AH",
+  "conversation_id": "cnv_01JZC7K4RQ",
+  "sequence": 7,
+  "sender": { "kind": "agent", "id": "agt_01JZRELAY" },
+  "parts": [
+    { "part_index": 0, "type": "text", "text": "Here is the link:" },
+    { "part_index": 1, "type": "link_preview", "url": "https://example.com" }
+  ],
+  "reply_to": null,
+  "fallback_text": "Here is the link:",
+  "status": "sent",
+  "created_at": "2026-07-12T01:21:08.000Z"
+}
+```
+
+`fallback_text` is the plain-language representation used by notifications, search, and clients that cannot render a part. Relay always derives it: from the first text part, then the first link preview, then the first data part's `fallback`, then `Voice memo` or `[attachment]`.
+
+## Edit and unsend
+
+Only a message's original sender can mutate it. Use
+`PATCH /v1/messages/{message_id}` within 15 minutes to replace all parts, up to
+five times. Edits must remain text-bearing and cannot involve attachment parts.
+Each successful edit preserves the prior canonical parts and fallback text in
+`revisions`, sets `edited_at`, and keeps the original conversation sequence.
+
+Use `DELETE /v1/messages/{message_id}` within two minutes to unsend. Relay
+removes the stored parts but keeps a bare `status: "deleted"` tombstone with
+the original id, sequence, sender, and creation time. Neither operation sends a
+push notification.
+
+Agent-sent messages use the sending agent's token. User-sent messages use the
+sending user's Relay session. Every other actor receives `404`.
+
+## Delivery and recovery
+
+`message.sequence` orders messages inside one conversation. A webhook `event_id`
+identifies one durable change for deduplication. They are different values.
+
+Relay delivers webhook events at least once and accepts message writes
+idempotently. See [Delivery model](/guides/delivery-model) for webhook
+acknowledgement, deduplication, receipt, and recovery rules.
+
+<Note>
+Socket mode and calls are specified for Relay and ship after the v0 developer
+API. See [API availability](/roadmap) for the full matrix.
+</Note>
+
+## Next steps
+
+- [Quickstart](/quickstart)
+- [Delivery model](/guides/delivery-model)
+- [Sending messages](/guides/sending-messages)
+- [Event types](/reference/events)

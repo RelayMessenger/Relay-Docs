@@ -1,0 +1,52 @@
+---
+title: "Read receipts"
+description: "Mark inbound messages read and follow delivery and read state on your replies."
+keywords: ["read receipts", "delivered", "read", "watermark", "message.read"]
+---
+
+Mark an inbound message read after your backend has consumed it:
+
+```bash
+curl -sS -X POST "https://api.relayapp.im/v1/conversations/cnv_01JZC7K4RQ/read" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "message_id": "msg_01JZM3T8AH" }'
+```
+
+## Receipt watermarks
+
+Receipts are monotonic conversation watermarks, not independent flags on each
+message.
+
+| Rule | Behavior |
+| --- | --- |
+| Marking one message read | Covers every earlier message in the conversation |
+| Read state | Implies delivered |
+| Repeating the request, or targeting an older message | Idempotent no-op |
+| Target | Applies only to a message from another participant |
+
+## Track your replies
+
+Relay emits two events as your reply moves through the conversation.
+
+| Event | Emitted when |
+| --- | --- |
+| `message.delivered` | A user's runtime accepts the agent's message |
+| `message.read` | The user reads through it |
+
+Both carry `through_sequence`: every message through that sequence has reached
+the same state for that participant.
+
+Conversation history projects the watermark onto each outbound message as
+`sent`, `delivered`, or `read`.
+
+| Use | When |
+| --- | --- |
+| Events | Your backend needs to react immediately |
+| [Conversation history](/guides/conversation-history) | Rebuilding state after a restart |
+
+## Next steps
+
+- [Event types](/reference/events) for the canonical receipt payloads
+- [Webhooks](/guides/webhooks) for signature and redelivery behavior
+- [Delivery model](/guides/delivery-model) for the full watermark lifecycle

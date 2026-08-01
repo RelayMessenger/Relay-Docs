@@ -1,0 +1,101 @@
+---
+title: "Buttons component"
+description: "Attach a vertical stack of up to five options to an agent message."
+keywords: ["buttons", "component", "tap", "actions", "interactive message"]
+---
+
+## Abstract
+
+Use `buttons` when a short set of distinct actions should remain attached to the agent message that requested them. An option without `url` sends an origin-tagged user data message; an option with `url` opens its HTTPS destination.
+
+## Wire example
+
+```json
+{
+  "send": {
+    "conversation_id": "cnv_01JZC7K4RQ",
+    "parts": [{
+      "type": "data",
+      "data": {
+        "kind": "buttons",
+        "prompt": "Want me to book it?",
+        "options": [
+          { "id": "book", "label": "Book it", "style": "primary" },
+          { "id": "later", "label": "Remind me later" }
+        ]
+      }
+    }]
+  },
+  "stored_part": {
+    "part_index": 0,
+    "type": "data",
+    "data": {
+      "kind": "buttons",
+      "prompt": "Want me to book it?",
+      "options": [
+        { "id": "book", "label": "Book it", "style": "primary" },
+        { "id": "later", "label": "Remind me later" }
+      ],
+      "fallback": "Want me to book it?\n1. Book it\n2. Remind me later"
+    }
+  },
+  "tap_result": {
+    "parts": [{
+      "type": "data",
+      "data": {
+        "origin": {
+          "kind": "data_action",
+          "message_id": "msg_01JZM4Q9VN",
+          "part_index": 0,
+          "option_id": "book",
+          "source_kind": "buttons"
+        },
+        "option_id": "book",
+        "label": "Book it"
+      }
+    }],
+    "fallback_text": "Book it"
+  }
+}
+```
+
+## Schema table
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `kind` | `"buttons"` | Yes | Selects this renderer |
+| `prompt` | string | No | Up to 1,024 characters |
+| `options` | option[] | Yes | 1–5 options |
+| `fallback` | string | No | Synthesized when omitted |
+
+Button options use the [common option fields](/components#common-option-fields), except `description` is not accepted.
+
+## Examples per state
+
+| State | Repository artifact |
+| --- | --- |
+| Send request | `examples/components/buttons-send.json` |
+| Canonical stored message | `examples/components/buttons-stored.json` |
+| Tap-result user message | `examples/components/buttons-tap-result.json` |
+
+## Constraints
+
+| Violation | Result |
+| --- | --- |
+| No options or more than 5 | `422 invalid_request` |
+| Duplicate or invalid option `id` | `422 invalid_request` |
+| Option label over 24 characters | `422 invalid_request` |
+| More than one `primary` option | `422 invalid_request` |
+| `description` on a button option | `422 invalid_request` |
+| Non-HTTPS option URL | `422 invalid_request` |
+| Message targets a group conversation | `422 invalid_request` |
+
+## iOS rendering notes
+
+Render `ComponentButtons` as a vertical stack under the owning agent bubble at message width. Up to three options render inline; a longer list collapses to a single "View options" row that opens the shared options sheet. A selected option becomes selected, siblings disable, and an in-flight tap shows a spinner. Style HTTPS link-out options as quieter navigation rows rather than reply choices. A failed send re-enables the options with a brief error.
+
+## See also
+
+- [Message components](/components)
+- [Confirm](/components/confirm)
+- [Sending messages](/guides/sending-messages)
