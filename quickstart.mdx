@@ -1,17 +1,10 @@
 ---
 title: "Quickstart"
-description: "Register a webhook, receive a message, and send a reply with plain HTTPS."
-keywords: ["quickstart", "get started", "first message", "webhook", "reply", "curl", "tutorial"]
+description: "From Agent Token to a reply in the user's thread, in minutes."
+keywords: ["quickstart", "get started", "first message", "webhook", "reply", "curl", "tutorial", "coding agent"]
 ---
 
 import SetupAIPrompt from "/snippets/setup-ai-prompt.mdx";
-
-<Tip>
-**Using a coding agent?** Skip the manual steps: paste this prompt and your
-agent wires the webhook, verification, and reply loop for you.
-
-<SetupAIPrompt />
-</Tip>
 
 Create an agent in Relay and save the Agent Token shown once.
 
@@ -37,6 +30,19 @@ export RELAY_AGENT_TOKEN="rly_live_..."
 ```
 
 <Steps>
+  <Step title="Set up your coding agent (optional)">
+    Paste this into Claude Code, Codex, or Cursor and it performs the rest of
+    this page for you; you only supply the Agent Token.
+
+    <SetupAIPrompt />
+
+    <Info>
+    **Not using a coding agent?** The steps below are the same integration by
+    hand. Point any LLM at [`llms-full.txt`](https://docs.relayapp.im/llms-full.txt),
+    the complete docs in one file.
+    </Info>
+  </Step>
+
   <Step title="Register your webhook">
     ```bash
     curl -sS -X POST "$RELAY_API_URL/v1/webhooks" \
@@ -114,11 +120,120 @@ export RELAY_AGENT_TOKEN="rly_live_..."
 
     Relay returns `202 Accepted` with the stored message.
   </Step>
+
+  <Step title="Run the complete handler">
+    The three steps above as one file: verify, store, reply.
+
+    <CodeGroup>
+
+    ```typescript server.ts
+    import { createServer } from "node:http";
+    import { Webhook } from "standardwebhooks";
+
+    const wh = new Webhook(process.env.RELAY_SIGNING_SECRET!);
+    const TOKEN = process.env.RELAY_AGENT_TOKEN!;
+    const seen = new Set<string>();
+
+    createServer(async (req, res) => {
+      const body = await new Promise<string>((ok) => {
+        let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => ok(b));
+      });
+      let event: any;
+      try {
+        event = wh.verify(body, req.headers as Record<string, string>);
+      } catch {
+        res.writeHead(401).end("bad signature"); return;
+      }
+      res.writeHead(202).end(); // ack first, work after
+
+      if (event.event_type !== "message.received") return;
+      if (seen.has(event.event_id)) return; // at-least-once delivery
+      seen.add(event.event_id);
+
+      await fetch("https://api.relayapp.im/v1/messages", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${TOKEN}`,
+          "Content-Type": "application/json",
+          "Idempotency-Key": `reply-${event.event_id}`,
+        },
+        body: JSON.stringify({
+          conversation_id: event.data.message.conversation_id,
+          parts: [{ type: "text", text: "Tomorrow at 2:00 PM works." }],
+        }),
+      });
+    }).listen(8787);
+    ```
+
+    ```python server.py
+    import json, os, urllib.request
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from standardwebhooks import Webhook
+
+    wh = Webhook(os.environ["RELAY_SIGNING_SECRET"])
+    TOKEN = os.environ["RELAY_AGENT_TOKEN"]
+    seen = set()
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            body = self.rfile.read(int(self.headers["Content-Length"]))
+            try:
+                event = wh.verify(body, dict(self.headers))
+            except Exception:
+                self.send_response(401); self.end_headers(); return
+            self.send_response(202); self.end_headers()  # ack first
+
+            if event["event_type"] != "message.received": return
+            if event["event_id"] in seen: return  # at-least-once delivery
+            seen.add(event["event_id"])
+
+            req = urllib.request.Request(
+                "https://api.relayapp.im/v1/messages",
+                data=json.dumps({
+                    "conversation_id": event["data"]["message"]["conversation_id"],
+                    "parts": [{"type": "text", "text": "Tomorrow at 2:00 PM works."}],
+                }).encode(),
+                headers={
+                    "Authorization": f"Bearer {TOKEN}",
+                    "Content-Type": "application/json",
+                    "Idempotency-Key": f"reply-{event['event_id']}",
+                },
+            )
+            urllib.request.urlopen(req)
+
+    HTTPServer(("", 8787), Handler).serve_forever()
+    ```
+
+    </CodeGroup>
+
+    Send your agent a message from the Relay app. The reply lands in the thread.
+  </Step>
+
+  <Step title="Review your setup with an agent (optional)">
+    ````markdown Copy this prompt
+    Review my Relay integration against https://docs.relayapp.im/quickstart.md
+    and https://docs.relayapp.im/guides/webhooks.md. Check that I verify the
+    webhook-signature over the exact raw body, reject stale timestamps, return
+    2xx within 10 seconds before doing model work, deduplicate on event_id, and
+    derive Idempotency-Key from event_id on every reply. Report anything that
+    does not match, with the file and line.
+    ````
+  </Step>
 </Steps>
 
 <Check>
 The reply is in the user's thread.
 </Check>
+
+## If it fails
+
+| Symptom | Cause and fix |
+| --- | --- |
+| `bad signature` | You verified a parsed or re-serialized body. Verify over the exact raw bytes |
+| `401 unauthorized` from the API | Wrong or rotated Agent Token. Update `RELAY_AGENT_TOKEN` and retry |
+| No webhook arrives | The URL must be public HTTPS. Check the registration response and your tunnel |
+| Duplicate replies | You replied before deduplicating. Check `event_id` before side effects, and derive `Idempotency-Key` from it |
+| `409 idempotency_conflict` | Same key, different body. Reuse the key only for the identical reply |
 
 ## Next steps
 
