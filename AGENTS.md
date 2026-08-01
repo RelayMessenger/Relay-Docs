@@ -2,6 +2,17 @@
 
 Conventions this site follows. They apply to people and to coding agents.
 
+## Voice
+
+- Learn structure from other documentation sites; never reuse their wording.
+  Headings, callouts, and prose must be written fresh, even when a reference
+  site solved the same problem well.
+- State what happens, never what the product is not. Negative constraints
+  belong only on agent-facing surfaces, where they prevent hallucinated SDKs
+  and endpoints.
+- Open every page with the operation or fact, never with a description of the
+  page.
+
 ## This directory
 
 - This is a [Mintlify](https://mintlify.com) site. Navigation, theme, and
