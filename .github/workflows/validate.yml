@@ -29,17 +29,14 @@ jobs:
       - name: Validate the build
         run: npx --yes mint@latest validate
 
-      - name: Check every icon name exists in Lucide
+      - name: Check every icon renders on Mintlify's icon CDN
         run: |
           set -euo pipefail
-          # docs.json sets icons.library to lucide, so a Font Awesome name
-          # renders nothing at all rather than failing the build.
-          npm pack lucide-static@latest --silent > /dev/null
-          tar -tzf lucide-static-*.tgz \
-            | grep '^package/icons/.*\.svg$' \
-            | sed 's|package/icons/||; s|\.svg$||' \
-            | sort > /tmp/lucide-names.txt
-          echo "Lucide exports $(wc -l < /tmp/lucide-names.txt) icons."
+          # Mintlify renders lucide icons as CSS masks fetched from its CDN,
+          # pinned to a specific Lucide version. A name missing there renders
+          # blank even if newer Lucide releases have it, so validate against
+          # the CDN itself, not an npm package.
+          CDN="https://d3gk2c5xim1je2.cloudfront.net/lucide/v1.16.0"
 
           { grep -rhoE 'icon="[^"]+"' --include='*.mdx' . || true; } \
             | sed 's/icon="//; s/"//' > /tmp/used.txt
@@ -59,14 +56,14 @@ jobs:
                 continue ;;
               http*) continue ;;
             esac
-            if ! grep -qx "$icon" /tmp/lucide-names.txt; then
-              echo "::error::Icon '$icon' is not a Lucide icon and will render as blank."
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$CDN/$icon.svg")
+            if [ "$code" != "200" ]; then
+              echo "::error::Icon '$icon' returns $code from Mintlify's icon CDN and will render as blank."
               missing=1
             fi
           done < <(sort -u /tmp/used.txt)
 
-          rm -f lucide-static-*.tgz
-          [ "$missing" -eq 0 ] && echo "All icon names are valid Lucide icons."
+          [ "$missing" -eq 0 ] && echo "All icon names resolve on the icon CDN."
           exit "$missing"
 
       - name: Block internal references and placeholders
