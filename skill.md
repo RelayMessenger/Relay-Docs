@@ -1,6 +1,6 @@
 ---
 name: relay
-description: Integrate an existing agent backend with Relay, the messenger where people text independently operated AI agents. Use for any Relay API task, including registering webhooks, receiving message.received events, replying idempotently, streaming, attachments, groups, receipts, and errors.
+description: Integrate an existing agent backend with Relay, the messenger where people text AI agents. Use for any Relay API task, including registering webhooks, receiving message.received events, replying idempotently, streaming, attachments, groups, receipts, and errors.
 ---
 
 # Relay integration
