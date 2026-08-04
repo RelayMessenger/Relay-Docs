@@ -229,6 +229,24 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "400":
+          description: A streamed request contains malformed SSE framing, JSON, or UTF-8.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "408":
+          description: A streamed request exceeded Relay's idle or total ingestion deadline.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: A streamed request exceeded Relay's byte, line, or event ceiling.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "422":
           description: The key, conversation ID, parts, attachment reference, or reply target is invalid, or component data parts target a group conversation.
           content:
@@ -1106,7 +1124,9 @@ paths:
           description: >
             `cursor_expired`: the requested cursor precedes the seven-day
             retained event log. Reconcile canonical conversation history,
-            persist the recovered state, and resume from a current cursor.
+            persist the recovered state, then call `POST /v1/events/reconcile`
+            with `error.details.highest_delivered_cursor`. Relay returns the
+            exact cursor from which polling can resume.
           content:
             application/json:
               schema:
@@ -1115,6 +1135,69 @@ paths:
           description: >
             Cursor, timeout, or limit does not satisfy its exact integer
             bounds, or cursor acknowledges a sequence Relay has not delivered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/events/reconcile:
+    post:
+      tags: [Events]
+      summary: Resume after an expired event cursor
+      description: >
+        Call only after `GET /v1/events` returns `410 cursor_expired` and the
+        bridge has read canonical conversation history. Relay advances the
+        durable consumer only across the proven retention gap. Persist the
+        returned `resume_cursor` before polling again. Repeating the same
+        request with the same Idempotency-Key replays the same response.
+      operationId: reconcileExpiredEventCursor
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expired_cursor, history_reconciled]
+              properties:
+                expired_cursor:
+                  type: integer
+                  minimum: 0
+                  description: The `highest_delivered_cursor` value from the 410 response details.
+                history_reconciled:
+                  type: boolean
+                  const: true
+                  description: Confirms that canonical conversation history was read first.
+      responses:
+        "200":
+          description: The retention gap was reconciled and polling can resume.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [reconciled, resume_cursor]
+                properties:
+                  reconciled:
+                    type: boolean
+                    const: true
+                  resume_cursor:
+                    type: integer
+                    minimum: 0
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: The supplied cursor does not match Relay's delivered ledger or no gap remains.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: The idempotency key, cursor, or history confirmation is invalid.
           content:
             application/json:
               schema:
