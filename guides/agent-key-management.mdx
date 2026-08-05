@@ -1,18 +1,12 @@
 ---
 title: "Agent key management"
 description: "Choose who holds your agent's conversation keys: Relay by default, or your own machine for full end-to-end encryption."
-keywords: ["key management", "encryption", "e2ee", "sidecar", "key-holder", "relay-managed", "developer-managed", "mls"]
+keywords: ["key management", "encryption", "e2ee", "keyholder", "key-holder", "relay-managed", "developer-managed", "mls"]
 ---
 
 In an [end-to-end encrypted conversation](/encryption), your agent participates
 through a runtime that holds its own keys. You choose who operates that
 runtime: Relay, by default, or you.
-
-<Info>
-Both tiers are part of the end-to-end encryption **developer preview** and
-apply only to conversations that have migrated to encryption. Conversations on
-the current transport behave exactly as the rest of these docs describe.
-</Info>
 
 ## Relay-managed keys, the default
 
@@ -20,15 +14,6 @@ Your integration does not change. Relay operates a key-holder runtime for your
 agent: it holds the agent's conversation keys, decrypts inbound messages,
 delivers them to your webhook as the same plaintext JSON you receive today, and
 encrypts your replies back into the conversation.
-
-This is the same model Meta ships for the
-[WhatsApp Business Platform Cloud API](https://developers.facebook.com/documentation/business-messaging/whatsapp/about-the-platform):
-Meta hosts the business's messaging endpoint, messages are encrypted from the
-customer's device to that hosted endpoint, and the business receives them from
-it over TLS. WhatsApp's
-[end-to-end encryption help page](https://faq.whatsapp.com/820124435853543)
-documents how that changes what "end-to-end" means for those chats. Relay's
-default tier makes the same trade, disclosed the same way.
 
 What the key-holder can and cannot see:
 
@@ -44,9 +29,9 @@ messages. The key-holder is the disclosed decrypting endpoint that acts on
 your agent's behalf, so this tier is encrypted between user devices and that
 key-holder, not all the way to your servers.
 
-## Developer-managed keys, the sidecar
+## Developer-managed keys, the keyholder
 
-For full end-to-end encryption to your own machine, run the Relay MLS sidecar
+For full end-to-end encryption to your own machine, run the Relay keyholder
 next to your backend. It is one process: it long-polls sealed events, decrypts
 them locally, calls your private loopback handler, encrypts the reply, and
 submits only ciphertext to Relay. Keys are created automatically on first run
@@ -59,15 +44,15 @@ guide.
 
 | | Relay-managed keys | Developer-managed keys |
 | --- | --- | --- |
-| Integration change | None; plaintext JSON webhook as today | Run one sidecar process; your handler moves to a loopback URL |
+| Integration change | None; plaintext JSON webhook as today | Run one keyholder process; your handler moves to a loopback URL |
 | Who holds the agent's keys | A Relay-operated key-holder runtime | Your machine, in a local storage directory |
 | Who can decrypt conversation content | Member devices and the Relay-operated key-holder | Member devices and your runtime only |
 | Encrypted to your servers | ❌ Delivery from the key-holder uses TLS | ✅ Only ciphertext crosses Relay |
-| Streaming replies | Vercel AI SDK stream as today | Supported; the sidecar encrypts stream frames |
-| Operational responsibility | Relay runs and updates the key-holder | You run the sidecar and protect its storage directory |
-| Availability | 🔵 Developer preview default | 🔵 Developer preview, distribution on request |
+| Streaming replies | Vercel AI SDK stream as today | Supported; the keyholder encrypts stream frames |
+| Operational responsibility | Relay runs and updates the key-holder | You run the keyholder and protect its storage directory |
+| Availability | Default for every agent | Run the keyholder whenever you choose |
 
-Start on Relay-managed keys and ship unchanged. Move to the sidecar when your
+Start on Relay-managed keys and ship unchanged. Move to the keyholder when your
 agent's content warrants holding the keys yourself.
 
 ## Next steps
