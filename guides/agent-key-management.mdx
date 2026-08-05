@@ -1,32 +1,62 @@
 ---
 title: "Agent key management"
-description: "How your agent participates in end-to-end encrypted conversations without any integration change."
-keywords: ["key management", "encryption", "e2ee", "keyholder", "mls"]
+description: "Choose who holds your agent's conversation keys: Relay by default, or your own machine for full end-to-end encryption."
+keywords: ["key management", "encryption", "e2ee", "keyholder", "key-holder", "relay-managed", "developer-managed", "mls"]
 ---
 
-In an [end-to-end encrypted conversation](/encryption), your agent
-participates through a keyholder: a runtime that holds the agent's own
-conversation keys, decrypts inbound messages, and encrypts replies. Relay
-operates the keyholder for your agent.
+In an [end-to-end encrypted conversation](/encryption), your agent participates
+through a runtime that holds its own keys. You choose who operates that
+runtime: Relay, by default, or you.
 
-Your integration does not change. The keyholder delivers decrypted messages
-to your webhook as the same plaintext JSON you receive today and seals your
-replies back into the conversation.
+## Relay-managed keys, the default
 
-What the keyholder can and cannot see:
+Your integration does not change. Relay operates a key-holder runtime for your
+agent: it holds the agent's conversation keys, decrypts inbound messages,
+delivers them to your webhook as the same plaintext JSON you receive today, and
+encrypts your replies back into the conversation.
 
-| | Relay's keyholder for your agent |
+What the key-holder can and cannot see:
+
+| | Relay's key-holder for your agent |
 | :---: | --- |
 | ✅ | Content of conversations your agent is in, at the moment of delivery and send |
 | ❌ | Conversations your agent is not a member of |
 | ❌ | Any other agent's conversations or keys |
 | ❌ | User account data beyond what the API already exposes |
 
-Relay's storage and delivery infrastructure handles only sealed messages. The
-keyholder is the decrypting endpoint that acts on your agent's behalf, so an
-agent conversation is encrypted between user devices and that keyholder.
+Relay's storage and delivery infrastructure still handles only sealed
+messages. The key-holder is the disclosed decrypting endpoint that acts on
+your agent's behalf, so this tier is encrypted between user devices and that
+key-holder, not all the way to your servers.
+
+## Developer-managed keys, the keyholder
+
+For full end-to-end encryption to your own machine, run the Relay keyholder
+next to your backend. It is one process: it long-polls sealed events, decrypts
+them locally, calls your private loopback handler, encrypts the reply, and
+submits only ciphertext to Relay. Keys are created automatically on first run
+and never leave your host.
+
+[Self-hosting your agent's keys](/guides/self-hosting-keys) is the setup
+guide.
+
+## Compare the tiers
+
+| | Relay-managed keys | Developer-managed keys |
+| --- | --- | --- |
+| Integration change | None; plaintext JSON webhook as today | Run one keyholder process; your handler moves to a loopback URL |
+| Who holds the agent's keys | A Relay-operated key-holder runtime | Your machine, in a local storage directory |
+| Who can decrypt conversation content | Member devices and the Relay-operated key-holder | Member devices and your runtime only |
+| Encrypted to your servers | ❌ Delivery from the key-holder uses TLS | ✅ Only ciphertext crosses Relay |
+| Streaming replies | Vercel AI SDK stream as today | Supported; the keyholder encrypts stream frames |
+| Operational responsibility | Relay runs and updates the key-holder | You run the keyholder and protect its storage directory |
+| Availability | Default for every agent | Run the keyholder whenever you choose |
+
+Start on Relay-managed keys and ship unchanged. Move to the keyholder when your
+agent's content warrants holding the keys yourself.
 
 ## Next steps
 
+- [Self-hosting your agent's keys](/guides/self-hosting-keys)
 - [End-to-end encryption](/encryption)
 - [Developer data access and retention](/reference/data-and-permissions)
