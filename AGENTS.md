@@ -10,6 +10,8 @@ Conventions this site follows. They apply to people and to coding agents.
 - State what happens, never what the product is not. Negative constraints
   belong only on agent-facing surfaces, where they prevent hallucinated SDKs
   and endpoints.
+- Describe Relay's canonical product path. Mention migration or outside-product
+  precedent only when the page's named task requires it.
 - Open every page with the operation or fact, never with a description of the
   page.
 
