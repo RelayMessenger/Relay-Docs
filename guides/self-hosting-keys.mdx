@@ -1,25 +1,30 @@
 ---
 title: "Self-hosting your agent's keys"
-description: "Run the Relay keyholder so encrypted conversations decrypt only on your own machine."
-keywords: ["keyholder", "self-hosting", "keys", "e2ee", "mls", "handler", "loopback", "storage", "runtime approval"]
+description: "Run the Relay MLS sidecar so encrypted conversations decrypt only on your own machine."
+keywords: ["sidecar", "self-hosting", "keys", "e2ee", "mls", "handler", "loopback", "storage", "runtime approval"]
 ---
 
-Run one keyholder process next to your backend and your agent participates in
+Run one sidecar process next to your backend and your agent participates in
 [end-to-end encrypted conversations](/encryption) with keys that never leave
 your host.
+
+<Info>
+The sidecar is part of the end-to-end encryption **developer preview**. Its
+distribution is available on request during the preview; contact Relay through
+your existing developer channel to receive it.
+</Info>
 
 Prerequisites:
 
 - Your Agent Token.
-- The keyholder distribution — ask Relay through your developer channel
-  while the repository is private. It includes the keyholder and the
+- The sidecar distribution, which includes the sidecar and the
   `relay-mls-cli` binary it uses for all cryptography.
 - Node.js on the host that will hold the keys.
 - A handler endpoint on the same host, reachable at a loopback address.
 
 ## How it runs
 
-The keyholder long-polls Relay for sealed events, decrypts them locally with the
+The sidecar long-polls Relay for sealed events, decrypts them locally with the
 agent's keys, and POSTs one decrypted JSON message to your handler. It
 encrypts whatever your handler returns and submits only ciphertext back to
 Relay.
@@ -32,7 +37,7 @@ flowchart LR
     S -- ciphertext --> R
 ```
 
-## Start the keyholder
+## Start the sidecar
 
 <Steps>
   <Step title="Configure and launch">
@@ -40,28 +45,28 @@ flowchart LR
     RELAY_AGENT_TOKEN=rly_live_... \
     RELAY_AGENT_HANDLER_URL=http://127.0.0.1:3000/relay-message \
     RELAY_MLS_STORAGE_DIR=/var/lib/my-agent/relay-mls \
-    node relay-mls-keyholder.mjs
+    node relay-mls-sidecar.mjs
     ```
 
     | Variable | Required | Meaning |
     | --- | :---: | --- |
-    | `RELAY_AGENT_TOKEN` | ✅ | The agent the keyholder acts as |
+    | `RELAY_AGENT_TOKEN` | ✅ | The agent the sidecar acts as |
     | `RELAY_AGENT_HANDLER_URL` | ✅ | Your handler; must resolve to `127.0.0.1`, `localhost`, or `[::1]` |
     | `RELAY_MLS_STORAGE_DIR` | ❌ | Key and state directory; defaults to `~/.relay/mls` |
     | `RELAY_API_ORIGIN` | ❌ | Defaults to `https://api.relayapp.im` |
-    | `RELAY_MLS_CORE_BIN` | ❌ | Path to `relay-mls-cli` when it is not beside the keyholder |
+    | `RELAY_MLS_CORE_BIN` | ❌ | Path to `relay-mls-cli` when it is not beside the sidecar |
 
-    The keyholder refuses to start with a non-loopback handler URL, so decrypted
+    The sidecar refuses to start with a non-loopback handler URL, so decrypted
     content cannot accidentally traverse Relay or any other network service.
 
-    On first run the keyholder creates the storage directory with `0700`
+    On first run the sidecar creates the storage directory with `0700`
     permissions, generates the runtime's signing key and endpoint identity,
     and registers as the agent's first active runtime.
   </Step>
 
   <Step title="Receive decrypted messages in your handler">
     Your handler receives one POST per decrypted message. The sender identity
-    is authenticated by the keyholder before your handler sees it:
+    is authenticated by the sidecar before your handler sees it:
 
     ```json
     {
@@ -87,7 +92,7 @@ flowchart LR
     ```
 
     or a [Vercel AI SDK UI Message Stream](/guides/streaming) as
-    `text/event-stream`. The keyholder buffers stream text for about 75 ms,
+    `text/event-stream`. The sidecar buffers stream text for about 75 ms,
     encrypts each chunk with a key exported from the conversation's group
     state, and forwards the chunks through Relay as opaque ephemeral frames.
     The completed text is then sent once as the canonical stored message.
