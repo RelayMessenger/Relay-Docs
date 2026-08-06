@@ -4,17 +4,16 @@ description: "How Relay stores messages, delivers events, prevents duplicates, a
 keywords: ["delivery", "at-least-once", "idempotency", "webhooks", "long polling", "cursor", "watermark", "receipts", "recovery"]
 ---
 
-What survives a restart, and what does not.
+Relay persists messages and events. Live state does not survive a restart.
 
 | | Stored | Examples |
-    | --- | :---: | --- |
+| --- | :---: | --- |
 | Survives a restart | ✅ | Messages, ordered history, webhook events, reactions, receipt watermarks |
 | Does not | ❌ | Typing indicators, in-flight stream deltas |
 
 ## Incoming messages
 
-Use webhooks or long polling, not both. Polling with a webhook enabled returns
-`409 conflict`.
+Use webhooks or long polling, never both.
 
 ```mermaid
 flowchart LR
@@ -28,7 +27,7 @@ flowchart LR
 ```
 
 | Transport | Use it when |
-    | --- | --- |
+| --- | --- |
 | [Signed webhooks](/guides/webhooks) | Your backend can accept public inbound HTTPS |
 | Long polling | Your backend cannot, such as a local coding-agent bridge |
 
@@ -48,11 +47,11 @@ returns `409 conflict`.
       </Step>
     </Steps>
 
-    A successful `message.received` webhook advances the delivered watermark. Mark it
-    read separately once your backend has consumed it.
+    A successful `message.received` webhook advances the delivered watermark.
+    Mark it read separately, once your backend has consumed it.
 
-    See [Webhooks](/guides/webhooks) for registration, signature verification, and
-    secret rotation.
+    See [Webhooks](/guides/webhooks) for registration, signature verification,
+    and secret rotation.
   </Tab>
 
   <Tab title="Long polling">
@@ -69,9 +68,9 @@ returns `409 conflict`.
     | `cursor` | Returns events strictly after this sequence |
     | `timeout` | 0 to 30 seconds. `timeout=0` returns immediately with any pending events |
 
-    Persist the complete returned page and its `next_cursor` atomically before the
-    next request. Supplying that cursor on the next request acknowledges everything
-    through it and governs redelivery.
+    Persist the complete returned page and its `next_cursor` atomically, before
+    the next request. Sending that cursor acknowledges everything through it,
+    and governs redelivery.
 
     <Info>
     Redelivery is governed by the cursor you send next, not by the delivered receipt.
@@ -99,7 +98,7 @@ Delivery and read arrive later as `message.delivered` and `message.read`.
 Every send requires an `Idempotency-Key`.
 
 | Reuse | Result |
-    | --- | --- |
+| --- | --- |
 | Same key, same request | The original message is returned |
 | Same key, different request | `409 idempotency_conflict` |
 
@@ -120,9 +119,9 @@ watermarks onto each message.
 
 ## Live state
 
-Typing indicators never appear in `GET /v1/events` or webhooks. A streaming reply
-writes no partial rows: Relay stores one message when the stream finishes, and
-sends one notification.
+Typing indicators never appear in `GET /v1/events` or webhooks. A streaming
+reply writes no partial rows. Relay stores one message when the stream
+finishes, and sends one notification.
 
 <Warning>
 If generation aborts, errors, or disconnects before completion, Relay commits

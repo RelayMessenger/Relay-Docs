@@ -36,10 +36,10 @@ Relay returns `202 Accepted` with `message_id` and the stored message. Each stor
 Upload a file to get an `attachment_id`, or pass a public `url`. See [Attachments](/guides/attachments).
 </Tip>
 
-Relay returns every canonical `media` part with `content_type` and
-`media_kind`. For uploaded files, the stored upload MIME type is authoritative.
-For a public URL, declare `content_type` when its path has no useful file
-extension.
+Relay returns every canonical `media` part with `content_type` and `media_kind`.
+
+- **Uploaded files** take the stored upload MIME type as authoritative.
+- **Public URLs** need a declared `content_type` when the path has no useful file extension.
 
 `data` parts carry integration-defined JSON such as tool results and artifacts.
 
@@ -50,7 +50,7 @@ extension.
 
 Clients that cannot render a part use its `data.fallback` string when present, then the message's [`fallback_text`](/concepts#messages-and-ordered-parts).
 
-Use [Voice memos](/guides/voice-memos) when audio should appear in the inline voice player, and [Rich link previews](/guides/rich-link-previews) when a URL should render as a preview card.
+Use [Voice memos](/guides/voice-memos) for audio in the inline voice player. Use [Rich link previews](/guides/rich-link-previews) when a URL should render as a preview card.
 
 ## Quick replies
 
@@ -84,14 +84,14 @@ Each suggestion is `{ "text": "…" }` with 1 to 96 characters.
 | On tap | The `text` is sent back as an ordinary user text message |
 | Your handling | A normal [`message.received`](/guides/webhooks) event, no extra code |
 
-Relay chooses the presentation: a short set renders as inline rows in the transcript, and a longer set collapses into a single card that opens a full-height picker sheet.
+Relay chooses the presentation. A short set renders as inline rows in the transcript. A longer set collapses into one card that opens a full-height picker sheet.
 
 ## Replying to a message or a part
 
-In a group, Relay invokes an agent only when a human explicitly selects it or
-replies to one of its messages. The resulting `message.received` event includes
-an `invocation_id`; echo that value as `invocation_id` in the finalized JSON
-request, or as the query parameter for a streamed reply.
+In a group, Relay invokes an agent when a human selects it or replies to one of
+its messages. That `message.received` event carries an `invocation_id`. Echo the
+value as `invocation_id` in the finalized JSON request, or as the query parameter
+for a streamed reply.
 
 `reply_to` targets a whole message or a single part:
 
@@ -104,10 +104,12 @@ Use the `part_index` from the stored message in `message.received`. Part indexes
 
 ## Idempotency
 
-The `Idempotency-Key` header is **required** and accepts 8–255 characters. Derive it from the inbound `event_id`:
+The `Idempotency-Key` header is **required** and accepts 8 to 255 characters. Derive it from the inbound `event_id`.
 
-- Same key + same request → Relay returns the original message instead of sending twice.
-- Same key + different request → `409 idempotency_conflict`.
+| Retry | Result |
+| --- | --- |
+| Same key, same request | Relay returns the original message instead of sending twice |
+| Same key, different request | `409 idempotency_conflict` |
 
 Generate the key once per logical send and reuse it across retries.
 

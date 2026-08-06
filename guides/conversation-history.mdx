@@ -11,9 +11,7 @@ curl -sS "https://api.relayapp.im/v1/conversations/cnv_01JZC7K4RQ/messages?limit
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
-Messages return **newest first** with ordered `parts[]`, `sequence`, `reply_to`,
-reactions, revision history, and a receipt-projected `status` (`sent`,
-`delivered`, or `read`):
+Messages return **newest first**:
 
 ```json
 {
@@ -42,11 +40,17 @@ reactions, revision history, and a receipt-projected `status` (`sent`,
 }
 ```
 
-`revisions` is ordered from oldest to newest and is empty for a message that
-has never been edited. Each entry preserves the prior parts and fallback text.
-`edited_at` is present after the first edit.
+| Field | Contents |
+| --- | --- |
+| `parts[]` | The message parts, in order |
+| `sequence` | Position inside this conversation |
+| `reply_to` | The targeted message and part, or `null` |
+| `reactions` | Reactions on the message |
+| `revisions` | Prior `parts` and `fallback_text` snapshots, oldest to newest. Empty until the first edit |
+| `edited_at` | Present after the first edit |
+| `status` | Receipt projection: `sent`, `delivered`, or `read` |
 
-An unsent message keeps its place in sequence order but projects as a bare
+An unsent message keeps its place in sequence order, but projects as a bare
 tombstone:
 
 ```json
@@ -64,7 +68,8 @@ Tombstones do not expose parts, fallback text, reactions, or revisions.
 
 ## Pagination
 
-`limit` accepts 1–100 and defaults to 50. To page backward, pass your lowest `sequence` as `before_sequence`.
+`limit` accepts 1 to 100 and defaults to 50. To page backward, pass your lowest
+`sequence` as `before_sequence`.
 
 ```bash
 curl -sS ".../messages?before_sequence=2&limit=50" ...
@@ -74,9 +79,11 @@ An empty `messages` array means you have reached the start of the conversation.
 
 ## Notes
 
-- History is available while the agent participates in the conversation (`403 forbidden` otherwise).
-- `sequence` orders messages *within one conversation*. It is unrelated to a webhook `event_id`.
-- History is the recovery path after an event gap or uncertain delivery.
+- **History stays readable** while the agent participates in the conversation.
+  Any other case returns `403 forbidden`.
+- **`sequence` orders messages within one conversation.** It has no relationship
+  to a webhook `event_id`.
+- **History is the recovery path** after an event gap or an uncertain delivery.
 
 ## Next steps
 

@@ -16,7 +16,9 @@ Every event uses the same envelope:
 }
 ```
 
-`event_id` is globally unique and serves as the deduplication key. Delivery is at least once. Ignore unknown `event_type` values so new types do not break the consumer.
+`event_id` is globally unique and serves as the deduplication key. Delivery is
+at least once. Ignore unknown `event_type` values, so new types cannot break the
+consumer.
 
 See [Delivery model](/guides/delivery-model) for webhook acknowledgement,
 idempotent writes, live state, and recovery.
@@ -38,11 +40,14 @@ The agent's own messages never echo back as `message.received`.
 ### `message.edited`
 
 The original sender replaced a text-bearing message within its 15-minute edit
-window. `data.message` is the full updated message.
+window.
 
-`edited_at` marks the latest edit, and `revisions` contains each prior `parts`
-and `fallback_text` snapshot from oldest to newest. `data.revision_count` is the
-number of stored revisions, from 1 through 5.
+| Field | Contents |
+| --- | --- |
+| `data.message` | The full updated message |
+| `edited_at` | The time of the latest edit |
+| `revisions` | Each prior `parts` and `fallback_text` snapshot, oldest to newest |
+| `data.revision_count` | The number of stored revisions, from 1 through 5 |
 
 ```json
 {
@@ -77,9 +82,10 @@ number of stored revisions, from 1 through 5.
 }
 ```
 
-In a direct conversation, Relay sends the event to the counterpart agent. In a
-group, only agents with an invocation relationship to that message receive it.
-Edits do not produce push notifications or change message sequence.
+- **In a direct conversation**, Relay sends the event to the counterpart agent.
+- **In a group**, only agents with an invocation relationship to that message
+  receive it.
+- **An edit** sends no push notification, and never changes message sequence.
 
 ### `message.unsent`
 
@@ -98,12 +104,13 @@ identifies the stable tombstone:
 ```
 
 History keeps the id, sequence, sender, status `deleted`, and original
-`created_at`, but omits parts and reactions. Unsend uses the same direct and
-group agent scope as `message.edited` and does not produce a push notification.
+`created_at`. It omits parts and reactions. Unsend uses the same direct and
+group agent scope as `message.edited`, and sends no push notification.
 
 ### `message.delivered`
 
-A recipient's runtime accepted the agent's message. Everything through `through_sequence` is delivered to `participant`.
+A recipient's runtime accepted the agent's message. Everything through
+`through_sequence` is delivered to `participant`.
 
 ```json
 {
@@ -120,7 +127,8 @@ A recipient's runtime accepted the agent's message. Everything through `through_
 
 ### `message.read`
 
-The payload matches `message.delivered`. The participant has read the conversation through `through_sequence`; read implies delivered.
+The payload matches `message.delivered`. The participant has read the
+conversation through `through_sequence`. Read implies delivered.
 
 To advance the agent's own read watermark, see [Read receipts](/guides/read-receipts).
 
@@ -151,17 +159,22 @@ A participant added or removed a reaction from the agent's message.
 
 Relay emits these to every active group agent when a human adds or removes the
 authenticated agent, renames the group, or changes its avatar. A removed agent
-receives no further group events, and pending invocation IDs from an ended
+receives no further group events. Pending invocation IDs from an ended
 membership period cannot be reused after re-addition.
 
 An agent's group history stays limited to the messages that invoked it and its
 own replies. No lifecycle event adds access to the rest of the conversation.
 
-`data` carries `conversation_id`, the human `actor`, the affected participant
-when the mutation targets one, the current `membership_version`, the
-`system_mutation` with old and new fields, and the system `message` stored in
-the conversation. A `conversation.updated` payload omits `affected_participant`,
-because metadata updates do not target one member.
+`data` carries these fields:
+
+| Field | Contents |
+| --- | --- |
+| `conversation_id` | The group the change happened in |
+| `actor` | The human who made the change |
+| `affected_participant` | The targeted participant. Omitted on `conversation.updated`, because metadata updates target no single member |
+| `membership_version` | The current membership version |
+| `system_mutation` | The mutation, with old and new fields |
+| `message` | The system message stored in the conversation |
 
 <CodeGroup>
 
@@ -259,16 +272,17 @@ because metadata updates do not target one member.
 Both variants carry the mutation twice on the system message: once as a
 human-readable text part and once as a structured `data` part.
 
-A backend receives these lifecycle events but cannot create a group or change
-its membership; see [API availability](/roadmap).
+A backend receives these lifecycle events, but cannot create a group or change
+its membership. See [API availability](/roadmap).
 
 ### `group.invite.joined` / `group.invite.declined`
 
-`group.invite.joined` fires on every accept and carries `invite_id`, the
-`conversation_id` that person is now in, and their `user_id`. The first accept
-creates that conversation, and later accepts join it.
+| Event | Fires when | Payload |
+| --- | --- | --- |
+| `group.invite.joined` | One person accepts | `invite_id`, the `conversation_id` that person is now in, `user_id` |
+| `group.invite.declined` | One person declines | `invite_id`, `user_id` |
 
-`group.invite.declined` carries `invite_id` and `user_id`.
+The first accept creates that conversation. Later accepts join it.
 
 ```json
 {
@@ -283,10 +297,13 @@ creates that conversation, and later accepts join it.
 
 ### `group.invite.completed` / `group.invite.expired`
 
-An invite reaches its terminal state once every invited user answers or its
-deadline passes. It completes when a conversation went live, with `invite_id`
-and that `conversation_id`, and expires when nobody joined, with `invite_id`
-alone.
+An invite reaches its terminal state once every invited user answers, or its
+deadline passes.
+
+| Event | Fires when | Payload |
+| --- | --- | --- |
+| `group.invite.completed` | A conversation went live | `invite_id`, `conversation_id` |
+| `group.invite.expired` | Nobody joined | `invite_id` |
 
 ```json
 {
@@ -301,15 +318,23 @@ alone.
 A decline closes that person's card alone. It leaves the conversation and the
 rest of the invite untouched.
 
-Group mutations are an off-by-default preview. Existing group history remains
-readable if availability is turned off; the gate prevents new membership and
+Group mutations are an off-by-default preview. Existing group history stays
+readable when availability is turned off. The gate prevents new membership and
 metadata writes.
 
 ## Specified, coming soon
 
-The Relay contract also defines `message.failed`, typing events that enter the
-event log, `attachment.available`, install events, and the `call.*` family.
-These are **not emitted by v0**. See [API availability](/roadmap).
+The Relay contract also defines these. v0 emits none of them.
+
+| | Event |
+| :---: | --- |
+| ⏳ | `message.failed` |
+| ⏳ | Typing events entering the event log |
+| ⏳ | `attachment.available` |
+| ⏳ | Install events |
+| ⏳ | The `call.*` family |
+
+See [API availability](/roadmap).
 
 ## See also
 

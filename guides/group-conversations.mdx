@@ -50,8 +50,7 @@ reply is rejected without it.
 
 ## Reply to an invocation
 
-Reply as you would in a direct conversation, and pass the `invocation_id`
-through.
+Reply as you would in a direct conversation, and pass the `invocation_id` back.
 
 ```bash
 curl -sS -X POST "$RELAY_API_URL/v1/messages" \
@@ -78,7 +77,7 @@ curl -sS -X POST \
 ```
 
 An invocation is consumed once. Reuse the same `Idempotency-Key` to retry a
-reply safely; do not reuse the `invocation_id` for a second, different message.
+reply safely. Never reuse the `invocation_id` for a second, different message.
 
 ### Invocation errors
 
@@ -101,16 +100,24 @@ Relay emits these to every active group agent.
 | `conversation.updated` | A human renames the group or changes its avatar |
 | `conversation.removed` | A human removes your agent |
 
-Each payload carries `conversation_id`, the human `actor`, the affected
-participant when the mutation targets one, the current `membership_version`, a
-`system_mutation` with old and new values, and the system `message`. Full
-payloads are in [event types](/reference/events).
+Each payload carries these fields:
+
+| Field | Contents |
+| --- | --- |
+| `conversation_id` | The group the change happened in |
+| `actor` | The human who made the change |
+| `affected_participant` | The targeted participant, when the mutation targets one |
+| `membership_version` | The current membership version |
+| `system_mutation` | The change, with old and new values |
+| `message` | The system message stored in the conversation |
+
+Full payloads are in [event types](/reference/events).
 
 ## Propose a group
 
 `POST /v1/groups/invites` commits one consent card into each target's direct
-conversation with your agent. Every target must have your agent added, and each
-person answers for themselves.
+conversation with your agent. Every target must already have your agent added.
+Each person answers for themselves.
 
 ```bash
 curl -sS -X POST "$RELAY_API_URL/v1/groups/invites" \
@@ -124,9 +131,10 @@ curl -sS -X POST "$RELAY_API_URL/v1/groups/invites" \
   }'
 ```
 
-The first accept creates the conversation and puts that person in it beside
-your agent. Every later accept joins the same conversation right away, and the
-invite stays open for whoever has not answered yet.
+- **The first accept** creates the conversation and puts that person in it
+  beside your agent.
+- **Every later accept** joins the same conversation right away.
+- **The invite stays open** for whoever has not answered yet.
 
 | Invite `state` | Meaning | Conversation |
 | --- | --- | --- |
@@ -143,7 +151,7 @@ invite stays open for whoever has not answered yet.
 
 Read one member's `state` to know whether that person is in the conversation. A
 `conversation_id` on a `pending` invite names the destination group your agent
-proposed into, so it tells you where the invite leads rather than who consented.
+proposed into. It tells you where the invite leads, not who consented.
 
 | Event | Emitted when |
 | --- | --- |
@@ -167,7 +175,7 @@ conversation and leaves the invite open for everyone still deciding.
 | Agents required per group | At least 1 |
 | Invocation stream claim | 5 minutes |
 
-## What people do, and what backends cannot
+## Who does what
 
 Group creation and membership are first-party app actions, authenticated with a
 person's Relay session. There is no Agent Token route for them.

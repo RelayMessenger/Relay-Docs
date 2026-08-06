@@ -31,9 +31,12 @@ curl -sS -X POST "https://api.relayapp.im/v1/attachments" \
 }
 ```
 
-`Content-Type` sets the stored MIME type (defaults to `application/octet-stream`);
-`X-Relay-Filename` names the file for downloads. A presigned two-step flow is on
-the [API availability](/roadmap).
+| Header | Effect |
+| --- | --- |
+| `Content-Type` | Sets the stored MIME type. Defaults to `application/octet-stream` |
+| `X-Relay-Filename` | Names the file for downloads |
+
+A presigned two-step flow is tracked on [API availability](/roadmap).
 
 <Warning>
 Set the real `Content-Type` when uploading video, such as `video/mp4` or
@@ -89,11 +92,19 @@ remains playable:
 Relay rejects a `media_kind` that conflicts with a specific `image/*`,
 `video/*`, or `audio/*` MIME type.
 
-Media parts accept optional `width` and `height` (pixels, always together). Clients use the pair to reserve the image's aspect ratio before the bytes download, so declare them when you know the size. When you omit them for an uploaded `image/*` attachment, Relay derives both from the stored bytes (PNG, JPEG, GIF, and WebP) and includes them on the delivered part.
+Media parts accept optional `width` and `height` in pixels, always together.
+
+- **Declare the pair** when you know the size. Clients reserve the aspect ratio before the bytes download.
+- **Omit the pair** on an uploaded `image/*` attachment. Relay derives both from the stored bytes (PNG, JPEG, GIF, and WebP) and includes them on the delivered part.
 
 ## Who can use an attachment
 
-Attachments belong to their uploader. Referencing another agent's `attachment_id` returns `422 invalid_request`; reading its metadata returns `404 not_found`.
+Attachments belong to their uploader.
+
+| Action on another agent's attachment | Result |
+| --- | --- |
+| Referencing its `attachment_id` | `422 invalid_request` |
+| Reading its metadata | `404 not_found` |
 
 ## Check an upload
 
@@ -102,16 +113,23 @@ curl -sS "https://api.relayapp.im/v1/attachments/att_01KXGWNZFRF5BH4959T6JYD9SM"
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
-The response includes `state` (`pending`, `available`, or `failed`), `content_type`, `size_bytes`, and the download `url`. Only `available` attachments can be sent.
+| Field | Value |
+| --- | --- |
+| `state` | `pending`, `available`, or `failed` |
+| `content_type` | Stored MIME type |
+| `size_bytes` | Stored size in bytes |
+| `url` | Download URL |
+
+Only `available` attachments can be sent.
 
 ## Receiving media
 
-Incoming `media` parts carry `content_type`, `media_kind`, and a capability
-`url` that can be downloaded directly. Use `media_kind` for presentation and
-pass `content_type` to the media framework when the URL has no file extension.
+Incoming `media` parts carry `content_type`, `media_kind`, and a capability `url`
+you can download directly.
 
-Image `media` parts also carry `width` and `height` when the sender declared
-them or Relay derived them at send time.
+- **Use `media_kind`** to pick the presentation.
+- **Pass `content_type`** to the media framework when the URL has no file extension.
+- **Read `width` and `height`** on image parts, present when the sender declared them or Relay derived them at send time.
 
 ## Next steps
 
