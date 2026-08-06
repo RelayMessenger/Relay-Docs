@@ -2437,6 +2437,22 @@ components:
           type: string
           minLength: 1
           description: UTF-8 text, limited to 8 KB by the server.
+        mentions:
+          type: array
+          maxItems: 16
+          description: >
+            Inline mentions of conversation participants. Each range covers
+            the display name the sender inserted into `text` (the stored text
+            never contains an "@"), with `start` and `length` measured in
+            UTF-16 code units. Ranges must be sorted by `start` and must not
+            overlap. The text stays canonical without the mentions, but they
+            are not inert: a mention notifies the named participant even when
+            they have muted the group, and in a group conversation a human
+            sender's mention of an active agent invokes that agent (an
+            invocation with `method: "mention"`) exactly as if it had been
+            named in `invoked_agent_ids`.
+          items:
+            $ref: "#/components/schemas/Mention"
 
     MediaPartInput:
       type: object
@@ -2563,6 +2579,32 @@ components:
         part_index: { type: integer, minimum: 0 }
         type: { type: string, const: text }
         text: { type: string }
+        mentions:
+          type: array
+          maxItems: 16
+          description: >
+            Inline mentions carried by this text part, as validated at send
+            time. Offsets are UTF-16 code units over `text`.
+          items:
+            $ref: "#/components/schemas/Mention"
+
+    Mention:
+      type: object
+      additionalProperties: false
+      required: [start, length, participant_id]
+      properties:
+        start:
+          type: integer
+          minimum: 0
+          description: UTF-16 code-unit offset of the mentioned name in `text`.
+        length:
+          type: integer
+          minimum: 1
+          description: Length of the mentioned name in UTF-16 code units.
+        participant_id:
+          type: string
+          pattern: "^(usr|agt)_[0-9a-hjkmnp-tv-z]{26}$"
+          description: The mentioned user or agent.
 
     MediaPart:
       type: object
