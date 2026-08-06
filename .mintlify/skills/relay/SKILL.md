@@ -1,0 +1,69 @@
+---
+name: relay
+description: Integrate an existing agent backend with Relay, the messenger for AI agents. Use for any Relay API task, including registering webhooks, receiving message.received events, replying idempotently, streaming, attachments, groups, receipts, and errors.
+---
+
+# Relay integration
+
+Relay delivers user messages to your backend as signed webhooks; you reply over
+HTTPS at `https://api.relayapp.im` with one Agent Token.
+
+## Source priority
+
+1. The exact page as Markdown: append `.md` to any docs URL
+   (for example `https://docs.relayapp.im/quickstart.md`).
+2. The wire contract: `https://docs.relayapp.im/api-reference/openapi.yaml`.
+3. Live search: the MCP server at `https://docs.relayapp.im/mcp`.
+4. Discovery: `https://docs.relayapp.im/llms.txt`.
+
+Read the current page before writing code. Do not rely on memorized Relay
+endpoints, fields, or limits.
+
+## The workflow
+
+1. Ask the user for their Agent Token (`rly_live_…`, shown once at agent
+   creation). Store it in `RELAY_AGENT_TOKEN`. Verify with `GET /v1/agents/me`.
+2. Register a public HTTPS endpoint with `POST /v1/webhooks`. Store the
+   `signing_secret` from the response; it is never returned again.
+3. On each delivery: verify the Standard Webhooks signature
+   (`webhook-id`, `webhook-timestamp`, `webhook-signature` headers) over the
+   exact raw body, reject timestamps older than five minutes, return `2xx`
+   within 10 seconds, then do model or tool work.
+4. Deduplicate on `event_id` before side effects; delivery is at least once.
+5. Reply with `POST /v1/messages`, `Idempotency-Key` derived from the inbound
+   `event_id`. Reuse the same key on retry.
+6. In group conversations, include the `invocation_id` from the triggering
+   event. One invocation produces exactly one agent message.
+
+## Rules
+
+- Base URL is `https://api.relayapp.im`. Never a `workers.dev` origin.
+- Raw HTTPS and JSON only. Never import or invent a `relay` package.
+- Webhooks and long polling are mutually exclusive per Agent Token; polling
+  with a webhook enabled returns `409 conflict`. Run one poller per token.
+- Order messages by `sequence`; deduplicate events by `event_id`. Never swap
+  them.
+- Group membership grants no transcript access; only invocations reach you.
+- Streaming: `POST /v1/messages?stream=true` with a Vercel AI SDK
+  UIMessageStream v1 body commits one stored message at `finish`; an aborted
+  stream commits nothing, so retry the whole stream with the same key.
+- Treat attachment capability URLs as secrets.
+
+## CANNOT
+
+- There is no Relay SDK, npm package, or client library.
+- Backends cannot read ambient group conversation, create group members, or
+  message users who have not installed the agent.
+- No socket mode and no calls in the current developer preview; check
+  `https://docs.relayapp.im/roadmap.md` before assuming a capability.
+- Agent Tokens cannot act as a user session, and user sessions cannot act as
+  an agent.
+
+## Verify
+
+```bash
+curl -sS https://api.relayapp.im/v1/agents/me -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+Then send the agent a message from the Relay app and confirm the reply lands
+in the thread. Full loop: `https://docs.relayapp.im/quickstart.md`.

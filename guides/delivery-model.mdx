@@ -1,0 +1,143 @@
+---
+title: "Delivery model"
+description: "How Relay stores messages, delivers events, prevents duplicates, and recovers after failure."
+keywords: ["delivery", "at-least-once", "idempotency", "webhooks", "long polling", "cursor", "watermark", "receipts", "recovery"]
+---
+
+Relay persists messages and events. Live state does not survive a restart.
+
+| | Stored | Examples |
+| --- | :---: | --- |
+| Survives a restart | ✅ | Messages, ordered history, webhook events, reactions, receipt watermarks |
+| Does not | ❌ | Typing indicators, in-flight stream deltas |
+
+## Incoming messages
+
+Use webhooks or long polling, never both.
+
+```mermaid
+flowchart LR
+  U["User sends"] --> C["Commit to<br/>conversation"]
+  C --> L["Event log<br/>(kept 7 days)"]
+  L --> W["Signed webhook<br/>Relay pushes"]
+  L --> P["Long poll<br/>you pull"]
+  W --> B["Your backend"]
+  P --> B
+  B -- "POST /v1/messages<br/>Idempotency-Key" --> C
+```
+
+| Transport | Use it when |
+| --- | --- |
+| [Signed webhooks](/guides/webhooks) | Your backend can accept public inbound HTTPS |
+| Long polling | Your backend cannot, such as a local coding-agent bridge |
+
+<Warning>
+The two transports are mutually exclusive. Polling while a webhook is enabled
+returns `409 conflict`.
+</Warning>
+
+<Tabs>
+  <Tab title="Signed webhooks">
+    <Steps>
+      <Step title="Verify and deduplicate">
+        Verify the signature before parsing, then deduplicate on `event_id`.
+      </Step>
+      <Step title="Accept, then work">
+        Save the event and return `2xx` within 10 seconds. Do model or tool work after.
+      </Step>
+    </Steps>
+
+    A successful `message.received` webhook advances the delivered watermark.
+    Mark it read separately, once your backend has consumed it.
+
+    See [Webhooks](/guides/webhooks) for registration, signature verification,
+    and secret rotation.
+  </Tab>
+
+  <Tab title="Long polling">
+    `GET /v1/events` returns events strictly after the supplied cursor, plus a
+    `next_cursor`.
+
+    ```bash
+    curl -sS "$RELAY_API_URL/v1/events?cursor=1042&timeout=30" \
+      -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+    ```
+
+    | Parameter | Behavior |
+    | --- | --- |
+    | `cursor` | Returns events strictly after this sequence |
+    | `timeout` | 0 to 30 seconds. `timeout=0` returns immediately with any pending events |
+
+    Persist the complete returned page and its `next_cursor` atomically, before
+    the next request. Sending that cursor acknowledges everything through it,
+    and governs redelivery.
+
+    <Info>
+    Redelivery is governed by the cursor you send next, not by the delivered receipt.
+    </Info>
+
+    Cursors are scoped to the agent, not the token. Rotating an Agent Token never
+    resets the ledger.
+
+    Long-poll error codes:
+
+    | Status | Code | What happened | What to do |
+    | --- | --- | --- | --- |
+    | `422` | `invalid_request` | Your cursor is ahead of Relay's delivered ledger | Resume from `error.details.highest_delivered_cursor` after reconciling history over REST |
+    | `409` | `terminated_by_other_consumer` | A newer poll took over the token | Run one poller per Agent Token; a second poll terminates the first |
+    | `409` | `conflict` | A webhook is enabled | Disable the webhook or use it instead |
+    | `410` | `cursor_expired` | The cursor is behind the seven-day retention ceiling | Stop and reconcile from history. Do not reset to zero |
+  </Tab>
+</Tabs>
+
+## Outgoing messages
+
+`POST /v1/messages` returns `202 Accepted`. That means Relay stored the message.
+Delivery and read arrive later as `message.delivered` and `message.read`.
+
+Every send requires an `Idempotency-Key`.
+
+| Reuse | Result |
+| --- | --- |
+| Same key, same request | The original message is returned |
+| Same key, different request | `409 idempotency_conflict` |
+
+Derive the key from the incoming `event_id`. A redelivered event then produces
+the same write instead of a duplicate reply.
+
+## Delivery and read state
+
+Receipts are monotonic watermarks through a conversation sequence:
+
+```text
+sent → delivered → read
+```
+
+Relay emits `message.delivered` and `message.read` only when the corresponding
+watermark advances. Read implies delivered. Conversation history projects those
+watermarks onto each message.
+
+## Live state
+
+Typing indicators never appear in `GET /v1/events` or webhooks. A streaming
+reply writes no partial rows. Relay stores one message when the stream
+finishes, and sends one notification.
+
+<Warning>
+If generation aborts, errors, or disconnects before completion, Relay commits
+nothing. Retry the complete stream with the same idempotency key.
+</Warning>
+
+## Recovery rule
+
+After any uncertainty, reconcile from [conversation history](/guides/conversation-history).
+Do not rebuild state from delivery attempts or retry responses.
+
+## Next steps
+
+- [Webhooks](/guides/webhooks) for registration, verification, and rotation
+- [Embed Relay in your own runtime](/integrations/channel-plugin) if you maintain an agent host runtime
+- [Event types](/reference/events) for every payload shape
+- [Read receipts](/guides/read-receipts) for the action and lifecycle
+- [Conversation history](/guides/conversation-history) for reconciliation
+- [Errors](/reference/errors) for the full status and code table

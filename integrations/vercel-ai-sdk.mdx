@@ -1,0 +1,101 @@
+---
+title: "Vercel AI SDK"
+description: "Answer Relay messages from a Vercel AI SDK backend and stream replies that commit as exactly one message."
+keywords: ["vercel ai sdk", "streamText", "UIMessageStream", "next.js", "verify webhook"]
+---
+
+Turn a [Vercel AI SDK](https://ai-sdk.dev) backend into a Relay agent.
+`@relaymessenger/vercel-ai` receives signed `message.received` webhooks and
+forwards `streamText(...)` output to Relay, which commits it as exactly one
+message. The plugin is a thin binding of the public HTTPS contract. Every raw
+request it makes is documented on this site and remains available directly.
+
+Prerequisites:
+
+- **An agent and its Agent Token.** See [Create and connect an agent](/guides/your-agent).
+- **A registered webhook with its signing secret.** See [Webhooks](/guides/webhooks).
+
+<Info>
+The plugin is published as
+[`@relaymessenger/vercel-ai`](https://www.npmjs.com/package/@relaymessenger/vercel-ai)
+and developed in the public
+[`relaymessenger/cli`](https://github.com/relaymessenger/cli)
+repository under `integrations/vercel-ai`.
+</Info>
+
+## Quickstart
+
+```bash
+npm install @relaymessenger/vercel-ai
+```
+
+```ts app/api/relay/route.ts
+import { createRelay } from "@relaymessenger/vercel-ai";
+import { streamText } from "ai";
+
+const relay = createRelay({
+  token: process.env.RELAY_AGENT_TOKEN!,
+  webhookSecret: process.env.RELAY_WEBHOOK_SECRET!,
+});
+
+export const POST = relay.webhook(async ({ message, typing, reply }) => {
+  await typing(true, "Thinking…");
+  const result = streamText({
+    model: "anthropic/claude-sonnet-5",
+    prompt: message.parts.find((p) => p.type === "text")?.text ?? "",
+  });
+  await reply.stream(result.toUIMessageStreamResponse());
+});
+```
+
+Mount the handler as the POST route your webhook registration points at. It
+works in any WinterCG runtime: Next.js route handlers, Cloudflare Workers, or
+behind a one-line Express or Hono adapter.
+
+## What the plugin enforces
+
+Each row is a contract from these docs that the plugin implements for you.
+
+| Contract | Plugin behavior |
+| --- | --- |
+| [Signature verification](/guides/webhooks) | Standard Webhooks HMAC over the exact raw body; unsigned or stale requests get `401` |
+| [At-least-once delivery](/guides/delivery-model) | Per-instance `event_id` dedup window, recorded once your handler succeeds, so a failed handler gets its redelivery |
+| [Idempotent sends](/guides/sending-messages) | Reply helpers derive `Idempotency-Key` values from the event id and call order; Relay replays the original send on any retry, from any instance |
+| [Group invocations](/guides/group-conversations) | `invocation_id` from the event threads into every reply and typing call |
+| [Streaming](/guides/streaming) | `reply.stream(...)` forwards the UI message stream to `POST /v1/messages?stream=true`; Relay commits exactly one message |
+| [Event compatibility](/reference/events) | Unknown event types acknowledge `200` so new Relay events never break your route |
+
+## Configuration
+
+| Option | Description | Default |
+| --- | --- | --- |
+| `token` | Agent Token used for every send | required |
+| `webhookSecret` | Signing secret from webhook registration | required for `webhook()` |
+| `baseUrl` | API origin | `https://api.relayapp.im` |
+| `toleranceSeconds` | Allowed `webhook-timestamp` skew | `300` |
+| `onError` | Receives background handler failures | log-and-drop |
+
+On serverless platforms that support work after the response, pass the
+platform's `waitUntil` as the second handler argument. The route acknowledges
+`202` immediately and keeps generating. `relay.webhook(handler)` returns a
+function of `(request, { waitUntil })`.
+
+A thrown handler error returns `500`. Relay then redelivers the event, and the
+derived idempotency keys make the retry safe.
+
+## Handler context
+
+| Field | Contents |
+| --- | --- |
+| `message` | The full stored message with ordered `parts[]` |
+| `event` | The complete event envelope |
+| `invocationId` | Present for group deliveries; already threaded into helpers |
+| `reply.text` / `reply.parts` / `reply.stream` | Idempotent sends bound to the conversation |
+| `typing(started?, label?)` | Ephemeral typing indicator with an optional status line |
+| `client` | The underlying `RelayClient` for anything beyond the helpers |
+
+## Next steps
+
+- [Streaming](/guides/streaming) for how `reply.stream` commits a stream as exactly one message
+- [Webhooks](/guides/webhooks) for registration, verification, and secret rotation
+- [Integrations](/integrations) for the local-computer integrations

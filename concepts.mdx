@@ -1,0 +1,99 @@
+---
+title: "Core concepts"
+description: "Work with Relay's model: agents, conversations, messages, ordered parts, and delivery semantics."
+keywords: ["concepts", "data model", "agent", "conversation", "message", "parts", "part_index", "sequence", "fallback_text"]
+---
+
+Relay's API works on five objects: agents, users, conversations, messages, and
+ordered parts. Learn them once, and every endpoint reads the same way.
+
+## Agents and users
+
+An **agent** is the identity a user messages. Its external backend supplies the
+model, tools, and memory.
+
+See [Your agent](/guides/your-agent) for creation, identity, distribution, and installation.
+
+## Conversations and participants
+
+A conversation has a stable `conversation_id` and a set of participants. A
+direct conversation normally contains one user and one agent. The backend can
+send only while its agent is an active participant and installed for that user.
+
+Use the `conversation_id` from `message.received` for replies and history reads.
+
+See [Conversation lifecycle](/guides/conversation-lifecycle) for how direct threads begin, remain authorized, and recover.
+
+## Messages and ordered parts
+
+A message carries an ordered `parts[]` array. Relay assigns each stored part a zero-based `part_index`. Order is presentation order.
+
+The send route accepts 1 to 32 parts, of five types.
+
+| Part type | Carries |
+| --- | --- |
+| `text` | Plain text, up to 8 KB per part |
+| `link_preview` | A public HTTPS URL Relay renders as a preview |
+| `data` | Any JSON, up to 16 KB, rendered through fallback text |
+| `media` | An image, video, audio file, or file, by URL or `attachment_id` |
+| `voice_memo` | Voice audio, by URL or `attachment_id` |
+
+Exact shapes and limits are in [Sending messages](/guides/sending-messages).
+
+Stored messages include:
+
+```json
+{
+  "id": "msg_01JZM3T8AH",
+  "conversation_id": "cnv_01JZC7K4RQ",
+  "sequence": 7,
+  "sender": { "kind": "agent", "id": "agt_01JZRELAY" },
+  "is_from_me": true,
+  "parts": [
+    { "part_index": 0, "type": "text", "text": "Here is the link:" },
+    { "part_index": 1, "type": "link_preview", "url": "https://example.com" }
+  ],
+  "reply_to": null,
+  "fallback_text": "Here is the link:",
+  "status": "sent",
+  "created_at": "2026-07-12T01:21:08.000Z"
+}
+```
+
+`fallback_text` is the plain-language representation used by notifications, search, and clients that cannot render a part. Relay always derives it, in this order: the first text part, then the first link preview, then the first data part's `fallback`, then `Voice memo` or `[attachment]`.
+
+`is_from_me` states direction for the caller the payload was projected for. Relay resolves it on the server against the authenticated identity, so a client never compares `sender.id` against its own id to decide which side of the conversation a message belongs on. That comparison is ambiguous before a client knows its own identity, and wrong for every other participant in a group.
+
+## Edit and unsend
+
+Only a message's original sender can mutate it. Every other actor receives `404`.
+
+Use `PATCH /v1/messages/{message_id}` within 15 minutes to replace all parts, up
+to five times. Edits must remain text-bearing and cannot involve attachment
+parts. Each successful edit appends the prior parts and `fallback_text` to
+`revisions`, sets `edited_at`, and keeps the original `sequence`.
+
+Use `DELETE /v1/messages/{message_id}` within two minutes to unsend. Relay
+removes the stored parts but keeps a bare `status: "deleted"` tombstone with
+the original id, sequence, sender, and creation time. Neither operation sends a
+push notification.
+
+## Delivery and recovery
+
+`message.sequence` orders messages inside one conversation. Deduplicate on
+`event_id`; order on `sequence`. Never use one for the other.
+
+See [Delivery model](/guides/delivery-model) for webhook acknowledgement,
+deduplication, receipt, and recovery rules.
+
+<Note>
+Socket mode and calls are specified for Relay and ship after the v0 developer
+API. See [API availability](/roadmap) for the full matrix.
+</Note>
+
+## Next steps
+
+- [Quickstart](/quickstart)
+- [Delivery model](/guides/delivery-model)
+- [Sending messages](/guides/sending-messages)
+- [Event types](/reference/events)

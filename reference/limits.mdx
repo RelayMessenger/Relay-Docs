@@ -1,0 +1,103 @@
+---
+title: "Limits and rate limits"
+description: "Every size, count, and rate ceiling the Relay API enforces."
+keywords: ["limits", "rate limits", "size limits", "retention", "quotas"]
+---
+
+The server enforces every ceiling below. Most violations return
+`422 invalid_request`. Exceptions are called out on their rows, and in
+[Errors](/reference/errors).
+
+## Rate limits
+
+Message writes use a fixed window per conversation.
+
+| Actor | Limit | Window |
+| --- | --- | --- |
+| Agent backend | 30 messages | 10 seconds |
+| Person in the app | 15 messages | 10 seconds |
+
+A `429` response carries `Retry-After` in seconds. Wait that long before
+retrying. Retrying sooner consumes the next window.
+
+## Messages
+
+| Limit | Value |
+| --- | --- |
+| Parts per message | 1 to 32 |
+| Text part | 8 KB |
+| Data part | 16 KB, JSON-encoded |
+| Link preview URL | 2,048 characters |
+| Idempotency key | 8 to 255 characters, required on every send |
+| Typing indicator label | 80 characters, truncated |
+| History page (`limit`) | 1 to 100, default 50; out-of-range values are clamped |
+
+## Quick replies
+
+| Limit | Value |
+| --- | --- |
+| Suggestions per message | 8 |
+| Suggestion text | 96 characters |
+
+## Attachments
+
+| Limit | Value |
+| --- | --- |
+| Upload size | 100 MB, as the raw request body. Larger bodies return `413` |
+
+## Message edit and unsend
+
+| Limit | Value |
+| --- | --- |
+| Edit window | 15 minutes from send |
+| Revisions per message | 5 |
+| Unsend window | 2 minutes from send |
+
+## Groups
+
+| Limit | Value |
+| --- | --- |
+| Participants per group | 25, humans and agents combined |
+| Historical participants tracked | 100 |
+| Group title | 1 to 100 characters |
+| Agents required per group | At least 1 |
+| Invocation stream claim | 5 minutes |
+
+See [group conversations](/guides/group-conversations).
+
+## Contact discovery
+
+| Limit | Value |
+| --- | --- |
+| Entries per request | 250 |
+
+## Webhooks
+
+| Limit | Value |
+| --- | --- |
+| Enabled endpoints per agent | 5. A sixth returns `409 limit_exceeded` |
+| Attempt timeout | 10 seconds |
+| Delivery attempts | 10 |
+| Initial replay on registration | The preceding 24 hours, capped at 1,000 matching events |
+| Previous secret validity after rotation | 24 hours |
+
+## Delivery and retention
+
+| Limit | Value |
+| --- | --- |
+| Event and delivery payload retention | 7 days |
+| Long-poll timeout | 0 to 30 seconds |
+| Long-poll consumers per Agent Token | 1. A second poll takes over, and the first ends with `409 terminated_by_other_consumer` |
+
+<Warning>
+A long-poll consumer that resumes behind the 7-day retention ceiling receives
+`410 cursor_expired`. Reconcile from [conversation
+history](/guides/conversation-history) rather than resetting the cursor to zero.
+</Warning>
+
+## See also
+
+- [Errors](/reference/errors)
+- [Delivery model](/guides/delivery-model)
+- [Sending messages](/guides/sending-messages)
+- [API overview](/api-reference/overview)

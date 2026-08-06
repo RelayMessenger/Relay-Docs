@@ -1,0 +1,68 @@
+---
+title: "Identifying users"
+description: "Turn a message's sender.id into the human's name and phone number."
+keywords: ["identify users", "user id", "sender", "profile", "identity"]
+---
+
+A `message.received` event carries the sender under `data.message.sender`:
+
+```json
+"sender": { "kind": "user", "id": "usr_01JZU1F0BD" }
+```
+
+That `usr_…` id is stable: the same user always has the same id, in direct
+chats and in groups. Use it to key your own records.
+
+## Resolve the name and phone
+
+Call `GET /v1/users/{user_id}` (see the **API Reference** tab):
+
+```bash
+curl https://api.relayapp.im/v1/users/usr_01JZU1F0BD \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```json
+{
+  "user": {
+    "id": "usr_01JZU1F0BD",
+    "name": "Rushil Kagithala",
+    "first_name": "Rushil",
+    "last_name": "Kagithala",
+    "phone_number": "+13135550123",
+    "avatar_url": null,
+    "created_at": "2026-07-12T01:20:00.000Z"
+  }
+}
+```
+
+| Field | Use |
+| --- | --- |
+| `name` | The stored value. Keep this one when you need the exact name |
+| `first_name`, `last_name` | A convenience split of `name` on the first space. Greet with these |
+
+A two-word given name puts its tail in `last_name`.
+
+<Tip>
+  In a group, read `sender.id` from each `message.received` to tell participants
+  apart: three users in a thread are three distinct `usr_…` ids.
+</Tip>
+
+## Scope
+
+Resolve only a user you **currently share an active conversation with**, direct
+or group. Every other id returns `404`, whether it exists or not:
+
+```json
+{ "error": { "code": "not_found", "message": "user not found" } }
+```
+
+The two cases are deliberately indistinguishable, so the endpoint cannot
+enumerate accounts or confirm who owns a phone number. When a user leaves the
+conversation or removes your agent, the lookup stops resolving them.
+
+## Next steps
+
+- [Developer data access and retention](/reference/data-and-permissions)
+- [Conversation lifecycle](/guides/conversation-lifecycle)
+- [Trust and data](/trust-and-data)
