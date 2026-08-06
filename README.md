@@ -32,7 +32,6 @@ frontmatter, and `docs.json` owns navigation, theme, and OpenAPI wiring.
 | `index.mdx`, `why-relay.mdx`, `how-relay-works.mdx`, `alternatives.mdx`, `trust-and-data.mdx`, `current-status.mdx` | The user-first product story |
 | `developers/`, `guides/` | Developer onboarding and implementation |
 | `reference/` | Exact contract behavior: events, errors, limits, permissions |
-| `components/` | Interactive message component kinds |
 | `api-reference/openapi.yaml` | Every generated endpoint and schema page |
 | `docs.json` | Site identity, navigation, theme, OpenAPI wiring |
 | `snippets/` | Content reused across more than one page |

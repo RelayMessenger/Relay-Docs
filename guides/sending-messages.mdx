@@ -28,7 +28,7 @@ Relay returns `202 Accepted` with `message_id` and the stored message. Each stor
 | --- | --- | --- |
 | `text` | `{ "type": "text", "text": "Hello" }` | 8 KB per part |
 | `link_preview` | `{ "type": "link_preview", "url": "https://example.com" }` | public HTTPS URL, up to 2,048 characters |
-| `data` | `{ "type": "data", "data": { ... } }` | any JSON, 16 KB; recognized component kinds get additional validation |
+| `data` | `{ "type": "data", "data": { ... } }` | any JSON, 16 KB; stored and delivered as sent, rendered through fallback text |
 | `media` | `{ "type": "media", "url": "https://…", "content_type": "video/mp4" }` or `{ "attachment_id": "att_…" }` | send one source; optional `content_type`, `media_kind` (`image` \| `video` \| `audio` \| `file`), and `width` + `height` in pixels (always together) |
 | `voice_memo` | `{ "type": "voice_memo", "url": "https://…" }` or `{ "type": "voice_memo", "attachment_id": "att_…" }` | send `url` or `attachment_id`, never both; `duration_ms` is optional |
 
@@ -42,16 +42,13 @@ For a public URL, declare `content_type` when its path has no useful file
 extension.
 
 `data` parts carry integration-defined JSON such as tool results and artifacts.
-Relay also recognizes the v1 [message component](/components) kinds: `buttons`,
-`select`, `card`, `confirm`, and `agent_permission_request`.
 
 | Case | Behavior |
 | --- | --- |
-| Missing component `data.fallback` | Synthesized before storage |
-| Unknown kind | Passes through unchanged, so older clients render the fallback instead of dropping the part |
+| Any `data` shape | Stored and delivered unchanged, so clients render fallback text instead of dropping the part |
 | `group_invite` kind | Reserved for cards committed by `POST /v1/groups/invites`; sending it through the ordinary message endpoint returns `422 invalid_request` |
 
-Clients that cannot render a part use its component fallback when present, then the message's [`fallback_text`](/concepts#messages-and-ordered-parts).
+Clients that cannot render a part use its `data.fallback` string when present, then the message's [`fallback_text`](/concepts#messages-and-ordered-parts).
 
 Use [Voice memos](/guides/voice-memos) when audio should appear in the inline voice player, and [Rich link previews](/guides/rich-link-previews) when a URL should render as a preview card.
 
@@ -89,58 +86,6 @@ Each suggestion is `{ "text": "…" }` with 1 to 96 characters.
 
 Relay chooses the presentation: a short set renders as inline rows in the transcript, and a longer set collapses into a single card that opens a full-height picker sheet.
 
-## Message components
-
-Components stay in the transcript and tap back as a `data` message carrying `origin.message_id`, `origin.part_index`, and `option_id`.
-
-```bash
-curl -sS -X POST "https://api.relayapp.im/v1/messages" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: booking-evt_01JZE9M2XW" \
-  -d '{
-    "conversation_id": "cnv_01JZC7K4RQ",
-    "parts": [
-      { "type": "data", "data": {
-        "kind": "buttons",
-        "prompt": "Pick your booking slot",
-        "options": [
-          { "id": "slot_fri_7", "label": "Friday 7pm", "style": "primary" },
-          { "id": "slot_sat_8", "label": "Saturday 8pm" }
-        ]
-      } }
-    ]
-  }'
-```
-
-Tapping `slot_sat_8` sends a normal user message through the existing message pipeline:
-
-```json
-{
-  "parts": [{
-    "type": "data",
-    "data": {
-      "origin": {
-        "kind": "data_action",
-        "message_id": "msg_01JZM4Q9VN",
-        "part_index": 0,
-        "option_id": "slot_sat_8",
-        "source_kind": "buttons"
-      },
-      "option_id": "slot_sat_8",
-      "label": "Saturday 8pm"
-    }
-  }],
-  "fallback_text": "Saturday 8pm"
-}
-```
-
-The agent receives this as the next ordinary `message.received` event. Normal message idempotency covers retries. The client marks the successful choice selected and disables its siblings.
-
-Treat `option_id` as idempotent; stale taps are possible.
-
-See the catalog and per-kind wire contracts in [Message components](/components), [Buttons](/components/buttons), [Select](/components/select), [Card](/components/card), [Confirm](/components/confirm), and [Agent permission request](/components/agent_permission_request).
-
 ## Replying to a message or a part
 
 In a group, Relay invokes an agent only when a human explicitly selects it or
@@ -175,5 +120,4 @@ Split content longer than the per-part limit across `text` parts or messages. Ea
 - [Streaming replies](/guides/streaming)
 - [Reactions](/guides/reactions)
 - [Attachments](/guides/attachments)
-- [Message components](/components)
 - [Delivery model](/guides/delivery-model)
