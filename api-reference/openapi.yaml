@@ -38,14 +38,6 @@ tags:
       the phone.
   - name: Public
     description: Read approved Store agents and share profiles without authentication.
-  - name: Invites
-    description: >
-      Relay signup is invite-only. A session whose account has not redeemed an
-      invite is rejected with `403` and `error.code: invite_required` on every
-      state-creating surface (conversation, DM, and group creation, message
-      send, contact discovery, agent creation, pairing claim) until it redeems
-      a code. Read-only session surfaces keep working so the app can render
-      the gate. Agent Tokens are never invite-gated.
 
 paths:
   /v1/agents/me:
@@ -666,8 +658,6 @@ paths:
                 $ref: "#/components/schemas/DirectConversationResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/InviteRequired"
         "404":
           description: The feature is unavailable or the verified target user does not exist.
           content:
@@ -680,172 +670,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-
-  /v1/waitlist:
-    post:
-      tags: [Invites, Public]
-      summary: Join the waitlist
-      description: >
-        Public, unauthenticated endpoint behind the relayapp.im waitlist form.
-        Accepts an email address or E.164 phone number, dedupes by contact,
-        and always answers `202` for a well-formed contact, including
-        duplicates, so the endpoint cannot be used to probe who is already on
-        the list. Aggressively rate limited per client IP.
-      operationId: joinWaitlist
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [contact]
-              properties:
-                contact:
-                  type: string
-                  maxLength: 254
-                  description: Email address or E.164 phone number.
-                  example: person@example.com
-                source:
-                  type: string
-                  enum: [web, app]
-                  default: web
-      responses:
-        "202":
-          description: Accepted (whether or not the contact was already listed).
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [accepted]
-                properties:
-                  accepted:
-                    type: boolean
-                    const: true
-        "422":
-          description: The contact is not a valid email address or phone number.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "429":
-          $ref: "#/components/responses/RateLimited"
-
-  /v1/invites/redeem:
-    post:
-      tags: [Invites]
-      summary: Redeem an invite code
-      description: >
-        Activates the calling account with a friend's invite code. Codes are 8
-        characters of unambiguous base32 (no 0/O/1/I) and match
-        case-insensitively. Idempotent once the account is activated: further
-        calls answer `200` with `already_activated: true` regardless of code.
-      operationId: redeemInvite
-      security:
-        - userSession: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [code]
-              properties:
-                code:
-                  type: string
-                  minLength: 8
-                  maxLength: 8
-                  pattern: "^[A-HJ-NP-Za-hj-np-z2-9]{8}$"
-                  example: KQ7MPX4Z
-      responses:
-        "200":
-          description: The account is activated.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [activated, already_activated, account]
-                properties:
-                  activated:
-                    type: boolean
-                    const: true
-                  already_activated:
-                    type: boolean
-                    description: True when the account was activated before this call.
-                  account:
-                    $ref: "#/components/schemas/AccountGate"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          description: Unknown invite code.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "409":
-          description: The invite code was already used by another account.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "422":
-          description: Missing or malformed code.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "429":
-          $ref: "#/components/responses/RateLimited"
-
-  /v1/me/invites:
-    get:
-      tags: [Invites]
-      summary: List my invite codes
-      description: >
-        Lists the caller's invite codes with used state, lazily minting the
-        full batch of 5 the first time an activated account asks. Grandfathered
-        accounts (activated by migration, never through a code) mint on their
-        first read too. Unactivated accounts are rejected with
-        `invite_required`.
-      operationId: listMyInvites
-      security:
-        - userSession: []
-      responses:
-        "200":
-          description: The caller's 5 invite codes.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [invites]
-                properties:
-                  invites:
-                    type: array
-                    minItems: 5
-                    maxItems: 5
-                    items:
-                      type: object
-                      required: [code, url, used, used_at, created_at]
-                      properties:
-                        code:
-                          type: string
-                          example: KQ7MPX4Z
-                        url:
-                          type: string
-                          format: uri
-                          example: https://relayapp.im/invite/KQ7MPX4Z
-                        used:
-                          type: boolean
-                        used_at:
-                          type: [string, "null"]
-                          format: date-time
-                        created_at:
-                          type: string
-                          format: date-time
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/InviteRequired"
 
   /v1/conversations/{conversation_id}/messages:
     get:
@@ -1877,15 +1701,6 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
-    InviteRequired:
-      description: >
-        The session's account has not redeemed an invite
-        (`error.code: invite_required`). Redeem a code with
-        `POST /v1/invites/redeem` to unlock state-creating surfaces.
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/Error"
     RateLimited:
       description: The per-conversation message-write ceiling was reached.
       headers:
@@ -1914,30 +1729,6 @@ components:
             message:
               type: string
               example: conversation_id is required
-
-    AccountGate:
-      type: object
-      description: >
-        Invite-gate account state. `/v1/sync` (top level and inside
-        `bootstrap`) and `POST /v1/invites/redeem` return it so the app can
-        render the gate screen and the Invite Friends sheet.
-      required: [activated, waitlist_position, invite_codes_remaining]
-      properties:
-        activated:
-          type: boolean
-        waitlist_position:
-          type: [integer, "null"]
-          minimum: 1
-          description: >
-            1-based rank by signup time among unactivated accounts; null once
-            activated.
-        invite_codes_remaining:
-          type: [integer, "null"]
-          minimum: 0
-          maximum: 5
-          description: >
-            Unused invite codes the account can still share; null until
-            activated.
 
     DirectConversationResponse:
       type: object
