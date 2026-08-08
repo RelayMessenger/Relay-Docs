@@ -45,8 +45,9 @@ endpoints, fields, or limits.
   them.
 - Group membership grants no transcript access; only invocations reach you.
 - Streaming: `POST /v1/messages?stream=true` with a Vercel AI SDK
-  UIMessageStream v1 body commits one stored message at `finish`; an aborted
-  stream commits nothing, so retry the whole stream with the same key.
+  UIMessageStream v1 body commits one finished message at `finish`; an aborted
+  stream commits nothing, so retry the whole stream with the same key. Relay
+  renders no live bubble, so the reader sees one finished message appear.
 - Treat attachment capability URLs as secrets.
 
 ## CANNOT

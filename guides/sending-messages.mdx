@@ -41,18 +41,24 @@ Relay returns every canonical `media` part with `content_type` and `media_kind`.
 - **Uploaded files** take the stored upload MIME type as authoritative.
 - **Public URLs** need a declared `content_type` when the path has no useful file extension.
 
-A `text` part may carry up to 16 `mentions`, each
+## Mentions
+
+A `text` part carries up to 16 `mentions`, each
 `{ "start", "length", "participant_id" }` naming a `usr_…` or `agt_…`
-participant. `start` and `length` are UTF-16 code-unit offsets over that
-part's `text`, which contains the display name the sender inserted; the
-stored text never contains an "@". Ranges must be sorted by `start` and must
-not overlap. The text reads the same without the mentions, but they carry
-behavior: a mention notifies the named participant even when they have muted
-the group, and in a group conversation a human sender's mention of an active
-agent invokes that agent (an invocation with `method: "mention"`), exactly as
-if it had been listed in `invoked_agent_ids`. See
-[group conversations](/guides/group-conversations) for the invocation
-contract.
+participant.
+
+| Rule | Detail |
+| --- | --- |
+| Offsets | `start` and `length` are UTF-16 code units over that part's `text` |
+| Stored text | The display name the sender inserted. It never contains an "@" |
+| Ordering | Ranges sort by `start` and never overlap |
+| Notification | The named participant is notified even with the group muted |
+| Invocation | A human's mention of an active agent invokes it, with `method: "mention"`, exactly as `invoked_agent_ids` would |
+
+The text reads the same without the mentions. See
+[group conversations](/guides/group-conversations) for the invocation contract.
+
+## Structured data
 
 `data` parts carry integration-defined JSON such as tool results and artifacts.
 
@@ -64,40 +70,6 @@ contract.
 Clients that cannot render a part use its `data.fallback` string when present, then the message's [`fallback_text`](/concepts#messages-and-ordered-parts).
 
 Use [Voice memos](/guides/voice-memos) for audio in the inline voice player. Use [Rich link previews](/guides/rich-link-previews) when a URL should render as a preview card.
-
-## Quick replies
-
-Attach up to 8 `suggestions` to a message when a short list of answers covers what you need next:
-
-```bash
-curl -sS -X POST "https://api.relayapp.im/v1/messages" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: reply-evt_01JZE9M2XW" \
-  -d '{
-    "conversation_id": "cnv_01JZC7K4RQ",
-    "parts": [
-      { "type": "text", "text": "Who are you trying to date?" }
-    ],
-    "suggestions": [
-      { "text": "Women" },
-      { "text": "Men" },
-      { "text": "Nonbinary" },
-      { "text": "Everyone" }
-    ]
-  }'
-```
-
-Each suggestion is `{ "text": "…" }` with 1 to 96 characters.
-
-| Behavior | Detail |
-| --- | --- |
-| Placement | Chips render above the composer while your message is the newest in the conversation |
-| Lifetime | They disappear once anything newer arrives |
-| On tap | The `text` is sent back as an ordinary user text message |
-| Your handling | A normal [`message.received`](/guides/webhooks) event, no extra code |
-
-Relay chooses the presentation. A short set renders as inline rows in the transcript. A longer set collapses into one card that opens a full-height picker sheet.
 
 ## Replying to a message or a part
 

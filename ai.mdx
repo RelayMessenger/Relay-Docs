@@ -131,8 +131,13 @@ POST /v1/messages?stream=true&conversation_id=cnv_… with:
 Relay consumes the stream and commits one stored message only after
 the UIMessageStream `finish` event. `[DONE]` closes the transport but is not
 semantic completion. Abort, error, malformed ordering, or early EOF commits
-nothing. Relay presents tool state but never executes tools; the external agent
-continues to own its model and tool loop.
+nothing. The stream is an ingestion format: Relay writes no partial row and
+renders no live bubble, so the reader sees one finished message appear. Relay
+presents tool state but never executes tools; the external agent continues to
+own its model and tool loop.
+Stream ceilings: 8 MB body, 64 KB per line, 256 KB per event, 30 s idle,
+10 min total. Breaching one commits nothing and returns 413 payload_too_large
+or 408 request_timeout; broken framing returns 400 malformed_stream.
 
 ## Messaging state
 - Typing: POST /v1/conversations/{id}/typing { "started": true, "label"?: "Searching…" }
@@ -155,9 +160,12 @@ continues to own its model and tool loop.
   Attachments are private to their uploader.
 
 ## Errors
-Envelope: { "error": { "code", "message" } }. Codes: unauthorized(401), forbidden(403),
-not_found(404), invalid_request(422), idempotency_conflict(409),
-internal_error(500). Retry only 429/5xx/network,
+Envelope: { "error": { "code", "message" } }. Codes: malformed_stream(400),
+unauthorized(401), forbidden(403), not_found(404), request_timeout(408),
+conflict(409), idempotency_conflict(409), limit_exceeded(409),
+terminated_by_other_consumer(409), cursor_expired(410), payload_too_large(413),
+invalid_request(422), rate_limited(429), internal_error(500),
+server_configuration_error(503). Retry only 429/5xx/network,
 with backoff, reusing the same Idempotency-Key.
 
 ## Coming later
