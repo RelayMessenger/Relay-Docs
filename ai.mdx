@@ -140,10 +140,16 @@ Stream ceilings: 8 MB body, 64 KB per line, 256 KB per event, 30 s idle,
 or 408 request_timeout; broken framing returns 400 malformed_stream.
 
 ## Messaging state
-- Typing: POST /v1/conversations/{id}/typing { "started": true, "label"?: "Searching…" }
-  (204; send {started:false} if you end up not replying; label ≤ 80 chars)
-- Read receipts: POST /v1/conversations/{id}/read { "message_id" }; read implies
-  delivered; watermarks are monotonic and idempotent.
+- Sent means Relay stored the message. Delivered means the recipient runtime
+  durably accepted it. Read means consumed or visibly viewed. Typing is an
+  independent temporary signal. Read implies Delivered.
+- Normal response: POST /v1/conversations/{id}/responding
+  { "message_id", "label"?, "invocation_id"? }. Relay commits Read before
+  starting typing. Groups require the matching invocation_id.
+- Consumption without response: POST /v1/conversations/{id}/read
+  { "message_id" }. Watermarks are monotonic and idempotent.
+- Proactive typing or explicit stop: POST /v1/conversations/{id}/typing
+  { "started", "label"?, "invocation_id"? }. Typing never changes receipts.
 - Reactions: POST /v1/messages/{id}/reactions
   { "operation": "add"|"remove", "type": "love|like|dislike|laugh|emphasize|question|emoji",
     "emoji"? (iff type=emoji), "part_index"? }

@@ -38,13 +38,17 @@ const relay = createRelay({
   webhookSecret: process.env.RELAY_WEBHOOK_SECRET!,
 });
 
-export const POST = relay.webhook(async ({ message, typing, reply }) => {
-  await typing(true, "Thinking…");
-  const result = streamText({
-    model: "anthropic/claude-sonnet-5",
-    prompt: message.parts.find((p) => p.type === "text")?.text ?? "",
-  });
-  await reply.stream(result.toUIMessageStreamResponse());
+export const POST = relay.webhook(async ({ message, responding, typing, reply }) => {
+  await responding(message.id, "Thinking…");
+  try {
+    const result = streamText({
+      model: "anthropic/claude-sonnet-5",
+      prompt: message.parts.find((p) => p.type === "text")?.text ?? "",
+    });
+    await reply.stream(result.toUIMessageStreamResponse());
+  } finally {
+    await typing(false);
+  }
 });
 ```
 
@@ -60,6 +64,7 @@ Each row is a contract from these docs that the plugin implements for you.
 | --- | --- |
 | [Signature verification](/guides/webhooks) | Standard Webhooks HMAC over the exact raw body; unsigned or stale requests get `401` |
 | [At-least-once delivery](/guides/delivery-model) | Per-instance `event_id` dedup window, recorded once your handler succeeds, so a failed handler gets its redelivery |
+| [Read before response](/guides/read-receipts) | `responding(message.id, label?)` commits Read before the independent typing signal |
 | [Idempotent sends](/guides/sending-messages) | Reply helpers derive `Idempotency-Key` values from the event id and call order; Relay replays the original send on any retry, from any instance |
 | [Group invocations](/guides/group-conversations) | `invocation_id` from the event threads into every reply and typing call |
 | [Streaming](/guides/streaming) | `reply.stream(...)` forwards the UI message stream to `POST /v1/messages?stream=true`; Relay commits exactly one message |
@@ -91,7 +96,8 @@ derived idempotency keys make the retry safe.
 | `event` | The complete event envelope |
 | `invocationId` | Present for group deliveries; already threaded into helpers |
 | `reply.text` / `reply.parts` / `reply.stream` | Idempotent sends bound to the conversation |
-| `typing(started?, label?)` | Ephemeral typing indicator with an optional status line |
+| `responding(messageId, label?)` | Normal Read-then-typing response transition |
+| `typing(started?, label?)` | Proactive typing or an explicit stop |
 | `client` | The underlying `RelayClient` for anything beyond the helpers |
 
 ## Next steps

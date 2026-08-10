@@ -1,10 +1,55 @@
 ---
 title: "Read receipts"
-description: "Mark inbound messages read and follow delivery and read state on your replies."
-keywords: ["read receipts", "delivered", "read", "watermark", "message.read"]
+description: "Mark inbound messages consumed and track delivery and read state on your replies."
+keywords: ["read receipts", "responding", "delivered", "read", "watermark", "message.read"]
 ---
 
-Mark an inbound message read after your backend has consumed it:
+Call `responding` when an inbound message starts a normal response:
+
+```bash
+curl -sS -X POST "https://api.relayapp.im/v1/conversations/cnv_01JZC7K4RQ/responding" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message_id": "msg_01JZM3T8AH",
+    "label": "Thinking…"
+  }'
+```
+
+Relay validates the target, commits Read, then sends `typing.started`. A failed
+validation or receipt write sends no typing signal.
+
+Retries are safe. Read is idempotent. Typing refreshes its expiry.
+
+For groups, include the `invocation_id` from the matching
+`message.received` event:
+
+```json
+{
+  "message_id": "msg_01JZM3T8AH",
+  "invocation_id": "ivk_01k1m4q9vn2r7t9b4c6qdh8xwy",
+  "label": "Checking the schedule…"
+}
+```
+
+## Four separate facts
+
+| State | Meaning |
+| --- | --- |
+| Sent | Relay stored the message |
+| Delivered | The recipient runtime durably accepted the message |
+| Read | The recipient consumed or visibly viewed the message |
+| Typing | The recipient sent a temporary, independent signal |
+
+Read implies Delivered. Delivery never starts typing. Typing alone never marks
+a message Read.
+
+`Delivered + typing` is valid during proactive activity. Ordinary response
+typing must identify the consumed message through `/responding`.
+
+## Consume without replying
+
+Use `/read` when your backend consumes a message without starting a response:
 
 ```bash
 curl -sS -X POST "https://api.relayapp.im/v1/conversations/cnv_01JZC7K4RQ/read" \
@@ -13,14 +58,12 @@ curl -sS -X POST "https://api.relayapp.im/v1/conversations/cnv_01JZC7K4RQ/read" 
   -d '{ "message_id": "msg_01JZM3T8AH" }'
 ```
 
-## Receipt watermarks
-
 | Rule | Behavior |
 | --- | --- |
-| Marking one message read | Covers every earlier message in the conversation |
-| Read state | Implies delivered |
-| Repeating the request, or targeting an older message | Idempotent no-op |
-| Target | Applies only to a message from another participant |
+| Marking one message Read | Covers every earlier message in the conversation |
+| Repeating or targeting an older message | Returns the current receipt with `advanced: false` |
+| Target | Must be an accessible message from another participant |
+| Group target | Must match this agent's invocation scope |
 
 ## Track your replies
 
@@ -28,22 +71,14 @@ Relay emits two events as your reply moves through the conversation.
 
 | Event | Emitted when |
 | --- | --- |
-| `message.delivered` | A user's runtime accepts the agent's message |
-| `message.read` | The user reads through it |
+| `message.delivered` | A user's runtime durably accepts the agent's message |
+| `message.read` | The user visibly reads through it |
 
-Both carry `through_sequence`: every message through that sequence has reached
-the same state for that participant.
-
-Conversation history projects the watermark onto each outbound message as
-`sent`, `delivered`, or `read`.
-
-| Use | When |
-| --- | --- |
-| Events | Your backend needs to react immediately |
-| [Conversation history](/guides/conversation-history) | Rebuilding state after a restart |
+Both carry `through_sequence`. Conversation history projects each outbound
+message as `sent`, `delivered`, or `read`.
 
 ## Next steps
 
-- [Event types](/reference/events) for the receipt payloads
-- [Webhooks](/guides/webhooks) for signature and redelivery behavior
-- [Delivery model](/guides/delivery-model) for the full watermark lifecycle
+- [Typing indicators](/guides/typing-indicators) for proactive starts and stops
+- [Event types](/reference/events) for receipt payloads
+- [Delivery model](/guides/delivery-model) for the full lifecycle

@@ -18,8 +18,10 @@ sequenceDiagram
     U->>R: "What time works tomorrow?"
     R->>B: message.received (signed)
     B-->>R: 202 Accepted
+    B->>R: POST /responding (Read, then typing)
     B->>R: POST /v1/messages (Idempotency-Key)
     R->>U: "Tomorrow at 2:00 PM works."
+    B->>R: POST /typing (stop)
 ```
 
 Set these once.
@@ -105,6 +107,20 @@ export RELAY_AGENT_TOKEN="rly_live_..."
   </Step>
 
   <Step title="Reply">
+    Mark the exact inbound message Read before model or tool work. This call
+    then starts the independent typing signal:
+
+    ```bash
+    curl -sS -X POST \
+      "$RELAY_API_URL/v1/conversations/cnv_01JZC7K4RQ/responding" \
+      -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "message_id": "msg_01JZM3T8AH",
+        "label": "Thinking…"
+      }'
+    ```
+
     Derive the `Idempotency-Key` from the incoming `event_id` so retries cannot
     create a second reply.
 
@@ -121,6 +137,16 @@ export RELAY_AGENT_TOKEN="rly_live_..."
     ```
 
     Relay returns `202 Accepted` with the stored message.
+
+    Stop typing after send, failure, or cancellation:
+
+    ```bash
+    curl -sS -X POST \
+      "$RELAY_API_URL/v1/conversations/cnv_01JZC7K4RQ/typing" \
+      -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{ "started": false }'
+    ```
   </Step>
 
   <Step title="Run the complete handler">
@@ -152,18 +178,50 @@ export RELAY_AGENT_TOKEN="rly_live_..."
       if (seen.has(event.event_id)) return; // at-least-once delivery
       seen.add(event.event_id);
 
-      await fetch("https://api.relayapp.im/v1/messages", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${TOKEN}`,
-          "Content-Type": "application/json",
-          "Idempotency-Key": `reply-${event.event_id}`,
-        },
-        body: JSON.stringify({
-          conversation_id: event.data.message.conversation_id,
-          parts: [{ type: "text", text: "Tomorrow at 2:00 PM works." }],
-        }),
-      });
+      const message = event.data.message;
+      const conversation = message.conversation_id;
+      const auth = { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" };
+      try {
+        const responding = await fetch(
+          `https://api.relayapp.im/v1/conversations/${conversation}/responding`,
+          {
+            method: "POST",
+            headers: auth,
+            body: JSON.stringify({
+              message_id: message.id,
+              ...(event.data.invocation_id
+                ? { invocation_id: event.data.invocation_id }
+                : {}),
+            }),
+          },
+        );
+        if (!responding.ok) return;
+        await fetch("https://api.relayapp.im/v1/messages", {
+          method: "POST",
+          headers: { ...auth, "Idempotency-Key": `reply-${event.event_id}` },
+          body: JSON.stringify({
+            conversation_id: conversation,
+            parts: [{ type: "text", text: "Tomorrow at 2:00 PM works." }],
+            ...(event.data.invocation_id
+              ? { invocation_id: event.data.invocation_id }
+              : {}),
+          }),
+        });
+      } finally {
+        await fetch(
+          `https://api.relayapp.im/v1/conversations/${conversation}/typing`,
+          {
+            method: "POST",
+            headers: auth,
+            body: JSON.stringify({
+              started: false,
+              ...(event.data.invocation_id
+                ? { invocation_id: event.data.invocation_id }
+                : {}),
+            }),
+          },
+        );
+      }
     }).listen(8787);
     ```
 
@@ -189,19 +247,42 @@ export RELAY_AGENT_TOKEN="rly_live_..."
             if event["event_id"] in seen: return  # at-least-once delivery
             seen.add(event["event_id"])
 
-            req = urllib.request.Request(
-                "https://api.relayapp.im/v1/messages",
-                data=json.dumps({
-                    "conversation_id": event["data"]["message"]["conversation_id"],
+            message = event["data"]["message"]
+            conversation = message["conversation_id"]
+            invocation = event["data"].get("invocation_id")
+            headers = {
+                "Authorization": f"Bearer {TOKEN}",
+                "Content-Type": "application/json",
+            }
+            try:
+                responding = {
+                    "message_id": message["id"],
+                    **({"invocation_id": invocation} if invocation else {}),
+                }
+                urllib.request.urlopen(urllib.request.Request(
+                    f"https://api.relayapp.im/v1/conversations/{conversation}/responding",
+                    data=json.dumps(responding).encode(), headers=headers, method="POST",
+                ))
+                reply = {
+                    "conversation_id": conversation,
                     "parts": [{"type": "text", "text": "Tomorrow at 2:00 PM works."}],
-                }).encode(),
-                headers={
-                    "Authorization": f"Bearer {TOKEN}",
-                    "Content-Type": "application/json",
-                    "Idempotency-Key": f"reply-{event['event_id']}",
-                },
-            )
-            urllib.request.urlopen(req)
+                    **({"invocation_id": invocation} if invocation else {}),
+                }
+                urllib.request.urlopen(urllib.request.Request(
+                    "https://api.relayapp.im/v1/messages",
+                    data=json.dumps(reply).encode(),
+                    headers={**headers, "Idempotency-Key": f"reply-{event['event_id']}"},
+                    method="POST",
+                ))
+            finally:
+                stop = {
+                    "started": False,
+                    **({"invocation_id": invocation} if invocation else {}),
+                }
+                urllib.request.urlopen(urllib.request.Request(
+                    f"https://api.relayapp.im/v1/conversations/{conversation}/typing",
+                    data=json.dumps(stop).encode(), headers=headers, method="POST",
+                ))
 
     HTTPServer(("", 8787), Handler).serve_forever()
     ```
@@ -216,9 +297,9 @@ export RELAY_AGENT_TOKEN="rly_live_..."
     Review my Relay integration against https://docs.relayapp.im/quickstart.md
     and https://docs.relayapp.im/guides/webhooks.md. Check that I verify the
     webhook-signature over the exact raw body, reject stale timestamps, return
-    2xx within 10 seconds before doing model work, deduplicate on event_id, and
-    derive Idempotency-Key from event_id on every reply. Report anything that
-    does not match, with the file and line.
+    2xx within 10 seconds, deduplicate on event_id, call /responding with the
+    consumed message before model work, derive Idempotency-Key from event_id,
+    and stop typing during cleanup. Report mismatches with the file and line.
     ````
   </Step>
 </Steps>

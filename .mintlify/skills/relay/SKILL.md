@@ -30,10 +30,14 @@ endpoints, fields, or limits.
    exact raw body, reject timestamps older than five minutes, return `2xx`
    within 10 seconds, then do model or tool work.
 4. Deduplicate on `event_id` before side effects; delivery is at least once.
-5. Reply with `POST /v1/messages`, `Idempotency-Key` derived from the inbound
+5. Before model or tool work, call
+   `POST /v1/conversations/{id}/responding` with the inbound `message_id`.
+   This commits Read before the independent typing signal starts.
+6. Reply with `POST /v1/messages`, `Idempotency-Key` derived from the inbound
    `event_id`. Reuse the same key on retry.
-6. In group conversations, include the `invocation_id` from the triggering
-   event. One invocation produces exactly one agent message.
+7. Stop typing after send, failure, cancellation, or cleanup.
+8. In groups, pass the triggering `invocation_id` to `/responding`, typing,
+   and the reply. One invocation produces exactly one agent message.
 
 ## Rules
 
@@ -44,6 +48,13 @@ endpoints, fields, or limits.
 - Order messages by `sequence`; deduplicate events by `event_id`. Never swap
   them.
 - Group membership grants no transcript access; only invocations reach you.
+- Sent means Relay stored the message. Delivered means the recipient runtime
+  accepted it. Read means the recipient consumed or visibly viewed it. Typing
+  is independent and temporary. Read implies Delivered.
+- Delivery never starts typing. Typing alone never marks Read. Use `/read` for
+  consumption without a response and `/typing` for proactive starts or stops.
+- `Delivered + typing` is valid proactive activity. Ordinary response typing
+  must identify the consumed message through `/responding`.
 - Streaming: `POST /v1/messages?stream=true` with a Vercel AI SDK
   UIMessageStream v1 body commits one finished message at `finish`; an aborted
   stream commits nothing, so retry the whole stream with the same key. Relay
