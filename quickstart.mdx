@@ -1,30 +1,22 @@
 ---
 title: "Quickstart"
-description: "Go from an Agent Token to a reply in the user's thread."
+description: "Receive one Relay message and send one reply."
 keywords: ["quickstart", "get started", "first message", "webhook", "reply", "curl", "tutorial", "coding agent"]
 ---
 
-import SetupAIPrompt from "/snippets/setup-ai-prompt.mdx";
+Receive one signed message event, mark it Read, and send one reply.
 
-Create an agent in Relay and save the Agent Token shown once.
+## Before you start
 
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant R as Relay
-    participant B as Your backend
-    B->>R: POST /v1/webhooks
-    R-->>B: signing secret (once)
-    U->>R: "What time works tomorrow?"
-    R->>B: message.received (signed)
-    B-->>R: 202 Accepted
-    B->>R: POST /responding (Read, then typing)
-    B->>R: POST /v1/messages (Idempotency-Key)
-    R->>U: "Tomorrow at 2:00 PM works."
-    B->>R: POST /typing (stop)
-```
+You need:
 
-Set these once.
+| Requirement | Where it comes from |
+| --- | --- |
+| Agent Token | Relay shows it once when you create an agent |
+| Public HTTPS endpoint | Your backend route for Relay events |
+| Signing secret | Relay returns it once when you register the endpoint |
+
+Set the API origin and token:
 
 ```bash
 export RELAY_API_URL="https://api.relayapp.im"
@@ -32,97 +24,113 @@ export RELAY_AGENT_TOKEN="rly_live_..."
 ```
 
 <Steps>
-  <Step title="Hand this page to your coding agent (optional)">
-    Paste this into Claude Code, Codex, or Cursor. The agent runs every step
-    below. It needs only the Agent Token from you.
+  <Step title="Verify the Agent Token">
+    ```bash
+    curl -sS "$RELAY_API_URL/v1/agents/me" \
+      -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+    ```
 
-    <SetupAIPrompt />
+    Relay returns the agent identity:
 
-    <Info>
-    **Working by hand?** Continue below. The steps are identical. Any LLM can
-    also ingest [`llms-full.txt`](https://docs.relayapp.im/llms-full.txt), which
-    bundles every page as one Markdown file.
-    </Info>
+    ```json
+    {
+      "agent": {
+        "id": "agt_01JZRELAY",
+        "handle": "scheduler",
+        "display_name": "Scheduler",
+        "tagline": "Finds a time that works",
+        "avatar_url": null,
+        "visibility": "private",
+        "owner_user_id": "usr_01JZU1F0BD",
+        "created_at": "2026-08-10T12:00:00.000Z"
+      }
+    }
+    ```
   </Step>
 
-  <Step title="Register your webhook">
+  <Step title="Register the webhook">
     ```bash
     curl -sS -X POST "$RELAY_API_URL/v1/webhooks" \
       -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
       -H "Content-Type: application/json" \
-      -d '{"url":"https://agent.example/webhooks/relay"}'
+      -d '{
+        "url": "https://agent.example/webhooks/relay",
+        "events": ["message.received"]
+      }'
     ```
 
-    Relay returns the signing secret exactly once:
+    Save `signing_secret`. Relay never returns it again.
 
     ```json
     {
       "webhook": {
         "id": "wh_01JZWEBHOOK",
         "url": "https://agent.example/webhooks/relay",
-        "events": ["message.received", "message.edited", "message.unsent", "…"],
+        "events": ["message.received"],
         "enabled": true,
-        "secret_prefix": "whsec_MfKQ9r8G…",
-        "created_at": "2026-07-15T20:00:00.000Z",
-        "updated_at": "2026-07-15T20:00:00.000Z"
+        "secret_prefix": "whsec_EXAMPL…",
+        "created_at": "2026-08-10T12:00:00.000Z",
+        "updated_at": "2026-08-10T12:00:00.000Z"
       },
-      "signing_secret": "whsec_..."
+      "signing_secret": "whsec_EXAMPLEKEYDONOTUSE0000000000000000"
     }
     ```
-
-    List and update requests never return it.
   </Step>
 
-  <Step title="Receive and verify the signed event">
-    Relay posts the event envelope as the raw JSON request body, with
-    `webhook-id`, `webhook-timestamp`, and `webhook-signature` headers.
+  <Step title="Verify and store the event">
+    Relay signs the exact request body with Standard Webhooks headers.
 
-    - **Verify the signature** over the raw body, before you parse it.
-    - **Reject timestamps** older than five minutes.
-    - **Store the event**, then return a `2xx` quickly.
+    ```bash
+    npm install standardwebhooks
+    ```
+
+    ```ts
+    import { Webhook } from "standardwebhooks";
+
+    const rawBody = await request.text();
+    const event = new Webhook(process.env.RELAY_SIGNING_SECRET!).verify(
+      rawBody,
+      {
+        "webhook-id": request.headers.get("webhook-id") ?? "",
+        "webhook-timestamp": request.headers.get("webhook-timestamp") ?? "",
+        "webhook-signature": request.headers.get("webhook-signature") ?? "",
+      },
+    );
+    ```
+
+    Store the event before returning `2xx`. Deduplicate on `event_id`.
 
     ```json
     {
       "event_id": "evt_01JZE9M2XW",
       "event_type": "message.received",
-      "agent_id": "agt_01JZRELAY",
-      "created_at": "2026-07-12T01:21:03.000Z",
       "data": {
         "message": {
           "id": "msg_01JZM3T8AH",
           "conversation_id": "cnv_01JZC7K4RQ",
           "sequence": 1,
-          "sender": { "kind": "user", "id": "usr_01JZU1F0BD" },
-          "parts": [{ "part_index": 0, "type": "text", "text": "What time works tomorrow?" }],
-          "reply_to": null,
-          "fallback_text": "What time works tomorrow?",
-          "status": "sent",
-          "created_at": "2026-07-12T01:21:03.000Z"
+          "parts": [
+            { "part_index": 0, "type": "text", "text": "What time works tomorrow?" }
+          ]
         }
       }
     }
     ```
-
-    Delivery is at least once. Deduplicate with `event_id`.
   </Step>
 
-  <Step title="Reply">
+  <Step title="Mark Read and reply">
     Mark the exact inbound message Read before model or tool work. This call
-    then starts the independent typing signal:
+    also starts the independent typing signal.
 
     ```bash
     curl -sS -X POST \
       "$RELAY_API_URL/v1/conversations/cnv_01JZC7K4RQ/responding" \
       -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
       -H "Content-Type: application/json" \
-      -d '{
-        "message_id": "msg_01JZM3T8AH",
-        "label": "Thinking…"
-      }'
+      -d '{"message_id":"msg_01JZM3T8AH"}'
     ```
 
-    Derive the `Idempotency-Key` from the incoming `event_id` so retries cannot
-    create a second reply.
+    Derive the idempotency key from the inbound `event_id`.
 
     ```bash
     curl -sS -X POST "$RELAY_API_URL/v1/messages" \
@@ -131,196 +139,44 @@ export RELAY_AGENT_TOKEN="rly_live_..."
       -H "Idempotency-Key: reply-evt_01JZE9M2XW" \
       -d '{
         "conversation_id": "cnv_01JZC7K4RQ",
-        "parts": [{ "type": "text", "text": "Tomorrow at 2:00 PM works." }],
-        "reply_to": { "message_id": "msg_01JZM3T8AH", "part_index": 0 }
+        "parts": [{ "type": "text", "text": "Tomorrow at 2:00 PM works." }]
       }'
     ```
 
-    Relay returns `202 Accepted` with the stored message.
-
-    Stop typing after send, failure, or cancellation:
+    Relay returns `202 Accepted` with one stored message. Stop typing after
+    send, failure, or cancellation:
 
     ```bash
     curl -sS -X POST \
       "$RELAY_API_URL/v1/conversations/cnv_01JZC7K4RQ/typing" \
       -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
       -H "Content-Type: application/json" \
-      -d '{ "started": false }'
-    ```
-  </Step>
-
-  <Step title="Run the complete handler">
-    Steps 2 through 4 as one file: verify, store, reply.
-
-    <CodeGroup>
-
-    ```typescript server.ts
-    import { createServer } from "node:http";
-    import { Webhook } from "standardwebhooks";
-
-    const wh = new Webhook(process.env.RELAY_SIGNING_SECRET!);
-    const TOKEN = process.env.RELAY_AGENT_TOKEN!;
-    const seen = new Set<string>();
-
-    createServer(async (req, res) => {
-      const body = await new Promise<string>((ok) => {
-        let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => ok(b));
-      });
-      let event: any;
-      try {
-        event = wh.verify(body, req.headers as Record<string, string>);
-      } catch {
-        res.writeHead(401).end("signature rejected"); return;
-      }
-      res.writeHead(202).end(); // ack first, work after
-
-      if (event.event_type !== "message.received") return;
-      if (seen.has(event.event_id)) return; // at-least-once delivery
-      seen.add(event.event_id);
-
-      const message = event.data.message;
-      const conversation = message.conversation_id;
-      const auth = { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" };
-      try {
-        const responding = await fetch(
-          `https://api.relayapp.im/v1/conversations/${conversation}/responding`,
-          {
-            method: "POST",
-            headers: auth,
-            body: JSON.stringify({
-              message_id: message.id,
-              ...(event.data.invocation_id
-                ? { invocation_id: event.data.invocation_id }
-                : {}),
-            }),
-          },
-        );
-        if (!responding.ok) return;
-        await fetch("https://api.relayapp.im/v1/messages", {
-          method: "POST",
-          headers: { ...auth, "Idempotency-Key": `reply-${event.event_id}` },
-          body: JSON.stringify({
-            conversation_id: conversation,
-            parts: [{ type: "text", text: "Tomorrow at 2:00 PM works." }],
-            ...(event.data.invocation_id
-              ? { invocation_id: event.data.invocation_id }
-              : {}),
-          }),
-        });
-      } finally {
-        await fetch(
-          `https://api.relayapp.im/v1/conversations/${conversation}/typing`,
-          {
-            method: "POST",
-            headers: auth,
-            body: JSON.stringify({
-              started: false,
-              ...(event.data.invocation_id
-                ? { invocation_id: event.data.invocation_id }
-                : {}),
-            }),
-          },
-        );
-      }
-    }).listen(8787);
+      -d '{"started":false}'
     ```
 
-    ```python server.py
-    import json, os, urllib.request
-    from http.server import BaseHTTPRequestHandler, HTTPServer
-    from standardwebhooks import Webhook
-
-    wh = Webhook(os.environ["RELAY_SIGNING_SECRET"])
-    TOKEN = os.environ["RELAY_AGENT_TOKEN"]
-    seen = set()
-
-    class Handler(BaseHTTPRequestHandler):
-        def do_POST(self):
-            body = self.rfile.read(int(self.headers["Content-Length"]))
-            try:
-                event = wh.verify(body, dict(self.headers))
-            except Exception:
-                self.send_response(401); self.end_headers(); return
-            self.send_response(202); self.end_headers()  # ack first
-
-            if event["event_type"] != "message.received": return
-            if event["event_id"] in seen: return  # at-least-once delivery
-            seen.add(event["event_id"])
-
-            message = event["data"]["message"]
-            conversation = message["conversation_id"]
-            invocation = event["data"].get("invocation_id")
-            headers = {
-                "Authorization": f"Bearer {TOKEN}",
-                "Content-Type": "application/json",
-            }
-            try:
-                responding = {
-                    "message_id": message["id"],
-                    **({"invocation_id": invocation} if invocation else {}),
-                }
-                urllib.request.urlopen(urllib.request.Request(
-                    f"https://api.relayapp.im/v1/conversations/{conversation}/responding",
-                    data=json.dumps(responding).encode(), headers=headers, method="POST",
-                ))
-                reply = {
-                    "conversation_id": conversation,
-                    "parts": [{"type": "text", "text": "Tomorrow at 2:00 PM works."}],
-                    **({"invocation_id": invocation} if invocation else {}),
-                }
-                urllib.request.urlopen(urllib.request.Request(
-                    "https://api.relayapp.im/v1/messages",
-                    data=json.dumps(reply).encode(),
-                    headers={**headers, "Idempotency-Key": f"reply-{event['event_id']}"},
-                    method="POST",
-                ))
-            finally:
-                stop = {
-                    "started": False,
-                    **({"invocation_id": invocation} if invocation else {}),
-                }
-                urllib.request.urlopen(urllib.request.Request(
-                    f"https://api.relayapp.im/v1/conversations/{conversation}/typing",
-                    data=json.dumps(stop).encode(), headers=headers, method="POST",
-                ))
-
-    HTTPServer(("", 8787), Handler).serve_forever()
-    ```
-
-    </CodeGroup>
-
-    Send your agent a message from the Relay app. The reply lands in the thread.
-  </Step>
-
-  <Step title="Ask your agent to audit the result (optional)">
-    ````markdown Copy this prompt
-    Review my Relay integration against https://docs.relayapp.im/quickstart.md
-    and https://docs.relayapp.im/guides/webhooks.md. Check that I verify the
-    webhook-signature over the exact raw body, reject stale timestamps, return
-    2xx within 10 seconds, deduplicate on event_id, call /responding with the
-    consumed message before model work, derive Idempotency-Key from event_id,
-    and stop typing during cleanup. Report mismatches with the file and line.
-    ````
+    In a group, copy `data.invocation_id` into `/responding`, typing, and the
+    reply.
   </Step>
 </Steps>
 
-<Check>
-The reply is in the user's thread.
-</Check>
+## Failure and retry behavior
 
-## If it fails
-
-| Symptom | Cause and fix |
+| Failure | What to do |
 | --- | --- |
-| `signature rejected` (401) | The body was parsed or re-serialized before verification. Verify over the exact raw bytes |
-| `401 unauthorized` from the API | Wrong or rotated Agent Token. Update `RELAY_AGENT_TOKEN` and retry |
-| No webhook arrives | The URL must be public HTTPS. Check the registration response and your tunnel |
-| Duplicate replies | You replied before deduplicating. Check `event_id` before side effects, and derive `Idempotency-Key` from it |
-| `409 idempotency_conflict` | Same key, different body. Reuse the key only for the identical reply |
+| Invalid signature | Return `401`. Do not parse or process the event |
+| Duplicate `event_id` | Return `2xx`. Do not run side effects again |
+| Relay returns `429` or `5xx` | Retry with backoff and the same `Idempotency-Key` |
+| Relay returns another `4xx` | Fix the request or token before retrying |
+| Your handler needs more than 10 seconds | Store the event, return `2xx`, then continue work |
+
+<Tip>
+Want a coding agent to build the handler? Use the
+[paste-ready integration brief](/ai).
+</Tip>
 
 ## Next steps
 
-- [Webhooks, for verification, retries, and rotation](/guides/webhooks)
-- [Sending messages, for every part type](/guides/sending-messages)
-- [Streaming replies](/guides/streaming)
-- [Errors](/reference/errors)
+- [Webhooks](/guides/webhooks) for signature rotation and delivery retries
+- [Sending messages](/guides/sending-messages) for every part type
+- [Group conversations](/guides/group-conversations) for `invocation_id`
+- [Errors](/reference/errors) for every retry rule
