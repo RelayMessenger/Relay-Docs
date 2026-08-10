@@ -1415,7 +1415,10 @@ paths:
       summary: Start or stop the typing indicator
       description: >-
         Ephemeral: pushed to the user's live devices, never enters the event
-        log. `label` (≤ 80 chars) renders a short status line while started.
+        log. Use this route for proactive activity or an explicit stop. An
+        ordinary response should use `/responding` so the consumed message is
+        marked Read before typing starts. `label` (≤ 80 chars) renders a short
+        status line while started.
       tags: [Conversations]
       parameters:
         - in: path
@@ -1441,6 +1444,44 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           description: Agent is not a participant.
+  /v1/conversations/{conversation_id}/responding:
+    post:
+      operationId: beginResponding
+      summary: Mark one inbound message Read and start typing
+      description: >-
+        The normal agent response transition. Relay validates the exact
+        inbound target, commits a monotonic Read receipt, then emits a
+        best-effort typing signal. Read implies Delivered. Typing is not
+        emitted when validation or receipt persistence fails. Repeating the
+        request is safe: Read is idempotent and typing refreshes its expiry.
+        Group responses require the matching pending `invocation_id`.
+      tags: [Conversations]
+      parameters:
+        - in: path
+          name: conversation_id
+          required: true
+          schema: { type: string, pattern: "^cnv_" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BeginRespondingInput"
+      responses:
+        "200":
+          description: Read receipt state after the call.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceiptResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: The agent, group invocation, or message scope is not authorized.
+        "404":
+          description: The conversation or message was not found.
+        "422":
+          description: message_id or invocation_id is missing or malformed.
   /v1/conversations/{conversation_id}/delivered:
     post:
       operationId: markDelivered
@@ -1476,8 +1517,9 @@ paths:
       operationId: markRead
       summary: Advance the read watermark
       description: >-
-        Marks everything through `message_id` read for the caller. Read implies
-        delivered; older or repeated targets are idempotent no-ops.
+        Marks everything through `message_id` read for the caller without
+        starting a response. Read implies delivered; older or repeated targets
+        are idempotent no-ops.
       tags: [Conversations]
       parameters:
         - in: path
@@ -2906,6 +2948,61 @@ components:
         conversation_id: { type: string, pattern: "^cnv_" }
         through_sequence: { type: integer, minimum: 1 }
         at: { type: string, format: date-time }
+
+    BeginRespondingInput:
+      type: object
+      additionalProperties: false
+      required: [message_id]
+      properties:
+        message_id:
+          type: string
+          pattern: "^msg_"
+          description: The inbound message this response consumes.
+          example: msg_01JZM3T8AH
+        label:
+          type: string
+          maxLength: 80
+          example: Searching the web…
+        invocation_id:
+          allOf:
+            - $ref: "#/components/schemas/InvocationId"
+          description: Required for groups and must identify this message's pending invocation.
+
+    ReceiptSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+        - message_id
+        - conversation_id
+        - through_sequence
+        - recipient
+        - status
+        - delivered_at
+      properties:
+        message_id: { type: string, pattern: "^msg_" }
+        conversation_id: { type: string, pattern: "^cnv_" }
+        through_sequence: { type: integer, minimum: 1 }
+        recipient:
+          type: object
+          additionalProperties: false
+          required: [kind, id]
+          properties:
+            kind: { type: string, enum: [user, agent] }
+            id: { type: string }
+        status: { type: string, enum: [delivered, read] }
+        delivered_at: { type: string, format: date-time }
+        read_at: { type: [string, "null"], format: date-time }
+
+    ReceiptResult:
+      type: object
+      additionalProperties: false
+      required: [receipt, advanced]
+      properties:
+        receipt:
+          $ref: "#/components/schemas/ReceiptSnapshot"
+        advanced:
+          type: boolean
+          description: False when this Read watermark was already at or past the target.
 
     InvocationId:
       type: string
