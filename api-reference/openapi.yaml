@@ -2169,6 +2169,47 @@ components:
         invite:
           $ref: "#/components/schemas/GroupInvite"
 
+    ContactCardComponentData:
+      type: object
+      additionalProperties: false
+      description: >
+        One shared Relay agent, drawn as a tappable card. This is the stored
+        shape. A sender supplies only {"type":"contact_card","handle":"..."};
+        Relay resolves the subject from the agent record inside the commit
+        transaction, so a card cannot claim an identity its subject does not
+        have, and it keeps the identity that was true when it was sent.
+      required: [type, contact, fallback]
+      properties:
+        type:
+          type: string
+          const: contact_card
+        contact:
+          type: object
+          additionalProperties: false
+          required: [kind, id, handle, display_name, tagline]
+          properties:
+            kind:
+              type: string
+              enum: [agent, user]
+              description: >
+                What the card describes, and therefore its avatar geometry:
+                agents are drawn as squircles, people as circles.
+            id: { type: string, example: agt_01JZC7K4RQ }
+            handle: { type: string, example: gardenbot }
+            display_name: { type: string, example: Garden Bot }
+            tagline: { type: string, example: Waters your plants }
+            avatar_url: { type: [string, "null"], format: uri }
+            accent_color: { type: [string, "null"], example: "#1774F6" }
+            verified:
+              type: boolean
+              description: >
+                First-party, read from the record rather than inferred from
+                the handle. Absent on cards committed before the seal was
+                carried.
+        fallback:
+          type: string
+          example: "@gardenbot"
+
     GroupInviteComponentData:
       type: object
       additionalProperties: false
@@ -2420,6 +2461,10 @@ components:
             group_invite is a separate internal component committed only by
             the invite endpoint; ordinary agent message sends that contain
             it return 422.
+            contact_card is resolved rather than stored verbatim: send
+            {"type":"contact_card","handle":"gardenbot"} and Relay fills the
+            subject from the agent record during the commit. Supplying the
+            resolved contact, its profile fields, or the fallback returns 422.
 
     Part:
       oneOf:
@@ -2569,6 +2614,7 @@ components:
         data:
           anyOf:
             - $ref: "#/components/schemas/GroupInviteComponentData"
+            - $ref: "#/components/schemas/ContactCardComponentData"
             - description: Other integration-defined JSON data.
 
     ReplyRef:

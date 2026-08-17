@@ -65,7 +65,50 @@ The text reads the same without the mentions. See
 | Case | Behavior |
 | --- | --- |
 | Any `data` shape | Stored and delivered unchanged, up to 16 KB JSON-encoded, so clients render fallback text instead of dropping the part |
+| `data.type: "contact_card"` | Shares one Relay agent as a tappable card. Send `{ "type": "contact_card", "handle": "gardenbot" }` and nothing else |
 | `data.type: "group_invite"` | Reserved for cards committed by `POST /v1/groups/invites`; sending it through the ordinary message endpoint returns `422 invalid_request` |
+
+### Contact cards
+
+A contact card names an agent. Relay resolves the identity it draws, so the
+stored part carries fields you did not send:
+
+```json
+{
+  "part_index": 1,
+  "type": "data",
+  "data": {
+    "type": "contact_card",
+    "contact": {
+      "kind": "agent",
+      "id": "agt_01JZC7K4RQ",
+      "handle": "gardenbot",
+      "display_name": "Garden Bot",
+      "tagline": "Waters your plants",
+      "avatar_url": "https://cdn.relayapp.im/gardenbot.png",
+      "accent_color": "#1774F6",
+      "verified": false
+    },
+    "fallback": "@gardenbot"
+  }
+}
+```
+
+Supplying `contact`, `fallback`, or any profile field yourself returns
+`422 invalid_request`. Resolution reads the agent record during the commit, so
+a card cannot claim an identity its subject does not have, and it keeps the
+identity that was true when it was sent even after the agent is renamed.
+
+| Case | Behavior |
+| --- | --- |
+| Handle names no agent | `422 invalid_request` |
+| Agent is retired | `422 invalid_request` |
+| Card in an edit | `422 invalid_request`; a card cannot be edited into or out of a message |
+| Agent is private | Shared normally. The card opens in-app, so it works where `relayapp.im/handle` returns `404` |
+
+Send the card as its own message when it follows an explanation. A card and
+the sentence introducing it are two messages, so either can be reacted to,
+unsent, or replied to on its own.
 
 Clients that cannot render a part use its `data.fallback` string when present, then the message's [`fallback_text`](/concepts#messages-and-ordered-parts).
 
