@@ -42,7 +42,8 @@ endpoints, fields, or limits.
 ## Rules
 
 - Base URL is `https://api.relayapp.im`. Never a `workers.dev` origin.
-- Raw HTTPS and JSON only. Never import or invent a `relay` package.
+- The contract is raw HTTPS and JSON. Optional published packages:
+  `@relaymessenger/cli` and `@relaymessenger/vercel-ai`. Import nothing else.
 - Webhooks and long polling are mutually exclusive per Agent Token; polling
   with a webhook enabled returns `409 conflict`. Run one poller per token.
 - Order messages by `sequence`; deduplicate events by `event_id`. Never swap
