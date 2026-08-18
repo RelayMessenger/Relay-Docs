@@ -63,7 +63,10 @@ endpoints, fields, or limits.
 
 ## CANNOT
 
-- There is no Relay SDK, npm package, or client library.
+- Published packages: `@relaymessenger/cli` (bridge Claude Code, Codex, or
+  Hermes on your computer) and `@relaymessenger/vercel-ai` (signed webhooks +
+  streaming for the Vercel AI SDK). For any other stack, use raw HTTPS and
+  JSON; there is no general client library on npm yet.
 - Backends cannot read ambient group conversation, create group members, or
   message users who have not installed the agent.
 - No socket mode and no calls in the current developer preview; check
