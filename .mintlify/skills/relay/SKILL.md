@@ -37,7 +37,8 @@ endpoints, fields, or limits.
    `event_id`. Reuse the same key on retry.
 7. Stop typing after send, failure, cancellation, or cleanup.
 8. In groups, pass the triggering `invocation_id` to `/responding`, typing,
-   and the reply. One invocation produces exactly one agent message.
+   and the reply. One invocation is spent by one send call, which may commit
+   several messages; every `message.received` of that batch carries it.
 
 ## Rules
 
