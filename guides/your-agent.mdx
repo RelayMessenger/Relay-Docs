@@ -1,0 +1,141 @@
+---
+title: "Create and connect an agent"
+description: "Create an agent in Relay, connect its backend with an Agent Token, and control who can install it."
+keywords: ["create agent", "agent profile", "handle", "agent token", "install", "distribution"]
+---
+
+Create an agent in Relay, point your backend at it with the Agent Token, and
+choose who can find and install it.
+
+## Create the agent
+
+Use either path:
+
+<Tabs>
+  <Tab title="In the app">
+    Tap **New Message**, then **Create Agent**. Enter a display name and handle.
+  </Tab>
+  <Tab title="Message @relay">
+    Tell `@relay` the agent's name and what it should do. It derives the handle
+    and creates a private agent.
+
+    `@relay` can also list your agents and stage profile updates. An update
+    applies only after you confirm the exact change.
+  </Tab>
+</Tabs>
+
+Both paths install the new agent and create its direct conversation.
+
+| Rule | Detail |
+| --- | --- |
+| Handle format | 3 to 32 lowercase letters, numbers, or underscores, starting with a letter. New handles cannot end with an underscore or repeat underscores; handles created before this rule keep working |
+| Reserved handles | Product and legal route names such as `dashboard`, `mac`, `privacy`, `support`, `terms`, and impersonation words such as `everyone`, `moderator`, `verified`. Lookalikes that swap in digits or pad with underscores (`re1ay`, `adm1n`, `r_elay`) are refused too |
+| Starting visibility | Private, until the owner changes it |
+| On creation | Relay installs the agent for its creator and creates its direct conversation |
+| Agent Token | Displayed once at creation and never shown again |
+
+Creation does not configure a model, prompt, backend, or hosting provider.
+Those stay in your own runtime.
+
+### Richer creation through the API
+
+An authenticated owner sets richer presentation fields in the same request with
+`POST /v1/me/agents`.
+
+| Field | Accepts |
+| --- | --- |
+| `avatarUrl`, `tagline`, `accentColor` | Presentation identity |
+| `capabilities` | `text`, `image`, `voice`, `video`, `files` |
+| `openingMessage` | The same ordered `parts` a normal Relay message accepts |
+
+Read and update those owner-only fields afterwards:
+
+```bash
+curl -sS "$RELAY_API_URL/v1/me/agents/$AGENT_ID/configuration" \
+  -H "Authorization: Bearer $RELAY_SESSION_TOKEN"
+```
+
+Send `{"openingMessage": null}` to `PATCH .../configuration` to disable the
+opening message for future installs.
+
+<Info>
+These endpoints use the owner's Relay session, not the Agent Token.
+</Info>
+
+The opening message follows three rules:
+
+- **Sends once** as the agent, when a user first installs it.
+- **Stays silent** on reinstall, visibility change, and distribution-policy change.
+- **Applies forward** after an edit, to future first installs only.
+
+## Connect the backend
+
+The Agent Token authenticates your backend as this agent. Verify it, then use
+the returned agent ID and handle in your logs and configuration.
+
+```bash
+curl -sS "$RELAY_API_URL/v1/agents/me" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+No backend yet? The [Cloudflare Workers starter](/integrations/cloudflare)
+deploys a complete signed-webhook backend you customize afterwards.
+
+## Profile and distribution
+
+Every public or unlisted handle owns a profile at `relayapp.im/handle` carrying
+display identity only.
+
+<Info>
+Agent Tokens, owner identity, prompts, model and provider choices, runtime
+details, backend configuration, and opening-message configuration are never part
+of a public profile.
+</Info>
+
+The owner chooses **Who can message** from the agent profile:
+
+| Setting | Store | Exact handle and share link | Installable by |
+| --- | :---: | :---: | --- |
+| **Public** | ✅ after Relay approves and publishes the listing | ✅ | Anyone |
+| **Unlisted** | ❌ | ✅ | Anyone with the handle or link |
+| **Private** | ❌ | ❌ `404` | The owner only |
+
+Relay keeps three states separate:
+
+| State | Controls |
+| --- | --- |
+| Visibility | Who can find the agent |
+| Store review | Whether it is indexed |
+| Installation | A user's existing messaging relationship |
+
+Changing visibility never silently removes an existing installation.
+
+## Installation
+
+A user explicitly adds an agent before messaging it. Installation creates or
+reuses one direct conversation between that user and agent.
+
+Relay accepts a backend message only while both of these hold:
+
+1. The agent is a participant in the target conversation.
+2. The agent is still installed for that user.
+
+| Action | Effect |
+| --- | --- |
+| Remove an ordinary agent | Ends the installation and blocks new messages from it |
+| Add it again | Reuses the existing direct conversation, no duplicate thread |
+| Block or report | Available for every agent, ends the installation, overrides required distribution |
+| Built-in **Relay** agent | Required, with no ordinary Remove action |
+
+<Note>
+Conversation creation and arbitrary user lookup are not part of the preview. The
+developer API continues from conversation IDs Relay delivers to the agent.
+</Note>
+
+## Next steps
+
+- [Quickstart](/quickstart) to receive and reply to the first message
+- [Build your own agent](/guides/build-your-own-agent) for a laptop long-poll example
+- [Authentication](/authentication) for token storage and rotation
+- [Conversation lifecycle](/guides/conversation-lifecycle)
+- [Developer data access and retention](/reference/data-and-permissions)

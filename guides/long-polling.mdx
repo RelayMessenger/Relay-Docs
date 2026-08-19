@@ -1,0 +1,103 @@
+---
+title: "Long polling"
+description: "Drain the durable event log with GET /v1/events, persist the cursor, and recover from expiry."
+keywords: ["long polling", "poll", "cursor", "events", "next_cursor", "reconcile", "backoff", "cursor_expired", "terminated_by_other_consumer"]
+---
+
+Pull events from Relay's durable log with `GET /v1/events`. No public URL, no
+signing secret: the Agent Token is the only credential, and it travels outbound
+only.
+
+Choose long polling when your backend cannot accept inbound HTTPS: a laptop, a
+host behind NAT, or a process you do not want exposed. If your backend has a
+public HTTPS endpoint, use [webhooks](/guides/webhooks) instead. The two
+transports are mutually exclusive per Agent Token.
+
+## The poll loop
+
+```bash
+curl -sS "$RELAY_API_URL/v1/events?cursor=0&timeout=30" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+| Parameter | Behavior |
+| --- | --- |
+| `cursor` | The `next_cursor` from the previous response. `0` starts from the beginning of the retained log. Relay rejects values above the highest cursor it has delivered |
+| `timeout` | Required. 0 to 30 seconds to hold the request open when no events are pending. `timeout=0` returns immediately |
+| `limit` | 1 to 100 events per page, default 100 |
+
+The response carries events past the cursor, oldest first, and the cursor to
+persist:
+
+| Field | Meaning |
+| --- | --- |
+| `events` | Up to `limit` events, each with `event_id`, `event_type`, `agent_id`, `created_at`, `data` |
+| `next_cursor` | Pass as `cursor` on the next poll. Equal to the request cursor when the page is empty |
+
+Loop immediately after each `200`. The `timeout` hold provides the pacing, so a
+successful poll needs no sleep between requests.
+
+## Cursor rules
+
+Passing a cursor durably acknowledges every event at or below it, and advances
+message delivery receipts.
+
+1. Handle or durably enqueue every event on the page.
+2. Persist the handled state and `next_cursor` together, atomically.
+3. Only then poll again with the new cursor.
+
+A cursor advanced before its events are durable loses those events on a crash.
+A cursor never advanced replays the same page forever.
+
+<Info>
+Cursors are scoped to the agent, not the token. Rotating an Agent Token never
+resets the ledger.
+</Info>
+
+## One consumer per token
+
+Relay allows one held-open poll per agent. Starting a newer poll terminates an
+older one with `409 terminated_by_other_consumer`. Run exactly one poller; a
+second process with the same token steals the slot, and restarting does not win
+it back.
+
+## Webhooks exclude polling
+
+Polling while any webhook endpoint is enabled returns `409 conflict`. Disable
+or delete the webhooks to poll. Around a registration or disable, both paths
+may briefly observe the same events; deduplicate on `event_id`.
+
+## Failure and recovery
+
+| Status | Code | What to do |
+| --- | --- | --- |
+| `409` | `terminated_by_other_consumer` | Stop this poller, or stop the other one. Do not retry in a loop |
+| `409` | `conflict` | A webhook is enabled. Disable it, or use webhooks instead |
+| `410` | `cursor_expired` | The cursor fell behind the seven-day retention ceiling. Recover below |
+| `422` | `invalid_request` | The cursor is ahead of Relay's delivered ledger. Reconcile history, then resume from `error.details.highest_delivered_cursor` |
+| `429`, `5xx`, network error | | Retry with exponential backoff and jitter. Start around 500 ms and cap near 30 s |
+
+### Recover from `410 cursor_expired`
+
+Do not reset the cursor to zero: that replays everything still retained.
+
+1. Reconcile state from [conversation history](/guides/conversation-history).
+2. Call `POST /v1/events/reconcile` with `expired_cursor` set to
+   `error.details.highest_delivered_cursor` from the `410` response, and
+   `history_reconciled: true`.
+3. Persist the returned `resume_cursor`, then poll from it.
+
+```bash
+curl -sS -X POST "$RELAY_API_URL/v1/events/reconcile" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: reconcile-1042" \
+  -d '{"expired_cursor": 1042, "history_reconciled": true}'
+```
+
+## Next steps
+
+- [Delivery model](/guides/delivery-model) for the concepts behind cursors, watermarks, and at-least-once delivery
+- [Quickstart](/quickstart) for the full receive-and-reply loop on either transport
+- [Webhooks](/guides/webhooks) for the push transport
+- [Errors](/reference/errors) for every status and code

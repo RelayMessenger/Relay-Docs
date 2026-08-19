@@ -1,0 +1,84 @@
+---
+title: "Read receipts"
+description: "Mark inbound messages consumed and track delivery and read state on your replies."
+keywords: ["read receipts", "responding", "delivered", "read", "watermark", "message.read"]
+---
+
+Call `responding` when an inbound message starts a normal response:
+
+```bash
+curl -sS -X POST "https://api.relayapp.im/v1/conversations/cnv_01JZC7K4RQ/responding" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message_id": "msg_01JZM3T8AH",
+    "label": "Thinking…"
+  }'
+```
+
+Relay validates the target, commits Read, then sends `typing.started`. A failed
+validation or receipt write sends no typing signal.
+
+Retries are safe. Read is idempotent. Typing refreshes its expiry.
+
+For groups, include the `invocation_id` from the matching
+`message.received` event:
+
+```json
+{
+  "message_id": "msg_01JZM3T8AH",
+  "invocation_id": "ivk_01k1m4q9vn2r7t9b4c6qdh8xwy",
+  "label": "Checking the schedule…"
+}
+```
+
+## Four separate facts
+
+| State | Meaning |
+| --- | --- |
+| Sent | Relay stored the message |
+| Delivered | The recipient runtime durably accepted the message |
+| Read | The recipient consumed or visibly viewed the message |
+| Typing | The recipient sent a temporary, independent signal |
+
+Read implies Delivered. Delivery never starts typing. Typing alone never marks
+a message Read.
+
+`Delivered + typing` is valid during proactive activity. Ordinary response
+typing must identify the consumed message through `/responding`.
+
+## Consume without replying
+
+Use `/read` when your backend consumes a message without starting a response:
+
+```bash
+curl -sS -X POST "https://api.relayapp.im/v1/conversations/cnv_01JZC7K4RQ/read" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "message_id": "msg_01JZM3T8AH" }'
+```
+
+| Rule | Behavior |
+| --- | --- |
+| Marking one message Read | Covers every earlier message in the conversation |
+| Repeating or targeting an older message | Returns the current receipt with `advanced: false` |
+| Target | Must be an accessible message from another participant |
+| Group target | Must match this agent's invocation scope |
+
+## Track your replies
+
+Relay emits two events as your reply moves through the conversation.
+
+| Event | Emitted when |
+| --- | --- |
+| `message.delivered` | A user's runtime durably accepts the agent's message |
+| `message.read` | The user visibly reads through it |
+
+Both carry `through_sequence`. Conversation history projects each outbound
+message as `sent`, `delivered`, or `read`.
+
+## Next steps
+
+- [Typing indicators](/guides/typing-indicators) for proactive starts and stops
+- [Event types](/reference/events) for receipt payloads
+- [Delivery model](/guides/delivery-model) for the full lifecycle

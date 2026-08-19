@@ -1,0 +1,86 @@
+name: Validate docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Links, build, and OpenAPI
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Check docs.json is valid JSON
+        run: python3 -m json.tool docs.json > /dev/null
+
+      - name: Lint the OpenAPI spec
+        run: npx --yes @redocly/cli@latest lint api-reference/openapi.yaml
+
+      - name: Check for broken links
+        run: npx --yes mint@latest broken-links
+
+      - name: Validate the build
+        run: npx --yes mint@latest validate
+
+      - name: Check every icon renders on Mintlify's icon CDN
+        run: |
+          set -euo pipefail
+          # Mintlify renders lucide icons as CSS masks fetched from its CDN,
+          # pinned to a specific Lucide version. A name missing there renders
+          # blank even if newer Lucide releases have it, so validate against
+          # the CDN itself, not an npm package.
+          CDN="https://d3gk2c5xim1je2.cloudfront.net/lucide/v1.16.0"
+
+          { grep -rhoE 'icon="[^"]+"' --include='*.mdx' . || true; } \
+            | sed 's/icon="//; s/"//' > /tmp/used.txt
+          { grep -oE '"icon": "[^"]+"' docs.json || true; } \
+            | sed 's/"icon": "//; s/"//' >> /tmp/used.txt
+
+          missing=0
+          while read -r icon; do
+            [ -z "$icon" ] && continue
+            case "$icon" in
+              /*)
+                # File-path icon: valid if the file exists in the repo.
+                if [ ! -f ".$icon" ]; then
+                  echo "::error::Icon file '$icon' does not exist in the repo."
+                  missing=1
+                fi
+                continue ;;
+              http*) continue ;;
+            esac
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$CDN/$icon.svg")
+            if [ "$code" != "200" ]; then
+              echo "::error::Icon '$icon' returns $code from Mintlify's icon CDN and will render as blank."
+              missing=1
+            fi
+          done < <(sort -u /tmp/used.txt)
+
+          [ "$missing" -eq 0 ] && echo "All icon names resolve on the icon CDN."
+          exit "$missing"
+
+      - name: Skill copies must not drift
+        run: |
+          # Root skill.md overrides Mintlify's generated /skill.md; the
+          # .mintlify copy feeds agent-skills discovery. They must stay
+          # byte-identical (a symlink is not followed by the deploy).
+          diff -q skill.md .mintlify/skills/relay/SKILL.md
+
+      - name: Block internal references and placeholders
+        run: |
+          set -euo pipefail
+          # This repository is public. Nothing internal may land in it.
+          if grep -rnE 'PRODUCT\.md|/tmp/|research/|source-archive|TECHNICAL-SHEET|companion-inc|TODO:' \
+               --include='*.mdx' --include='*.md' --include='*.json' --include='*.yaml' \
+               --exclude-dir=.github . ; then
+            echo "::error::Found an internal reference or TODO placeholder in published content."
+            exit 1
+          fi
+          echo "No internal references or placeholders found."

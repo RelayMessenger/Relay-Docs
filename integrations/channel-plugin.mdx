@@ -1,0 +1,110 @@
+---
+title: "Embed Relay in your own runtime"
+sidebarTitle: "Your own runtime"
+description: "Give a host runtime you maintain a native Relay channel with recoverable receive and replies that cannot post twice."
+keywords: ["channel plugin", "host runtime", "long polling", "multi agent", "embed", "build your own"]
+---
+
+Add a native Relay channel to an agent host runtime you maintain. To connect a
+single agent instead, use one of the [shipped integrations](/integrations): all
+four are built and installable today.
+
+A channel plugin lets a host runtime treat Relay as one of its own channels. The
+host keeps owning ingress, routing, and session lifecycle. It calls Relay
+directly over HTTPS for receive and reply. Relay's own
+[OpenClaw channel](/integrations/openclaw) is built this way, and this guide
+describes the same contract.
+
+Prerequisites:
+
+- **An agent and its Agent Token.** See [Create and connect an agent](/guides/your-agent).
+- **A read of the transport contract.** See [Delivery model](/guides/delivery-model) and [Webhooks](/guides/webhooks).
+
+## Choose this pattern deliberately
+
+Relay's public contract supports more than one integration shape. Pick the
+narrowest one that fits.
+
+| Pattern | Use it when | Reference |
+| --- | --- | --- |
+| Webhook handler | A stateless function replies to each message | [Webhooks](/guides/webhooks) |
+| Framework plugin | You bind one server framework's native streaming format | [Vercel AI SDK](/integrations/vercel-ai-sdk) |
+| Coding-agent bridge | Relay starts and drives a local subprocess over ACP | [Integrations](/integrations) |
+| **Channel plugin** | **Your runtime already owns routing, sessions, and lifecycle for many agents** | This guide |
+
+A channel plugin is the right shape only when the host runtime, not Relay,
+decides which local agent handles a turn.
+
+## Pick a transport
+
+<Warning>
+Signed webhooks and long polling are mutually exclusive per Agent Token.
+Enabling one disables the other; polling while a webhook is active returns
+`409 conflict`.
+</Warning>
+
+```bash
+# Long polling: use it when the host runtime cannot accept public inbound HTTPS
+curl -sS "$RELAY_API_URL/v1/events?cursor=0&timeout=30" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+Use [signed webhooks](/guides/webhooks) when your host already terminates
+public HTTPS. Use [long polling](/guides/delivery-model) when it does not, such
+as a channel plugin running inside a user's own process. Run exactly one
+consumer per Agent Token. A newer poll or webhook registration takes over, and
+the older one gets `terminated_by_other_consumer`.
+
+## Scope every inbound turn to an owner
+
+Call `GET /v1/agents/me` once at startup and pin the returned owner user id.
+Drop any inbound message whose sender is not the owner, or not on an explicit
+allowlist you maintain, before your plugin interprets its content. The released
+OpenClaw and coding-agent integrations enforce the same rule: default-deny, not
+default-allow.
+
+## Map events to your runtime's turns
+
+Your plugin owns the mapping from a Relay `conversation_id` to your host's own
+session or thread state. Relay does not prescribe one. Persist that mapping to
+disk. Persist the long-poll `next_cursor` in the same atomic write as any
+locally queued work. Webhooks need no cursor, because Relay's outbox already
+retries. A crash must never be able to acknowledge an event your runtime never
+queued.
+
+Deduplicate on `event_id` regardless of transport: both webhooks and long-poll
+redeliver at least once. If your host processes a rapid burst of messages as
+separate turns, consider a short debounce window before starting work. Relay's
+own released plugins coalesce a fast sequence of messages into one turn instead
+of running the agent once per message.
+
+## Reply idempotently
+
+```bash
+curl -sS -X POST "$RELAY_API_URL/v1/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: reply:$EVENT_ID" \
+  -d '{"conversation_id":"cnv_123","parts":[{"type":"text","text":"On it."}]}'
+```
+
+Derive every outbound `Idempotency-Key` from the triggering `event_id`. A
+retried turn then replays the original send instead of posting twice, whether
+the retry comes from your host's crash recovery or a Relay redelivery. Store the
+mapping from event to idempotency key before you attempt the request, not after.
+
+## Handle failure without losing state
+
+Follow the [recovery rule](/guides/delivery-model#recovery-rule): conversation
+history is the source of truth for what a thread contains. After a crash, a
+`401`, or any ambiguous response, reconcile from
+[conversation history](/guides/conversation-history). Do not reconstruct state
+from your own retry attempts.
+
+## Next steps
+
+- [Delivery model](/guides/delivery-model) for the full transport and idempotency contract
+- [Webhooks](/guides/webhooks) for registration, verification, and rotation
+- [OpenClaw](/integrations/openclaw) for a shipped channel plugin built on this contract
+- [Integration troubleshooting](/integrations/troubleshooting) for the `401`, `409`, and `410` symptoms by failure signature
+- [Developer data access](/reference/data-and-permissions) for what a plugin may read and store

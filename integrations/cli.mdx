@@ -1,0 +1,103 @@
+---
+title: "The relaymessenger CLI"
+sidebarTitle: "CLI"
+description: "Pair a computer, see what Relay never receives, and rely on the CLI's approval and delivery guarantees."
+keywords: ["relaymessenger", "cli", "pair", "pairing", "doctor", "agent token", "approvals", "credentials"]
+---
+
+`relaymessenger` connects an engine on your computer to a Relay conversation.
+Every [local integration](/integrations) shares this one process.
+
+```bash
+npm install -g @relaymessenger/cli
+relaymessenger pair
+```
+
+## Pairing
+
+Pairing is a device-code flow:
+
+<Steps>
+  <Step title="The CLI creates a pairing">
+    It creates a short-lived pairing and long-polls it with a poll token.
+  </Step>
+  <Step title="You claim it in Relay">
+    Claiming creates a Relay agent owned by your account.
+  </Step>
+  <Step title="Relay returns the token">
+    The Agent Token goes only to the waiting CLI.
+  </Step>
+  <Step title="The CLI pins the owner">
+    It stores the token with owner-only permissions and records the owner user id
+    returned by `GET /v1/agents/me`.
+  </Step>
+</Steps>
+
+Pairing pins your Relay user id as the only default sender allowed to drive the
+agent.
+
+## What Relay never receives
+
+<Warning>
+Relay never receives your engine provider keys, SSH keys, or full parent process
+environment.
+</Warning>
+
+ACP subprocesses receive three things: platform basics, the engine and provider
+variables for the supported engines, and variables you add explicitly through
+`RELAYMESSENGER_ENGINE_ENV`.
+
+## Approval and delivery safety
+
+| Guarantee | What it prevents |
+| --- | --- |
+| Only the pinned owner can create prompts or answer approval requests, which arrive as messages carrying an id you answer with `yes <id>` or `no <id>` | A non-owner message is dropped before its content is interpreted |
+| Each approval is a create-once file on disk | A replayed approval cannot run twice |
+| The exact operation must fit in the security preview | Incomplete or oversized operations are denied instead of blindly allowed |
+| The event cursor advances in the same atomic write as the pending queue | A crash cannot acknowledge an event that was never recorded |
+| Agent and tool turns are at-most-once | A crash cannot silently repeat a deploy, deletion, command, or external send |
+| Completed replies use an on-disk outbox and a stable idempotency key | Delivery retries without rerunning the agent turn |
+
+<Warning>
+Event long-polling is exclusive per Agent Token and mutually exclusive with
+webhooks. Give every active consumer its own Relay agent and token.
+</Warning>
+
+## Diagnose
+
+```bash
+relaymessenger doctor
+```
+
+`doctor` verifies each of these:
+
+- **Node version** on this machine.
+- **Pairing and owner pinning** against the paired account.
+- **Token permissions** on the stored token file.
+- **API reachability** for the configured origin.
+- **Saved state** readability.
+- **Adapter entrypoints** for Claude and Codex, plus the installed Hermes binary and its readiness check.
+
+See [integration troubleshooting](/integrations/troubleshooting) for what each
+red line means.
+
+## Local files
+
+```text
+~/.relaymessenger/config.json                        paired token, origin, owner (0600)
+~/.relaymessenger/codex-notify.json                  project roots opted into Codex notify
+~/.relaymessenger/accounts/<identity>/state.json     saved cursor, queue, outbox
+~/.relaymessenger/accounts/<identity>/approvals/     one file per approval
+~/.relaymessenger/accounts/<identity>/sessions.json  conversation to ACP sessions
+~/.relaymessenger/accounts/<identity>/mcp-sends/     Codex MCP logical sends, one file each
+~/.relaymessenger/accounts/<identity>/installed-plugins/ stable plugin copies
+```
+
+## Next steps
+
+- [Claude Code](/integrations/claude-code)
+- [Codex](/integrations/codex)
+- [Hermes Agent](/integrations/hermes)
+- [OpenClaw](/integrations/openclaw)
+- [Integration troubleshooting](/integrations/troubleshooting) for symptoms by failure signature
+- [Authentication](/authentication) for Agent Token handling

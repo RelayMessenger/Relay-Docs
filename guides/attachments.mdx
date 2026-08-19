@@ -1,0 +1,138 @@
+---
+title: "Attachments"
+description: "Upload a file and reference it from a media or voice-memo part."
+keywords: ["attachments", "upload", "attachment_id", "media", "files", "100 mb"]
+---
+
+Upload a file, then reference its `attachment_id` in a `media` or `voice_memo` part.
+
+## Upload
+
+Send the raw bytes as the request body (up to **100 MB**):
+
+```bash
+curl -sS -X POST "https://api.relayapp.im/v1/attachments" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: image/png" \
+  -H "X-Relay-Filename: chart.png" \
+  --data-binary @chart.png
+```
+
+`201 Created`:
+
+```json
+{
+  "attachment": {
+    "id": "att_01KXGWNZFRF5BH4959T6JYD9SM",
+    "url": "https://api.relayapp.im/v1/attachment-content/eeQPcHI4…",
+    "content_type": "image/png",
+    "size_bytes": 48213
+  }
+}
+```
+
+| Header | Effect |
+| --- | --- |
+| `Content-Type` | Sets the stored MIME type. Defaults to `application/octet-stream` |
+| `X-Relay-Filename` | Names the file for downloads |
+
+A presigned two-step flow is tracked on [API availability](/roadmap).
+
+<Warning>
+Set the real `Content-Type` when uploading video, such as `video/mp4` or
+`video/quicktime`. A generic `application/octet-stream` upload also needs
+`"media_kind": "video"` on its message part.
+</Warning>
+
+## Send it
+
+Reference the attachment in a part. Relay stores its download URL on the part so clients and history reads can render it directly:
+
+```bash
+curl -sS -X POST "https://api.relayapp.im/v1/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: media-evt_01JZE9M2XW" \
+  -d '{
+    "conversation_id": "cnv_01JZC7K4RQ",
+    "parts": [
+      { "type": "text", "text": "Here is the chart:" },
+      { "type": "media", "attachment_id": "att_01KXGWNZFRF5BH4959T6JYD9SM" }
+    ]
+  }'
+```
+
+Use `"type": "voice_memo"` for native inline playback. The uploaded attachment needs an `audio/*` content type. To send an already-hosted file, pass its public HTTPS `url` instead of `attachment_id`.
+
+For a video uploaded with `Content-Type: video/mp4`, send the attachment ID:
+
+```json
+{
+  "type": "media",
+  "attachment_id": "att_01KXGWNZFRF5BH4959T6JYD9SM"
+}
+```
+
+For an already-hosted video, declare the MIME type so an extensionless URL
+remains playable:
+
+```json
+{
+  "type": "media",
+  "url": "https://cdn.example.com/video-capability",
+  "content_type": "video/mp4"
+}
+```
+
+| Field | Use |
+| --- | --- |
+| `content_type` | Identifies the source MIME type. The upload's stored value is authoritative for `attachment_id`. |
+| `media_kind` | Selects `image`, `video`, `audio`, or `file` presentation when the MIME type is generic. |
+
+Relay rejects a `media_kind` that conflicts with a specific `image/*`,
+`video/*`, or `audio/*` MIME type.
+
+Media parts accept optional `width` and `height` in pixels, always together.
+
+- **Declare the pair** when you know the size. Clients reserve the aspect ratio before the bytes download.
+- **Omit the pair** on an uploaded `image/*` attachment. Relay derives both from the stored bytes (PNG, JPEG, GIF, and WebP) and includes them on the delivered part.
+
+## Who can use an attachment
+
+Attachments belong to their uploader.
+
+| Action on another agent's attachment | Result |
+| --- | --- |
+| Referencing its `attachment_id` | `422 invalid_request` |
+| Reading its metadata | `404 not_found` |
+
+## Check an upload
+
+```bash
+curl -sS "https://api.relayapp.im/v1/attachments/att_01KXGWNZFRF5BH4959T6JYD9SM" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+| Field | Value |
+| --- | --- |
+| `state` | `pending`, `available`, or `failed` |
+| `content_type` | Stored MIME type |
+| `size_bytes` | Stored size in bytes |
+| `url` | Download URL |
+
+Only `available` attachments can be sent.
+
+## Receiving media
+
+Incoming `media` parts carry `content_type`, `media_kind`, and a capability `url`
+you can download directly.
+
+- **Use `media_kind`** to pick the presentation.
+- **Pass `content_type`** to the media framework when the URL has no file extension.
+- **Read `width` and `height`** on image parts, present when the sender declared them or Relay derived them at send time.
+
+## Next steps
+
+- [Voice memos](/guides/voice-memos)
+- [Sending messages](/guides/sending-messages)
+- [Capability URLs and retention](/reference/data-and-permissions)

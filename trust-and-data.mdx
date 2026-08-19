@@ -1,0 +1,102 @@
+---
+title: "Trust, privacy, and control"
+description: "What Relay stores, what an independent agent operator receives, and what the user controls."
+keywords: ["trust", "privacy", "data", "operator", "control", "blocking", "reporting", "deletion"]
+---
+
+An agent in Relay is independently operated AI: software with a named operator.
+Relay operates `@relay`. Every other agent belongs to the person or company that
+created it. Three things stay separate: what Relay stores, what that operator
+receives, and what the user can revoke.
+
+<Info>
+Relay encrypts traffic in transit with TLS. Message content is not encrypted
+end to end, and these docs make no such claim.
+[See the current status](/current-status).
+</Info>
+
+## The data path
+
+```text
+User's Relay app
+        ↕
+Relay conversation and delivery service
+        ↕
+Independent agent operator's backend
+```
+
+Relay stores one history per conversation, enough to order, deliver,
+synchronize, recover, and render messages. When the user messages an agent,
+Relay sends the authorized conversation content to that agent's external
+backend. The user authorizes each send by opening that conversation and tapping
+Send for the specific message or attachment.
+
+@relay, the agent that comes with every account, generates replies with Google Gemini through Cloudflare
+AI Gateway. Google may receive the current message, up to 30 recent messages
+from that conversation, and images the user attaches. Cloudflare Workers AI
+processes voice audio and transcripts for transcription and speech, and image
+prompts for generation. These requests exclude the user's phone number, address
+book, profile photo, device identifier, and messages from other conversations.
+
+An Agent Token is scoped to one agent and its own conversations, through the
+public API. Relay user accounts, email addresses, address books, other agents,
+unrelated conversations, and Relay's database stay outside that scope.
+
+## What the operator can receive
+
+For an active conversation, the agent backend may receive:
+
+- **Message content** and its ordered parts.
+- **Identifiers** for the sender, agent, message, and conversation.
+- **Reply targets and reactions** on those messages.
+- **Delivery and read state** for the thread.
+- **Attachments** the user includes.
+- **Timestamps and sequence information** required to maintain the thread.
+
+The operator may copy that into its own logs, memory, tools, or model pipeline
+under its disclosed policy. Relay review cannot guarantee that an agent is
+accurate, safe, private, or appropriate for every use.
+
+## Relay deletion and external memory are separate
+
+Deleting Relay's copy erases Relay's copy. A copy already stored by the agent
+developer persists under that operator's own policy. Users need to know:
+
+- **What the operator retains**, and for how long.
+- **Whether messages or derived data** can be used for training.
+- **How to request deletion** from the operator.
+- **What happens to history and memory** if the agent shuts down.
+- **Whether the conversation can be exported** before access ends.
+
+Relay has not yet shipped a developer-facing deletion event. Every operator
+should provide its own deletion path for data it retains outside Relay.
+
+## Adding an agent grants messaging, and only messaging
+
+An installation creates a messaging relationship. Every further capability needs
+its own explicit and revocable grant as it ships:
+
+- **Retain messages** in external memory.
+- **Send proactive messages** or expanded notifications.
+- **Receive location, media, voice, or call access.**
+- **Initiate or request payments.**
+- **Join groups or share context** with another agent.
+- **Invoke consequential tools.**
+
+An agent reaches a user only after that user adds it, and a Store listing stays
+a listing until then.
+
+## Removal, blocking, and reporting
+
+Removing or blocking an agent ends the active installation. The server rejects
+new backend messages after that relationship ends, even if the operator still
+has an old conversation ID.
+
+Blocking, reporting, and account deletion ship today, on every agent, including
+the one Relay operates.
+
+## See also
+
+- [Developer data access and retention](/reference/data-and-permissions)
+- [How Relay works](/how-relay-works)
+- [Current status](/current-status)

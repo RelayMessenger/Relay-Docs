@@ -1,0 +1,112 @@
+---
+title: "Cloudflare Workers starter"
+description: "Deploy a complete Relay webhook backend on Cloudflare Workers, then replace one function with your model call."
+keywords: ["cloudflare", "workers", "starter", "template", "durable objects", "webhook", "wrangler", "deploy"]
+---
+
+Deploy [relay-agent-starter](https://github.com/relaymessenger/relay-agent-starter),
+a Relay agent backend on Cloudflare Workers: signed webhook in, durable reply
+out. Replace one function with your model call and it is your agent.
+
+The delivery plumbing is the part worth keeping:
+
+| Behavior | How the starter does it |
+| --- | --- |
+| Verifies before parsing | Standard Webhooks signature checked over the exact raw request body |
+| Acknowledges only durable work | Returns `202` only after the ledger row and the alarm both exist; anything earlier returns `5xx` so Relay redelivers |
+| Survives eviction | Replies are armed with Durable Object alarms, so an evicted isolate wakes itself back up |
+| Replies exactly once | Idempotency keys derived from the event and a content digest survive redelivery without `409 idempotency_conflict` |
+| Handles groups | `invocation_id` is threaded into the reply, the Read call, and the typing calls |
+
+## Deploy
+
+Use the one-click deploy:
+
+[Deploy to Cloudflare](https://deploy.workers.cloudflare.com/?url=https://github.com/relaymessenger/relay-agent-starter)
+
+Or scaffold locally:
+
+```bash
+npm create cloudflare@latest -- --template relaymessenger/relay-agent-starter
+```
+
+<Warning>
+Never add `--accept-defaults` to this command. That flag ignores `--template`,
+scaffolds a hello-world Worker, and still prints success.
+</Warning>
+
+From a local checkout, deploy with:
+
+```bash
+npm install
+npx wrangler deploy
+```
+
+Note the deployed URL. It looks like
+`https://relay-agent.<your-subdomain>.workers.dev`.
+
+## Configure the two secrets
+
+<Steps>
+  <Step title="Set the Agent Token">
+    Create an agent in the Relay app and copy the Agent Token; Relay shows it
+    once. The deploy button prompts for it. Locally:
+
+    ```bash
+    npx wrangler secret put RELAY_AGENT_TOKEN
+    ```
+  </Step>
+
+  <Step title="Register the webhook">
+    Point Relay at `/webhooks/relay` on the deployed Worker:
+
+    ```bash
+    curl -sS -X POST "https://api.relayapp.im/v1/webhooks" \
+      -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "url": "https://relay-agent.<your-subdomain>.workers.dev/webhooks/relay",
+        "events": ["message.received"]
+      }'
+    ```
+
+    Save `signing_secret` from the response. Relay never returns it again.
+  </Step>
+
+  <Step title="Set the signing secret and redeploy">
+    ```bash
+    npx wrangler secret put RELAY_WEBHOOK_SECRET
+    npx wrangler deploy
+    ```
+  </Step>
+
+  <Step title="Text your agent">
+    Open Relay, find your agent, and send it a message. It replies.
+
+    <Check>
+    `GET /healthz` on the Worker returns `{"ok":true}` when it is up.
+    </Check>
+  </Step>
+</Steps>
+
+## Write your agent
+
+Everything you change lives in one function, `generateReply` at the bottom of
+`src/agent.ts`:
+
+```ts
+async generateReply(text: string, handle: string): Promise<string> {
+  return `@${handle} here. You said: ${text}`;
+}
+```
+
+Call any model from there. A Workers AI example is commented directly above it
+and needs no extra secrets: add the `ai` binding to `wrangler.jsonc`, uncomment
+`AI` in `src/env.ts`, and swap the return.
+
+## Next steps
+
+- [Webhooks](/guides/webhooks) for signature verification, retries, and rotation
+- [Sending messages](/guides/sending-messages) for every part type beyond text
+- [Group conversations](/guides/group-conversations) for `invocation_id`
+- [Streaming replies](/guides/streaming) to pipe model output as one finished message

@@ -1,0 +1,305 @@
+---
+title: "Quickstart"
+description: "Receive one Relay message and send one reply."
+keywords: ["quickstart", "get started", "first message", "webhook", "long poll", "reply", "curl", "tutorial", "coding agent"]
+---
+
+Receive one signed message event, mark it Read, and send one reply.
+
+Verify the token first. Then pick a receive path:
+
+| Where the backend runs | Receive path |
+| --- | --- |
+| Laptop or any host without a public URL | Long poll. No tunnel |
+| Public HTTPS server | Webhook |
+
+<Warning>
+Webhooks and long polling are mutually exclusive per Agent Token. Polling while
+a webhook is enabled returns `409 conflict`.
+</Warning>
+
+## Before you start
+
+You need:
+
+| Requirement | Where it comes from | Needed for |
+| --- | --- | --- |
+| Agent Token | Relay shows it once when you create an agent | Both paths |
+| Public HTTPS endpoint | Your own hosting | Webhook path only |
+| Signing secret | Relay returns it once when you register the webhook | Webhook path only |
+
+Set the API origin and token:
+
+```bash
+export RELAY_API_URL="https://api.relayapp.im"
+export RELAY_AGENT_TOKEN="rly_live_..."
+```
+
+## Verify the Agent Token
+
+```bash
+curl -sS "$RELAY_API_URL/v1/agents/me" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+Relay returns the agent identity:
+
+```json
+{
+  "agent": {
+    "id": "agt_01JZRELAY",
+    "handle": "scheduler",
+    "display_name": "Scheduler",
+    "tagline": "Finds a time that works",
+    "avatar_url": null,
+    "visibility": "private",
+    "owner_user_id": "usr_01JZU1F0BD",
+    "created_at": "2026-08-10T12:00:00.000Z"
+  }
+}
+```
+
+## Receive and reply
+
+<Tabs>
+  <Tab title="Long poll">
+    <Steps>
+      <Step title="Poll for one event">
+        `GET /v1/events` drains the agent's durable event log. The request
+        holds open up to `timeout` seconds and returns as soon as an event
+        lands.
+
+        ```bash
+        curl -sS "$RELAY_API_URL/v1/events?timeout=30" \
+          -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+        ```
+
+        While it waits, open the Relay app and text your agent. The poll
+        returns the event:
+
+        ```json
+        {
+          "events": [
+            {
+              "event_id": "evt_01JZE9M2XW",
+              "event_type": "message.received",
+              "agent_id": "agt_01JZRELAY",
+              "created_at": "2026-08-10T12:00:00.000Z",
+              "data": {
+                "message": {
+                  "id": "msg_01JZM3T8AH",
+                  "conversation_id": "cnv_01JZC7K4RQ",
+                  "sequence": 1,
+                  "parts": [
+                    { "part_index": 0, "type": "text", "text": "What time works tomorrow?" }
+                  ]
+                }
+              }
+            }
+          ],
+          "next_cursor": 1
+        }
+        ```
+      </Step>
+
+      <Step title="Mark Read and reply">
+        Mark the exact inbound message Read before model or tool work. This
+        call also starts the independent typing signal.
+
+        ```bash
+        curl -sS -X POST \
+          "$RELAY_API_URL/v1/conversations/cnv_01JZC7K4RQ/responding" \
+          -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{"message_id":"msg_01JZM3T8AH"}'
+        ```
+
+        Derive the idempotency key from the inbound `event_id`.
+
+        ```bash
+        curl -sS -X POST "$RELAY_API_URL/v1/messages" \
+          -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+          -H "Content-Type: application/json" \
+          -H "Idempotency-Key: reply-evt_01JZE9M2XW" \
+          -d '{
+            "conversation_id": "cnv_01JZC7K4RQ",
+            "parts": [{ "type": "text", "text": "Tomorrow at 2:00 PM works." }]
+          }'
+        ```
+
+        Relay returns `202 Accepted` with one stored message. Stop typing
+        after send, failure, or cancellation:
+
+        ```bash
+        curl -sS -X POST \
+          "$RELAY_API_URL/v1/conversations/cnv_01JZC7K4RQ/typing" \
+          -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{"started":false}'
+        ```
+
+        In a group, copy `data.invocation_id` into `/responding`, typing, and
+        the reply.
+      </Step>
+
+      <Step title="Poll again with the cursor">
+        Pass the returned `next_cursor` on the next poll. Passing a cursor
+        acknowledges every event at or below it, so persist it before making
+        the next request, never after.
+
+        ```bash
+        curl -sS "$RELAY_API_URL/v1/events?cursor=1&timeout=30" \
+          -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+        ```
+
+        That is the whole loop: poll, handle, persist the cursor, poll again.
+        See [Long polling](/guides/long-polling) for backoff, the one-poller
+        rule, and `410` recovery.
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Webhook">
+    <Tip>
+    The fastest deployed path: the
+    [Cloudflare Workers starter](/integrations/cloudflare) ships these steps
+    as a working backend.
+    </Tip>
+
+    <Steps>
+      <Step title="Register the webhook">
+        ```bash
+        curl -sS -X POST "$RELAY_API_URL/v1/webhooks" \
+          -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "url": "https://agent.example/webhooks/relay",
+            "events": ["message.received"]
+          }'
+        ```
+
+        Save `signing_secret`. Relay never returns it again.
+
+        ```json
+        {
+          "webhook": {
+            "id": "wh_01JZWEBHOOK",
+            "url": "https://agent.example/webhooks/relay",
+            "events": ["message.received"],
+            "enabled": true,
+            "secret_prefix": "whsec_EXAMPL…",
+            "created_at": "2026-08-10T12:00:00.000Z",
+            "updated_at": "2026-08-10T12:00:00.000Z"
+          },
+          "signing_secret": "whsec_EXAMPLEKEYDONOTUSE0000000000000000"
+        }
+        ```
+      </Step>
+
+      <Step title="Verify and store the event">
+        Relay signs the exact request body with Standard Webhooks headers.
+
+        ```bash
+        npm install standardwebhooks
+        ```
+
+        ```ts
+        import { Webhook } from "standardwebhooks";
+
+        const rawBody = await request.text();
+        const event = new Webhook(process.env.RELAY_SIGNING_SECRET!).verify(
+          rawBody,
+          {
+            "webhook-id": request.headers.get("webhook-id") ?? "",
+            "webhook-timestamp": request.headers.get("webhook-timestamp") ?? "",
+            "webhook-signature": request.headers.get("webhook-signature") ?? "",
+          },
+        );
+        ```
+
+        Store the event before returning `2xx`. Deduplicate on `event_id`.
+
+        ```json
+        {
+          "event_id": "evt_01JZE9M2XW",
+          "event_type": "message.received",
+          "data": {
+            "message": {
+              "id": "msg_01JZM3T8AH",
+              "conversation_id": "cnv_01JZC7K4RQ",
+              "sequence": 1,
+              "parts": [
+                { "part_index": 0, "type": "text", "text": "What time works tomorrow?" }
+              ]
+            }
+          }
+        }
+        ```
+      </Step>
+
+      <Step title="Mark Read and reply">
+        Mark the exact inbound message Read before model or tool work. This
+        call also starts the independent typing signal.
+
+        ```bash
+        curl -sS -X POST \
+          "$RELAY_API_URL/v1/conversations/cnv_01JZC7K4RQ/responding" \
+          -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{"message_id":"msg_01JZM3T8AH"}'
+        ```
+
+        Derive the idempotency key from the inbound `event_id`.
+
+        ```bash
+        curl -sS -X POST "$RELAY_API_URL/v1/messages" \
+          -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+          -H "Content-Type: application/json" \
+          -H "Idempotency-Key: reply-evt_01JZE9M2XW" \
+          -d '{
+            "conversation_id": "cnv_01JZC7K4RQ",
+            "parts": [{ "type": "text", "text": "Tomorrow at 2:00 PM works." }]
+          }'
+        ```
+
+        Relay returns `202 Accepted` with one stored message. Stop typing
+        after send, failure, or cancellation:
+
+        ```bash
+        curl -sS -X POST \
+          "$RELAY_API_URL/v1/conversations/cnv_01JZC7K4RQ/typing" \
+          -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{"started":false}'
+        ```
+
+        In a group, copy `data.invocation_id` into `/responding`, typing, and
+        the reply.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Failure and retry behavior
+
+| Failure | What to do |
+| --- | --- |
+| Invalid signature | Return `401`. Do not parse or process the event |
+| Duplicate `event_id` | Return `2xx`. Do not run side effects again |
+| Relay returns `429` or `5xx` | Retry with backoff and the same `Idempotency-Key` |
+| Relay returns another `4xx` | Fix the request or token before retrying |
+| Your handler needs more than 10 seconds | Store the event, return `2xx`, then continue work |
+
+<Tip>
+Want a coding agent to build the handler? Copy the
+[prompt on the home page](/#start-with-your-coding-agent), or hand it the
+[machine-readable contract](/reference/machine-readable).
+</Tip>
+
+## Next steps
+
+- [Long polling](/guides/long-polling) for the durable poll loop
+- [Webhooks](/guides/webhooks) for signature rotation and delivery retries
+- [Sending messages](/guides/sending-messages) for every part type
+- [Group conversations](/guides/group-conversations) for `invocation_id`
+- [Errors](/reference/errors) for every retry rule
