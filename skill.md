@@ -43,7 +43,8 @@ endpoints, fields, or limits.
 
 - Base URL is `https://api.relayapp.im`. Never a `workers.dev` origin.
 - The contract is raw HTTPS and JSON. Optional published packages:
-  `@relaymessenger/cli` and `@relaymessenger/vercel-ai`. Import nothing else.
+  `@relaymessenger/sdk`, `@relaymessenger/cli`, and `@relaymessenger/vercel-ai`.
+  Import nothing else.
 - Webhooks and long polling are mutually exclusive per Agent Token; polling
   with a webhook enabled returns `409 conflict`. Run one poller per token.
 - Order messages by `sequence`; deduplicate events by `event_id`. Never swap
@@ -64,10 +65,11 @@ endpoints, fields, or limits.
 
 ## CANNOT
 
-- Published packages: `@relaymessenger/cli` (bridge Claude Code, Codex, or
-  Hermes on your computer) and `@relaymessenger/vercel-ai` (signed webhooks +
-  streaming for the Vercel AI SDK). For any other stack, use raw HTTPS and
-  JSON; there is no general client library on npm yet.
+- Published packages: `@relaymessenger/sdk` (the general client and transport:
+  HTTPS client, Standard Webhooks verify, cursor, poll loop),
+  `@relaymessenger/cli` (bridge Claude Code, Codex, or Hermes on your
+  computer), and `@relaymessenger/vercel-ai` (signed webhooks + streaming for
+  the Vercel AI SDK). For any other stack, use raw HTTPS and JSON.
 - Backends cannot read ambient group conversation, create group members, or
   message users who have not installed the agent.
 - No socket mode and no calls in the current developer preview; check
