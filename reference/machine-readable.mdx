@@ -117,14 +117,15 @@ Store the returned signing_secret; it is shown only on create or rotation.
 ## Send
 POST /v1/messages with the required Idempotency-Key header (8-255 chars; derive it from
 the inbound event_id so retries are safe; reuse the same key when you retry).
-Body: { "conversation_id": "cnv_…", "parts": [...], "reply_to"?: { "message_id" } }
+Body: { "conversation_id": "cnv_…", "parts": [...], "fallback_text"?, "reply_to"?: { "message_id" } }
 Part types (1-32 parts per send, order = presentation order). The server splits
 the send at ingest: each visible non-media part commits as its own message;
 contiguous media parts commit together as one media message; a voice_memo
 always commits as its own message. Each bubble is a message. One send raises
 one push notification regardless of how many messages it commits. reply_to
-targets a message id only and projects on the first committed message; a group
-invocation is delivered on the last one's message.received event:
+targets a message id only and projects on the first committed message; every
+message.received event of an invoking group batch carries the same
+invocation_id. Optional fallback_text applies to the last committed message:
 - { "type": "text", "text": "…" }                     (≤ 8 KB per part)
 - { "type": "link_preview", "url": "https://…" }
 - { "type": "data", "data": { any JSON } }            (≤ 16 KB)
