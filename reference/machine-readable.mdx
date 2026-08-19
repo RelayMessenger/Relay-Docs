@@ -120,8 +120,11 @@ the inbound event_id so retries are safe; reuse the same key when you retry).
 Body: { "conversation_id": "cnv_…", "parts": [...], "reply_to"?: { "message_id" } }
 Part types (1-32 parts per send, order = presentation order). The server splits
 the send at ingest: each visible non-media part commits as its own message;
-contiguous media parts commit together as one media message. Each bubble is a
-message. reply_to targets a message id only:
+contiguous media parts commit together as one media message; a voice_memo
+always commits as its own message. Each bubble is a message. One send raises
+one push notification regardless of how many messages it commits. reply_to
+targets a message id only and projects on the first committed message; a group
+invocation is delivered on the last one's message.received event:
 - { "type": "text", "text": "…" }                     (≤ 8 KB per part)
 - { "type": "link_preview", "url": "https://…" }
 - { "type": "data", "data": { any JSON } }            (≤ 16 KB)
@@ -159,10 +162,13 @@ or 408 request_timeout; broken framing returns 400 malformed_stream.
 - Proactive typing or explicit stop: POST /v1/conversations/{id}/typing
   { "started", "label"?, "invocation_id"? }. Typing never changes receipts.
 - Reactions: POST /v1/messages/{id}/reactions
-  { "operation": "add"|"remove", "type": "emoji", "emoji" }
-- Edit: PATCH /v1/messages/{id} { "parts": [...] } within 15 minutes, at most
-  five revisions. Only the original user session or Agent Token can edit.
-  Replacement and stored content must be text-bearing with no attachments.
+  { "operation": "add"|"remove", "type": "emoji", "emoji", "part_index"? }.
+  part_index anchors on one part of a media message (per-photo pills) and must
+  name a real part; text and card messages take whole-message reactions only.
+- Edit: PATCH /v1/messages/{id} { "parts": [exactly one text part] } within
+  15 minutes, at most five revisions. Anything but one text part answers 422.
+  Only the original user session or Agent Token can edit, and the stored
+  message must be text-bearing.
 - Unsend: DELETE /v1/messages/{id} within two minutes. Only the original
   sender can unsend. History keeps a bare status=deleted tombstone.
 - History: GET /v1/conversations/{id}/messages?limit=50&before_sequence=N,

@@ -36,14 +36,15 @@ See [Conversation lifecycle](/guides/conversation-lifecycle) for how direct thre
 
 ## Messages and ordered parts
 
-A message is either text or media, never both: it carries one visible non-media
-part, or a run of contiguous `media` and `voice_memo` parts. Each bubble in the
-app is a message.
+A message is either text or media, never both: it carries one visible
+non-media part, a run of contiguous `media` parts, or one `voice_memo` part.
+Each bubble in the app is a message.
 
 The send route accepts 1 to 32 parts, of five types, and splits them at
-ingest: each visible non-media part commits as its own message, and contiguous
-media parts commit together as one media message. The 202 lists every
-committed message in display order.
+ingest: each visible non-media part commits as its own message, contiguous
+media parts commit together as one media message, and a voice memo always
+commits as its own message. The 202 lists every committed message in display
+order.
 
 | Part type | Carries |
 | --- | --- |
@@ -84,10 +85,11 @@ Read direction from that field alone. Comparing `sender.id` against your own id 
 
 Only a message's original sender can mutate it. Every other actor receives `404`.
 
-Use `PATCH /v1/messages/{message_id}` within 15 minutes to replace all parts, up
-to five times. Edits must remain text-bearing and cannot involve attachment
-parts. Each successful edit appends the prior parts and `fallback_text` to
-`revisions`, sets `edited_at`, and keeps the original `sequence`.
+Use `PATCH /v1/messages/{message_id}` within 15 minutes to replace a text
+message's text, up to five times. An edit carries exactly one text part;
+anything else answers `422`. Each successful edit appends the prior parts and
+`fallback_text` to `revisions`, sets `edited_at`, and keeps the original
+`sequence`.
 
 Use `DELETE /v1/messages/{message_id}` within two minutes to unsend. Relay
 removes the stored parts but keeps a bare `status: "deleted"` tombstone with

@@ -35,7 +35,10 @@ human explicitly invoked the agent in a group.
 | `data.message` | The full stored message: `id`, `conversation_id`, `sequence`, `sender`, `is_from_me`, ordered `parts[]`, `reply_to`, `fallback_text`, `status`, `created_at` |
 | `data.invocation_id` | Group deliveries only. Required when replying, see [group conversations](/guides/group-conversations) |
 
-The agent's own messages never echo back as `message.received`.
+The agent's own messages never echo back as `message.received`. When one send
+splits into several messages, each arrives as its own `message.received`
+event: `reply_to` projects on the first of them, and a group invocation is
+delivered on the last.
 
 ### `message.edited`
 
@@ -154,7 +157,9 @@ A participant added or removed a reaction from the agent's message.
 ```
 
 A reaction targets a message id. `emoji` is present if and only if
-`type` is `"emoji"`.
+`type` is `"emoji"`. When the reaction anchors on one part of a media
+message, the payload also carries that `part_index`; a whole-message
+reaction, the only shape for text and card messages, omits it.
 
 ### `conversation.added`, `conversation.updated`, and `conversation.removed`
 
@@ -176,11 +181,6 @@ own replies. No lifecycle event adds access to the rest of the conversation.
 | `membership_version` | The current membership version |
 | `system_mutation` | The mutation, with old and new fields |
 | `message` | The system message stored in the conversation |
-
-{/* TODO-INTEGRATOR: confirm the stored shape of group system messages under
-the split. These examples show one data message whose fallback_text carries the
-human line; verify whether the server commits one data message or a text
-message plus a data message. */}
 
 <CodeGroup>
 
@@ -207,6 +207,12 @@ message plus a data message. */}
     "sender": { "kind": "system", "id": "system" },
     "parts": [
       {
+        "part_index": 0,
+        "type": "text",
+        "text": "Scheduler was added"
+      },
+      {
+        "part_index": 1,
         "type": "data",
         "data": {
           "type": "group.mutation",
@@ -249,6 +255,12 @@ message plus a data message. */}
     "sender": { "kind": "system", "id": "system" },
     "parts": [
       {
+        "part_index": 0,
+        "type": "text",
+        "text": "Mira updated the group"
+      },
+      {
+        "part_index": 1,
         "type": "data",
         "data": {
           "type": "group.mutation",
@@ -271,8 +283,10 @@ message plus a data message. */}
 
 </CodeGroup>
 
-Both variants carry the mutation twice on the system message: once as a
-human-readable text part and once as a structured `data` part.
+A group system message is the one shape the split leaves untouched: one
+message carrying the human-readable line as a text part and the structured
+`group.mutation` as a `data` part. The data part is membership metadata, not
+a bubble; the app renders only the text line.
 
 A backend receives these lifecycle events, but cannot create a group or change
 its membership. See [API availability](/roadmap).

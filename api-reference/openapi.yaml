@@ -106,9 +106,12 @@ paths:
       summary: Send a message
       description: >
         Send as the authenticated agent. Relay splits the accepted parts at
-        ingest: each visible non-media part becomes its own message, and
-        contiguous media parts stay one media message. The 202 lists every
-        committed message in display order. Requires an `Idempotency-Key`
+        ingest: each visible non-media part becomes its own message,
+        contiguous media parts stay one media message, and a voice memo
+        always commits as its own message. The 202 lists every committed
+        message in display order. When one send commits several messages,
+        `reply_to` projects on the first committed message. Requires an
+        `Idempotency-Key`
         header of 8–255 characters; reusing the same key with the same request
         returns the originally committed messages. To pipe native agent
         output, set `stream=true` and pipe a Vercel AI SDK UIMessageStream v1
@@ -159,8 +162,9 @@ paths:
                   description: >
                     Ordered parts for this send. The server splits them at
                     ingest: each visible non-media part commits as its own
-                    message, and contiguous media parts commit together as
-                    one media message.
+                    message, contiguous media parts commit together as one
+                    media message, and a voice memo always commits as its
+                    own message.
                   items:
                     $ref: "#/components/schemas/PartInput"
                 reply_to:
@@ -248,12 +252,13 @@ paths:
       tags: [Messages]
       summary: Edit a message
       description: >
-        Replace the authenticated sender's message parts without changing its
-        conversation sequence. User-sent messages require that user's session.
-        Agent-sent messages require that agent's token. Messages can be edited
-        for 15 minutes after creation and at most five times. Both the stored
-        message and replacement must be text-bearing and cannot contain
-        attachment parts. Relay does not send a push notification for edits.
+        Replace a text message's text without changing its conversation
+        sequence. User-sent messages require that user's session. Agent-sent
+        messages require that agent's token. Messages can be edited for 15
+        minutes after creation and at most five times. The stored message
+        must be text-bearing, and the replacement is exactly one text part;
+        anything else answers 422. Relay does not send a push notification
+        for edits.
       operationId: editMessage
       security:
         - agentToken: []
@@ -288,7 +293,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "422":
-          description: The replacement is invalid, is not text-bearing, or contains attachment parts.
+          description: The replacement is not exactly one valid text part.
           content:
             application/json:
               schema:
@@ -337,6 +342,9 @@ paths:
       description: >
         Add or remove a tapback or emoji on a message.
         Recipients receive `reaction.added` / `reaction.removed` events.
+        By default the reaction applies to the whole message. On a media
+        message, `part_index` anchors it on one part instead, which is how
+        per-photo reaction pills work.
       operationId: reactToMessage
       parameters:
         - $ref: "#/components/parameters/MessageId"
@@ -358,6 +366,14 @@ paths:
                   type: string
                   description: The emoji to add or remove. Required.
                   example: "🔥"
+                part_index:
+                  type: integer
+                  minimum: 0
+                  description: >
+                    Anchor the reaction on one part of a media message. Must
+                    name a part the message actually has, and is meaningful
+                    only on media messages; text and card messages take
+                    whole-message reactions only.
       responses:
         "200":
           description: Reaction state updated.
@@ -370,7 +386,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "422":
-          description: The operation, type, or emoji is invalid.
+          description: >
+            The operation, type, or emoji is invalid, or part_index names a
+            part the message does not have.
           content:
             application/json:
               schema:
@@ -383,8 +401,10 @@ paths:
       description: >
         Ask verified users who have installed the authenticated agent to join
         a new group or an existing group that already contains the agent.
-        Relay commits one consent card into each target's direct conversation
-        with the agent. The agent never changes membership directly. The first
+        Relay commits the invite into each target's direct conversation with
+        the agent: a text message carrying the reason when one was given, then
+        the consent card message. The agent never changes membership
+        directly. The first
         accept makes the conversation live, each later accept joins that same
         conversation, and the invite stays open for whoever has not answered
         until everyone answers or it expires.
@@ -2326,14 +2346,6 @@ components:
       discriminator:
         propertyName: type
 
-    EditablePartInput:
-      oneOf:
-        - $ref: "#/components/schemas/TextPartInput"
-        - $ref: "#/components/schemas/LinkPreviewPartInput"
-        - $ref: "#/components/schemas/DataPartInput"
-      discriminator:
-        propertyName: type
-
     MessageEditInput:
       type: object
       additionalProperties: false
@@ -2342,16 +2354,13 @@ components:
         parts:
           type: array
           minItems: 1
-          maxItems: 32
+          maxItems: 1
           description: >
-            Full replacement for the stored parts. At least one text part is
-            required. Media, voice memo, and all attachment references are
-            rejected.
+            Exactly one text part that replaces the message's text. Anything
+            else, including a second part or a media, voice memo, link
+            preview, or data part, is rejected with 422.
           items:
-            $ref: "#/components/schemas/EditablePartInput"
-          contains:
             $ref: "#/components/schemas/TextPartInput"
-          minContains: 1
 
     TextPartInput:
       type: object
@@ -2743,6 +2752,9 @@ components:
 
     ReplyRef:
       type: [object, "null"]
+      description: >
+        A reply targets a message id. A legacy `part_index` in the request is
+        accepted and ignored.
       properties:
         message_id:
           type: string
@@ -2788,6 +2800,13 @@ components:
         actor_id:
           type: string
           pattern: "^(usr|agt)_"
+        part_index:
+          type: integer
+          minimum: 0
+          description: >
+            Present when the reaction anchors on one part of a media message,
+            for per-photo reaction pills. Absent on a whole-message reaction,
+            the only shape for text and card messages.
 
     VisibleMessage:
       type: object
@@ -3069,7 +3088,13 @@ components:
         message:
           $ref: "#/components/schemas/Message"
         invocation_id:
-          $ref: "#/components/schemas/InvocationId"
+          allOf:
+            - $ref: "#/components/schemas/InvocationId"
+          description: >
+            Present on a group invocation. When the sender's one send
+            committed several messages, the invocation is delivered on the
+            last of them; `reply_to` and `invoked_agents` project on the
+            first.
 
     MessageEditedEventData:
       type: object
