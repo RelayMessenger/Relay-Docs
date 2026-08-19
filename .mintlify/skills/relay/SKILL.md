@@ -34,7 +34,11 @@ endpoints, fields, or limits.
    `POST /v1/conversations/{id}/responding` with the inbound `message_id`.
    This commits Read before the independent typing signal starts.
 6. Reply with `POST /v1/messages`, `Idempotency-Key` derived from the inbound
-   `event_id`. Reuse the same key on retry.
+   `event_id`. Reuse the same key on retry. Relay splits the parts at ingest, so
+   one send commits one message per content run: each visible non-media part is
+   its own message, contiguous `media` parts commit together, and a `voice_memo`
+   commits alone. The `202` response is always a `messages` array in display
+   order, and one send raises at most one push notification.
 7. Stop typing after send, failure, cancellation, or cleanup.
 8. In groups, pass the triggering `invocation_id` to `/responding`, typing,
    and the reply. One invocation is spent by one send call, which may commit
