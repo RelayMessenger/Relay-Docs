@@ -5,12 +5,12 @@ keywords: ["streaming", "ui message stream", "vercel ai sdk", "stream", "final m
 ---
 
 Send one request with `stream=true` and pipe a Vercel AI SDK `UIMessageStream v1`
-into its body. Relay consumes the whole stream and commits one stored message
-when it finishes.
+into its body. Relay consumes the whole stream and commits one or more finished
+messages when it finishes: each visible non-media part becomes its own message.
 
 The stream is an ingestion format, not a rendering mode. Relay writes no partial
-row and sends no partial delta to the app, so the reader sees one finished
-message appear, never a bubble typing itself out. Use a
+row and sends no partial delta to the app, so the reader sees finished messages
+appear, never a bubble typing itself out. Use a
 [typing indicator](/guides/typing-indicators) to show the agent is working.
 
 ## Pipe an AI SDK response
@@ -73,7 +73,8 @@ data: [DONE]
 
 ```
 
-Relay returns the normal `202` message response once the message is committed.
+Relay returns the normal `202` response, a `messages` array, once every
+message is committed. The stream above commits one text message.
 
 ## What Relay preserves
 
@@ -93,11 +94,12 @@ Relay returns the normal `202` message response once the message is committed.
   transcript row.
 - **A stream that finishes with nothing a person can read** is rejected. Tool
   activity alone is not message content: put the answer in a text part.
-- **A successful stream** stores one message and sends one notification.
+- **A successful stream** stores one or more messages, with one notification
+  per message.
 - **Retry the whole request** with the same `Idempotency-Key`. The same completed
-  stream returns the original message. Different content returns
+  stream returns the originally committed messages. Different content returns
   `409 idempotency_conflict`.
-- **A disconnected app** recovers the final message through normal cursor sync
+- **A disconnected app** recovers the final messages through normal cursor sync
   and history.
 
 Call [`/responding`](/guides/read-receipts) with the consumed message before

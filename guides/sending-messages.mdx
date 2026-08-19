@@ -1,6 +1,6 @@
 ---
 title: "Sending messages"
-description: "Send ordered parts with POST /v1/messages, reply to a message or a part, and make retries safe."
+description: "Send ordered parts with POST /v1/messages, reply to a message, and make retries safe."
 keywords: ["send message", "parts", "text", "media", "voice memo", "data", "reply_to", "idempotency"]
 ---
 
@@ -20,7 +20,22 @@ curl -sS -X POST "https://api.relayapp.im/v1/messages" \
   }'
 ```
 
-Relay returns `202 Accepted` with `message_id` and the stored message. Each stored part includes its assigned `part_index`.
+Relay splits the parts at ingest: each visible non-media part commits as its
+own message, and contiguous `media` and `voice_memo` parts commit together as
+one media message. Each bubble in the app is a message. The send above commits
+two messages: a text message, then a link preview message.
+
+The `202 Accepted` response is always a `messages` array listing every
+committed message in display order:
+
+```json
+{
+  "messages": [
+    { "id": "msg_01JZM4Q9VN", "sequence": 8, "parts": [{ "type": "text", "text": "Found three options. The best one:" }], "...": "..." },
+    { "id": "msg_01JZM4QA2C", "sequence": 9, "parts": [{ "type": "link_preview", "url": "https://example.com/listing/42" }], "...": "..." }
+  ]
+}
+```
 
 ## Part types
 
@@ -71,21 +86,22 @@ Clients that cannot render a part use its `data.fallback` string when present, t
 
 Use [Voice memos](/guides/voice-memos) for audio in the inline voice player. Use [Rich link previews](/guides/rich-link-previews) when a URL should render as a preview card.
 
-## Replying to a message or a part
+## Replying to a message
 
 In a group, Relay invokes an agent when a human selects it or replies to one of
 its messages. That `message.received` event carries an `invocation_id`. Echo the
 value as `invocation_id` in the finalized JSON request, or as the query parameter
 for a streamed reply.
 
-`reply_to` targets a whole message or a single part:
+`reply_to` targets a message by id:
 
 ```json
 { "reply_to": { "message_id": "msg_01JZM3T8AH" } }
-{ "reply_to": { "message_id": "msg_01JZM3T8AH", "part_index": 1 } }
 ```
 
-Use the `part_index` from the stored message in `message.received`. Part indexes are dense, zero-based, and stable.
+Use the message id from the stored message in `message.received`. Because every
+bubble is a message, replying to the message is replying to exactly what the
+reader sees.
 
 ## Idempotency
 
@@ -93,14 +109,15 @@ The `Idempotency-Key` header is **required** and accepts 8 to 255 characters. De
 
 | Retry | Result |
 | --- | --- |
-| Same key, same request | Relay returns the original message instead of sending twice |
+| Same key, same request | Relay returns the originally committed messages instead of sending twice |
 | Same key, different request | `409 idempotency_conflict` |
 
 Generate the key once per logical send and reuse it across retries.
 
 ## Long replies
 
-Split content longer than the per-part limit across `text` parts or messages. Each part renders as its own bubble.
+Split content longer than the per-part limit across `text` parts. Each part
+renders as its own bubble, because each becomes its own message.
 
 ## Next steps
 

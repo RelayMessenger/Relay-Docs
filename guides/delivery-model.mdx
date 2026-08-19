@@ -95,14 +95,15 @@ returns `409 conflict`.
 
 ## Outgoing messages
 
-`POST /v1/messages` returns `202 Accepted`. That means Relay stored the message.
-Delivery and read arrive later as `message.delivered` and `message.read`.
+`POST /v1/messages` returns `202 Accepted` with a `messages` array: every
+message the send committed, in display order. Delivery and read arrive later
+as `message.delivered` and `message.read`, per message.
 
 Every send requires an `Idempotency-Key`.
 
 | Reuse | Result |
 | --- | --- |
-| Same key, same request | The original message is returned |
+| Same key, same request | The originally committed messages are returned |
 | Same key, different request | `409 idempotency_conflict` |
 
 Derive the key from the incoming `event_id`. A redelivered event then produces
@@ -135,8 +136,8 @@ Delivery never starts typing. Typing alone never marks Read. Use
 ## Live state
 
 Typing indicators never appear in `GET /v1/events` or webhooks. A streaming
-reply writes no partial rows. Relay stores one message when the stream
-finishes, and sends one notification.
+reply writes no partial rows. Relay stores one or more finished messages when
+the stream finishes, with one notification per message.
 
 `Delivered + typing` is valid because the receipt and live signal describe
 different facts.

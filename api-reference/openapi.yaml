@@ -105,13 +105,16 @@ paths:
       tags: [Messages]
       summary: Send a message
       description: >
-        Send a message as the authenticated agent. Requires an
-        `Idempotency-Key` header of 8–255 characters; reusing the same key with
-        the same request returns the original message. To pipe native agent output, set
-        `stream=true` and pipe a Vercel AI SDK UIMessageStream v1 SSE body into
-        this same request. Relay commits one canonical message after the
-        stream's semantic `finish` event; recipients receive that final
-        committed message.
+        Send as the authenticated agent. Relay splits the accepted parts at
+        ingest: each visible non-media part becomes its own message, and
+        contiguous media parts stay one media message. The 202 lists every
+        committed message in display order. Requires an `Idempotency-Key`
+        header of 8–255 characters; reusing the same key with the same request
+        returns the originally committed messages. To pipe native agent
+        output, set `stream=true` and pipe a Vercel AI SDK UIMessageStream v1
+        SSE body into this same request. Relay commits one or more finished
+        messages after the stream's semantic `finish` event; recipients
+        receive only finished committed messages.
       operationId: sendMessage
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -127,10 +130,6 @@ paths:
           in: query
           schema: { type: string }
           description: Optional message id to reply to when `stream=true`.
-        - name: reply_to_part_index
-          in: query
-          schema: { type: integer, minimum: 0 }
-          description: Optional part target used with `reply_to`.
         - name: invocation_id
           in: query
           schema:
@@ -157,7 +156,11 @@ paths:
                   type: array
                   minItems: 1
                   maxItems: 32
-                  description: Ordered message parts.
+                  description: >
+                    Ordered parts for this send. The server splits them at
+                    ingest: each visible non-media part commits as its own
+                    message, and contiguous media parts commit together as
+                    one media message.
                   items:
                     $ref: "#/components/schemas/PartInput"
                 reply_to:
@@ -171,18 +174,22 @@ paths:
                 `x-vercel-ai-ui-message-stream: v1`.
       responses:
         "202":
-          description: Message accepted and committed.
+          description: Send accepted; every committed message, in display order.
           content:
             application/json:
               schema:
                 type: object
-                required: [message_id, message]
+                required: [messages]
                 properties:
-                  message_id:
-                    type: string
-                    example: msg_01JZM4Q9VN
-                  message:
-                    $ref: "#/components/schemas/Message"
+                  messages:
+                    type: array
+                    minItems: 1
+                    description: >
+                      The messages this send committed, in display order. A
+                      single non-media part commits one message; mixed parts
+                      commit several.
+                    items:
+                      $ref: "#/components/schemas/Message"
                   stream:
                     type: object
                     properties:
@@ -328,7 +335,7 @@ paths:
       tags: [Messages]
       summary: Add or remove a reaction
       description: >
-        Add or remove a tapback or emoji on a message or a specific part.
+        Add or remove a tapback or emoji on a message.
         Recipients receive `reaction.added` / `reaction.removed` events.
       operationId: reactToMessage
       parameters:
@@ -351,9 +358,6 @@ paths:
                   type: string
                   description: The emoji to add or remove. Required.
                   example: "🔥"
-                part_index:
-                  type: integer
-                  description: Target a specific part instead of the whole message.
       responses:
         "200":
           description: Reaction state updated.
@@ -366,7 +370,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "422":
-          description: The operation, type, emoji, or part target is invalid.
+          description: The operation, type, or emoji is invalid.
           content:
             application/json:
               schema:
@@ -2568,7 +2572,7 @@ components:
     TextPart:
       type: object
       additionalProperties: false
-      required: [part_index, type, text]
+      required: [type, text]
       properties:
         part_index: { type: integer, minimum: 0 }
         type: { type: string, const: text }
@@ -2705,7 +2709,7 @@ components:
     LinkPreviewPart:
       type: object
       additionalProperties: false
-      required: [part_index, type, url]
+      required: [type, url]
       properties:
         part_index: { type: integer, minimum: 0 }
         type: { type: string, const: link_preview }
@@ -2728,7 +2732,7 @@ components:
     DataPart:
       type: object
       additionalProperties: false
-      required: [part_index, type, data]
+      required: [type, data]
       properties:
         part_index: { type: integer, minimum: 0 }
         type: { type: string, const: data }
@@ -2743,9 +2747,6 @@ components:
         message_id:
           type: string
           example: msg_01JZM3T8AH
-        part_index:
-          type: integer
-          example: 0
 
     Sender:
       type: object
@@ -2777,11 +2778,8 @@ components:
     ProjectedReaction:
       type: object
       additionalProperties: false
-      required: [part_index, emoji, actor_kind, actor_id]
+      required: [emoji, actor_kind, actor_id]
       properties:
-        part_index:
-          type: [integer, "null"]
-          minimum: 0
         emoji:
           type: string
         actor_kind:

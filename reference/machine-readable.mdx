@@ -117,15 +117,18 @@ Store the returned signing_secret; it is shown only on create or rotation.
 ## Send
 POST /v1/messages with the required Idempotency-Key header (8-255 chars; derive it from
 the inbound event_id so retries are safe; reuse the same key when you retry).
-Body: { "conversation_id": "cnv_…", "parts": [...], "reply_to"?: { "message_id", "part_index"? } }
-Part types (1-32 parts, order = presentation order):
+Body: { "conversation_id": "cnv_…", "parts": [...], "reply_to"?: { "message_id" } }
+Part types (1-32 parts per send, order = presentation order). The server splits
+the send at ingest: each visible non-media part commits as its own message;
+contiguous media parts commit together as one media message. Each bubble is a
+message. reply_to targets a message id only:
 - { "type": "text", "text": "…" }                     (≤ 8 KB per part)
 - { "type": "link_preview", "url": "https://…" }
 - { "type": "data", "data": { any JSON } }            (≤ 16 KB)
 - { "type": "media", "url" | "attachment_id" }        (exactly one of the two)
 - { "type": "voice_memo", "url": "https://…", "duration_ms": 18400 }
 - { "type": "voice_memo", "attachment_id": "att_…", "duration_ms": 18400 }
-Response 202 { message_id, message }; parts come back with dense part_index.
+Response 202 { messages: [...] }: every committed message, in display order.
 
 ## Stream an existing agent reply
 POST /v1/messages?stream=true&conversation_id=cnv_… with:
@@ -133,11 +136,11 @@ POST /v1/messages?stream=true&conversation_id=cnv_… with:
 - x-vercel-ai-ui-message-stream: v1
 - the required Idempotency-Key
 - the SSE body returned by Vercel AI SDK toUIMessageStreamResponse()
-Relay consumes the stream and commits one stored message only after
+Relay consumes the stream and commits one or more finished messages only after
 the UIMessageStream `finish` event. `[DONE]` closes the transport but is not
 semantic completion. Abort, error, malformed ordering, or early EOF commits
 nothing. The stream is an ingestion format: Relay writes no partial row and
-renders no live bubble, so the reader sees one finished message appear. Relay
+renders no live bubble, so the reader sees finished messages appear. Relay
 presents tool state but never executes tools; the external agent continues to
 own its model and tool loop.
 Stream ceilings: 8 MB body, 64 KB per line, 256 KB per event, 30 s idle,
@@ -156,7 +159,7 @@ or 408 request_timeout; broken framing returns 400 malformed_stream.
 - Proactive typing or explicit stop: POST /v1/conversations/{id}/typing
   { "started", "label"?, "invocation_id"? }. Typing never changes receipts.
 - Reactions: POST /v1/messages/{id}/reactions
-  { "operation": "add"|"remove", "type": "emoji", "emoji", "part_index"? }
+  { "operation": "add"|"remove", "type": "emoji", "emoji" }
 - Edit: PATCH /v1/messages/{id} { "parts": [...] } within 15 minutes, at most
   five revisions. Only the original user session or Agent Token can edit.
   Replacement and stored content must be text-bearing with no attachments.
