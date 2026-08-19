@@ -58,12 +58,35 @@ curl -sS -X POST "https://api.relayapp.im/v1/conversations/cnv_01JZC7K4RQ/read" 
   -d '{ "message_id": "msg_01JZM3T8AH" }'
 ```
 
+`/read`, `/delivered`, and `/responding` all answer with the watermark after
+the call:
+
+```json
+{
+  "receipt": {
+    "message_id": "msg_01JZM3T8AH",
+    "conversation_id": "cnv_01JZC7K4RQ",
+    "through_sequence": 12,
+    "recipient": { "kind": "agent", "id": "agt_01JZRELAY" },
+    "status": "read",
+    "delivered_at": "2026-07-13T20:02:09.000Z",
+    "read_at": "2026-07-13T20:02:11.000Z"
+  },
+  "advanced": true
+}
+```
+
 | Rule | Behavior |
 | --- | --- |
 | Marking one message Read | Covers every earlier message in the conversation |
 | Repeating or targeting an older message | Returns the current receipt with `advanced: false` |
 | Target | Must be an accessible message from another participant |
 | Group target | Must match this agent's invocation scope |
+| Past 240 receipts a minute | `429 rate_limited`, with `Retry-After` in seconds |
+
+`/responding` spends from the read-receipt budget and the typing budget in the
+same call. Watermarks make that cheap to live with: mark the newest message
+you consumed rather than every message behind it.
 
 ## Track your replies
 

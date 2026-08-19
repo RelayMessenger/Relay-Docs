@@ -5,8 +5,9 @@ info:
   description: >
     Add Relay as a channel for your agent, receive messages, and reply with
     plain HTTPS and JSON. Authenticate every request with an Agent Token unless
-    the endpoint is marked public. Data parts are stored and delivered
-    unchanged and render through their fallback text.
+    the endpoint is marked public. Data parts are stored and delivered as sent
+    and render through their fallback text, except for the reserved `data.type`
+    values Relay resolves itself.
   license:
     name: Proprietary
     identifier: LicenseRef-Proprietary
@@ -138,13 +139,27 @@ paths:
           schema:
             $ref: "#/components/schemas/InvocationId"
           description: Required for a streaming reply to an agent invocation in a group.
+        - name: x-vercel-ai-ui-message-stream
+          in: header
+          schema: { type: string, const: v1 }
+          description: >
+            Required when `stream=true`, and rejected with 422 when absent.
+            It names the stream protocol version, so a body framed for a
+            later protocol cannot be read as this one.
+        - name: Content-Type
+          in: header
+          schema: { type: string }
+          description: >
+            `application/json` for a finalized send. Must be
+            `text/event-stream` when `stream=true`; any other value returns
+            422 before the body is read.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [conversation_id]
+              required: [conversation_id, parts]
               properties:
                 conversation_id:
                   type: string
@@ -160,11 +175,12 @@ paths:
                   minItems: 1
                   maxItems: 32
                   description: >
-                    Ordered parts for this send. The server splits them at
-                    ingest: each visible non-media part commits as its own
-                    message, contiguous media parts commit together as one
-                    media message, and a voice memo always commits as its
-                    own message.
+                    Ordered parts for this send. Required: an absent or empty
+                    array returns 422. The server splits them at ingest: each
+                    visible non-media part commits as its own message,
+                    contiguous media parts commit together as one media
+                    message, and a voice memo always commits as its own
+                    message.
                   items:
                     $ref: "#/components/schemas/PartInput"
                 fallback_text:
@@ -271,8 +287,10 @@ paths:
         messages require that agent's token. Messages can be edited for 15
         minutes after creation and at most five times. The stored message
         must be text-bearing, and the replacement is exactly one text part;
-        anything else answers 422. Relay does not send a push notification
-        for edits.
+        anything else answers 422. A message carrying a `contact_card` data
+        part cannot be edited at all: the card is resolved against the agent
+        record during a send commit, and the edit path has no such step.
+        Relay does not send a push notification for edits.
       operationId: editMessage
       security:
         - agentToken: []
@@ -307,7 +325,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "422":
-          description: The replacement is not exactly one valid text part.
+          description: >
+            The replacement is not exactly one valid text part, the stored
+            message carries an attachment or a `contact_card` data part, or
+            the replacement carries a `group_invite` data part in a group.
           content:
             application/json:
               schema:
@@ -390,9 +411,29 @@ paths:
                     whole-message reactions only.
       responses:
         "200":
-          description: Reaction state updated.
+          description: >
+            Reaction state updated. The body echoes the reaction Relay
+            recorded, which is also what recipients receive in the
+            `reaction.added` or `reaction.removed` event.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reaction]
+                properties:
+                  reaction:
+                    $ref: "#/components/schemas/Reaction"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >
+            The actor is not an active participant, the target sits outside
+            the actor's membership periods, or the agent is blocked or not
+            installed for this conversation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "404":
           description: The message does not exist or is not visible to this actor.
           content:
@@ -407,6 +448,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/WriteBudgetExceeded"
 
   /v1/groups/invites:
     post:
@@ -706,6 +749,13 @@ paths:
       description: >
         Read a conversation's messages, newest first. The authenticated agent
         must be a participant. Page backwards with `before_sequence`.
+
+        In a group, this is not the transcript. An agent reads only the
+        messages inside its own invocations: each message that invoked it and
+        each message it committed in reply, including every message of a
+        split reply batch. A group an agent has never been invoked in returns
+        an empty array. In a 1:1 conversation an agent reads the whole
+        history its membership covers.
       operationId: listConversationMessages
       parameters:
         - name: conversation_id
@@ -1359,7 +1409,9 @@ paths:
         `Content-Length` is required and Relay verifies it against the stored
         object size. `Content-Type` sets the stored MIME type;
         `X-Relay-Filename` names downloads. Agent tokens and user sessions both
-        work; the attachment is private to its uploader.
+        work; the attachment is private to its uploader. The upload budget is
+        counted in megabytes rather than requests, and it is charged from the
+        declared `Content-Length` before the body streams.
       tags: [Attachments]
       parameters:
         - in: header
@@ -1415,6 +1467,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/WriteBudgetExceeded"
   /v1/attachments/{attachment_id}:
     get:
       operationId: getAttachment
@@ -1482,6 +1536,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           description: Agent is not a participant.
+        "429":
+          $ref: "#/components/responses/WriteBudgetExceeded"
   /v1/conversations/{conversation_id}/responding:
     post:
       operationId: beginResponding
@@ -1520,6 +1576,8 @@ paths:
           description: The conversation or message was not found.
         "422":
           description: message_id or invocation_id is missing or malformed.
+        "429":
+          $ref: "#/components/responses/WriteBudgetExceeded"
   /v1/conversations/{conversation_id}/delivered:
     post:
       operationId: markDelivered
@@ -1546,10 +1604,22 @@ paths:
       responses:
         "200":
           description: Delivery watermark state after the call.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceiptResult"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: The conversation or message was not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "422":
           description: message_id is missing, malformed, or belongs to the caller.
+        "429":
+          $ref: "#/components/responses/WriteBudgetExceeded"
   /v1/conversations/{conversation_id}/read:
     post:
       operationId: markRead
@@ -1576,10 +1646,22 @@ paths:
       responses:
         "200":
           description: Watermark state after the call.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceiptResult"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: The conversation or message was not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "422":
           description: message_id missing or malformed.
+        "429":
+          $ref: "#/components/responses/WriteBudgetExceeded"
   /v1/agents:
     get:
       tags: [Public]
@@ -1776,6 +1858,22 @@ components:
       headers:
         Retry-After:
           description: Whole seconds until Relay can admit another new canonical write.
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    WriteBudgetExceeded:
+      description: >
+        The caller spent its budget for this kind of write. Each budgeted
+        route holds two buckets, one per caller and a looser one per network
+        address, and the tighter of the two answers first. The body carries
+        `rate_limited`. See [Limits](/reference/limits) for the ceilings.
+      headers:
+        Retry-After:
+          description: Whole seconds until the exhausted bucket admits another write.
           schema:
             type: integer
             minimum: 1
@@ -2575,12 +2673,70 @@ components:
         data:
           description: >
             Integration-defined JSON, limited to 16 KB by the server. Relay
-            stores and delivers it unchanged; clients render a part-level
+            stores and delivers it as sent; clients render a part-level
             fallback string when present, then the message fallback_text.
             Consumers must ignore unknown fields inside a data part.
-            group_invite is a separate internal component committed only by
-            the invite endpoint; ordinary agent message sends that contain
-            it return 422.
+
+            Two `data.type` values are reserved and are not carried through
+            as sent. `group_invite` is committed only by the invite endpoint;
+            ordinary agent message sends that contain it return 422.
+            `contact_card` names an agent to share and Relay resolves the
+            card itself: what you send is ContactCardDataInput, and what
+            recipients receive is ContactCardData.
+          anyOf:
+            - $ref: "#/components/schemas/ContactCardDataInput"
+            - description: Other integration-defined JSON data.
+
+    ContactCardDataInput:
+      type: object
+      additionalProperties: false
+      required: [type, handle]
+      description: >
+        The `data` value of a data part that shares a Relay agent. A sender
+        names the agent and nothing else: every field the card draws is read
+        from the agent record inside the same transaction that commits the
+        message, so a card cannot dress one agent in another's identity. Any
+        property beyond `type` and `handle` returns 422, as does a handle
+        that names no agent or names a retired one.
+      properties:
+        type: { type: string, const: contact_card }
+        handle:
+          type: string
+          description: Relay agent handle, without the "@". Lowercased on commit.
+          example: relay
+
+    ContactCardData:
+      type: object
+      additionalProperties: false
+      required: [type, contact, fallback]
+      description: >
+        The `data` value recipients receive in place of what was sent. It is
+        a snapshot, not a live join: the card keeps saying what was true when
+        it was sent, so renaming an agent never rewrites cards already in a
+        transcript.
+      properties:
+        type: { type: string, const: contact_card }
+        contact:
+          type: object
+          additionalProperties: false
+          required: [kind, id, handle, display_name, verified]
+          properties:
+            kind: { type: string, const: agent }
+            id: { type: string, pattern: "^agt_" }
+            handle: { type: string }
+            display_name: { type: string }
+            tagline: { type: [string, "null"] }
+            avatar_url: { type: [string, "null"] }
+            accent_color: { type: [string, "null"] }
+            verified:
+              type: boolean
+              description: >
+                True for a first-party Relay agent. Read from the agent
+                record, never inferred from the handle.
+        fallback:
+          type: string
+          description: The handle with its "@", drawn wherever no card renderer exists.
+          example: "@relay"
 
     Part:
       oneOf:
@@ -2762,6 +2918,7 @@ components:
         data:
           anyOf:
             - $ref: "#/components/schemas/GroupInviteComponentData"
+            - $ref: "#/components/schemas/ContactCardData"
             - description: Other integration-defined JSON data.
 
     ReplyRef:
@@ -2804,7 +2961,7 @@ components:
     ProjectedReaction:
       type: object
       additionalProperties: false
-      required: [emoji, actor_kind, actor_id]
+      required: [emoji, actor_kind, actor_id, part_index]
       properties:
         emoji:
           type: string
@@ -2815,12 +2972,12 @@ components:
           type: string
           pattern: "^(usr|agt)_"
         part_index:
-          type: integer
+          type: [integer, "null"]
           minimum: 0
           description: >
-            Present when the reaction anchors on one part of a media message,
-            for per-photo reaction pills. Absent on a whole-message reaction,
-            the only shape for text and card messages.
+            The part this reaction anchors on, for per-photo reaction pills
+            on a media message. Always present, and null on a whole-message
+            reaction, the only shape for text and card messages.
 
     VisibleMessage:
       type: object
@@ -3218,12 +3375,51 @@ components:
               type: string
               pattern: "^inv_"
 
+    Reaction:
+      type: object
+      additionalProperties: false
+      required: [message_id, part_index, type, emoji, actor, operation]
+      description: >
+        One reaction as Relay recorded it. The same object is the reaction
+        endpoint's response body and the `data.reaction` of a
+        `reaction.added` or `reaction.removed` event, so a consumer reads one
+        shape from both paths. It is flatter than the `reactions` array in a
+        projected message, which carries `actor_kind` and `actor_id` instead
+        of a nested actor: see ProjectedReaction.
+      properties:
+        message_id: { type: string, pattern: "^msg_" }
+        part_index:
+          type: [integer, "null"]
+          minimum: 0
+          description: >
+            The part this reaction anchors on. Always present, and null on a
+            whole-message reaction.
+        type: { type: string, const: emoji }
+        emoji: { type: string, example: "❤️" }
+        actor:
+          type: object
+          additionalProperties: false
+          required: [kind, id]
+          properties:
+            kind:
+              type: string
+              enum: [user, contact]
+              description: >
+                `contact` names an agent here. This payload carries the
+                stored actor kind rather than the `agent` spelling a
+                message `sender` uses.
+            id: { type: string, pattern: "^(usr|agt)_" }
+        operation:
+          type: string
+          enum: [add, remove]
+
     ReactionEventData:
       type: object
       additionalProperties: false
       required: [reaction]
       properties:
-        reaction: { type: object }
+        reaction:
+          $ref: "#/components/schemas/Reaction"
 
     ReceiptEventData:
       type: object
@@ -3288,7 +3484,9 @@ components:
           $ref: "#/components/schemas/ReceiptSnapshot"
         advanced:
           type: boolean
-          description: False when this Read watermark was already at or past the target.
+          description: >
+            False when this watermark was already at or past the target,
+            which is the ordinary answer to a repeated or older call.
 
     InvocationId:
       type: string

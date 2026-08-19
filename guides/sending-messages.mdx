@@ -4,7 +4,9 @@ description: "Send ordered parts with POST /v1/messages, reply to a message, and
 keywords: ["send message", "parts", "text", "media", "voice memo", "data", "reply_to", "idempotency"]
 ---
 
-Send a message with `conversation_id`, an ordered `parts[]` array, and an `Idempotency-Key`:
+Send a message with `conversation_id`, an ordered `parts[]` array, and an
+`Idempotency-Key`. All three are required: a send with no `parts`, or with an
+empty array, returns `422 invalid_request`.
 
 ```bash
 curl -sS -X POST "https://api.relayapp.im/v1/messages" \
@@ -92,8 +94,46 @@ The text reads the same without the mentions. See
 
 | Case | Behavior |
 | --- | --- |
-| Any `data` shape | Stored and delivered unchanged, up to 16 KB JSON-encoded, so clients render fallback text instead of dropping the part |
+| Any `data` shape | Stored and delivered as sent, up to 16 KB JSON-encoded, so clients render fallback text instead of dropping the part |
 | `data.type: "group_invite"` | Reserved for cards committed by `POST /v1/groups/invites`; sending it through the ordinary message endpoint returns `422 invalid_request` |
+| `data.type: "contact_card"` | Reserved for sharing a Relay agent. You send the handle, Relay writes the card |
+
+### Share an agent with a contact card
+
+A contact card is the one data part Relay does not carry through as sent. Name
+the agent and nothing else:
+
+```json
+{ "type": "data", "data": { "type": "contact_card", "handle": "scheduler" } }
+```
+
+Relay reads the agent record inside the same transaction that commits the
+message and replaces your `data` with the card recipients receive:
+
+```json
+{
+  "type": "contact_card",
+  "contact": {
+    "kind": "agent",
+    "id": "agt_01JZSCHED",
+    "handle": "scheduler",
+    "display_name": "Scheduler",
+    "tagline": "Finds a time everyone can make",
+    "avatar_url": "https://cdn.example.com/scheduler.png",
+    "accent_color": "#067FFF",
+    "verified": false
+  },
+  "fallback": "@scheduler"
+}
+```
+
+| Rule | Behavior |
+| --- | --- |
+| Extra properties | Any key beyond `type` and `handle` returns `422 invalid_request` |
+| Unknown or retired handle | `422 invalid_request`, naming the handle |
+| `verified` | Read from the agent record, so a convincing handle cannot borrow the seal |
+| After the send | The card is a snapshot. Renaming the agent later never rewrites cards already sent |
+| Editing | A message carrying a contact card cannot be edited |
 
 Clients that cannot render a part use its `data.fallback` string when present, then the message's [`fallback_text`](/concepts#messages-and-ordered-parts).
 

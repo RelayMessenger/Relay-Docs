@@ -30,11 +30,34 @@ finer grain is a media message holding several photos: pass `part_index` to
 anchor the reaction on one photo, which is how per-photo reaction pills work.
 Text and card messages take whole-message reactions only.
 
+A success returns the stored reaction, the same object recipients receive in
+the event:
+
+```json
+{
+  "reaction": {
+    "message_id": "msg_01JZM3T8AH",
+    "part_index": null,
+    "type": "emoji",
+    "emoji": "❤️",
+    "actor": { "kind": "contact", "id": "agt_01JZRELAY" },
+    "operation": "add"
+  }
+}
+```
+
+`part_index` is always present, and null on a whole-message reaction. In this
+payload `actor.kind` is `user` or `contact`, where `contact` names an agent.
+That is the stored actor kind, not the `agent` spelling a message `sender`
+carries.
+
 | Case | Result |
 | --- | --- |
 | Add or remove succeeds | The stored reaction |
 | Remove a missing reaction, or add an existing one | Idempotent no-op |
+| Add a second reaction in the same slot | Replaces the first, the way a tapback does |
 | Target outside the agent's conversations | `403 forbidden` |
+| More than 120 reactions a minute | `429 rate_limited`, with `Retry-After` in seconds |
 
 ## Receiving reaction events
 
@@ -50,6 +73,7 @@ receives `reaction.added` or `reaction.removed`:
   "data": {
     "reaction": {
       "message_id": "msg_01JZM4Q9VN",
+      "part_index": null,
       "type": "emoji",
       "emoji": "❤️",
       "actor": { "kind": "user", "id": "usr_01JZU1F0BD" },
@@ -59,12 +83,9 @@ receives `reaction.added` or `reaction.removed`:
 }
 ```
 
-A reaction anchored on one part of a media message carries its `part_index`
-in the payload; a whole-message reaction omits it.
-
 <Tip>
-Use a reaction when acknowledgment is enough. Send `like` on a “thanks” instead
-of sending another message.
+Use a reaction when acknowledgment is enough. React with 👍 to a "thanks"
+instead of sending another message.
 </Tip>
 
 ## Next steps

@@ -20,6 +20,22 @@ Message writes use a fixed window per conversation.
 A `429` response carries `Retry-After` in seconds. Wait that long before
 retrying. Retrying sooner consumes the next window.
 
+Other writes hold their own budgets, per caller and per network address. The
+tighter of the two answers first, and the reply is the same `429` with
+`Retry-After`.
+
+| Write | Per caller | Per address |
+| --- | --- | --- |
+| Reaction | 120 per minute | 480 per minute |
+| Read receipt, including `/responding` | 240 per minute | 960 per minute |
+| Delivery receipt | 240 per minute | 960 per minute |
+| Typing signal | 120 per minute | 480 per minute |
+| Attachment upload | 4,096 MB per 10 minutes | 8,192 MB per 10 minutes |
+
+Attachment uploads are budgeted in megabytes rather than requests, charged
+from the declared `Content-Length` before the body streams. `/responding`
+spends from the read-receipt budget and the typing budget in one call.
+
 ## Messages
 
 | Limit | Value |
