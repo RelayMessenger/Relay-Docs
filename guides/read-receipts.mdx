@@ -90,17 +90,24 @@ you consumed rather than every message behind it.
 
 ## Record delivery
 
-Relay records Delivered when it hands a message to your runtime.
+Relay records Delivered on the transports it hands messages to. Which transport
+you use decides whether you also call `/delivered`.
 
-| Path | Relay records Delivered |
+| Transport | Relay records Delivered |
 | --- | --- |
 | Webhook | After your endpoint answers `2xx` |
-| Long poll | When a later cursor acknowledges the page |
+| Long poll on `GET /v1/events` | When a later cursor acknowledges the page |
+| Polling [conversation history](/guides/conversation-history) | Never. Reading history changes no receipt |
 | `/delivered` | When you call it |
 
-Call `/delivered` when your runtime accepts a message outside those paths, or
-when you want to stamp delivery at a point you control, such as after you
-durably enqueue the message:
+Webhook and `GET /v1/events` consumers get Delivered from Relay and need no
+extra call. A backend that discovers messages by polling conversation history
+must call `/delivered` itself, once per new inbound message, or the sender stays
+on Sent until the Read receipt arrives.
+
+Call `/delivered` when your runtime accepts a message outside the two automatic
+transports, or when you want to stamp delivery at a point you control, such as
+after you durably enqueue the message:
 
 ```bash
 curl -sS -X POST "https://api.relayapp.im/v1/conversations/cnv_01JZC7K4RQ/delivered" \
