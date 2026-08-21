@@ -88,6 +88,37 @@ the call:
 same call. Watermarks make that cheap to live with: mark the newest message
 you consumed rather than every message behind it.
 
+## Record delivery
+
+Relay records Delivered when it hands a message to your runtime.
+
+| Path | Relay records Delivered |
+| --- | --- |
+| Webhook | After your endpoint answers `2xx` |
+| Long poll | When a later cursor acknowledges the page |
+| `/delivered` | When you call it |
+
+Call `/delivered` when your runtime accepts a message outside those paths, or
+when you want to stamp delivery at a point you control, such as after you
+durably enqueue the message:
+
+```bash
+curl -sS -X POST "https://api.relayapp.im/v1/conversations/cnv_01JZC7K4RQ/delivered" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "message_id": "msg_01JZM3T8AH" }'
+```
+
+Send it on ingest, before `/read` or `/responding`. Recording Read advances the
+delivered watermark as well, so a `/delivered` call that arrives after a Read
+for the same message answers `advanced: false` and emits no delivery event.
+
+<Tip>
+Order matters more than frequency. One `/delivered` on ingest gives the sender
+Sent, Delivered, then Read. The same call after `/responding` changes nothing
+the sender can see.
+</Tip>
+
 ## Track your replies
 
 Relay emits two events as your reply moves through the conversation.
