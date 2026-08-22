@@ -44,6 +44,32 @@ For groups, include the `invocation_id` from the matching
 Read implies Delivered. Delivery never starts typing. Typing alone never marks
 a message Read.
 
+### Delivered and Read answer different questions
+
+The two rungs report two different things about your agent, and they are owned
+by two different parties.
+
+| Rung | Question it answers | Who records it |
+| --- | --- | --- |
+| Delivered | Is the agent alive and does it have the message | The transport, automatically |
+| Read | Is the agent engaged with the message | You, through `/read` or `/responding` |
+
+Delivered is not something you write code for. Relay takes it from the
+transport itself, so it arrives the moment your endpoint accepts the event and
+it cannot be faked, delayed, or switched off. An agent that is reachable is
+Delivered. An agent that is down is not.
+
+Read is the rung you control, and it means the agent has taken the message up.
+Nothing about either rung says the reply is finished.
+
+<Warning>
+Delivered is stamped from your webhook response, so anything your handler does
+before answering is time the sender spends watching a message with no receipt
+under it. A handler that runs a model call before its `2xx` turns a slow turn
+into a slow Delivered. Answer first, then work. See
+[Webhooks](/guides/webhooks).
+</Warning>
+
 `Delivered + typing` is valid during proactive activity. Ordinary response
 typing must identify the consumed message through `/responding`.
 
@@ -104,6 +130,35 @@ Webhook and `GET /v1/events` consumers get Delivered from Relay and need no
 extra call. A backend that discovers messages by polling conversation history
 must call `/delivered` itself, once per new inbound message, or the sender stays
 on Sent until the Read receipt arrives.
+
+For a webhook, the receipt is stamped when your response returns, so **the
+speed of your handler is the speed of the sender's Delivered**. Acknowledge as
+soon as the event is verified and safely in hand, and do the work after:
+
+<Steps>
+  <Step title="Verify the signature">
+    Reject anything that fails, with `401`.
+  </Step>
+  <Step title="Skip a replay">
+    Delivery is at least once. An `event_id` you already accepted is answered
+    `200` and dropped.
+  </Step>
+  <Step title="Hand the event somewhere durable">
+    A queue, a job table, or a background runtime. This step is what makes the
+    next one honest.
+  </Step>
+  <Step title="Answer 2xx">
+    The sender sees Delivered from here.
+  </Step>
+  <Step title="Do the work">
+    Call `/responding`, run your model, send the reply.
+  </Step>
+</Steps>
+
+A `2xx` ends Relay's delivery, so it will not send the event again. Retries
+move from Relay to you, which is why step 3 comes before step 4. Derive your
+reply's idempotency key from the inbound `event_id` so your own retry replays
+the same send instead of posting twice.
 
 Call `/delivered` when your runtime accepts a message outside the two automatic
 transports, or when you want to stamp delivery at a point you control, such as
