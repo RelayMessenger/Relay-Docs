@@ -78,15 +78,26 @@ Each row is a contract from these docs that the plugin implements for you.
 | `webhookSecret` | Signing secret from webhook registration | required for `webhook()` |
 | `baseUrl` | API origin | `https://api.relayapp.im` |
 | `toleranceSeconds` | Allowed `webhook-timestamp` skew | `300` |
-| `onError` | Receives background handler failures | log-and-drop |
+| `onError` | Receives a handler failure before the route returns `500` | log-and-drop |
 
-On serverless platforms that support work after the response, pass the
-platform's `waitUntil` as the second handler argument. The route acknowledges
-`202` immediately and keeps generating. `relay.webhook(handler)` returns a
-function of `(request, { waitUntil })`.
+## When the route responds
+
+`relay.webhook(handler)` returns a function of `(request, { waitUntil })`. The
+second argument is accepted for call-site compatibility with the Vercel and
+Cloudflare runtimes and is currently unused: the route runs your handler to
+completion, then responds.
 
 A thrown handler error returns `500`. Relay then redelivers the event, and the
-derived idempotency keys make the retry safe.
+derived idempotency keys make the retry safe. Responding before the work
+finishes would end delivery for that event, so a handler that then threw would
+lose it.
+
+<Note>
+Relay stamps [Delivered](/guides/read-receipts) when your route responds, which
+here is after the handler finishes. Read advances the same watermark, so a
+handler that calls `responding(message.id)` first shows the sender Delivered and
+Read together rather than Delivered on arrival.
+</Note>
 
 ## Handler context
 
