@@ -1,8 +1,154 @@
 ---
 title: "Cloudflare Agents"
-description: "Run a Relay agent as a Cloudflare Agent: one agent instance per conversation, a SQLite ledger, and an alarm that survives eviction."
-keywords: ["cloudflare", "cloudflare agents", "agents sdk", "durable objects", "workers", "starter", "template", "wrangler", "webhook", "deploy"]
+description: "Add Relay as a channel to a Cloudflare Think agent, or deploy a Relay agent on the Agents SDK with one instance per conversation."
+keywords: ["cloudflare", "cloudflare agents", "agents sdk", "think", "messengerChannel", "chat sdk", "durable objects", "workers", "starter", "template", "wrangler", "webhook", "deploy"]
 ---
+
+There are two ways to answer Relay conversations on Cloudflare, and which one
+you want depends on whether you already have an agent.
+
+| You have | Do this |
+| --- | --- |
+| An agent on [Think](https://developers.cloudflare.com/agents/harnesses/think/), Cloudflare's chat agent framework | [Add Relay as a channel](#add-relay-as-a-channel-to-a-think-agent), next to Telegram and Slack |
+| No agent yet, or an agent whose only job is Relay | [Deploy the starter](#deploy-the-starter) on the Agents SDK |
+
+Prerequisites for both:
+
+- **An agent and its Agent Token.** See [Create and connect an agent](/guides/your-agent).
+- **A Cloudflare account.** Both paths deploy with `wrangler`.
+- **Node 20 or newer.**
+
+## Add Relay as a channel to a Think agent
+
+Think builds a channel by wrapping a Chat SDK adapter in `messengerChannel()`.
+That is how its own Telegram channel is built. Relay publishes a Chat SDK
+adapter, so Relay is one more channel: your agent, its tools, and its memory
+stay exactly as they are.
+
+<Steps>
+  <Step title="Install the adapter">
+    ```bash
+    npm install @cloudflare/think @relaymessenger/chat-sdk-adapter agents ai chat
+    ```
+  </Step>
+
+  <Step title="Declare the channel">
+    The channel id names the route. Called `relay`, it serves
+    `POST /messengers/relay/webhook`.
+
+    ```ts src/index.ts
+    import { Think, messengerChannel } from "@cloudflare/think";
+    import { chatSdkMessenger } from "@cloudflare/think/messengers";
+    import {
+      createRelayAdapter,
+      verifyWebhookSignature,
+    } from "@relaymessenger/chat-sdk-adapter";
+
+    function relayWebhookVerifier(secret: string) {
+      return async (request: Request): Promise<boolean> => {
+        try {
+          await verifyWebhookSignature({
+            secret,
+            payload: await request.text(),
+            headers: {
+              "webhook-id": request.headers.get("webhook-id"),
+              "webhook-timestamp": request.headers.get("webhook-timestamp"),
+              "webhook-signature": request.headers.get("webhook-signature"),
+            },
+          });
+          return true;
+        } catch {
+          return false;
+        }
+      };
+    }
+
+    export class MyAgent extends Think<Env> {
+      configureChannels() {
+        return {
+          relay: messengerChannel(
+            chatSdkMessenger({
+              adapter: createRelayAdapter({
+                token: this.env.RELAY_AGENT_TOKEN,
+                webhookSecret: this.env.RELAY_WEBHOOK_SECRET,
+                fetch: (input, init) => fetch(input, init),
+              }),
+              provider: "relay",
+              userName: "Relay Agent",
+              verifyWebhook: relayWebhookVerifier(this.env.RELAY_WEBHOOK_SECRET),
+            }),
+          ),
+        };
+      }
+    }
+    ```
+
+    <Warning>
+    The `fetch` line is a workaround for adapter `0.2.0`, which stores the
+    global `fetch` on its client and calls it as a method. Node allows that.
+    Workers refuses every send with `Illegal invocation`. Delete the line once
+    the adapter ships the fix.
+    </Warning>
+  </Step>
+
+  <Step title="Set the secrets and deploy">
+    ```bash
+    npx wrangler secret put RELAY_AGENT_TOKEN
+    npx wrangler deploy
+    ```
+  </Step>
+
+  <Step title="Register the webhook">
+    ```bash
+    curl -sS -X POST "https://api.relayapp.im/v1/webhooks" \
+      -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "url": "https://<your-worker>.workers.dev/messengers/relay/webhook",
+        "events": ["message.received"]
+      }'
+    ```
+
+    Save `signing_secret` from the response, then set it:
+
+    ```bash
+    npx wrangler secret put RELAY_WEBHOOK_SECRET
+    ```
+  </Step>
+
+  <Step title="Message your agent">
+    Open Relay, find your agent, and send it a message. It replies.
+
+    <Check>
+    An unsigned or forged delivery to the webhook route returns `401` before
+    Think parses anything.
+    </Check>
+  </Step>
+</Steps>
+
+Think owns the parts a channel needs, so you write none of them.
+
+| Think handles | How |
+| --- | --- |
+| The webhook route | The channel id becomes `/messengers/<id>/webhook` |
+| Refusing forged deliveries | `verifyWebhook` runs before any parsing. Every custom messenger must supply one, or opt out explicitly |
+| One conversation per thread | Think fans out to a sub-agent per Chat SDK thread, and a Relay thread is one conversation |
+| Surviving a restart mid-reply | The reply runs in a durable fiber, which Think replays or closes with its interruption message rather than risking a duplicate |
+| Bursts | The Chat SDK debounces a run of messages into one turn |
+
+Two Relay rules shape what arrives on the other end. A streamed turn commits
+exactly one canonical message, so the adapter buffers the stream and posts once
+instead of editing a draft bubble into place. In a group, the reply is scoped to
+the single-use `invocation_id` that produced the inbound event, so the first
+send of a turn carries it and a second one cannot.
+
+<Note>
+A runnable version of this is
+[`examples/think-channel`](https://github.com/relaymessenger/relay-agent-starter/tree/main/examples/think-channel)
+in the starter repository.
+</Note>
+
+## Deploy the starter
 
 Deploy [relay-agent-starter](https://github.com/relaymessenger/relay-agent-starter)
 to answer Relay conversations from a [Cloudflare Agent](https://developers.cloudflare.com/agents/).
@@ -10,20 +156,12 @@ Each conversation gets its own agent instance, its own SQLite ledger, and its
 own alarm, so a reply survives an evicted isolate. Replace one function with
 your model call and it is your agent.
 
-Prerequisites:
-
-- **An agent and its Agent Token.** See [Create and connect an agent](/guides/your-agent).
-- **A Cloudflare account.** The starter deploys with `wrangler`.
-- **Node 20 or newer**, if you scaffold locally rather than using the deploy button.
-
 <Info>
 The starter is developed in the public
 [`relaymessenger/relay-agent-starter`](https://github.com/relaymessenger/relay-agent-starter)
 repository. It depends on Cloudflare's [`agents`](https://www.npmjs.com/package/agents)
 package and nothing of Relay's own beyond the HTTPS API documented on this site.
 </Info>
-
-## Deploy
 
 <Steps>
   <Step title="Scaffold or deploy the starter">
