@@ -14,6 +14,10 @@ Prerequisites:
 
 - **An agent and its Agent Token.** See [Create and connect an agent](/guides/your-agent).
 - **A registered webhook with its signing secret.** See [Webhooks](/guides/webhooks).
+- **A credential for the model you call.** The quickstart's plain `model` string
+  resolves through the [Vercel AI Gateway](https://vercel.com/docs/ai-gateway),
+  which reads `AI_GATEWAY_API_KEY` from the environment. Without it the model
+  call throws `GatewayAuthenticationError` before any reply is sent.
 
 <Info>
 The plugin is published as
@@ -26,7 +30,7 @@ repository under `integrations/vercel-ai`.
 ## Quickstart
 
 ```bash
-npm install @relaymessenger/vercel-ai
+npm install @relaymessenger/vercel-ai ai
 ```
 
 ```ts app/api/relay/route.ts
@@ -38,8 +42,8 @@ const relay = createRelay({
   webhookSecret: process.env.RELAY_WEBHOOK_SECRET!,
 });
 
-export const POST = relay.webhook(async ({ message, responding, typing, reply }) => {
-  await responding(message.id, "Thinking…");
+export const POST = relay.webhook(async ({ message, typing, reply }) => {
+  await typing(true, "Thinking…");
   try {
     const result = streamText({
       model: "anthropic/claude-sonnet-5",
@@ -64,7 +68,6 @@ Each row is a contract from these docs that the plugin implements for you.
 | --- | --- |
 | [Signature verification](/guides/webhooks) | Standard Webhooks HMAC over the exact raw body; unsigned or stale requests get `401` |
 | [At-least-once delivery](/guides/delivery-model) | Per-instance `event_id` dedup window, recorded once your handler succeeds, so a failed handler gets its redelivery |
-| [Read before response](/guides/read-receipts) | `responding(message.id, label?)` commits Read before the independent typing signal |
 | [Idempotent sends](/guides/sending-messages) | Reply helpers derive `Idempotency-Key` values from the event id and call order; Relay replays the original send on any retry, from any instance |
 | [Group invocations](/guides/group-conversations) | `invocation_id` from the event threads into every reply and typing call |
 | [Streaming](/guides/streaming) | `reply.stream(...)` forwards the UI message stream to `POST /v1/messages?stream=true`; Relay commits one or more finished messages |
@@ -94,9 +97,7 @@ lose it.
 
 <Note>
 Relay stamps [Delivered](/guides/read-receipts) when your route responds, which
-here is after the handler finishes. Read advances the same watermark, so a
-handler that calls `responding(message.id)` first shows the sender Delivered and
-Read together rather than Delivered on arrival.
+here is after the handler finishes rather than when the event arrives.
 </Note>
 
 ## Handler context
@@ -107,7 +108,6 @@ Read together rather than Delivered on arrival.
 | `event` | The complete event envelope |
 | `invocationId` | Present for group deliveries; already threaded into helpers |
 | `reply.text` / `reply.parts` / `reply.stream` | Idempotent sends bound to the conversation |
-| `responding(messageId, label?)` | Normal Read-then-typing response transition |
 | `typing(started?, label?)` | Proactive typing or an explicit stop |
 | `client` | The underlying `RelayClient` for anything beyond the helpers |
 
