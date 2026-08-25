@@ -22,13 +22,43 @@ curl -sS -X POST "https://api.relayapp.im/v1/messages/msg_01JZM3T8AH/reactions" 
 | `operation` | `add` \| `remove` |
 | `type` | `emoji` |
 | `emoji` | required. Any single emoji, e.g. `"🔥"` |
-| `part_index` | optional. Anchors the reaction on one part of a media message; must name a part the message has |
+| `target_scope` | optional. `message` \| `part`. Defaults to `message` |
+| `target_part_id` | optional. The `prt_` id to anchor on. Supplying it implies `part` scope |
+| `part_index` | deprecated. Legacy index form, media parts only |
+| `operation_id` | optional. A client-minted `mut_` id making the write replayable |
 
-A reaction targets a message id. Because every bubble is a message, reacting
-to the message is reacting to exactly the bubble the reader sees. The one
-finer grain is a media message holding several photos: pass `part_index` to
-anchor the reaction on one photo, which is how per-photo reaction pills work.
-Text and card messages take whole-message reactions only.
+## Choose a target
+
+A reaction targets a slot: the whole message, or one exact part of it.
+
+```bash
+curl -sS -X POST "https://api.relayapp.im/v1/messages/msg_01k1m9x2ph4vb7k0d3wzr8ftqe/reactions" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "operation": "add",
+    "type": "emoji",
+    "emoji": "🔥",
+    "target_part_id": "prt_01k1ma0m5sy2k8f3b7wnq4hdvc"
+  }'
+```
+
+`target_part_id` names a part of any kind, including text and cards. Read the
+`part_id` off the part you want from the message itself.
+
+A part-scoped reaction follows its part. If a later edit reorders the parts,
+the projected `part_index` moves with the part; if the edit removes the part,
+the reaction goes with it. That is the whole reason the identity is the id and
+not the index.
+
+<Warning>
+`part_index` is the deprecated form and keeps its original rule: it anchors on
+media parts only, and an index naming a text or card part answers `422`. Relay
+translates it to that part's `part_id` at the boundary and never stores the
+index. Use `target_part_id`.
+</Warning>
+
+## Read the result
 
 A success returns the stored reaction, the same object recipients receive in
 the event:
@@ -36,27 +66,42 @@ the event:
 ```json
 {
   "reaction": {
-    "message_id": "msg_01JZM3T8AH",
-    "part_index": null,
+    "message_id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
+    "part_index": 1,
+    "target_scope": "part",
+    "target_part_id": "prt_01k1ma0m5sy2k8f3b7wnq4hdvc",
     "type": "emoji",
-    "emoji": "❤️",
-    "actor": { "kind": "agent", "id": "agt_01JZRELAY" },
-    "operation": "add"
+    "emoji": "🔥",
+    "actor": { "kind": "agent", "id": "agt_01k1m7v9wr4t2b8n5c3qjd6hzx" },
+    "operation": "add",
+    "changed": true
   }
 }
 ```
 
-`part_index` is always present, and null on a whole-message reaction.
-`actor.kind` is `user` or `agent`, the same two values a message `sender`
-carries.
+`part_index` is always present, and null on a whole-message reaction. It is the
+target part's current position, not an identity. `actor.kind` is `user` or
+`agent`, the same two values a message `sender` carries.
+
+`changed` says whether anything actually moved. Relay emits `reaction.added` or
+`reaction.removed` only when it is true, so a retry costs recipients nothing.
 
 | Case | Result |
 | --- | --- |
-| Add or remove succeeds | The stored reaction |
-| Remove a missing reaction, or add an existing one | Idempotent no-op |
+| Add or remove succeeds | The stored reaction, `changed: true` |
+| Remove a missing reaction, or add an existing one | `200` with `changed: false` |
 | Add a second reaction in the same slot | Replaces the first, the way a tapback does |
+| `target_part_id` names no active part of this message | `422 invalid_request` |
+| Reacting to an unsent message | `409 conflict` |
 | Target outside the agent's conversations | `403 forbidden` |
 | More than 120 reactions a minute | `429 rate_limited`, with `Retry-After` in seconds |
+
+## Retry safely
+
+Pass a client-minted `mut_` id as `operation_id` to make a reaction write
+replayable. Retrying with the same id and the same request returns the original
+result and emits no second event; the same id with a different emoji or a
+different target answers `409 idempotency_conflict`.
 
 ## Receiving reaction events
 
@@ -71,12 +116,15 @@ receives `reaction.added` or `reaction.removed`:
   "created_at": "2026-07-13T20:02:11.000Z",
   "data": {
     "reaction": {
-      "message_id": "msg_01JZM4Q9VN",
+      "message_id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
       "part_index": null,
+      "target_scope": "message",
+      "target_part_id": null,
       "type": "emoji",
       "emoji": "❤️",
-      "actor": { "kind": "user", "id": "usr_01JZU1F0BD" },
-      "operation": "add"
+      "actor": { "kind": "user", "id": "usr_01k1m8t3zq7v2r9c4b6ndh5xwj" },
+      "operation": "add",
+      "changed": true
     }
   }
 }
@@ -89,5 +137,6 @@ instead of sending another message.
 
 ## Next steps
 
+- [Message model](/concepts/message-model) for part identities and reaction scopes
 - [Event types](/reference/events)
 - [Sending messages](/guides/sending-messages)

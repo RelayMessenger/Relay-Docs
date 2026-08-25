@@ -34,11 +34,44 @@ Relay returns `204 No Content`.
 
 - **Independent state.** Typing does not advance Delivered or Read.
 - **Ephemeral state.** Relay pushes it to active devices and never logs it.
-- **Temporary state.** Refresh a long-running start before its expiry.
+- **Temporary state.** A start is a 10-second lease. Refresh it before it
+  lapses.
 - **Scoped state.** Group typing requires a pending `invocation_id`.
 - **Budgeted state.** Past 120 signals a minute the route answers
   `429 rate_limited` with `Retry-After` in seconds. Refresh on a timer, not on
   every token.
+
+## The indicator expires on its own
+
+A `typing.started` carries its own expiry, so a recipient never depends on a
+`typing.stopped` arriving. Render the indicator until `expires_at` and then
+stop, whether or not the stop signal ever lands.
+
+```json
+{
+  "conversation_id": "cnv_01k1m4q9vn2r7t9b4c6qdh8xwy",
+  "participant": { "id": "agt_01k1m7v9wr4t2b8n5c3qjd6hzx", "kind": "agent" },
+  "invocation_id": "ivk_01k1m4q9vn2r7t9b4c6qdh8xwy",
+  "expires_at": "2026-08-24T20:00:10.000Z",
+  "expires_in_ms": 10000,
+  "label": "Searching the web…"
+}
+```
+
+| Field | Read it for |
+| --- | --- |
+| `participant` | Who is typing, as `{ id, kind }`. This is the field to read |
+| `expires_at` | When to stop on your own. Authority on a `typing.started` |
+| `expires_in_ms` | The same fact pre-subtracted, if you would rather not trust your clock |
+| `invocation_id` | Present when an agent is typing inside a group invocation |
+| `label` | Short status line. Present only on a start |
+
+A `typing.stopped` carries no expiry. The payload also repeats the typist as a
+legacy `user` or `contact` object for builds that shipped before `participant`
+existed; read `participant`.
+
+That expiry is what makes a dropped socket a recovered indicator rather than a
+stuck one. Without it, a lost `typing.stopped` leaves a bubble pulsing forever.
 
 A conversation can correctly show Delivered and typing together. This means the
 runtime accepted one message while the participant sent a separate live signal.
@@ -59,6 +92,7 @@ explicit stop when no message follows.
 
 ## Next steps
 
+- [Message model](/concepts/message-model)
 - [Read receipts](/guides/read-receipts)
 - [Streaming replies](/guides/streaming)
 - [Sending messages](/guides/sending-messages)

@@ -147,15 +147,28 @@ its messages. That `message.received` event carries an `invocation_id`. Echo the
 value as `invocation_id` in the finalized JSON request, or as the query parameter
 for a streamed reply.
 
-`reply_to` targets a message by id:
+`reply_to` targets a message by id, and optionally one exact part of it:
 
 ```json
 { "reply_to": { "message_id": "msg_01JZM3T8AH" } }
 ```
 
-Use the message id from the stored message in `message.received`. Because every
-bubble is a message, replying to the message is replying to exactly what the
-reader sees.
+```json
+{
+  "reply_to": {
+    "message_id": "msg_01JZM3T8AH",
+    "part_id": "prt_01k1ma0m5sy2k8f3b7wnq4hdvc"
+  }
+}
+```
+
+Use the message id from the stored message in `message.received`, and the
+`part_id` from the part you are answering. Relay freezes a quote of the target
+when the reply commits, so an edit to the target later changes the reply's
+`quote_state` rather than the words it quoted.
+
+A legacy `part_index` is accepted here and is translated to that part's
+`part_id` before anything is stored. Send `part_id`.
 
 ## Idempotency
 
@@ -173,8 +186,53 @@ Generate the key once per logical send and reuse it across retries.
 Split content longer than the per-part limit across `text` parts. Each part
 renders as its own bubble, because each becomes its own message.
 
+## Send one message with /v2
+
+`POST /v2/conversations/{conversation_id}/messages` commits the whole send as
+one message. Text and media stay together as ordered parts instead of being
+split into a run of messages, and every part comes back with a permanent
+`part_id` that replies, reactions, and edits address.
+
+```bash
+curl -sS -X POST "https://api.relayapp.im/v2/conversations/cnv_01k1m4q9vn2r7t9b4c6qdh8xwy/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message_id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
+    "parts": [
+      { "type": "text", "text": "Found three options. The best one:" },
+      { "type": "link_preview", "url": "https://example.com/listing/42" }
+    ]
+  }'
+```
+
+The client mints `message_id` before queueing the send, and it is both the
+canonical id of the message and the retry key. There is no `Idempotency-Key`
+header on `/v2`.
+
+| Retry | Result |
+| --- | --- |
+| Same id, same request | `201` replaying the original message |
+| Same id, different content | `409 idempotency_conflict` |
+| Same id, after the message was unsent | `201` replaying the tombstone |
+
+Mint the id with any ULID generator that emits lowercase Crockford base32, and
+mint it once per logical send so a retry after a lost response resolves to the
+same message.
+
+| Difference from `/v1` | `/v2` |
+| --- | --- |
+| Messages committed | Exactly one |
+| Retry key | `message_id` in the body |
+| `reply_to` | `part_id` only. `part_index` answers `422` |
+
+`/v1` keeps splitting sends into content runs for the clients already shipped
+against it, and both wires read and write the same rows. See
+[Compatibility and migration](/concepts/message-model#compatibility-and-migration).
+
 ## Next steps
 
+- [Message model](/concepts/message-model) for part ids, edits, and unsend
 - [Streaming replies](/guides/streaming)
 - [Reactions](/guides/reactions)
 - [Attachments](/guides/attachments)

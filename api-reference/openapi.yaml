@@ -191,7 +191,7 @@ paths:
                     message of the send; every other committed message keeps
                     its derived fallback.
                 reply_to:
-                  $ref: "#/components/schemas/ReplyRef"
+                  $ref: "#/components/schemas/ReplyRefInput"
           text/event-stream:
             schema:
               type: string
@@ -370,16 +370,231 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /v2/conversations/{conversation_id}/messages:
+    post:
+      tags: [Messages]
+      summary: Send one message
+      description: >
+        One send is one message. Mixed text and media stay together as ordered
+        parts of a single message instead of being split into a run of
+        messages, and every committed part is given a permanent `part_id` that
+        survives edits, reordering and removal.
+
+
+        The client mints `message_id` before queueing the send. It is the
+        canonical id and the idempotency key: retrying with the same id and the
+        same request replays the original `201`, the same id with different
+        content answers `409 idempotency_conflict`, and an id already taken by
+        another sender answers the same `409` without revealing whose it is. No
+        `Idempotency-Key` header is involved.
+
+
+        `reply_to.part_id` targets one exact part. The legacy `part_index` form
+        is not accepted here; see
+        [Compatibility and migration](/concepts/message-model#compatibility-and-migration).
+      operationId: sendMessageV2
+      security:
+        - agentToken: []
+        - userSession: []
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendMessageV2Input"
+      responses:
+        "201":
+          description: >
+            The committed message. A retry whose message has since been unsent
+            replays the tombstone rather than the content, so this is `Message`
+            and not `VisibleMessage`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendMessageV2Response"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: The sender is not an active participant of this conversation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: >
+            `idempotency_conflict`: this `message_id` is already committed with
+            a different request, or is still in flight. A `Retry-After` header
+            is present in the in-flight case.
+          headers:
+            Retry-After:
+              description: Whole seconds until the in-flight operation should be retried.
+              schema:
+                type: integer
+                minimum: 1
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: >
+            The message id, conversation id, parts, an attachment reference, or
+            the reply target is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v2/messages/{message_id}:
+    patch:
+      tags: [Messages]
+      summary: Edit a message with part operations
+      description: >
+        Apply ordered operations to a message's parts. Each part keeps its
+        identity across the edit, so a reply or reaction that named a part
+        still names the same part afterwards, and a removed part leaves a
+        tombstoned identity rather than shifting its neighbours into its place.
+
+
+        `expected_version` is optimistic concurrency: two devices editing
+        version 2 produce exactly one version 3 and the loser is refused.
+        `operation_id` is the retry key, on the same terms as `message_id` is
+        for a send. A message may be edited for 15 minutes after it was sent
+        and at most five times, giving version 6 as the ceiling.
+
+
+        Which operations a part accepts is per kind, and the server publishes
+        the answer on every message as `edit_capabilities`. Relay does not send
+        a push notification for edits, and an edit never invokes an agent.
+      operationId: editMessageV2
+      security:
+        - agentToken: []
+        - userSession: []
+      parameters:
+        - $ref: "#/components/parameters/MessageId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageEditV2Input"
+      responses:
+        "200":
+          description: The message at its new version, with the prior version in `revisions`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageEditResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: >
+            The message does not exist, was not sent by this actor, or has
+            already been unsent. One answer for all three: an editor must not
+            learn about messages that are not theirs.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: >
+            `expected_version` is stale, the 15-minute window or the five-edit
+            limit has passed, or `operation_id` was reused with different
+            operations.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: >
+            An operation names a part that is not active on this message, or
+            asks a part for something its kind does not support.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      tags: [Messages]
+      summary: Unsend a message
+      description: >
+        Unsend the authenticated sender's message within two minutes of
+        sending. Relay keeps the id and the conversation sequence as a deleted
+        tombstone and redacts everything else it controls: every version, every
+        stored part, every quote of the message in someone else's reply, and
+        the stored replay bodies of the operations that produced it. Every
+        identity survives, so nothing dangles.
+
+
+        Unsending is idempotent. A second unsend answers with the same
+        tombstone rather than a 404, and a send retry that arrives afterwards
+        replays the tombstone rather than resurrecting the content.
+
+
+        What Relay cannot erase is listed in
+        [Deletion limits](/concepts/message-model#deletion-limits).
+      operationId: unsendMessageV2
+      security:
+        - agentToken: []
+        - userSession: []
+      parameters:
+        - $ref: "#/components/parameters/MessageId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageUnsendV2Input"
+      responses:
+        "200":
+          description: Bare deleted-message tombstone.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageUnsendResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: The message does not exist or was not sent by this actor.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: The two-minute unsend window has passed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: The message id or `operation_id` is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /v1/messages/{message_id}/reactions:
     post:
       tags: [Messages]
       summary: Add or remove a reaction
       description: >
-        Add or remove a tapback or emoji on a message.
+        Add or remove an emoji on a message, or on one exact part of it.
         Recipients receive `reaction.added` / `reaction.removed` events.
-        By default the reaction applies to the whole message. On a media
-        message, `part_index` anchors it on one part instead, which is how
-        per-photo reaction pills work.
+
+
+        One reaction per actor per target slot: adding a second emoji to a slot
+        replaces the first, and removing one that is not there is a documented
+        no-op that answers `200` with `changed: false`. Events are emitted only
+        when `changed` is true.
+
+
+        Omit both target fields to react to the whole message. Send
+        `target_part_id` to react to one part, of any kind. The legacy
+        `part_index` form is accepted for shipped clients and keeps its
+        media-only rule.
       operationId: reactToMessage
       parameters:
         - $ref: "#/components/parameters/MessageId"
@@ -388,27 +603,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [operation, type, emoji]
-              properties:
-                operation:
-                  type: string
-                  enum: [add, remove]
-                type:
-                  type: string
-                  enum: [emoji]
-                emoji:
-                  type: string
-                  description: The emoji to add or remove. Required.
-                  example: "🔥"
-                part_index:
-                  type: integer
-                  minimum: 0
-                  description: >
-                    Anchor the reaction on one part of a media message. Must
-                    name a part the message actually has, and is meaningful
-                    only on media messages; text and card messages take
-                    whole-message reactions only.
+              $ref: "#/components/schemas/ReactionInput"
       responses:
         "200":
           description: >
@@ -1531,7 +1726,15 @@ paths:
                   description: Required for typing in a group; must name this agent's pending invocation.
       responses:
         "204":
-          description: Accepted.
+          description: >
+            Accepted. The signal is a 10-second lease: recipients receive a
+            `typing.started` carrying `expires_at`, and stop on their own at
+            that instant whether or not the matching `typing.stopped` arrives.
+            Refresh by sending again before it lapses.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TypingEventData"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1817,6 +2020,14 @@ components:
         minLength: 8
         maxLength: 255
       description: Deriving it from the triggering `event_id` makes a retry safe.
+    ConversationId:
+      name: conversation_id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^cnv_[0-9a-hjkmnp-tv-z]{26}$"
+      example: cnv_01k1m4q9vn2r7t9b4c6qdh8xwy
     MessageId:
       name: message_id
       in: path
@@ -2745,15 +2956,63 @@ components:
           description: The handle with its "@", drawn wherever no card renderer exists.
           example: "@relay"
 
+    PartId:
+      type: string
+      pattern: "^prt_[0-9a-hjkmnp-tv-z]{26}$"
+      example: prt_01k1m4q9vn2r7t9b4c6qdh8xwy
+      description: >
+        Permanent part identity. It is minted when the part is committed and
+        survives every edit: updating a part's text keeps it, moving a part
+        keeps it, and removing a part leaves it behind as a tombstone so a
+        reply that named it still resolves to the right thing. Replacing media
+        is the one exception, because new bytes are a new identity.
+
     Part:
+      description: >
+        One part of a message, discriminated on `type`. The union is
+        deliberately open: a client that meets a `type` it does not know must
+        render the message's `fallback_text` for that part and leave it
+        otherwise untouched, rather than dropping the part or failing the
+        message. Relay adds part types without a version bump, so this is the
+        difference between an old client degrading and an old client breaking.
       oneOf:
         - $ref: "#/components/schemas/TextPart"
         - $ref: "#/components/schemas/MediaPart"
         - $ref: "#/components/schemas/VoiceMemoPart"
         - $ref: "#/components/schemas/LinkPreviewPart"
         - $ref: "#/components/schemas/DataPart"
-      discriminator:
-        propertyName: type
+        - $ref: "#/components/schemas/UnknownPart"
+
+    UnknownPart:
+      type: object
+      additionalProperties: true
+      required: [part_index, type]
+      description: >
+        The catch-all that keeps `Part` open. Anything whose `type` is not one
+        of the published kinds matches here and still carries its identity:
+        every part the current server stores has `part_id` and `position`, and
+        they are optional here only so a payload Relay stored before part
+        identities existed still validates when `/v1/events` replays it.
+      properties:
+        part_index: { type: integer, minimum: 0 }
+        part_id:
+          $ref: "#/components/schemas/PartId"
+        position:
+          type: integer
+          minimum: 0
+          description: >
+            Dense presentation position in the current version, and always
+            equal to `part_index`. `part_index` is retained for shipped
+            clients; neither is ever an identity. Reactions and replies key on
+            `part_id`.
+        type:
+          type: string
+          not:
+            enum: [text, media, voice_memo, link_preview, data]
+          description: >
+            A part kind this version of the spec does not publish. The
+            exclusion is what keeps the union unambiguous: a known kind is
+            always checked against its own shape and never falls through here.
 
     TextPart:
       type: object
@@ -2761,6 +3020,16 @@ components:
       required: [type, text]
       properties:
         part_index: { type: integer, minimum: 0 }
+        part_id:
+          $ref: "#/components/schemas/PartId"
+        position:
+          type: integer
+          minimum: 0
+          description: >
+            Dense presentation position in the current version, and always
+            equal to `part_index`. `part_index` is retained for shipped
+            clients; neither is ever an identity. Reactions and replies key on
+            `part_id`.
         type: { type: string, const: text }
         text: { type: string }
         mentions:
@@ -2833,6 +3102,16 @@ components:
       required: [part_index, type, url, content_type, media_kind]
       properties:
         part_index: { type: integer, minimum: 0 }
+        part_id:
+          $ref: "#/components/schemas/PartId"
+        position:
+          type: integer
+          minimum: 0
+          description: >
+            Dense presentation position in the current version, and always
+            equal to `part_index`. `part_index` is retained for shipped
+            clients; neither is ever an identity. Reactions and replies key on
+            `part_id`.
         type: { type: string, const: media }
         url: { type: string, format: uri }
         attachment_id: { type: string, pattern: "^att_" }
@@ -2887,6 +3166,16 @@ components:
       required: [part_index, type, url]
       properties:
         part_index: { type: integer, minimum: 0 }
+        part_id:
+          $ref: "#/components/schemas/PartId"
+        position:
+          type: integer
+          minimum: 0
+          description: >
+            Dense presentation position in the current version, and always
+            equal to `part_index`. `part_index` is retained for shipped
+            clients; neither is ever an identity. Reactions and replies key on
+            `part_id`.
         type: { type: string, const: voice_memo }
         url: { type: string, format: uri }
         attachment_id: { type: string, pattern: "^att_" }
@@ -2898,6 +3187,16 @@ components:
       required: [type, url]
       properties:
         part_index: { type: integer, minimum: 0 }
+        part_id:
+          $ref: "#/components/schemas/PartId"
+        position:
+          type: integer
+          minimum: 0
+          description: >
+            Dense presentation position in the current version, and always
+            equal to `part_index`. `part_index` is retained for shipped
+            clients; neither is ever an identity. Reactions and replies key on
+            `part_id`.
         type: { type: string, const: link_preview }
         url: { type: string, format: uri, maxLength: 2048 }
         title:
@@ -2921,6 +3220,16 @@ components:
       required: [type, data]
       properties:
         part_index: { type: integer, minimum: 0 }
+        part_id:
+          $ref: "#/components/schemas/PartId"
+        position:
+          type: integer
+          minimum: 0
+          description: >
+            Dense presentation position in the current version, and always
+            equal to `part_index`. `part_index` is retained for shipped
+            clients; neither is ever an identity. Reactions and replies key on
+            `part_id`.
         type: { type: string, const: data }
         data:
           anyOf:
@@ -2931,12 +3240,93 @@ components:
     ReplyRef:
       type: [object, "null"]
       description: >
-        A reply targets a message id. A legacy `part_index` in the request is
-        accepted and ignored.
+        The reply edge as one reader sees it. `message_id` and `part_id` are
+        permanent and never repoint; `quote_state` and `quote` are what changed
+        since the reply was sent.
+      required: [message_id, quote_state]
       properties:
         message_id:
           type: string
-          example: msg_01JZM3T8AH
+          pattern: "^msg_[0-9a-hjkmnp-tv-z]{26}$"
+          example: msg_01k1m4q9vn2r7t9b4c6qdh8xwy
+        part_id:
+          allOf:
+            - $ref: "#/components/schemas/PartId"
+          description: >
+            Present when the reply targeted one exact part. It keeps naming
+            that part after an edit removes it, so a reply to the middle photo
+            never silently becomes a reply to a different photo.
+        quote_state:
+          type: string
+          enum: [active, unsent, part_removed, moderated, redacted, unavailable]
+          description: >
+            `active`: the quote below is live. `unsent`: the sender unsent the
+            target. `part_removed`: an edit removed the quoted part.
+            `moderated` / `redacted`: Relay removed the content. `unavailable`:
+            this reader's membership window does not include the target, so the
+            edge is visible and its content is not.
+        quote:
+          allOf:
+            - $ref: "#/components/schemas/ReplyQuote"
+          description: Present only when `quote_state` is `active`.
+
+    ReplyQuote:
+      type: object
+      additionalProperties: false
+      required: [sender, target_kind, target_version_id]
+      description: >
+        A snapshot of the target taken when the reply was committed, and frozen
+        after. Editing the target does not rewrite it, and losing the target
+        redacts it rather than repointing it, so a quote can never show
+        something the quoted message no longer says.
+      properties:
+        sender:
+          $ref: "#/components/schemas/Sender"
+        target_kind:
+          type: string
+          enum: [text, media, voice_memo, link_preview, data, contact_card, card, poll]
+          description: >
+            The stored kind of the quoted part, which is finer-grained than a
+            part's wire `type`: a contact card and a group-invite card both
+            project as a `data` part but quote as their own kind.
+        text_preview:
+          type: string
+          maxLength: 200
+        media:
+          type: object
+          additionalProperties: false
+          properties:
+            attachment_id: { type: string, pattern: "^att_" }
+            content_type: { type: string }
+            width: { type: integer, minimum: 1 }
+            height: { type: integer, minimum: 1 }
+            blur_hash: { type: string }
+        target_part_id:
+          $ref: "#/components/schemas/PartId"
+        target_version_id:
+          type: string
+          description: The message version this quote was taken from.
+
+    ReplyRefInput:
+      type: [object, "null"]
+      description: >
+        A reply target on a send. `part_id` names one exact part. On `/v1` a
+        legacy `part_index` is also accepted and is translated to that part's
+        `part_id` at the boundary; the index itself is never stored. `/v2`
+        rejects `part_index` with a 422.
+      required: [message_id]
+      properties:
+        message_id:
+          type: string
+          pattern: "^msg_[0-9a-hjkmnp-tv-z]{26}$"
+          example: msg_01k1m4q9vn2r7t9b4c6qdh8xwy
+        part_id:
+          $ref: "#/components/schemas/PartId"
+        part_index:
+          type: integer
+          minimum: 0
+          deprecated: true
+          description: Legacy index form, accepted on `/v1` only. Use `part_id`.
 
     Sender:
       type: object
@@ -2954,6 +3344,14 @@ components:
       additionalProperties: false
       required: [parts, fallback_text, replaced_at]
       properties:
+        version:
+          type: integer
+          minimum: 1
+          description: The version number this snapshot was.
+        created_at:
+          type: string
+          format: date-time
+          description: Time this snapshot became the canonical content.
         parts:
           type: array
           items:
@@ -2968,8 +3366,23 @@ components:
     ProjectedReaction:
       type: object
       additionalProperties: false
-      required: [emoji, actor_kind, actor_id, part_index]
+      required: [emoji, actor_kind, actor_id, part_index, target_scope, target_part_id]
       properties:
+        target_scope:
+          type: string
+          enum: [message, part]
+          description: Whether this reaction is on the whole message or on one part.
+        target_part_id:
+          oneOf:
+            - $ref: "#/components/schemas/PartId"
+            - type: "null"
+          description: >
+            The part this reaction is anchored to, and the only identity for
+            it. Null exactly when `target_scope` is `message`. A reaction
+            follows its part through a reorder and is deleted with it.
+        created_at:
+          type: string
+          format: date-time
         emoji:
           type: string
         actor_kind:
@@ -2982,9 +3395,10 @@ components:
           type: [integer, "null"]
           minimum: 0
           description: >
-            The part this reaction anchors on, for per-photo reaction pills
-            on a media message. Always present, and null on a whole-message
-            reaction, the only shape for text and card messages.
+            The target part's CURRENT position, resolved at read time from the
+            live parts, so a reaction pill follows its photo when an edit
+            reorders the stack. Null on a whole-message reaction. Retained for
+            clients that key reaction slots by index; never an identity.
 
     VisibleMessage:
       type: object
@@ -3050,9 +3464,26 @@ components:
           description: >
             Prior canonical parts and fallback text, ordered from oldest to
             newest. History and bootstrap projections include an empty array
-            for unedited messages.
+            for unedited messages. The current version is never in this list.
           items:
             $ref: "#/components/schemas/MessageRevision"
+        version:
+          type: integer
+          minimum: 1
+          maximum: 6
+          description: >
+            The current version number. 1 for a message that has never been
+            edited; five successful edits is the ceiling, so 6 is the highest
+            value. Send it back as `expected_version` to edit.
+        edit_capabilities:
+          allOf:
+            - $ref: "#/components/schemas/EditCapabilities"
+          description: >
+            Resolved for the reader on history and bootstrap projections, and
+            on an edit response. A send response carries the committed message
+            alone.
+        receipt_summary:
+          $ref: "#/components/schemas/ReceiptSummary"
         created_at:
           type: string
           format: date-time
@@ -3111,10 +3542,265 @@ components:
             Clients may render "You unsent a message"-style copy only when
             this field is present.
 
+    EditCapabilities:
+      type: object
+      additionalProperties: false
+      required: [can_edit, version, editable_parts]
+      description: >
+        The server's answer to what this reader may do to this message right
+        now. Hide controls it says are unavailable rather than deriving the
+        policy client-side: the window, the edit count and the per-kind rules
+        are all server state, and a client that guesses will offer an action
+        that then fails.
+      properties:
+        can_edit:
+          type: boolean
+          description: >
+            False for anyone but the sender, for a message outside its
+            15-minute window, for one that has already been edited five times,
+            and for one that is no longer active.
+        version:
+          type: integer
+          minimum: 1
+          maximum: 6
+        editable_parts:
+          type: object
+          description: >
+            Keyed by `part_id`. Each value lists the operations that part
+            accepts. Empty when `can_edit` is false.
+          additionalProperties:
+            type: array
+            items:
+              type: string
+              enum: [update, remove, move, replace]
+
+    ReceiptSummary:
+      type: object
+      additionalProperties: false
+      required: [eligible, delivered, read, delivered_state, read_state]
+      description: >
+        How many eligible recipients reached each state, so `read` on a group
+        message is never mistaken for everyone having read it.
+      properties:
+        eligible: { type: integer, minimum: 0 }
+        delivered: { type: integer, minimum: 0 }
+        read: { type: integer, minimum: 0 }
+        delivered_state: { type: string, enum: [none, partial, complete] }
+        read_state: { type: string, enum: [none, partial, complete] }
+        first_delivered_at: { type: string, format: date-time }
+        first_read_at: { type: string, format: date-time }
+        complete_delivered_at: { type: string, format: date-time }
+        complete_read_at: { type: string, format: date-time }
+
     Message:
       oneOf:
         - $ref: "#/components/schemas/VisibleMessage"
         - $ref: "#/components/schemas/DeletedMessageTombstone"
+
+    SendMessageV2Input:
+      type: object
+      additionalProperties: false
+      required: [message_id, parts]
+      properties:
+        message_id:
+          type: string
+          pattern: "^msg_[0-9a-hjkmnp-tv-z]{26}$"
+          example: msg_01k1m4q9vn2r7t9b4c6qdh8xwy
+          description: >
+            The client mints this before queueing the send: a lowercase
+            Crockford base32 ULID with a `msg_` prefix. It is the canonical id
+            of the resulting message and the send's idempotency key.
+        parts:
+          type: array
+          minItems: 1
+          maxItems: 32
+          description: >
+            Ordered parts of ONE message. Unlike `/v1`, they are not split:
+            text and media sent together arrive together.
+          items:
+            $ref: "#/components/schemas/PartInput"
+        reply_to:
+          type: [object, "null"]
+          additionalProperties: false
+          required: [message_id]
+          description: >
+            `/v2` accepts a stable `part_id` only. A `part_index` here is a
+            422.
+          properties:
+            message_id:
+              type: string
+              pattern: "^msg_[0-9a-hjkmnp-tv-z]{26}$"
+            part_id:
+              $ref: "#/components/schemas/PartId"
+        invoked_agent_ids:
+          type: array
+          uniqueItems: true
+          items: { type: string, pattern: "^agt_" }
+          description: Agents this human message explicitly invokes. User senders only.
+        fallback_text:
+          type: string
+          description: Plain-language representation for notifications and search.
+        invocation_id:
+          allOf:
+            - $ref: "#/components/schemas/InvocationId"
+          description: Agent senders only, and required when an agent replies in a group.
+
+    SendMessageV2Response:
+      type: object
+      additionalProperties: false
+      required: [message]
+      properties:
+        message:
+          $ref: "#/components/schemas/Message"
+
+    MessageEditV2Input:
+      type: object
+      additionalProperties: false
+      required: [operation_id, expected_version, operations]
+      properties:
+        operation_id:
+          type: string
+          pattern: "^mut_[0-9a-hjkmnp-tv-z]{26}$"
+          example: mut_01k1m4q9vn2r7t9b4c6qdh8xwy
+          description: >
+            Client-minted id for this logical edit. Retrying with the same id
+            and the same operations replays the original result; the same id
+            with different operations is a 409.
+        expected_version:
+          type: integer
+          minimum: 1
+          maximum: 6
+          description: >
+            The `version` the client last read. A stale value is a 409 rather
+            than a silent overwrite of somebody else's edit.
+        operations:
+          type: array
+          minItems: 1
+          maxItems: 64
+          description: Applied in array order against `expected_version`.
+          items:
+            $ref: "#/components/schemas/PartOperation"
+
+    PartOperation:
+      oneOf:
+        - title: Update a part in place
+          type: object
+          additionalProperties: false
+          required: [action, part_id]
+          description: Text parts only. The part keeps its identity.
+          properties:
+            action: { type: string, const: update }
+            part_id: { $ref: "#/components/schemas/PartId" }
+            text: { type: string }
+            mentions:
+              type: array
+              maxItems: 16
+              items:
+                $ref: "#/components/schemas/Mention"
+            styles:
+              type: array
+              maxItems: 200
+              items:
+                $ref: "#/components/schemas/StyleRange"
+        - title: Add a part
+          type: object
+          additionalProperties: false
+          required: [action, part]
+          properties:
+            action: { type: string, const: add }
+            position:
+              type: integer
+              minimum: 0
+              description: Where it lands. Appended when omitted.
+            part:
+              $ref: "#/components/schemas/PartInput"
+        - title: Remove a part
+          type: object
+          additionalProperties: false
+          required: [action, part_id]
+          description: >
+            The identity is tombstoned rather than deleted, and reactions on
+            the part go with it. Remaining positions are densified.
+          properties:
+            action: { type: string, const: remove }
+            part_id: { $ref: "#/components/schemas/PartId" }
+        - title: Move a part
+          type: object
+          additionalProperties: false
+          required: [action, part_id, position]
+          properties:
+            action: { type: string, const: move }
+            part_id: { $ref: "#/components/schemas/PartId" }
+            position: { type: integer, minimum: 0 }
+        - title: Replace a part
+          type: object
+          additionalProperties: false
+          required: [action, part_id, part]
+          description: >
+            Media and voice bytes are never rewritten in place. Replacing
+            tombstones the old identity and mints a new one, and reactions on
+            the old part go with it.
+          properties:
+            action: { type: string, const: replace }
+            part_id: { $ref: "#/components/schemas/PartId" }
+            part:
+              $ref: "#/components/schemas/PartInput"
+
+    MessageUnsendV2Input:
+      type: object
+      additionalProperties: false
+      required: [operation_id]
+      properties:
+        operation_id:
+          type: string
+          pattern: "^mut_[0-9a-hjkmnp-tv-z]{26}$"
+          description: >
+            Client-minted id for this unsend. May also travel as an
+            `Idempotency-Key` header when it is itself a `mut_` id.
+
+    ReactionInput:
+      type: object
+      additionalProperties: false
+      required: [operation, type, emoji]
+      properties:
+        operation:
+          type: string
+          enum: [add, remove]
+        type:
+          type: string
+          enum: [emoji]
+        emoji:
+          type: string
+          maxLength: 32
+          description: The emoji to add or remove. Required.
+          example: "🔥"
+        target_scope:
+          type: string
+          enum: [message, part]
+          description: >
+            Defaults to `message`. Supplying `target_part_id` alone implies
+            `part`.
+        target_part_id:
+          allOf:
+            - $ref: "#/components/schemas/PartId"
+          description: >
+            Required when `target_scope` is `part`. Targets a part of any kind,
+            and must name a part the message currently has.
+        part_index:
+          type: integer
+          minimum: 0
+          deprecated: true
+          description: >
+            Legacy index form for shipped clients. Translated to that part's
+            `part_id` at the boundary and never stored. It keeps its original
+            media-only rule: an index naming a non-media part is a 422. Use
+            `target_part_id`.
+        operation_id:
+          type: string
+          pattern: "^mut_[0-9a-hjkmnp-tv-z]{26}$"
+          description: >
+            Client-minted id for this reaction change. Retrying with it replays
+            the original result and emits no second event.
 
     MessageEditResponse:
       type: object
@@ -3141,6 +3827,7 @@ components:
         - conversation.added
         - conversation.updated
         - conversation.removed
+        - conversation.left
         - reaction.added
         - reaction.removed
         - message.delivered
@@ -3173,6 +3860,32 @@ components:
           type: string
           description: Non-secret prefix for identifying the configured signing key.
           example: whsec_MfKQ9r8G…
+        schema_version:
+          type: string
+          format: date
+          example: "2026-08-24"
+          description: >
+            The envelope shape this endpoint is pinned to. Versions are dates,
+            not integers: pin the day the shape you wrote against was frozen.
+            An endpoint keeps the date it was created with; nothing migrates it
+            silently.
+        deprecated_after:
+          type: [string, "null"]
+          format: date-time
+          description: >
+            When `schema_version` stops being served for this endpoint. Null
+            means not deprecated, which is every endpoint on the current
+            version. When a version is retired this is set 90 days out and the
+            operator is told then, not at the end.
+        disabled_at:
+          type: [string, "null"]
+          format: date-time
+          description: >
+            Start of the current disabled window. Re-enabling backfills events
+            emitted since this instant, bounded to 24 hours and 1,000 events.
+        last_disabled_reason:
+          type: [string, "null"]
+          description: Why the endpoint was last switched off, for the operator listing.
         created_at:
           type: string
           format: date-time
@@ -3232,13 +3945,26 @@ components:
 
     Event:
       type: object
-      additionalProperties: false
+      # Additive members never bump the envelope version, so this stays open on
+      # purpose: a consumer that rejects a field it does not know is a consumer
+      # Relay cannot ship anything to. See the deprecation policy in
+      # [Webhooks](/guides/webhooks#versioning-and-deprecation).
+      additionalProperties: true
       required: [event_id, event_type, agent_id, created_at, data]
       properties:
         event_id:
           type: string
           description: Deduplicate on this; delivery is at least once.
           example: evt_01JZE9M2XW
+        schema_version:
+          type: string
+          format: date
+          example: "2026-08-24"
+          description: >
+            The envelope shape this delivery was rendered as, repeated inside
+            the body so a consumer that queues the envelope still has it an
+            hour later, and so it sits inside the signed bytes. Webhooks also
+            receive it as the `relay-webhook-version` header.
         event_type:
           $ref: "#/components/schemas/WebhookEventType"
           example: message.received
@@ -3249,7 +3975,13 @@ components:
           type: string
           format: date-time
         data:
-          oneOf:
+          description: >
+            The shape `event_type` names. This is `anyOf` rather than `oneOf`
+            on purpose: the variants are open to additive members, which makes
+            them overlap, and a payload that satisfies two of them is a
+            correctly extended payload rather than an ambiguous one. Switch on
+            `event_type`, never on which branch happens to match.
+          anyOf:
             - $ref: "#/components/schemas/MessageEventData"
             - $ref: "#/components/schemas/MessageEditedEventData"
             - $ref: "#/components/schemas/MessageUnsentEventData"
@@ -3260,7 +3992,8 @@ components:
 
     MessageEventData:
       type: object
-      additionalProperties: false
+      # Open for the same reason Event is: members are added additively.
+      additionalProperties: true
       required: [message]
       properties:
         message:
@@ -3276,7 +4009,8 @@ components:
 
     MessageEditedEventData:
       type: object
-      additionalProperties: false
+      # Open for the same reason Event is: members are added additively.
+      additionalProperties: true
       required: [message, revision_count]
       properties:
         message:
@@ -3288,7 +4022,8 @@ components:
 
     MessageUnsentEventData:
       type: object
-      additionalProperties: false
+      # Open for the same reason Event is: members are added additively.
+      additionalProperties: true
       required: [message_id, conversation_id, sequence]
       properties:
         message_id:
@@ -3300,10 +4035,17 @@ components:
         sequence:
           type: integer
           minimum: 1
+        unsent_at:
+          type: string
+          format: date-time
+          description: >
+            When the sender unsent the message. Additive, so a consumer written
+            before it existed is unaffected.
 
     GroupLifecycleEventData:
       type: object
-      additionalProperties: false
+      # Open for the same reason Event is: members are added additively.
+      additionalProperties: true
       required: [conversation_id, actor, membership_version, system_mutation, message]
       properties:
         conversation_id: { type: string, pattern: "^cnv_" }
@@ -3385,7 +4127,7 @@ components:
     Reaction:
       type: object
       additionalProperties: false
-      required: [message_id, part_index, type, emoji, actor, operation]
+      required: [message_id, part_index, target_scope, target_part_id, type, emoji, actor, operation, changed]
       description: >
         One reaction as Relay recorded it. The same object is the reaction
         endpoint's response body and the `data.reaction` of a
@@ -3399,8 +4141,17 @@ components:
           type: [integer, "null"]
           minimum: 0
           description: >
-            The part this reaction anchors on. Always present, and null on a
-            whole-message reaction.
+            The target part's position at the time of the write. Null on a
+            whole-message reaction. Retained for shipped clients; the identity
+            is `target_part_id`.
+        target_scope:
+          type: string
+          enum: [message, part]
+        target_part_id:
+          oneOf:
+            - $ref: "#/components/schemas/PartId"
+            - type: "null"
+          description: Null exactly when `target_scope` is `message`.
         type: { type: string, const: emoji }
         emoji: { type: string, example: "❤️" }
         actor:
@@ -3418,10 +4169,18 @@ components:
         operation:
           type: string
           enum: [add, remove]
+        changed:
+          type: boolean
+          description: >
+            False when the request was a no-op: removing a reaction that was
+            not there, or re-adding the one already in the slot. Events are
+            emitted only when this is true, so a retry costs the recipient
+            nothing.
 
     ReactionEventData:
       type: object
-      additionalProperties: false
+      # Open for the same reason Event is: members are added additively.
+      additionalProperties: true
       required: [reaction]
       properties:
         reaction:
@@ -3436,6 +4195,58 @@ components:
         conversation_id: { type: string, pattern: "^cnv_" }
         through_sequence: { type: integer, minimum: 1 }
         at: { type: string, format: date-time }
+
+    TypingEventData:
+      type: object
+      additionalProperties: true
+      required: [conversation_id, participant]
+      description: >
+        The `data` of a `typing.started` or `typing.stopped`. Ephemeral: pushed
+        to live devices and never written to the event log, so it carries no
+        `event_id` and is never replayed.
+      properties:
+        conversation_id: { type: string, pattern: "^cnv_" }
+        participant:
+          type: object
+          required: [id, kind]
+          description: Who is typing. This is the field to read.
+          properties:
+            id: { type: string, pattern: "^(usr|agt)_" }
+            kind: { type: string, enum: [user, agent] }
+        user:
+          type: object
+          deprecated: true
+          description: Legacy shape for a human typist. Read `participant`.
+          properties:
+            id: { type: string, pattern: "^usr_" }
+        contact:
+          type: object
+          deprecated: true
+          description: Legacy shape for an agent typist. Read `participant`.
+          properties:
+            id: { type: string, pattern: "^agt_" }
+            handle: { type: string }
+        expires_at:
+          type: string
+          format: date-time
+          description: >
+            Authority on a `typing.started`. Render the indicator until this
+            instant and then stop, whether or not a `typing.stopped` arrives.
+            Absent on a `typing.stopped`.
+        expires_in_ms:
+          type: integer
+          minimum: 0
+          description: >
+            The same fact pre-subtracted, for clients that would rather not
+            trust their own clock.
+        invocation_id:
+          allOf:
+            - $ref: "#/components/schemas/InvocationId"
+          description: Present when an agent is typing inside a group invocation.
+        label:
+          type: string
+          maxLength: 80
+          description: Short status line. Present only on a `typing.started`.
 
     BeginRespondingInput:
       type: object

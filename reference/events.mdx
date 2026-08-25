@@ -12,6 +12,7 @@ Every event uses the same envelope:
   "event_type": "message.received",
   "agent_id": "agt_01JZRELAY",
   "created_at": "2026-07-12T01:21:03.000Z",
+  "schema_version": "2026-08-24",
   "data": { }
 }
 ```
@@ -19,6 +20,15 @@ Every event uses the same envelope:
 `event_id` is globally unique and serves as the deduplication key. Delivery is
 at least once. Ignore unknown `event_type` values, so new types cannot break the
 consumer.
+
+`schema_version` is the envelope shape this delivery was rendered as. It is a
+date rather than an integer: pin the day the shape you wrote against was
+frozen. It is repeated inside the body so a consumer that queues the envelope
+still has it an hour later, and so it sits inside the signed bytes.
+
+Additive members never bump that date, so ignore fields you do not recognise
+too, not just event types you did not subscribe to. See
+[Versioning and deprecation](/guides/webhooks#versioning-and-deprecation).
 
 See [Delivery model](/guides/delivery-model) for webhook acknowledgement,
 idempotent writes, live state, and recovery.
@@ -49,8 +59,14 @@ window.
 | --- | --- |
 | `data.message` | The full updated message |
 | `edited_at` | The time of the latest edit |
-| `revisions` | Each prior `parts` and `fallback_text` snapshot, oldest to newest |
+| `version` | The message's current version number, 1 through 6 |
+| `edit_capabilities` | What the reader may do to this message now |
+| `revisions` | Each prior version, oldest to newest, with its `version`, `parts`, `fallback_text`, `created_at`, and `replaced_at`. The current version is never among them |
 | `data.revision_count` | The number of stored revisions, from 1 through 5 |
+
+Every part in `parts` and in each revision carries a `part_id` that survives
+the edit, so a consumer can tell an updated part from a replaced one instead of
+diffing positions.
 
 ```json
 {
@@ -63,19 +79,22 @@ window.
       "sender": { "kind": "user", "id": "usr_01K1M9ALICE" },
       "is_from_me": false,
       "parts": [
-        { "part_index": 0, "type": "text", "text": "Tomorrow at 3:00 PM works." }
+        { "part_id": "prt_01k1ma0m5r9xd4t7c2vqj6nzbh", "part_index": 0, "position": 0, "type": "text", "text": "Tomorrow at 3:00 PM works." }
       ],
       "reply_to": null,
       "reactions": [],
       "fallback_text": "Tomorrow at 3:00 PM works.",
       "status": "sent",
       "edited_at": "2026-07-24T20:15:00.000Z",
+      "version": 2,
       "revisions": [
         {
+          "version": 1,
           "parts": [
-            { "part_index": 0, "type": "text", "text": "Tomorrow at 2:00 PM works." }
+            { "part_id": "prt_01k1ma0m5r9xd4t7c2vqj6nzbh", "part_index": 0, "position": 0, "type": "text", "text": "Tomorrow at 2:00 PM works." }
           ],
           "fallback_text": "Tomorrow at 2:00 PM works.",
+          "created_at": "2026-07-24T20:05:00.000Z",
           "replaced_at": "2026-07-24T20:15:00.000Z"
         }
       ],
@@ -146,21 +165,41 @@ A participant added or removed a reaction from the agent's message.
   "event_type": "reaction.added",
   "data": {
     "reaction": {
-      "message_id": "msg_01JZM4Q9VN",
-      "part_index": null,
+      "message_id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
+      "part_index": 1,
+      "target_scope": "part",
+      "target_part_id": "prt_01k1ma0m5sy2k8f3b7wnq4hdvc",
       "type": "emoji",
       "emoji": "🔥",
-      "actor": { "kind": "user", "id": "usr_01JZU1F0BD" },
-      "operation": "add"
+      "actor": { "kind": "user", "id": "usr_01k1m8t3zq7v2r9c4b6ndh5xwj" },
+      "operation": "add",
+      "changed": true
     }
   }
 }
 ```
 
-A reaction targets a message id, and `type` is always `"emoji"`. `part_index`
-is always present: it names the part when the reaction anchors on one part of
-a media message, and is null on a whole-message reaction, the only shape for
-text and card messages. `actor.kind` is `user` or `agent`.
+| Field | Contents |
+| --- | --- |
+| `target_scope` | `message` or `part` |
+| `target_part_id` | The part this reaction is anchored to. Null exactly when `target_scope` is `message`. This is the identity |
+| `part_index` | The target part's position when the write happened. Null on a whole-message reaction. Retained for shipped clients; never an identity |
+| `type` | Always `"emoji"` |
+| `actor.kind` | `user` or `agent` |
+| `changed` | Always true on an emitted event. Relay emits nothing for a no-op |
+
+A message projected in history carries its reactions in the flatter
+`reactions[]` shape, which uses `actor_kind` and `actor_id` in place of a
+nested `actor` and adds `created_at`.
+
+### `conversation.left`
+
+A participant left a group of their own accord. It is a different fact from
+`conversation.removed`: nobody removed them, so there is no actor to attribute
+it to, and an agent that left has no membership left to re-check.
+
+`data` carries the same fields as the events below, with `system_mutation.mutation`
+set to `membership.left`.
 
 ### `conversation.added`, `conversation.updated`, and `conversation.removed`
 
@@ -353,6 +392,8 @@ The Relay contract also defines these. v0 emits none of them.
 See [API availability](/roadmap).
 
 ## See also
+
+- [Message model](/concepts/message-model)
 
 - [Webhooks](/guides/webhooks)
 - [Delivery model](/guides/delivery-model)

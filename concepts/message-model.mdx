@@ -1,0 +1,373 @@
+---
+title: "Message model"
+description: "One send is one message: part identities, client-generated message ids, replies, reactions, edits, and what an unsend can and cannot erase."
+keywords: ["message model", "part_id", "message_id", "reply", "quote", "reaction", "edit", "unsend", "version", "idempotency", "handles"]
+---
+
+One send is one message. Its ordered parts stay together, each part is given a
+permanent id, and everything that points at a message points at an id rather
+than a position.
+
+| Object | Identity | Mutable |
+| --- | --- | --- |
+| Message | `message_id`, minted by the client | Its parts, up to five times |
+| Part | `part_id`, minted by the server | Text in place; media by replacement |
+| Version | `version`, an integer per message | Never; a new edit is a new version |
+| Reply edge | The replying message | Its `quote_state`, when the target changes |
+| Reaction | (message, target slot, actor) | Its emoji, one per slot |
+
+## The smallest send
+
+```bash
+curl -sS -X POST "https://api.relayapp.im/v2/conversations/cnv_01k1m4q9vn2r7t9b4c6qdh8xwy/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message_id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
+    "parts": [
+      { "type": "text", "text": "Three options, best one first:" },
+      { "type": "media", "attachment_id": "att_01k1m9zc4d8jr2wq6nvy0h5tpb" }
+    ]
+  }'
+```
+
+The `201` carries one message holding both parts, each with its own `part_id`:
+
+```json
+{
+  "message": {
+    "id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
+    "sequence": 41,
+    "version": 1,
+    "parts": [
+      { "part_id": "prt_01k1ma0m5r9xd4t7c2vqj6nzbh", "part_index": 0, "position": 0, "type": "text", "text": "Three options, best one first:" },
+      { "part_id": "prt_01k1ma0m5sy2k8f3b7wnq4hdvc", "part_index": 1, "position": 1, "type": "media", "attachment_id": "att_01k1m9zc4d8jr2wq6nvy0h5tpb" }
+    ],
+    "reply_to": null,
+    "fallback_text": "Three options, best one first:",
+    "status": "sent",
+    "created_at": "2026-08-24T20:00:00.000Z"
+  }
+}
+```
+
+## Message identity and part identity
+
+A message id is minted by the client before the send is queued. A part id is
+minted by the server when the part is committed. Both are lowercase Crockford
+base32 ULIDs behind a type prefix, and a well-formed id proves nothing about
+existence, ownership, or access.
+
+| Prefix | Names |
+| --- | --- |
+| `msg_` | One message |
+| `prt_` | One part, for its whole life |
+| `mut_` | One mutation: an edit, an unsend, a reaction change |
+| `mvr_` | One immutable message version |
+| `att_` | One uploaded attachment |
+
+A part id survives everything except a replacement. Updating a text part's text
+keeps it, moving a part keeps it, and removing a part leaves the id behind as a
+tombstone. Replacing media mints a new id, because new bytes are a new thing.
+
+## Sequence, position, and part_index
+
+Three numbers, none of them interchangeable.
+
+| Field | Scope | Means |
+| --- | --- | --- |
+| `sequence` | Conversation | Where this message sits in the thread. Assigned once and never reused |
+| `position` | Message | Where this part renders inside the current version. Dense, from 0 |
+| `part_index` | Message | The same number as `position`, retained for clients that predate part ids |
+
+Positions are densified after every edit, so removing the middle part of three
+leaves positions 0 and 1. That is exactly why a position is not an identity:
+the part that was at position 2 is now at 1, and anything that had stored "2"
+would now be pointing at a different part.
+
+## Client-generated ids and retries
+
+The client mints `message_id`, so the identity of a send exists before the
+request does. That makes a retry unambiguous without any separate idempotency
+header.
+
+| Second request | Answer |
+| --- | --- |
+| Same id, same content | `201` replaying the original message, byte for byte |
+| Same id, different content | `409 idempotency_conflict` |
+| Same id, different sender | `409 idempotency_conflict`, naming no owner |
+| Same id, after the message was unsent | `201` replaying the tombstone, never the content |
+| Two different ids, identical text | Two messages, because two sends were intended |
+
+The conflict for another sender's id says nothing about who holds it. A
+message id is not an existence oracle.
+
+### Mutation operation ids
+
+Edits, unsends, and reaction changes carry a client-minted `mut_` id on the
+same terms. The operation type is part of the key, so a `mut_` id spent on an
+edit can never replay as an unsend.
+
+| Second request | Answer |
+| --- | --- |
+| Same operation id, same request | The original result, and no second event |
+| Same operation id, different request | `409 idempotency_conflict` |
+| Same operation id, original still in flight | `409` with `Retry-After` in seconds |
+
+## Replies
+
+A reply names a target message, and optionally one exact part of it. Relay
+freezes a quote of the target at the moment the reply commits and never
+re-resolves it.
+
+```json
+{
+  "reply_to": {
+    "message_id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
+    "part_id": "prt_01k1ma0m5sy2k8f3b7wnq4hdvc",
+    "quote_state": "active",
+    "quote": {
+      "sender": { "kind": "user", "id": "usr_01k1m8t3zq7v2r9c4b6ndh5xwj" },
+      "target_kind": "media",
+      "text_preview": "Three options, best one first:",
+      "target_part_id": "prt_01k1ma0m5sy2k8f3b7wnq4hdvc",
+      "target_version_id": "mvr_01k1ma0m5tqb3n8v5f2wjc7hdk"
+    }
+  }
+}
+```
+
+The edge is permanent and the quote is not. When the target changes, Relay
+changes `quote_state` and drops the quote rather than repointing the edge.
+
+| `quote_state` | What happened |
+| --- | --- |
+| `active` | The quote is live |
+| `part_removed` | An edit removed the quoted part. The edge still names it |
+| `unsent` | The sender unsent the whole target |
+| `moderated` / `redacted` | Relay removed the content |
+| `unavailable` | This reader's membership window does not include the target |
+
+Reply to the second of three photos, then let the sender remove that photo and
+reorder the other two. The reply still names the removed photo's `part_id` and
+reads `part_removed`. It never becomes a reply to whichever photo now sits in
+that slot, which is the failure a positional reference guarantees.
+
+`unavailable` is the group case. A member who joined after the target was sent
+sees that a reply exists and sees none of its content, so a quote can never
+carry history past a membership boundary.
+
+## Reactions
+
+A reaction targets a slot, and a slot is either the whole message or one exact
+part.
+
+| Request | Slot |
+| --- | --- |
+| Neither target field | The whole message |
+| `target_part_id` | That part, of any kind |
+| `part_index` | That part, media only. Legacy, translated to a `part_id` at the boundary |
+
+One reaction per actor per slot. Adding a second emoji to a slot replaces the
+first; removing one that is not there answers `200` with `changed: false`.
+Events are emitted only when `changed` is true, so a retry costs recipients
+nothing.
+
+A part-scoped reaction follows its part. When an edit reorders parts, the
+projected `part_index` moves with the part; when an edit removes the part, the
+reaction is removed with it.
+
+## Edits
+
+An edit is a list of operations applied against the version the client last
+read.
+
+```bash
+curl -sS -X PATCH "https://api.relayapp.im/v2/messages/msg_01k1m9x2ph4vb7k0d3wzr8ftqe" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "operation_id": "mut_01k1mb4h8w6nq2t5v9c3jr7dzf",
+    "expected_version": 1,
+    "operations": [
+      { "action": "update", "part_id": "prt_01k1ma0m5r9xd4t7c2vqj6nzbh", "text": "Two options now:" },
+      { "action": "remove", "part_id": "prt_01k1ma0m5sy2k8f3b7wnq4hdvc" }
+    ]
+  }'
+```
+
+| Action | Effect |
+| --- | --- |
+| `update` | Rewrites a text part in place. The id is kept |
+| `add` | Inserts a new part at `position`, or appends |
+| `remove` | Tombstones the identity. Reactions on it go with it |
+| `move` | Changes a part's position. The id is kept |
+| `replace` | Tombstones the old identity and mints a new one |
+
+Which actions a part accepts depends on its kind, and the server publishes the
+answer on every message it serves:
+
+```json
+{
+  "edit_capabilities": {
+    "can_edit": true,
+    "version": 2,
+    "editable_parts": {
+      "prt_01k1ma0m5r9xd4t7c2vqj6nzbh": ["update", "remove", "move"],
+      "prt_01k1ma0m5sy2k8f3b7wnq4hdvc": ["remove", "move", "replace"]
+    }
+  }
+}
+```
+
+Read `edit_capabilities` rather than deriving the policy. The window, the edit
+count, and the per-kind rules are all server state, and a client that guesses
+will offer an action that then fails.
+
+`expected_version` is what keeps two devices from overwriting each other. Both
+send `expected_version: 2`, exactly one produces version 3, and the other is
+refused with a `409` rather than silently landing on top.
+
+Prior versions are published on the message as `revisions`, oldest first, with
+the current version never among them. An edit does not raise a push
+notification and never invokes an agent.
+
+## Unsend
+
+Unsending redacts everything Relay controls and keeps every identity. The
+message row survives as a tombstone holding its id, its sequence, its sender,
+and nothing else.
+
+```json
+{
+  "message": {
+    "id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
+    "conversation_id": "cnv_01k1m4q9vn2r7t9b4c6qdh8xwy",
+    "sequence": 41,
+    "sender": { "kind": "user", "id": "usr_01k1m8t3zq7v2r9c4b6ndh5xwj" },
+    "is_from_me": true,
+    "status": "deleted",
+    "unsent_at": "2026-08-24T20:04:00.000Z",
+    "created_at": "2026-08-24T20:00:00.000Z"
+  }
+}
+```
+
+Redaction reaches every version's parts, every stored fallback text, the
+conversation preview, the quote inside anyone else's reply, and the stored
+replay bodies of the operations that produced the message. The notice that the
+message was unsent survives its own scrub, because recipients still need to be
+told.
+
+Unsending is idempotent. A second unsend answers with the same tombstone rather
+than a `404`, and a send retry arriving afterwards replays the tombstone.
+
+### Deletion limits
+
+An unsend is a request Relay honours everywhere Relay reaches. Relay does not
+claim to reach further, and these are the places it does not:
+
+| Where the content may remain | Why |
+| --- | --- |
+| A recipient's device | The message was delivered before the unsend. Relay asks the app to drop it and cannot verify that it did |
+| A screenshot, a photo of a screen, a copy someone pasted | Outside any software boundary |
+| OS notification history | The push was handed to Apple or Google and rendered before the unsend |
+| An agent's own storage | An agent that received the message keeps whatever it stored. `message.unsent` tells it to delete; honouring that is the agent's job |
+| A webhook consumer's logs and queues | The delivery already happened. Relay redelivers nothing and cannot reach into a third-party system |
+| Someone's memory | Stated for completeness, and it is the one that matters most |
+
+Tell people the truth about this. An unsend is a strong guarantee about
+Relay's own storage and a request everywhere else.
+
+## Mentions
+
+A mention is a range over a text part, not a token inside it. The part's `text`
+holds the display name the sender inserted, with no `@`, and the mention names
+the participant separately.
+
+```json
+{
+  "type": "text",
+  "text": "Alice picked the rooftop",
+  "mentions": [{ "start": 0, "length": 5, "participant_id": "usr_01k1m8t3zq7v2r9c4b6ndh5xwj" }]
+}
+```
+
+`start` and `length` are UTF-16 code units over that part's `text`, matching
+what a Swift or JavaScript string reports. The text stays canonical, so a
+client that ignores mentions renders a correct sentence.
+
+The identity is `participant_id`, never the name. A mention keeps pointing at
+the same person after they rename, and the message keeps the name it was sent
+under.
+
+## Handles are labels, not identities
+
+A handle is a mutable label over a stable participant id. Users and agents
+share one namespace, so a name is taken or free without reference to what kind
+of thing holds it.
+
+| Event | Effect |
+| --- | --- |
+| A participant renames | The old tenure closes, the new one opens. No message row changes |
+| The old handle is looked up | It resolves to nobody, immediately. It is not an alias |
+| Someone else claims it within 30 days | Refused. The name is reserved to its previous holder |
+| The previous holder reclaims it within 30 days | Allowed |
+| 30 days pass | The name returns to the pool |
+
+The cooldown exists for the person who renames and regrets it, and against the
+impersonator who waits for a well-known name to be released. Resolve handles to
+participant ids once and store the id.
+
+## Limits
+
+| Limit | Value |
+| --- | --- |
+| Parts per message | 32 |
+| Text per part | 8 KiB |
+| Data payload per part | 16 KiB |
+| Mentions per text part | 16 |
+| Style ranges per text part | 200 |
+| Media per part | 100 MB |
+| Operations per edit | 64 |
+| Edit window | 15 minutes after sending |
+| Edits per message | 5, giving version 6 as the ceiling |
+| Unsend window | 2 minutes after sending |
+
+## Compatibility and migration
+
+`/v1` and `/v2` are the same model over two wires. They read and write the same
+rows, so a message sent on one is a message the other serves.
+
+| Behaviour | `/v1` | `/v2` |
+| --- | --- | --- |
+| One send | Split into content runs: each visible non-media part becomes its own message, contiguous media stay together, a voice memo is always its own | One message, holding every part |
+| Message id | Server-assigned; `Idempotency-Key` header is the retry key | Client-minted `message_id` is both the id and the retry key |
+| Reply target | `part_id`, or a legacy `part_index` | `part_id` only. `part_index` is a `422` |
+| Edit | One text part replaces the message body | Part operations against `expected_version` |
+| Part ids | Present on every part it serves | Present on every part it serves |
+
+The `/v1` split stays exactly as it is. Shipped clients render one bubble per
+message and would show a mixed send as one unreadable balloon if the split
+changed under them, so the split is a property of the `/v1` wire rather than a
+bug to be fixed there.
+
+Legacy `part_index` inputs are translated to the addressed part's `part_id` at
+the boundary and are never stored. Nothing inside Relay holds a positional
+reference, which is what lets an edit reorder parts without breaking anything
+that pointed at them.
+
+<Warning>
+`/v1` message and reaction routes are supported for at least 90 days after
+`/v2` reaches general availability. Deprecation is announced before the window
+opens, and the window is a promise about notice rather than about the change
+never arriving.
+</Warning>
+
+## See also
+
+- [Sending messages](/guides/sending-messages)
+- [Reactions](/guides/reactions)
+- [Limits](/reference/limits)
+- [Event types](/reference/events)
+- [Core concepts](/concepts)
