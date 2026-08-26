@@ -104,12 +104,12 @@ Store the returned signing_secret; it is shown only on create or rotation.
   `<webhook-id>.<webhook-timestamp>.<raw-body>` using the base64-decoded bytes after whsec_.
 - Reject timestamps outside a 5-minute window and compare signatures in constant time.
 - Return 2xx only after the event is stored. Delivery is at-least-once; deduplicate on event_id.
-- Envelope: { event_id, sequence, event_type, agent_id, conversation_id,
+- Envelope: { event_id, sequence, event_type, agent_id, chat_id,
   created_at, schema_version, data }.
 - The nine event types: message.received (data.message = the full message),
   message.delivered / message.read (receipt watermarks: data.through_sequence,
-  data.recipient; 1:1 only), conversation.added / conversation.updated /
-  conversation.removed / conversation.left (group lifecycle), reaction.added /
+  data.recipient; 1:1 only), participant.added / chat.group_name_updated /
+  participant.removed / participant.removed (group lifecycle), reaction.added /
   reaction.removed (data.reaction). Ignore unknown types.
 - Relay retries timeouts, connection errors, 408, 429, and 5xx with exponential
   backoff for up to 10 attempts. Any other non-2xx response is a permanent
@@ -129,20 +129,20 @@ Crockford base32 ULID. It is the canonical id and the idempotency key, so a
 retry with the same id replays the stored message and another sender's use of
 it answers 409 idempotency_conflict. There is no Idempotency-Key requirement.
 POST /v1/messages
-Body: { "message_id": "msg_…", "conversation_id": "cnv_…", "parts": [...],
-"fallback_text"?, "reply_to"?: { "message_id", "part_id"? } }
+Body: { "message_id": "msg_…", "chat_id": "cnv_…", "parts": [...],
+"text"?, "reply_to"?: { "message_id", "part_id"? } }
 1-32 parts per message, order = presentation order. Text and media sent
 together stay together as parts of the one message:
 - { "type": "text", "text": "…", "mentions"?, "styles"? }   (≤ 8 KB per part)
-- { "type": "link_preview", "url": "https://…", "title"?, "description"? }
+- { "type": "link", "url": "https://…", "title"?, "description"? }
 - { "type": "data", "data": { any JSON } }            (≤ 16 KB)
 - { "type": "media", "url" | "attachment_id" }        (exactly one of the two)
-- { "type": "voice_memo", "url" | "attachment_id", "duration_ms"? }
+- { "type": "media", "url" | "attachment_id", "duration_ms"? }
 Text styles are bold, italic, underline, and strikethrough; anything else is 422.
 Request body ceiling 512 KB.
 Response 202 { message_id, message }. The conversation-scoped forms are
-POST /v1/conversations/{id}/messages → 201 { messages: [message] } and
-POST /v2/conversations/{id}/messages → 201 { message }, which requires
+POST /v1/chats/{id}/messages → 201 { messages: [message] } and
+POST /v2/chats/{id}/messages → 201 { message }, which requires
 message_id and rejects unknown fields with 422.
 
 ## Messaging state
@@ -152,12 +152,12 @@ message_id and rejects unknown fields with 422.
   a group message stays `sent`.
 - Message content is immutable. There is no edit, unsend, or delete route, no
   message versions, and no tombstones.
-- Mark read: POST /v1/conversations/{id}/read { "message_id" }. Mark delivered:
-  POST /v1/conversations/{id}/delivered { "message_id" }. Watermarks are
+- Mark read: POST /v1/chats/{id}/read { "message_id" }. Mark delivered:
+  POST /v1/chats/{id}/delivered { "message_id" }. Watermarks are
   monotonic and idempotent, and answer { receipt, advanced }.
-- Typing: POST /v1/conversations/{id}/typing { "started": true|false } → 204.
-  Recipients get an ephemeral typing.started/typing.stopped carrying
-  { conversation_id, participant, timeout_ms: 90000 }. Nothing is stored, it
+- Typing: POST /v1/chats/{id}/typing { "started": true|false } → 204.
+  Recipients get an ephemeral chat.typing_indicator.started/chat.typing_indicator.stopped carrying
+  { chat_id, participant, timeout_ms: 90000 }. Nothing is stored, it
   never enters the event log, and clients hide the indicator after timeout_ms.
 - Reactions: POST /v1/messages/{id}/reactions
   { "operation": "add"|"remove", "type": "emoji", "emoji", "target_part_id"? }.
@@ -168,12 +168,12 @@ message_id and rejects unknown fields with 422.
 - Groups: an agent is an ordinary member and receives every message from the
   sequence it joined at. There are no invocations and no invites. People change
   membership in the app.
-- History: GET /v1/conversations/{id}/messages?limit=50&before_sequence=N,
+- History: GET /v1/chats/{id}/messages?limit=50&before_sequence=N,
   newest first, inside the caller's membership window. Projections include
   reactions[] and 1:1 receipt stamps.
 - Media: POST /v1/attachments (raw body ≤ 100 MB, Content-Length required,
   Content-Type + X-Relay-Filename headers) → { attachment: { id: "att_…", url } };
-  send the id in a media or voice_memo part. Attachments are private to their uploader.
+  send the id in a media or media part. Attachments are private to their uploader.
 
 ## Errors
 Envelope: { "error": { "code", "message" } }. Codes: unauthorized(401),

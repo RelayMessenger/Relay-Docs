@@ -1,10 +1,12 @@
 ---
 title: "Reactions"
-description: "Add and remove tapback-style reactions on a message, and receive reaction events."
-keywords: ["reactions", "tapback", "emoji", "reaction.added", "reaction.removed"]
+description: "Add and remove tapback reactions on a message, and receive reaction events."
+keywords: ["reactions", "tapback", "love", "like", "custom emoji", "reaction.added", "reaction.removed"]
 ---
 
-Add a tapback-style reaction to a message.
+Add a tapback reaction to a message. The `type` values are Apple's six tapback
+verbs — `love`, `like`, `dislike`, `laugh`, `emphasize`, `question` — plus
+`custom`, which carries any single emoji in `custom_emoji`.
 
 ## Add or remove a reaction
 
@@ -14,18 +16,15 @@ Use `operation` to add or remove the reaction:
 curl -sS -X POST "https://api.relayapp.im/v1/messages/msg_01JZM3T8AH/reactions" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{ "operation": "add", "type": "emoji", "emoji": "❤️" }'
+  -d '{ "operation": "add", "type": "love" }'
 ```
 
 | Field | Values |
 | --- | --- |
 | `operation` | `add` \| `remove` |
-| `type` | `emoji` |
-| `emoji` | required. Any single emoji, e.g. `"🔥"` |
-| `target_scope` | optional. `message` \| `part`. Defaults to `message` |
-| `target_part_id` | optional. The `prt_` id to anchor on. Supplying it implies `part` scope |
-| `part_index` | deprecated. Legacy index form, media parts only |
-| `operation_id` | optional. A client-minted `mut_` id making the write replayable |
+| `type` | `love` \| `like` \| `dislike` \| `laugh` \| `emphasize` \| `question` \| `custom` |
+| `custom_emoji` | required exactly when `type` is `custom`. Any single emoji, e.g. `"🔥"` |
+| `target_part_id` | optional. The `prt_` id to anchor on; omit it to react to the whole message |
 
 ## Choose a target
 
@@ -37,41 +36,27 @@ curl -sS -X POST "https://api.relayapp.im/v1/messages/msg_01k1m9x2ph4vb7k0d3wzr8
   -H "Content-Type: application/json" \
   -d '{
     "operation": "add",
-    "type": "emoji",
-    "emoji": "🔥",
+    "type": "custom",
+    "custom_emoji": "🔥",
     "target_part_id": "prt_01k1ma0m5sy2k8f3b7wnq4hdvc"
   }'
 ```
 
-`target_part_id` names a part of any kind, including text and cards. Read the
-`part_id` off the part you want from the message itself.
-
-A part-scoped reaction follows its part. If a later edit reorders the parts,
-the projected `part_index` moves with the part; if the edit removes the part,
-the reaction goes with it. That is the whole reason the identity is the id and
-not the index.
-
-<Warning>
-`part_index` is the deprecated form and keeps its original rule: it anchors on
-media parts only, and an index naming a text or card part answers `422`. Relay
-translates it to that part's `part_id` at the boundary and never stores the
-index. Use `target_part_id`.
-</Warning>
+`target_part_id` names a part of any kind. Read the `part_id` off the part you
+want from the message itself.
 
 ## Read the result
 
-A success returns the stored reaction, the same object recipients receive in
-the event:
+A success returns the stored reaction, the same object recipients receive as
+the `data` of a `reaction.added` or `reaction.removed` event:
 
 ```json
 {
   "reaction": {
     "message_id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
-    "part_index": 1,
-    "target_scope": "part",
     "target_part_id": "prt_01k1ma0m5sy2k8f3b7wnq4hdvc",
-    "type": "emoji",
-    "emoji": "🔥",
+    "type": "custom",
+    "custom_emoji": "🔥",
     "actor": { "kind": "agent", "id": "agt_01k1m7v9wr4t2b8n5c3qjd6hzx" },
     "operation": "add",
     "changed": true
@@ -79,9 +64,8 @@ the event:
 }
 ```
 
-`part_index` is always present, and null on a whole-message reaction. It is the
-target part's current position, not an identity. `actor.kind` is `user` or
-`agent`, the same two values a message `sender` carries.
+`actor.kind` is `user` or `agent`, the same two values a message
+`sender_handle` carries.
 
 `changed` says whether anything actually moved. Relay emits `reaction.added` or
 `reaction.removed` only when it is true, so a retry costs recipients nothing.
@@ -91,17 +75,13 @@ target part's current position, not an identity. `actor.kind` is `user` or
 | Add or remove succeeds | The stored reaction, `changed: true` |
 | Remove a missing reaction, or add an existing one | `200` with `changed: false` |
 | Add a second reaction in the same slot | Replaces the first, the way a tapback does |
-| `target_part_id` names no active part of this message | `422 invalid_request` |
-| Reacting to an unsent message | `409 conflict` |
+| `target_part_id` names no part of this message | `422 invalid_request` |
 | Target outside the agent's conversations | `403 forbidden` |
 | More than 120 reactions a minute | `429 rate_limited`, with `Retry-After` in seconds |
 
-## Retry safely
-
-Pass a client-minted `mut_` id as `operation_id` to make a reaction write
-replayable. Retrying with the same id and the same request returns the original
-result and emits no second event; the same id with a different emoji or a
-different target answers `409 idempotency_conflict`.
+A message projected in history carries its reactions in the flatter
+`reactions[]` shape, which uses `actor_kind` and `actor_id` in place of a
+nested `actor` and adds `created_at`.
 
 ## Receiving reaction events
 
@@ -115,28 +95,23 @@ receives `reaction.added` or `reaction.removed`:
   "agent_id": "agt_01JZRELAY",
   "created_at": "2026-07-13T20:02:11.000Z",
   "data": {
-    "reaction": {
-      "message_id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
-      "part_index": null,
-      "target_scope": "message",
-      "target_part_id": null,
-      "type": "emoji",
-      "emoji": "❤️",
-      "actor": { "kind": "user", "id": "usr_01k1m8t3zq7v2r9c4b6ndh5xwj" },
-      "operation": "add",
-      "changed": true
-    }
+    "message_id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
+    "target_part_id": null,
+    "type": "love",
+    "actor": { "kind": "user", "id": "usr_01k1m8t3zq7v2r9c4b6ndh5xwj" },
+    "operation": "add",
+    "changed": true
   }
 }
 ```
 
 <Tip>
-Use a reaction when acknowledgment is enough. React with 👍 to a "thanks"
+Use a reaction when acknowledgment is enough. React with `like` to a "thanks"
 instead of sending another message.
 </Tip>
 
 ## Next steps
 
-- [Message model](/concepts/message-model) for part identities and reaction scopes
+- [Message model](/concepts/message-model) for part identities and reaction slots
 - [Event types](/reference/events)
 - [Sending messages](/guides/sending-messages)

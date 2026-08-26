@@ -1,7 +1,7 @@
 ---
 title: "Core concepts"
 description: "Work with Relay's model: agents, conversations, messages, ordered parts, and delivery semantics."
-keywords: ["concepts", "data model", "agent", "conversation", "message", "parts", "part_id", "sequence", "fallback_text"]
+keywords: ["concepts", "data model", "agent", "conversation", "message", "parts", "part_id", "sequence", "text"]
 ---
 
 Relay uses five objects. Learn these once, then every endpoint follows the same
@@ -24,13 +24,13 @@ See [Your agent](/guides/your-agent) for creation, identity, distribution, and i
 
 ## Conversations and participants
 
-A conversation has a stable `conversation_id` and a set of participants. A
+A conversation has a stable `chat_id` and a set of participants. A
 direct conversation normally contains one user and one agent.
 
 The backend can send only while its agent remains installed and active in the
 conversation.
 
-Use the `conversation_id` from `message.received` for replies and history reads.
+Use the `chat_id` from `message.received` for replies and history reads.
 
 See [Conversation lifecycle](/guides/conversation-lifecycle) for how direct threads begin, remain authorized, and recover.
 
@@ -42,10 +42,10 @@ types, and text and media handed over together stay together inside it.
 | Part type | Carries |
 | --- | --- |
 | `text` | Plain text, up to 8 KB per part |
-| `link_preview` | A public HTTPS URL Relay renders as a preview |
+| `link` | A public HTTPS URL Relay renders as a preview |
 | `data` | Any JSON, up to 16 KB, rendered through fallback text |
 | `media` | An image, video, audio file, or file, by URL or `attachment_id` |
-| `voice_memo` | Voice audio, by URL or `attachment_id` |
+
 
 Every committed part is given a permanent `part_id`. A reply or a reaction
 names that id, so a target never depends on a position.
@@ -57,32 +57,32 @@ Stored messages include:
 ```json
 {
   "id": "msg_01JZM3T8AH",
-  "conversation_id": "cnv_01JZC7K4RQ",
+  "chat_id": "cnv_01JZC7K4RQ",
   "sequence": 7,
-  "kind": "message",
-  "sender": { "kind": "agent", "id": "agt_01JZRELAY" },
+  "item_type": 0,
+  "sender_handle": { "kind": "agent", "id": "agt_01JZRELAY" },
   "is_from_me": true,
   "parts": [
     {
       "part_id": "prt_01k1m4q9vn2r7t9b4c6qdh8xwy",
       "part_index": 0,
       "position": 0,
-      "type": "link_preview",
+      "type": "link",
       "url": "https://example.com"
     }
   ],
   "reply_to": null,
-  "fallback_text": "https://example.com",
+  "text": "https://example.com",
   "status": "sent",
   "created_at": "2026-07-12T01:21:08.000Z"
 }
 ```
 
-`fallback_text` is the plain-language representation used by notifications, search, and clients that cannot render a part. Relay derives it, in this order: the first text part, then the first link preview, then the first data part's `fallback`, then `Voice memo` or `[attachment]`. A sender-supplied `fallback_text` replaces the derived one.
+`text` is the plain-language representation used by notifications, search, and clients that cannot render a part. Relay derives it, in this order: the first text part, then the first link preview, then the first data part's `fallback`, then `Voice memo` or `[attachment]`. A sender-supplied `text` replaces the derived one.
 
 `is_from_me` states direction for the caller the payload was projected for. Relay resolves it on the server against the authenticated identity.
 
-Read direction from that field alone. Comparing `sender.id` against your own id is ambiguous before a client knows its own identity, and wrong for every other participant in a group.
+Read direction from that field alone. Comparing `sender_handle.id` against your own id is ambiguous before a client knows its own identity, and wrong for every other participant in a group.
 
 `kind` separates the two things a conversation stores. A `message` is
 something someone sent. A `notice` is a group membership or metadata change,

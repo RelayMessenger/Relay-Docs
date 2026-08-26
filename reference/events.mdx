@@ -12,7 +12,7 @@ Every event uses the same envelope:
   "sequence": 118,
   "event_type": "message.received",
   "agent_id": "agt_01JZRELAY",
-  "conversation_id": "cnv_01JZC7K4RQ",
+  "chat_id": "cnv_01JZC7K4RQ",
   "created_at": "2026-07-12T01:21:03.000Z",
   "schema_version": "2026-08-24",
   "data": { }
@@ -42,18 +42,18 @@ idempotent writes, live state, and recovery.
 
 ## Emitted in v0
 
-Ten event types, and every one of them is available to both webhooks and
-`GET /v1/events`.
+Every event type is available to both webhooks and `GET /v1/events`.
 
 | Event | Fires when |
 | --- | --- |
 | `message.received` | Someone sent a message in one of the agent's conversations |
 | `message.delivered` | A recipient received the agent's message |
 | `message.read` | A recipient read the agent's message |
-| `conversation.added` | The agent was added to a group |
-| `conversation.updated` | A group's roster or metadata changed |
-| `conversation.removed` | The agent was removed from a group |
-| `conversation.left` | A participant left a group of their own accord |
+| `chat.created` | A chat the agent belongs to was created |
+| `chat.group_name_updated` | A group was renamed |
+| `chat.group_icon_updated` | A group's photo changed |
+| `participant.added` | A participant (the agent included) was added to a group |
+| `participant.removed` | A participant (the agent included) was removed from, or left, a group |
 | `reaction.added` | Someone reacted to the agent's message |
 | `reaction.removed` | Someone took a reaction off |
 
@@ -64,7 +64,7 @@ group.
 
 | Field | Contents |
 | --- | --- |
-| `data.message` | The full stored message: `id`, `conversation_id`, `sequence`, `kind`, `sender`, `is_from_me`, ordered `parts[]`, `reply_to`, `fallback_text`, `status`, `created_at` |
+| `data` | The full stored message: `id`, `chat_id`, `sequence`, `item_type`, `sender_handle`, `is_from_me`, ordered `parts[]`, `reply_to`, `text`, `status`, `created_at` |
 
 One send is one message, so one send is one `message.received`. The agent's own
 messages never echo back.
@@ -81,10 +81,10 @@ line.
   "data": {
     "message": {
       "id": "msg_01JZM3T8AH",
-      "conversation_id": "cnv_01JZC7K4RQ",
+      "chat_id": "cnv_01JZC7K4RQ",
       "sequence": 4,
-      "kind": "notice",
-      "sender": { "kind": "user", "id": "usr_01JZU1F0BD" },
+      "item_type": 1,
+      "sender_handle": { "kind": "user", "id": "usr_01JZU1F0BD" },
       "is_from_me": false,
       "parts": [
         {
@@ -111,7 +111,7 @@ line.
         }
       ],
       "reply_to": null,
-      "fallback_text": "Scheduler was added",
+      "text": "Scheduler was added",
       "status": "sent",
       "created_at": "2026-07-17T12:00:00.000Z"
     }
@@ -129,7 +129,7 @@ A recipient durably received the agent's message. Everything through
   "event_type": "message.delivered",
   "data": {
     "message_id": "msg_01KXEKDSH8M3V5P2R7T9B4C6QD",
-    "conversation_id": "cnv_01JZU1CONV",
+    "chat_id": "cnv_01JZU1CONV",
     "through_sequence": 42,
     "recipient": { "kind": "user", "id": "usr_01JZU1X4" },
     "participant": { "kind": "user", "id": "usr_01JZU1X4" },
@@ -161,15 +161,13 @@ A participant added or removed a reaction on the agent's message.
 {
   "event_type": "reaction.added",
   "data": {
-    "reaction": {
-      "message_id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
-      "target_part_id": "prt_01k1ma0m5sy2k8f3b7wnq4hdvc",
-      "type": "emoji",
-      "emoji": "🔥",
-      "actor": { "kind": "user", "id": "usr_01k1m8t3zq7v2r9c4b6ndh5xwj" },
-      "operation": "add",
-      "changed": true
-    }
+    "message_id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
+    "target_part_id": "prt_01k1ma0m5sy2k8f3b7wnq4hdvc",
+    "type": "custom",
+    "custom_emoji": "🔥",
+    "actor": { "kind": "user", "id": "usr_01k1m8t3zq7v2r9c4b6ndh5xwj" },
+    "operation": "add",
+    "changed": true
   }
 }
 ```
@@ -177,7 +175,8 @@ A participant added or removed a reaction on the agent's message.
 | Field | Contents |
 | --- | --- |
 | `target_part_id` | The part this reaction is anchored to, and the identity for it. Null when the reaction is on the whole message |
-| `type` | Always `"emoji"` |
+| `type` | One of `love`, `like`, `dislike`, `laugh`, `emphasize`, `question`, `custom` — Apple's six tapback verbs plus a custom emoji |
+| `custom_emoji` | The emoji, present exactly when `type` is `custom` |
 | `actor.kind` | `user` or `agent` |
 | `changed` | Always true on an emitted event. Relay emits nothing for a no-op |
 
@@ -185,29 +184,38 @@ A message projected in history carries its reactions in the flatter
 `reactions[]` shape, which uses `actor_kind` and `actor_id` in place of a
 nested `actor` and adds `created_at`.
 
-### `conversation.added`, `conversation.updated`, `conversation.removed`, `conversation.left`
+### `chat.created`, `participant.added`, `participant.removed`, `chat.group_name_updated`, `chat.group_icon_updated`
 
 Relay emits these when a person changes a group the agent is in. A removed
 agent receives no further events for that group.
 
 An agent in a group is an ordinary member: it receives every message from the
 sequence it joined at, and reads that same history back from
-`GET /v1/conversations/{id}/messages`.
+`GET /v1/chats/{id}/messages`.
+
+Roster events (`participant.added` / `participant.removed`) carry:
 
 | Field | Contents |
 | --- | --- |
-| `conversation_id` | The group the change happened in |
+| `chat_id` | The group the change happened in |
 | `actor` | The person who made the change |
-| `affected_participant` | The participant added, removed, or departed. Absent on a metadata update |
-| `membership_version` | The roster version after the change. Present on a roster change |
-| `changes` | Each changed field, with its old and new value. Present on a metadata change |
-| `updated_at` | When the metadata changed |
+| `affected_participant` | The participant added or removed. On a leave, the actor and the affected participant are the same person |
+| `membership_version` | The roster version after the change |
+
+Metadata events (`chat.group_name_updated` / `chat.group_icon_updated`) carry:
+
+| Field | Contents |
+| --- | --- |
+| `chat_id` | The group the change happened in |
+| `old_value` / `new_value` | The name or icon before and after |
+| `changed_by_handle` | The person who made the change |
+| `updated_at` | When it changed |
 
 <CodeGroup>
 
 ```json Roster change
 {
-  "conversation_id": "cnv_01JZC7K4RQ",
+  "chat_id": "cnv_01JZC7K4RQ",
   "actor": { "kind": "user", "id": "usr_01JZU1F0BD" },
   "affected_participant": { "kind": "agent", "id": "agt_01JZRELAY" },
   "membership_version": 2
@@ -216,28 +224,27 @@ sequence it joined at, and reads that same history back from
 
 ```json Metadata change
 {
-  "conversation_id": "cnv_01JZC7K4RQ",
-  "actor": { "kind": "user", "id": "usr_01JZU1F0BD" },
-  "changes": {
-    "title": { "old": "Weekend", "new": "Weekend plans" },
-    "avatar_url": { "old": null, "new": "https://cdn.relayapp.im/group.png" }
-  },
+  "chat_id": "cnv_01JZC7K4RQ",
+  "old_value": "Weekend",
+  "new_value": "Weekend plans",
+  "changed_by_handle": { "kind": "user", "id": "usr_01JZU1F0BD" },
   "updated_at": "2026-07-17T12:00:00.000Z"
 }
 ```
 
 </CodeGroup>
 
-The matching notice arrives separately, as the `message.received` shown above.
-`conversation.left` is a different fact from `conversation.removed`: nobody
-removed the participant, so the change is attributed to them.
+The matching notice arrives separately, as the `message.received` shown above:
+a message row with `item_type` 1 (roster), 2 (rename) or 3 (photo), sent by
+the person who made the change. A leave is a `participant.removed` whose
+`actor` and `affected_participant` are the same person.
 
 A backend receives these lifecycle events, but cannot create a group or change
 its membership. People do that in the app. See [API availability](/roadmap).
 
 ## Not in the event log
 
-Typing is ephemeral. `typing.started` and `typing.stopped` are pushed to a
+Typing is ephemeral. `chat.typing_indicator.started` and `chat.typing_indicator.stopped` are pushed to a
 person's live devices, take no sequence, never enter the log, and are never
 replayed. See [Typing indicators](/guides/typing-indicators).
 

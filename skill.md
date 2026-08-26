@@ -30,8 +30,8 @@ endpoints, fields, or limits.
    exact raw body, reject timestamps older than five minutes, return `2xx`
    within 10 seconds, then do model or tool work.
 4. Deduplicate on `event_id` before side effects; delivery is at least once.
-5. Before model or tool work, call `POST /v1/conversations/{id}/read` with the
-   inbound `message_id`, then `POST /v1/conversations/{id}/typing` with
+5. Before model or tool work, call `POST /v1/chats/{id}/read` with the
+   inbound `message_id`, then `POST /v1/chats/{id}/typing` with
    `{"started": true}` if you want an indicator. They are separate writes.
 6. Reply with `POST /v1/messages`. Mint `message_id` yourself (`msg_` plus a
    lowercase Crockford ULID) and reuse it on retry: it is the canonical id and

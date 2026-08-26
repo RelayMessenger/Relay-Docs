@@ -1,12 +1,12 @@
 ---
 title: "Group conversations"
 description: "Receive every group message from the sequence your agent joined at, reply into the group, and follow membership changes."
-keywords: ["groups", "group conversations", "membership", "participants", "notice", "conversation.added"]
+keywords: ["groups", "group conversations", "membership", "participants", "notice", "participant.added"]
 ---
 
 An agent in a group is an ordinary member. From the sequence it joined at it
 receives every message the group sends, and `GET
-/v1/conversations/{id}/messages` returns that same history. See [conversation
+/v1/chats/{id}/messages` returns that same history. See [conversation
 history](/guides/conversation-history).
 
 Membership is what grants access. A member added later starts at the sequence
@@ -20,7 +20,7 @@ flowchart TB
     M2["seq 9: Alice: dinner Thursday?"]
     M3["seq 10: Bob: works for me"]
   end
-  M1 ==>|"conversation.added"| X["Your backend"]
+  M1 ==>|"participant.added"| X["Your backend"]
   M2 ==>|"message.received"| X
   M3 ==>|"message.received"| X
   X ==>|"POST /v1/messages"| G
@@ -35,18 +35,18 @@ direct conversation uses.
 {
   "event_type": "message.received",
   "agent_id": "agt_01JZRELAY",
-  "conversation_id": "cnv_01JZC7K4RQ",
+  "chat_id": "cnv_01JZC7K4RQ",
   "data": {
     "message": {
       "id": "msg_01JZM3T8AH",
-      "conversation_id": "cnv_01JZC7K4RQ",
+      "chat_id": "cnv_01JZC7K4RQ",
       "sequence": 12,
-      "kind": "message",
-      "sender": { "kind": "user", "id": "usr_01JZU1F0BD" },
+      "item_type": 0,
+      "sender_handle": { "kind": "user", "id": "usr_01JZU1F0BD" },
       "is_from_me": false,
       "parts": [{ "part_id": "prt_01JZM3T8AJ", "part_index": 0, "type": "text", "text": "when are we free?" }],
       "reply_to": null,
-      "fallback_text": "when are we free?",
+      "text": "when are we free?",
       "status": "sent",
       "created_at": "2026-07-17T12:00:00.000Z"
     }
@@ -70,7 +70,7 @@ curl -sS -X POST "https://api.relayapp.im/v1/messages" \
   -H "Content-Type: application/json" \
   -d '{
     "message_id": "msg_01k1m4q9vn2r7t9b4c6qdh8xwy",
-    "conversation_id": "cnv_01JZC7K4RQ",
+    "chat_id": "cnv_01JZC7K4RQ",
     "parts": [{ "type": "text", "text": "Thursday after 4pm works for everyone." }]
   }'
 ```
@@ -84,15 +84,15 @@ Relay emits these to an agent in a group.
 
 | Event | Emitted when |
 | --- | --- |
-| `conversation.added` | A person adds your agent to a group |
-| `conversation.updated` | The roster or the group's title or avatar changes while your agent is a member |
-| `conversation.removed` | A person removes your agent |
+| `participant.added` | A person adds your agent to a group |
+| `chat.group_name_updated` | The roster or the group's title or avatar changes while your agent is a member |
+| `participant.removed` | A person removes your agent |
 
 Each payload carries these fields:
 
 | Field | Contents |
 | --- | --- |
-| `conversation_id` | The group the change happened in |
+| `chat_id` | The group the change happened in |
 | `actor` | The person who made the change |
 | `affected_participant` | The participant the change targeted. Roster changes only |
 | `membership_version` | The roster version after the change. Roster changes only |
@@ -111,10 +111,10 @@ naming the change.
 ```json
 {
   "id": "msg_01K1M9NOTICE",
-  "conversation_id": "cnv_01JZC7K4RQ",
+  "chat_id": "cnv_01JZC7K4RQ",
   "sequence": 8,
-  "kind": "notice",
-  "sender": { "kind": "user", "id": "usr_01JZU1F0BD" },
+  "item_type": 1,
+  "sender_handle": { "kind": "user", "id": "usr_01JZU1F0BD" },
   "is_from_me": false,
   "parts": [
     { "part_id": "prt_01K1M9NOT01", "part_index": 0, "type": "text", "text": "Scheduler was added" },
@@ -135,7 +135,7 @@ naming the change.
     }
   ],
   "reply_to": null,
-  "fallback_text": "Scheduler was added",
+  "text": "Scheduler was added",
   "status": "sent",
   "created_at": "2026-07-17T11:59:40.000Z"
 }
@@ -175,7 +175,7 @@ person's Relay session. There is no Agent Token route for them.
 | Leave the group | A person, in the app |
 | Send a message into the group | Your backend, via `POST /v1/messages` |
 | React to a group message | Your backend, or a person in the app |
-| Read the group's history | Your backend, via `GET /v1/conversations/{id}/messages` |
+| Read the group's history | Your backend, via `GET /v1/chats/{id}/messages` |
 
 <Note>
 Fuller agent-initiated group management is on the [API availability](/roadmap).

@@ -4,7 +4,7 @@ description: "Send ordered parts as one message with POST /v1/messages, reply to
 keywords: ["send message", "parts", "text", "media", "voice memo", "data", "reply_to", "message_id"]
 ---
 
-Send a message with `conversation_id` and an ordered `parts[]` array. Both are
+Send a message with `chat_id` and an ordered `parts[]` array. Both are
 required: a send with no `parts`, or with an empty array, returns
 `422 invalid_request`.
 
@@ -14,10 +14,10 @@ curl -sS -X POST "https://api.relayapp.im/v1/messages" \
   -H "Content-Type: application/json" \
   -d '{
     "message_id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
-    "conversation_id": "cnv_01JZC7K4RQ",
+    "chat_id": "cnv_01JZC7K4RQ",
     "parts": [
       { "type": "text", "text": "Found three options. The best one:" },
-      { "type": "link_preview", "url": "https://example.com/listing/42" }
+      { "type": "link", "url": "https://example.com/listing/42" }
     ]
   }'
 ```
@@ -26,11 +26,11 @@ One send is one message. The parts stay together in the order you sent them,
 and every committed part carries a permanent `part_id` that replies and
 reactions address.
 
-The notification carries the message's `fallback_text`, so the alert reads as
+The notification carries the message's `text`, so the alert reads as
 the words, not as an attachment placeholder. In a group, a message that
 mentions the recipient reaches them even with the group muted.
 
-The send body takes an optional `fallback_text`, a plain-language
+The send body takes an optional `text`, a plain-language
 representation for notifications and search. Relay derives one when it is
 absent.
 
@@ -41,17 +41,17 @@ The `202 Accepted` response carries the canonical id and the committed message:
   "message_id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
   "message": {
     "id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
-    "conversation_id": "cnv_01JZC7K4RQ",
+    "chat_id": "cnv_01JZC7K4RQ",
     "sequence": 8,
-    "kind": "message",
-    "sender": { "kind": "agent", "id": "agt_01k1m7v9wr4t2b8n5c3qjd6hzx" },
+    "item_type": 0,
+    "sender_handle": { "kind": "agent", "id": "agt_01k1m7v9wr4t2b8n5c3qjd6hzx" },
     "is_from_me": true,
     "parts": [
       { "part_id": "prt_01k1ma0m5sy2k8f3b7wnq4hdvc", "part_index": 0, "position": 0, "type": "text", "text": "Found three options. The best one:" },
-      { "part_id": "prt_01k1ma0m6t3rd9v2h8xkq5wzbf", "part_index": 1, "position": 1, "type": "link_preview", "url": "https://example.com/listing/42" }
+      { "part_id": "prt_01k1ma0m6t3rd9v2h8xkq5wzbf", "part_index": 1, "position": 1, "type": "link", "url": "https://example.com/listing/42" }
     ],
     "reply_to": null,
-    "fallback_text": "Found three options. The best one:",
+    "text": "Found three options. The best one:",
     "status": "sent",
     "created_at": "2026-07-13T20:01:04.000Z"
   }
@@ -63,18 +63,18 @@ Three routes commit a send, and each of them commits exactly one message:
 | Route | Success | Body |
 | --- | --- | --- |
 | `POST /v1/messages` | `202` | `{ message_id, message }` |
-| `POST /v1/conversations/{conversation_id}/messages` | `201` | `{ messages: [message] }`, an array of exactly one |
-| `POST /v2/conversations/{conversation_id}/messages` | `201` | `{ message }` |
+| `POST /v1/chats/{chat_id}/messages` | `201` | `{ messages: [message] }`, an array of exactly one |
+| `POST /v2/chats/{chat_id}/messages` | `201` | `{ message }` |
 
 ## Part types
 
 | Type | Shape | Limits |
 | --- | --- | --- |
 | `text` | `{ "type": "text", "text": "Hello" }` | 8 KB per part |
-| `link_preview` | `{ "type": "link_preview", "url": "https://example.com" }` | public HTTPS URL, up to 2,048 characters |
+| `link` | `{ "type": "link", "url": "https://example.com" }` | public HTTPS URL, up to 2,048 characters |
 | `data` | `{ "type": "data", "data": { ... } }` | any JSON, 16 KB; stored and delivered as sent, rendered through fallback text |
 | `media` | `{ "type": "media", "url": "https://…", "content_type": "video/mp4" }` or `{ "attachment_id": "att_…" }` | send one source; optional `content_type`, `media_kind` (`image` \| `video` \| `audio` \| `file`), and `width` + `height` in pixels (always together) |
-| `voice_memo` | `{ "type": "voice_memo", "url": "https://…" }` or `{ "type": "voice_memo", "attachment_id": "att_…" }` | send `url` or `attachment_id`, never both; `duration_ms` is optional |
+| `media` | `{ "type": "media", "url": "https://…" }` or `{ "type": "media", "attachment_id": "att_…" }` with `"is_audio_message": true` on the message | send `url` or `attachment_id`, never both; `duration_ms` is optional |
 
 A message carries 1 to 32 parts.
 
@@ -161,7 +161,7 @@ message and replaces your `data` with the card recipients receive:
 | `tagline` | Always present, and an empty string when the agent has not set one |
 | After the send | The card is a snapshot. Renaming the agent later never rewrites cards already sent |
 
-Clients that cannot render a part use its `data.fallback` string when present, then the message's [`fallback_text`](/concepts).
+Clients that cannot render a part use its `data.fallback` string when present, then the message's [`text`](/concepts).
 
 Use [Voice memos](/guides/voice-memos) for audio in the inline voice player. Use [Rich link previews](/guides/rich-link-previews) when a URL should render as a preview card.
 
@@ -206,19 +206,19 @@ reads no header.
 
 ## Send with /v2
 
-`POST /v2/conversations/{conversation_id}/messages` returns the committed
+`POST /v2/chats/{chat_id}/messages` returns the committed
 message on its own and validates the body strictly: any field outside
-`message_id`, `parts`, `reply_to`, and `fallback_text` returns `422`.
+`message_id`, `parts`, `reply_to`, and `text` returns `422`.
 
 ```bash
-curl -sS -X POST "https://api.relayapp.im/v2/conversations/cnv_01k1m4q9vn2r7t9b4c6qdh8xwy/messages" \
+curl -sS -X POST "https://api.relayapp.im/v2/chats/cnv_01k1m4q9vn2r7t9b4c6qdh8xwy/messages" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "message_id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
     "parts": [
       { "type": "text", "text": "Found three options. The best one:" },
-      { "type": "link_preview", "url": "https://example.com/listing/42" }
+      { "type": "link", "url": "https://example.com/listing/42" }
     ]
   }'
 ```

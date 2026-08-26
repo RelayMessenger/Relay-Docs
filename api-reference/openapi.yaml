@@ -86,7 +86,7 @@ paths:
           required: true
           schema:
             type: string
-          description: The `sender.id` from a `message.received` event.
+          description: The `sender_handle.id` from a `message.received` event.
           example: usr_01JZU1F0BD
       responses:
         "200":
@@ -262,7 +262,7 @@ paths:
         "429":
           $ref: "#/components/responses/WriteBudgetExceeded"
 
-  /v1/conversations:
+  /v1/chats:
     get:
       tags: [Conversations]
       summary: List conversations
@@ -302,7 +302,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
-  /v1/conversations/{conversation_id}:
+  /v1/chats/{chat_id}:
     get:
       tags: [Conversations]
       summary: Get a conversation
@@ -325,7 +325,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /v1/conversations/{conversation_id}/messages:
+  /v1/chats/{chat_id}/messages:
     get:
       tags: [Messages]
       summary: Read conversation history
@@ -450,14 +450,14 @@ paths:
         "503":
           $ref: "#/components/responses/CommitUnavailable"
 
-  /v2/conversations/{conversation_id}/messages:
+  /v2/chats/{chat_id}/messages:
     post:
       tags: [Messages]
       summary: Send one message
       description: >
         The current send. One send is one message, the response is the message
         on its own, and the request body is validated strictly: any field
-        outside `message_id`, `parts`, `reply_to` and `fallback_text` answers
+        outside `message_id`, `parts`, `reply_to` and `text` answers
         `422`.
 
 
@@ -896,7 +896,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
-  /v1/conversations/{conversation_id}/typing:
+  /v1/chats/{chat_id}/typing:
     post:
       operationId: setTyping
       summary: Start or stop the typing indicator
@@ -904,7 +904,7 @@ paths:
         Ephemeral, the way iMessage treats it: the signal is pushed to the
         other people's live devices and nothing is stored, so it takes no
         sequence, never enters the event log, and is never replayed. Recipients
-        receive `typing.started` or `typing.stopped` carrying `timeout_ms`, and
+        receive `chat.typing_indicator.started` or `chat.typing_indicator.stopped` carrying `timeout_ms`, and
         hide the indicator on their own once that many milliseconds pass
         without a refresh. Send the start again while still composing to keep
         it alive.
@@ -912,7 +912,7 @@ paths:
 
         The signal reaches the conversation's other people, never other agents,
         and its payload is
-        `{ "conversation_id": "cnv_…", "participant": { "kind": "agent", "id":
+        `{ "chat_id": "cnv_…", "participant": { "kind": "agent", "id":
         "agt_…" }, "timeout_ms": 90000 }`.
       tags: [Conversations]
       security:
@@ -952,7 +952,7 @@ paths:
         "429":
           $ref: "#/components/responses/WriteBudgetExceeded"
 
-  /v1/conversations/{conversation_id}/delivered:
+  /v1/chats/{chat_id}/delivered:
     post:
       operationId: markDelivered
       summary: Advance the delivery watermark
@@ -1004,7 +1004,7 @@ paths:
         "429":
           $ref: "#/components/responses/WriteBudgetExceeded"
 
-  /v1/conversations/{conversation_id}/read:
+  /v1/chats/{chat_id}/read:
     post:
       operationId: markRead
       summary: Advance the read watermark
@@ -1294,7 +1294,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [agent, token, conversation_id]
+                required: [agent, token, chat_id]
                 properties:
                   agent:
                     $ref: "#/components/schemas/Agent"
@@ -1302,7 +1302,7 @@ paths:
                     type: string
                     pattern: "^rly_live_"
                     description: The Agent Token. Returned once and never again.
-                  conversation_id:
+                  chat_id:
                     type: string
                     pattern: "^cnv_"
                     description: The owner's direct conversation with the new agent.
@@ -1511,7 +1511,7 @@ components:
         the body. It is read only when it is itself a `msg_` id; any other
         value is ignored and the server mints the id.
     ConversationId:
-      name: conversation_id
+      name: chat_id
       in: path
       required: true
       schema:
@@ -1612,7 +1612,7 @@ components:
               example: invalid_request
             message:
               type: string
-              example: conversation_id is required
+              example: chat_id is required
 
     DeviceAuthorizationError:
       type: object
@@ -1654,8 +1654,8 @@ components:
       additionalProperties: false
       required:
         - id
-        - kind
-        - title
+        - is_group
+        - display_name
         - counterpart_user
         - participant_count
         - last_sequence
@@ -1663,8 +1663,8 @@ components:
         - created_at
       properties:
         id: { type: string, pattern: "^cnv_" }
-        kind: { type: string, enum: [direct, group] }
-        title: { type: [string, "null"] }
+        is_group: { type: boolean }
+        display_name: { type: [string, "null"] }
         counterpart_user:
           description: The active human in a direct user-agent conversation; null for groups.
           oneOf:
@@ -1949,7 +1949,6 @@ components:
       oneOf:
         - $ref: "#/components/schemas/TextPartInput"
         - $ref: "#/components/schemas/MediaPartInput"
-        - $ref: "#/components/schemas/VoiceMemoPartInput"
         - $ref: "#/components/schemas/LinkPreviewPartInput"
         - $ref: "#/components/schemas/DataPartInput"
       discriminator:
@@ -1965,21 +1964,19 @@ components:
           type: string
           minLength: 1
           description: UTF-8 text, limited to 8 KB by the server.
-        mentions:
+        mention:
+          $ref: "#/components/schemas/Mention"
+        mention_range:
           type: array
-          maxItems: 16
+          minItems: 2
+          maxItems: 2
+          items: { type: integer, minimum: 0 }
           description: >
-            The handles this message mentions, each of which must be written
-            as `@handle` in `text`: at its start or after a space, newline,
-            bracket or quote, running to the first character outside
-            `[A-Za-z0-9_]`. There are no offsets: a mention can only ever be
-            the handle itself. A handle typed but never confirmed against the
-            sender's suggestion list is absent here and stays plain text. The
-            text stays canonical without the mentions, but they are not inert:
-            a mention notifies the named participant even when they have muted
-            the group.
-          items:
-            $ref: "#/components/schemas/Mention"
+            [start, end) UTF-16 code-unit offsets over `text`: one mention
+            per text part, carried the way Linq carries them. The ranged text
+            is display text and is not required to spell the handle. Required
+            when `mention` is present. A mention notifies the named
+            participant even when they have muted the group.
         styles:
           type: array
           maxItems: 200
@@ -2082,44 +2079,13 @@ components:
         - properties: { attachment_id: {} }
           required: [attachment_id]
 
-    VoiceMemoPartInput:
-      type: object
-      additionalProperties: false
-      required: [type]
-      description: Audio rendered with Relay's native inline voice-memo player.
-      properties:
-        type: { type: string, const: voice_memo }
-        url:
-          type: string
-          format: uri
-          pattern: "^https://"
-          description: >
-            Public HTTPS audio URL. The hostname must be publicly reachable:
-            private and reserved ranges, loopback, and IP-literal hostnames
-            are rejected. At commit the server imports audio bytes into
-            Relay-owned attachment storage and rewrites the part to
-            reference the copy.
-        attachment_id:
-          type: string
-          pattern: "^att_"
-          description: Available `audio/*` attachment created by `POST /v1/attachments`.
-        duration_ms:
-          type: integer
-          minimum: 0
-          description: Optional playback duration metadata in milliseconds.
-      oneOf:
-        - properties: { url: {} }
-          required: [url]
-        - properties: { attachment_id: {} }
-          required: [attachment_id]
-
     LinkPreviewPartInput:
       type: object
       additionalProperties: false
       required: [type, url]
       description: URL rendered as a native rich preview when metadata is available.
       properties:
-        type: { type: string, const: link_preview }
+        type: { type: string, const: link }
         url:
           type: string
           format: uri
@@ -2152,7 +2118,7 @@ components:
           description: >
             Integration-defined JSON, limited to 16 KB by the server. Relay
             stores and delivers it as sent; clients render a part-level
-            fallback string when present, then the message fallback_text.
+            fallback string when present, then the message text.
             Consumers must ignore unknown fields inside a data part.
 
             One `data.type` value is reserved and is not carried through as
@@ -2228,14 +2194,13 @@ components:
       description: >
         One part of a message, discriminated on `type`. The union is
         deliberately open: a client that meets a `type` it does not know must
-        render the message's `fallback_text` for that part and leave it
+        render the message's `text` for that part and leave it
         otherwise untouched, rather than dropping the part or failing the
         message. Relay adds part types without a version bump, so this is the
         difference between an old client degrading and an old client breaking.
       oneOf:
         - $ref: "#/components/schemas/TextPart"
         - $ref: "#/components/schemas/MediaPart"
-        - $ref: "#/components/schemas/VoiceMemoPart"
         - $ref: "#/components/schemas/LinkPreviewPart"
         - $ref: "#/components/schemas/DataPart"
         - $ref: "#/components/schemas/UnknownPart"
@@ -2261,7 +2226,7 @@ components:
         type:
           type: string
           not:
-            enum: [text, media, voice_memo, link_preview, data]
+            enum: [text, media, link, data]
           description: >
             A part kind this version of the spec does not publish. The
             exclusion is what keeps the union unambiguous: a known kind is
@@ -2280,14 +2245,14 @@ components:
           minimum: 0
         type: { type: string, const: text }
         text: { type: string }
-        mentions:
+        mention:
+          $ref: "#/components/schemas/Mention"
+        mention_range:
           type: array
-          maxItems: 16
-          description: >
-            The handles this text part mentions, as validated at send time.
-            Each is written as `@handle` in `text`.
-          items:
-            $ref: "#/components/schemas/Mention"
+          minItems: 2
+          maxItems: 2
+          items: { type: integer, minimum: 0 }
+          description: The mention's [start, end) UTF-16 range over `text`.
         styles:
           type: array
           maxItems: 200
@@ -2390,22 +2355,6 @@ components:
             the server derived it from a stored image attachment. Decode it
             into a soft preview to draw before the media bytes download.
 
-    VoiceMemoPart:
-      type: object
-      additionalProperties: false
-      required: [part_index, type, url]
-      properties:
-        part_index: { type: integer, minimum: 0 }
-        part_id:
-          $ref: "#/components/schemas/PartId"
-        position:
-          type: integer
-          minimum: 0
-        type: { type: string, const: voice_memo }
-        url: { type: string, format: uri }
-        attachment_id: { type: string, pattern: "^att_" }
-        duration_ms: { type: integer, minimum: 0 }
-
     LinkPreviewPart:
       type: object
       additionalProperties: false
@@ -2417,7 +2366,7 @@ components:
         position:
           type: integer
           minimum: 0
-        type: { type: string, const: link_preview }
+        type: { type: string, const: link }
         url: { type: string, format: uri, maxLength: 2048 }
         title:
           type: string
@@ -2520,7 +2469,7 @@ components:
     ProjectedReaction:
       type: object
       additionalProperties: false
-      required: [target_part_id, emoji, actor_kind, actor_id, created_at]
+      required: [target_part_id, type, actor_kind, actor_id, created_at]
       description: One reaction as it appears in a message's `reactions` array.
       properties:
         target_part_id:
@@ -2530,8 +2479,16 @@ components:
           description: >
             The part this reaction is anchored to, and the only identity for
             it. Null exactly when the reaction is on the whole message.
-        emoji:
+        type:
           type: string
+          enum: [love, like, dislike, laugh, emphasize, question, custom]
+          description: >
+            Apple's six tapback verbs (chat.db associated_message_type
+            2000–2005, spelled the way Linq spells them) plus `custom`.
+        custom_emoji:
+          type: string
+          maxLength: 32
+          description: Present exactly when `type` is `custom`.
         actor_kind:
           type: string
           enum: [user, agent]
@@ -2552,14 +2509,14 @@ components:
         move.
       required:
         - id
-        - conversation_id
+        - chat_id
         - sequence
-        - kind
-        - sender
+        - item_type
+        - sender_handle
         - is_from_me
         - parts
         - reply_to
-        - fallback_text
+        - text
         - status
         - created_at
       properties:
@@ -2567,21 +2524,36 @@ components:
           type: string
           pattern: "^msg_[0-9a-hjkmnp-tv-z]{26}$"
           example: msg_01k1m4q9vn2r7t9b4c6qdh8xwy
-        conversation_id:
+        chat_id:
           type: string
           pattern: "^cnv_"
           example: cnv_01k1m4q9vn2r7t9b4c6qdh8xwy
         sequence:
           type: integer
           description: Order inside the conversation. It is unrelated to event sequences.
-        kind:
-          type: string
-          enum: [message, notice]
+        item_type:
+          type: integer
+          enum: [0, 1, 2, 3]
           description: >
-            `notice` is a group notice ("Alice added Bob"), sent by the person
-            who caused it and carrying a text part plus a `data` part with the
-            mutation. Render it as a centered system line, not as a bubble.
-        sender:
+            chat.db's item_type, with Apple's values: 0 an ordinary message,
+            1 a participant change (`group_action_type` 0 = added,
+            1 = removed/left; `other_handle` = who), 2 a rename
+            (`group_title`), 3 a group-photo change. A notice row (item_type
+            ≠ 0) is sent by the person who did the thing, carries no parts,
+            and its human line rides in `text`. Render it as a centered
+            system line, not as a bubble.
+        group_action_type:
+          type: integer
+          enum: [0, 1]
+        other_handle:
+          type: string
+          pattern: "^(usr|agt)_"
+        group_title:
+          type: string
+        is_audio_message:
+          type: boolean
+          description: "chat.db's is_audio_message: this message is a voice memo."
+        sender_handle:
           $ref: "#/components/schemas/Sender"
         is_from_me:
           type: boolean
@@ -2593,8 +2565,11 @@ components:
             participant in a group.
         parts:
           type: array
-          minItems: 1
+          minItems: 0
           maxItems: 32
+          description: >
+            An item_type 0 message has at least one part; a notice carries
+            none.
           items:
             $ref: "#/components/schemas/Part"
         reply_to:
@@ -2606,7 +2581,7 @@ components:
             array; a send response carries the committed message alone.
           items:
             $ref: "#/components/schemas/ProjectedReaction"
-        fallback_text:
+        text:
           type: string
           description: Plain-language representation used by notifications and search.
         status:
@@ -2652,7 +2627,7 @@ components:
             $ref: "#/components/schemas/PartInput"
         reply_to:
           $ref: "#/components/schemas/ReplyRefInput"
-        fallback_text:
+        text:
           type: string
           description: >
             Optional plain-language representation for notifications and
@@ -2662,9 +2637,9 @@ components:
       allOf:
         - $ref: "#/components/schemas/SendMessageBody"
         - type: object
-          required: [conversation_id]
+          required: [chat_id]
           properties:
-            conversation_id:
+            chat_id:
               type: string
               pattern: "^cnv_"
               description: Conversation to send into, from `message.received`.
@@ -2693,7 +2668,7 @@ components:
             $ref: "#/components/schemas/PartInput"
         reply_to:
           $ref: "#/components/schemas/ReplyRefInput"
-        fallback_text:
+        text:
           type: string
           description: Plain-language representation for notifications and search.
 
@@ -2723,20 +2698,23 @@ components:
     ReactionInput:
       type: object
       additionalProperties: false
-      required: [operation, emoji]
+      required: [operation, type]
       properties:
         operation:
           type: string
           enum: [add, remove]
         type:
           type: string
-          enum: [emoji]
-          description: Optional. The only accepted value is `emoji`.
-        emoji:
+          enum: [love, like, dislike, laugh, emphasize, question, custom]
+          description: >
+            Apple's six tapback verbs (chat.db associated_message_type
+            2000–2005, spelled the way Linq spells them) plus `custom`, which
+            carries the emoji in `custom_emoji`.
+        custom_emoji:
           type: string
           minLength: 1
           maxLength: 32
-          description: The emoji to add or remove. Required.
+          description: Required exactly when `type` is `custom`.
           example: "🔥"
         target_part_id:
           oneOf:
@@ -2749,7 +2727,7 @@ components:
     Reaction:
       type: object
       additionalProperties: false
-      required: [message_id, target_part_id, type, emoji, actor, operation, changed]
+      required: [message_id, target_part_id, type, actor, operation, changed]
       description: >
         One reaction as Relay recorded it. The same object is the reaction
         endpoint's response body and the `data.reaction` of a `reaction.added`
@@ -2764,8 +2742,10 @@ components:
             - $ref: "#/components/schemas/PartId"
             - type: "null"
           description: Null exactly when the reaction is on the whole message.
-        type: { type: string, const: emoji }
-        emoji: { type: string, example: "❤️" }
+        type:
+          type: string
+          enum: [love, like, dislike, laugh, emphasize, question, custom]
+        custom_emoji: { type: string, example: "❤️" }
         actor:
           $ref: "#/components/schemas/Sender"
         operation:
@@ -2793,10 +2773,10 @@ components:
     ReceiptSnapshot:
       type: object
       additionalProperties: false
-      required: [message_id, conversation_id, through_sequence, recipient, status, at]
+      required: [message_id, chat_id, through_sequence, recipient, status, at]
       properties:
         message_id: { type: string, pattern: "^msg_" }
-        conversation_id: { type: string, pattern: "^cnv_" }
+        chat_id: { type: string, pattern: "^cnv_" }
         through_sequence: { type: integer, minimum: 1 }
         recipient:
           $ref: "#/components/schemas/Sender"
@@ -2822,10 +2802,11 @@ components:
         - message.received
         - message.delivered
         - message.read
-        - conversation.added
-        - conversation.updated
-        - conversation.removed
-        - conversation.left
+        - chat.created
+        - chat.group_name_updated
+        - chat.group_icon_updated
+        - participant.added
+        - participant.removed
         - reaction.added
         - reaction.removed
 
@@ -2940,7 +2921,7 @@ components:
       # Relay cannot ship anything to. See the deprecation policy in
       # [Webhooks](/guides/webhooks#versioning-and-deprecation).
       additionalProperties: true
-      required: [event_id, sequence, event_type, agent_id, conversation_id, created_at, schema_version, data]
+      required: [event_id, sequence, event_type, agent_id, chat_id, created_at, webhook_version, data]
       properties:
         event_id:
           type: string
@@ -2952,7 +2933,7 @@ components:
           description: >
             This agent's log position. Pass the highest one you have processed
             as `after` on the next `GET /v1/events`.
-        schema_version:
+        webhook_version:
           type: string
           format: date
           example: "2026-08-24"
@@ -2967,7 +2948,7 @@ components:
         agent_id:
           type: string
           example: agt_01JZRELAY
-        conversation_id:
+        chat_id:
           type: [string, "null"]
           description: The conversation this event belongs to, when it belongs to one.
         created_at:
@@ -2980,7 +2961,8 @@ components:
           oneOf:
             - $ref: "#/components/schemas/MessageEventData"
             - $ref: "#/components/schemas/ReceiptEventData"
-            - $ref: "#/components/schemas/ConversationEventData"
+            - $ref: "#/components/schemas/RosterEventData"
+            - $ref: "#/components/schemas/ChatMetadataEventData"
             - $ref: "#/components/schemas/ReactionEventData"
 
     MessageEventData:
@@ -2996,14 +2978,14 @@ components:
     ReceiptEventData:
       type: object
       additionalProperties: true
-      required: [message_id, conversation_id, through_sequence, at, recipient]
+      required: [message_id, chat_id, through_sequence, at, recipient]
       description: >
         The `data` of a `message.delivered` or `message.read`: one of this
         agent's messages reached or was read by the other party. Only 1:1
         conversations emit these.
       properties:
         message_id: { type: string, pattern: "^msg_" }
-        conversation_id: { type: string, pattern: "^cnv_" }
+        chat_id: { type: string, pattern: "^cnv_" }
         through_sequence: { type: integer, minimum: 1 }
         at: { type: string, format: date-time }
         recipient:
@@ -3013,42 +2995,48 @@ components:
             - $ref: "#/components/schemas/Sender"
           description: The same actor as `recipient`, kept for shipped consumers.
 
-    ConversationEventData:
+    RosterEventData:
       type: object
       additionalProperties: true
-      required: [conversation_id, actor]
+      required: [chat_id, actor, affected_participant, membership_version]
       description: >
-        The `data` of `conversation.added`, `conversation.updated`,
-        `conversation.removed` and `conversation.left`. A roster change carries
-        `affected_participant` and `membership_version`; a metadata change
-        carries `changes` and `updated_at`. The matching notice arrives
-        separately as a `message.received` whose message `kind` is `notice`.
+        The `data` of `participant.added` and `participant.removed`. On a
+        leave, the actor and the affected participant are the same person. The
+        matching notice arrives separately as a `message.received` whose
+        message has `item_type` 1.
       properties:
-        conversation_id: { type: string, pattern: "^cnv_" }
+        chat_id: { type: string, pattern: "^cnv_" }
         actor:
           $ref: "#/components/schemas/Sender"
         affected_participant:
           allOf:
             - $ref: "#/components/schemas/Sender"
-          description: Present when the change adds, removes, or records the departure of one participant.
+          description: The participant added or removed.
         membership_version:
           type: integer
           minimum: 1
-          description: Present on a roster change. It increases by one per change.
-        changes:
-          type: object
-          description: >-
-            Present on a metadata change: each changed field as an object with
-            `old` and `new`.
-          additionalProperties:
-            type: object
-            properties:
-              old: {}
-              new: {}
+          description: The roster version after the change. It increases by one per change.
+
+    ChatMetadataEventData:
+      type: object
+      additionalProperties: true
+      required: [chat_id, old_value, new_value, changed_by_handle, updated_at]
+      description: >
+        The `data` of `chat.created`, `chat.group_name_updated` and
+        `chat.group_icon_updated`. The matching notice arrives separately as a
+        `message.received` whose message has `item_type` 2 (rename) or 3
+        (photo).
+      properties:
+        chat_id: { type: string, pattern: "^cnv_" }
+        old_value:
+          type: [string, "null"]
+        new_value:
+          type: [string, "null"]
+        changed_by_handle:
+          $ref: "#/components/schemas/Sender"
         updated_at:
           type: string
           format: date-time
-          description: Present on a metadata change.
 
     ReactionEventData:
       type: object
