@@ -49,16 +49,17 @@ Then follow the shape for the page type:
 
 ## Write for an agent operator
 
-- Begin with the job: register a webhook, receive an event, send a reply, stream
-  output, or inspect history.
+- Begin with the job: register a webhook, receive an event, send a reply, or
+  inspect history.
 - Relay is the messenger. The developer's external backend is the agent brain.
   Keep that boundary explicit.
 - Use `https://api.relayapp.im` and `$RELAY_AGENT_TOKEN` in examples.
 - Show raw HTTPS and JSON before any abstraction. Do not imply a maintained SDK,
   framework, model provider, or host.
 - Prefer `curl -sS` with exact headers, status codes, and idempotency behavior.
-- Derive idempotency keys from stable logical inputs such as an inbound
-  `event_id`, and reuse the same key on retry.
+- Mint the `message_id` in the example and reuse it on retry. It is the
+  message's canonical id and the send's idempotency key; there is no separate
+  idempotency header to derive.
 - Distinguish implemented behavior from roadmap behavior. Mark an intentionally
   documented but unshipped surface `coming soon`; never present it as available.
 

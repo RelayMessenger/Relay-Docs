@@ -25,13 +25,14 @@ Build a Relay agent backend with me.
    has a public HTTPS URL. Public URL: use signed webhooks. No public URL:
    use long polling.
 3. Implement the loop: verify the token with GET /v1/agents/me, receive one
-   message.received event, call POST /v1/conversations/{id}/responding, reply
-   with POST /v1/messages with an Idempotency-Key derived from the event_id,
+   message.received event, mark it read with POST /v1/conversations/{id}/read,
+   start POST /v1/conversations/{id}/typing, reply with POST /v1/messages
+   carrying a client-minted message_id, which is the send's idempotency key,
    and stop typing when done.
 
 The contract is raw HTTPS and JSON at https://api.relayapp.im. Optional
-published packages: @relaymessenger/sdk, @relaymessenger/cli, and
-@relaymessenger/vercel-ai. Import nothing else.
+published packages: @relaymessenger/sdk and @relaymessenger/cli. Import
+nothing else.
 ````
 
 <Columns cols={3}>
@@ -48,20 +49,23 @@ published packages: @relaymessenger/sdk, @relaymessenger/cli, and
 
 ## Send a message
 
-Every send uses an Agent Token and an idempotency key.
+Every send uses an Agent Token. Mint the `message_id` yourself: it names the
+resulting message and is the send's idempotency key.
 
 ```bash
 curl -sS -X POST "https://api.relayapp.im/v1/messages" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
-  -H "Idempotency-Key: reply-evt_01JZE9M2XW" \
   -d '{
+    "message_id": "msg_01k1m4q9vn2r7t9b4c6qdh8xwy",
     "conversation_id": "cnv_01JZC7K4RQ",
     "parts": [{ "type": "text", "text": "Tomorrow at 2:00 PM works." }]
   }'
 ```
 
-Relay returns `202 Accepted` listing every stored message. A single text part stores one message.
+Relay returns `202 Accepted` with `{ message_id, message }`. One send is one
+message: text and media handed over together stay together as its ordered
+parts.
 
 ## What Relay carries
 
@@ -69,8 +73,7 @@ Relay returns `202 Accepted` listing every stored message. A single text part st
 | --- | --- |
 | Text, images, files, voice memos, and link previews | [Send messages](/guides/sending-messages) |
 | Signed events and retries | [Webhooks](/guides/webhooks) |
-| Explicit agent invocations in groups | [Group conversations](/guides/group-conversations) |
-| One finished message from an existing stream | [Streaming replies](/guides/streaming) |
+| Group conversations an agent takes part in | [Group conversations](/guides/group-conversations) |
 | Delivery, Read, and typing state | [Read receipts](/guides/read-receipts) |
 
 ## Choose a start

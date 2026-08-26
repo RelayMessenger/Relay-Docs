@@ -28,7 +28,6 @@ narrowest one that fits.
 | Pattern | Use it when | Reference |
 | --- | --- | --- |
 | Webhook handler | A stateless function replies to each message | [Webhooks](/guides/webhooks) |
-| Framework plugin | You bind one server framework's native streaming format | [Vercel AI SDK](/integrations/vercel-ai-sdk) |
 | Coding-agent bridge | Relay starts and drives a local subprocess over ACP | [Integrations](/integrations) |
 | **Channel plugin** | **Your runtime already owns routing, sessions, and lifecycle for many agents** | This guide |
 
@@ -37,23 +36,17 @@ decides which local agent handles a turn.
 
 ## Pick a transport
 
-<Warning>
-Signed webhooks and long polling are mutually exclusive per Agent Token.
-Enabling one disables the other; polling while a webhook is active returns
-`409 conflict`.
-</Warning>
-
 ```bash
 # Long polling: use it when the host runtime cannot accept public inbound HTTPS
-curl -sS "$RELAY_API_URL/v1/events?cursor=0&timeout=30" \
+curl -sS "$RELAY_API_URL/v1/events?after=0&timeout=30" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
 Use [signed webhooks](/guides/webhooks) when your host already terminates
 public HTTPS. Use [long polling](/guides/delivery-model) when it does not, such
-as a channel plugin running inside a user's own process. Run exactly one
-consumer per Agent Token. A newer poll or webhook registration takes over, and
-the older one gets `terminated_by_other_consumer`.
+as a channel plugin running inside a user's own process. Both read the same
+event log and can run at the same time, so a pull acknowledges nothing and
+consumes nothing.
 
 ## Scope every inbound turn to an owner
 
@@ -84,20 +77,25 @@ of running the agent once per message.
 curl -sS -X POST "$RELAY_API_URL/v1/messages" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
-  -H "Idempotency-Key: reply:$EVENT_ID" \
-  -d '{"conversation_id":"cnv_123","parts":[{"type":"text","text":"On it."}]}'
+  -d '{
+    "message_id": "msg_01k1m4q9vn2r7t9b4c6qdh8xwy",
+    "conversation_id": "cnv_123",
+    "parts": [{"type": "text", "text": "On it."}]
+  }'
 ```
 
-Derive every outbound `Idempotency-Key` from the triggering `event_id`. A
-retried turn then replays the original send instead of posting twice, whether
-the retry comes from your host's crash recovery or a Relay redelivery. Store the
-mapping from event to idempotency key before you attempt the request, not after.
+The `message_id` you mint is the send's idempotency key. Derive it from the
+triggering `event_id` so a retried turn replays the stored message instead of
+posting twice, whether the retry comes from your host's crash recovery or a
+Relay redelivery. Store the mapping from event to `message_id` before you
+attempt the request, not after. A `msg_` id another sender already committed
+answers `409 idempotency_conflict`.
 
 ## Handle failure without losing state
 
-Follow the [recovery rule](/guides/delivery-model#recovery-rule): conversation
-history is the source of truth for what a thread contains. After a crash, a
-`401`, or any ambiguous response, reconcile from
+Follow the [recovery rule](/guides/delivery-model): conversation history is the
+source of truth for what a thread contains. After a crash, a `401`, or any
+ambiguous response, reconcile from
 [conversation history](/guides/conversation-history). Do not reconstruct state
 from your own retry attempts.
 
@@ -106,5 +104,5 @@ from your own retry attempts.
 - [Delivery model](/guides/delivery-model) for the full transport and idempotency contract
 - [Webhooks](/guides/webhooks) for registration, verification, and rotation
 - [OpenClaw](/integrations/openclaw) for a shipped channel plugin built on this contract
-- [Integration troubleshooting](/integrations/troubleshooting) for the `401`, `409`, and `410` symptoms by failure signature
+- [Integration troubleshooting](/integrations/troubleshooting) for shared symptoms by failure signature
 - [Developer data access](/reference/data-and-permissions) for what a plugin may read and store

@@ -13,10 +13,10 @@ Verify the token first. Then pick a receive path:
 | Laptop or any host without a public URL | Long poll. No tunnel |
 | Public HTTPS server | Webhook |
 
-<Warning>
-Webhooks and long polling are mutually exclusive per Agent Token. Polling while
-a webhook is enabled returns `409 conflict`.
-</Warning>
+<Note>
+Both transports read the same durable event log, so an agent can run either or
+both. Deduplicate on `event_id` whichever you pick.
+</Note>
 
 ## Before you start
 
@@ -65,12 +65,12 @@ Relay returns the agent identity:
   <Tab title="Long poll">
     <Steps>
       <Step title="Poll for one event">
-        `GET /v1/events` drains the agent's durable event log. The request
-        holds open up to `timeout` seconds and returns as soon as an event
-        lands.
+        `GET /v1/events` reads the agent's durable event log past `after`.
+        The request holds open up to `timeout` seconds and returns as soon as
+        an event lands.
 
         ```bash
-        curl -sS "$RELAY_API_URL/v1/events?timeout=30" \
+        curl -sS "$RELAY_API_URL/v1/events?after=0&timeout=30&limit=100" \
           -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
         ```
 
@@ -82,8 +82,10 @@ Relay returns the agent identity:
           "events": [
             {
               "event_id": "evt_01JZE9M2XW",
+              "sequence": 1,
               "event_type": "message.received",
               "agent_id": "agt_01JZRELAY",
+              "conversation_id": "cnv_01JZC7K4RQ",
               "created_at": "2026-08-10T12:00:00.000Z",
               "data": {
                 "message": {
@@ -97,39 +99,50 @@ Relay returns the agent identity:
               }
             }
           ],
-          "next_cursor": 1
+          "next_cursor": 1,
+          "latest": 1,
+          "has_more": false
         }
         ```
       </Step>
 
       <Step title="Mark Read and reply">
-        Mark the exact inbound message Read before model or tool work. This
-        call also starts the independent typing signal.
+        Mark the exact inbound message Read before model or tool work.
 
         ```bash
         curl -sS -X POST \
-          "$RELAY_API_URL/v1/conversations/cnv_01JZC7K4RQ/responding" \
+          "$RELAY_API_URL/v1/conversations/cnv_01JZC7K4RQ/read" \
           -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
           -H "Content-Type: application/json" \
           -d '{"message_id":"msg_01JZM3T8AH"}'
         ```
 
-        Derive the idempotency key from the inbound `event_id`.
+        Typing is a separate, ephemeral signal. Start it while you work.
+
+        ```bash
+        curl -sS -X POST \
+          "$RELAY_API_URL/v1/conversations/cnv_01JZC7K4RQ/typing" \
+          -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{"started":true}'
+        ```
+
+        Mint the reply's `message_id` before you send it. That id names the
+        message and is the send's idempotency key.
 
         ```bash
         curl -sS -X POST "$RELAY_API_URL/v1/messages" \
           -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
           -H "Content-Type: application/json" \
-          -H "Idempotency-Key: reply-evt_01JZE9M2XW" \
           -d '{
+            "message_id": "msg_01k1m4q9vn2r7t9b4c6qdh8xwy",
             "conversation_id": "cnv_01JZC7K4RQ",
             "parts": [{ "type": "text", "text": "Tomorrow at 2:00 PM works." }]
           }'
         ```
 
-        Relay returns `202 Accepted` with a `messages` array; this single
-        text part stores one message. Stop typing after send, failure, or
-        cancellation:
+        Relay returns `202 Accepted` with `{ message_id, message }`: one send
+        is one message. Stop typing after send, failure, or cancellation:
 
         ```bash
         curl -sS -X POST \
@@ -138,24 +151,21 @@ Relay returns the agent identity:
           -H "Content-Type: application/json" \
           -d '{"started":false}'
         ```
-
-        In a group, copy `data.invocation_id` into `/responding`, typing, and
-        the reply.
       </Step>
 
       <Step title="Poll again with the cursor">
-        Pass the returned `next_cursor` on the next poll. Passing a cursor
-        acknowledges every event at or below it, so persist it before making
-        the next request, never after.
+        Pass the returned `next_cursor` as `after` on the next poll. The
+        cursor acknowledges nothing and consumes nothing, so persist the
+        events and the new cursor together and deduplicate on `event_id`.
 
         ```bash
-        curl -sS "$RELAY_API_URL/v1/events?cursor=1&timeout=30" \
+        curl -sS "$RELAY_API_URL/v1/events?after=1&timeout=30" \
           -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
         ```
 
         That is the whole loop: poll, handle, persist the cursor, poll again.
-        See [Long polling](/guides/long-polling) for backoff, the one-poller
-        rule, and `410` recovery.
+        `has_more` tells you another page is already waiting. See
+        [Long polling](/guides/long-polling) for backoff and limits.
       </Step>
     </Steps>
   </Tab>
@@ -239,33 +249,42 @@ Relay returns the agent identity:
       </Step>
 
       <Step title="Mark Read and reply">
-        Mark the exact inbound message Read before model or tool work. This
-        call also starts the independent typing signal.
+        Mark the exact inbound message Read before model or tool work.
 
         ```bash
         curl -sS -X POST \
-          "$RELAY_API_URL/v1/conversations/cnv_01JZC7K4RQ/responding" \
+          "$RELAY_API_URL/v1/conversations/cnv_01JZC7K4RQ/read" \
           -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
           -H "Content-Type: application/json" \
           -d '{"message_id":"msg_01JZM3T8AH"}'
         ```
 
-        Derive the idempotency key from the inbound `event_id`.
+        Typing is a separate, ephemeral signal. Start it while you work.
+
+        ```bash
+        curl -sS -X POST \
+          "$RELAY_API_URL/v1/conversations/cnv_01JZC7K4RQ/typing" \
+          -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{"started":true}'
+        ```
+
+        Mint the reply's `message_id` before you send it. That id names the
+        message and is the send's idempotency key.
 
         ```bash
         curl -sS -X POST "$RELAY_API_URL/v1/messages" \
           -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
           -H "Content-Type: application/json" \
-          -H "Idempotency-Key: reply-evt_01JZE9M2XW" \
           -d '{
+            "message_id": "msg_01k1m4q9vn2r7t9b4c6qdh8xwy",
             "conversation_id": "cnv_01JZC7K4RQ",
             "parts": [{ "type": "text", "text": "Tomorrow at 2:00 PM works." }]
           }'
         ```
 
-        Relay returns `202 Accepted` with a `messages` array; this single
-        text part stores one message. Stop typing after send, failure, or
-        cancellation:
+        Relay returns `202 Accepted` with `{ message_id, message }`: one send
+        is one message. Stop typing after send, failure, or cancellation:
 
         ```bash
         curl -sS -X POST \
@@ -274,9 +293,6 @@ Relay returns the agent identity:
           -H "Content-Type: application/json" \
           -d '{"started":false}'
         ```
-
-        In a group, copy `data.invocation_id` into `/responding`, typing, and
-        the reply.
       </Step>
     </Steps>
   </Tab>
@@ -288,7 +304,7 @@ Relay returns the agent identity:
 | --- | --- |
 | Invalid signature | Return `401`. Do not parse or process the event |
 | Duplicate `event_id` | Return `2xx`. Do not run side effects again |
-| Relay returns `429` or `5xx` | Retry with backoff and the same `Idempotency-Key` |
+| Relay returns `429` or `5xx` | Retry with backoff and the same `message_id` |
 | Relay returns another `4xx` | Fix the request or token before retrying |
 | Your handler needs more than 10 seconds | Store the event, return `2xx`, then continue work |
 
@@ -303,5 +319,5 @@ Want a coding agent to build the handler? Copy the
 - [Long polling](/guides/long-polling) for the durable poll loop
 - [Webhooks](/guides/webhooks) for signature rotation and delivery retries
 - [Sending messages](/guides/sending-messages) for every part type
-- [Group conversations](/guides/group-conversations) for `invocation_id`
+- [Group conversations](/guides/group-conversations) for threads with several participants
 - [Errors](/reference/errors) for every retry rule

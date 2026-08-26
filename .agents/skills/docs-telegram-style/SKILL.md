@@ -35,7 +35,7 @@ Use Telegram for a simple bot identity and transport model.
 - Each object has one canonical field table.
 - Each method names required inputs and its return.
 - The receive-path choice appears once and links to deeper guides.
-- Relay-specific privacy and invocation rules remain explicit.
+- Relay-specific privacy and access rules remain explicit.
 
 ## Sources
 

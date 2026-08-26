@@ -18,14 +18,11 @@ and form elicitation are not proxied through Relay.
 | Node.js | 22.18 or newer for the `relaymessenger` CLI. The channel plugin runtime itself needs 20.11 or newer |
 | Claude Code | A build with channel support. Channels are a research preview, and Team or Enterprise organizations must enable them |
 | Relay agent | An agent and its Agent Token. See [Create and connect an agent](/guides/your-agent) |
-| Event consumer | The agent must have no webhook registered |
 
-<Warning>
-Relay allows one event consumer per Agent Token. A webhook and this integration
-cannot share an agent: whichever registers last takes the stream, and the other
-receives `terminated_by_other_consumer`. Give the bridge its own agent when a
-webhook backend already serves one.
-</Warning>
+<Tip>
+Give the bridge its own Relay agent when a webhook backend already serves one,
+so each turn is answered once and by one runtime.
+</Tip>
 
 <Steps>
   <Step title="Pair this computer">
@@ -34,8 +31,10 @@ webhook backend already serves one.
     relaymessenger pair
     ```
 
-    Scan the terminal QR code or enter its short code in Relay. See
-    [the CLI](/integrations/cli) for what pairing creates and what it never sends.
+    Scan the terminal QR code or enter its short code in Relay, and approve the
+    pairing there. The Agent Token is minted onto this computer and never
+    travels to the phone. See [the CLI](/integrations/cli) for the full device
+    flow and what pairing never sends.
   </Step>
 
   <Step title="Choose a path">
@@ -113,7 +112,7 @@ the same verification from the session.
 | Session persistence | Conversation-to-session bindings survive bridge restarts when the adapter supports session loading. Where it does not, a restart begins a new session. |
 | Permission previews | Claude supplies a bounded permission input preview. Relay offers remote Allow only when that preview is complete JSON that Claude did not truncate. Otherwise the phone can deny, and you approve at the keyboard. |
 | Channel plugin tools | The plugin follows Claude's MCP channel contract: it emits `notifications/claude/channel`, exposes retry-safe `reply` and `acknowledge` tools, and relays permission notifications. |
-| One session per agent | A second Claude session on the same agent fails closed instead of stealing the event stream from the first. Point the second session at a different Relay agent. |
+| One session per agent | A second Claude session on the same agent fails closed instead of answering the same messages twice. Point the second session at a different Relay agent. |
 | Redelivery | Channel notifications are unacknowledged at Claude's transport layer, so the plugin re-notifies every 30 seconds until Claude calls `acknowledge`, and replays after a restart. Delivery is at least once. Reconcile before repeating a deploy, a deletion, or a payment. |
 | Identity protection | `relaymessenger install-claude` validates the bundled marketplace, copies it into the paired account's private runtime directory, and writes the token, API origin, and owner pin to an owner-only channel `.env`. It refuses to replace a different configured identity. |
 
@@ -123,9 +122,8 @@ the same verification from the session.
 relaymessenger doctor
 ```
 
-See [integration troubleshooting](/integrations/troubleshooting) for the `401`,
-`409`, and `410` symptoms shared with every other integration. These are
-specific to this one.
+See [integration troubleshooting](/integrations/troubleshooting) for the
+symptoms shared with every other integration. These are specific to this one.
 
 | Symptom | Cause and fix |
 | --- | --- |
@@ -136,4 +134,4 @@ specific to this one.
 
 - [The relaymessenger CLI](/integrations/cli) for pairing and the approval guarantees
 - [Codex](/integrations/codex) to bridge a second engine from the same computer
-- [Delivery model](/guides/delivery-model) for long polling, watermarks, and recovery
+- [Delivery model](/guides/delivery-model) for long polling, cursors, and recovery

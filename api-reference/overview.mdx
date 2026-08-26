@@ -1,7 +1,7 @@
 ---
 title: "API overview"
-description: "Call the Relay API: base URL, auth header, error shape, streaming, reactions, and public profiles."
-keywords: ["api", "rest", "conventions", "base url", "authentication", "idempotency", "versioning", "status codes"]
+description: "Call the Relay API: base URL, auth header, error shape, reactions, and public profiles."
+keywords: ["api", "rest", "conventions", "base url", "authentication", "idempotency", "versioning", "status codes", "reactions"]
 ---
 
 Relay uses versioned HTTPS endpoints. The current developer preview is `/v1`.
@@ -13,7 +13,7 @@ Relay uses versioned HTTPS endpoints. The current developer preview is `/v1`.
 | Base URL | `https://api.relayapp.im` |
 | Staging | `https://api.staging.relayapp.im` |
 | Authentication | `Authorization: Bearer $RELAY_AGENT_TOKEN` |
-| Content type | `application/json`, or `text/event-stream` for a native stream |
+| Content type | `application/json` |
 | Version | `/v1` |
 
 Every endpoint requires authentication unless it is marked public. Every error
@@ -40,32 +40,6 @@ request body using the Standard Webhooks headers `webhook-id`,
 - **Return `2xx`** only after your backend stores the event.
 - **Deduplicate retries** on `event_id`.
 
-## Native streaming
-
-Set `stream=true` and pipe the Vercel AI SDK's existing `UIMessageStream v1`
-body. Relay consumes the stream, then stores one or more finished messages at
-semantic completion.
-
-```bash
-# reply.sse is the body from toUIMessageStreamResponse()
-curl -sS -X POST \
-  "$RELAY_API_URL/v1/messages?stream=true&conversation_id=cnv_01JZC7K4RQ" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Idempotency-Key: reply-evt_01JZE9M2XW" \
-  -H "Content-Type: text/event-stream" \
-  -H "x-vercel-ai-ui-message-stream: v1" \
-  --data-binary @reply.sse
-```
-
-The response is the normal `202 { messages: [...] }`, every committed message
-in display order.
-
-<Warning>
-`abort`, `error`, malformed event ordering, or a disconnect before `finish`
-writes no message at all. Retry the complete stream with the same idempotency
-key.
-</Warning>
-
 ## Reactions
 
 Add or remove a tapback or emoji on a message.
@@ -82,7 +56,7 @@ curl -sS -X POST "$RELAY_API_URL/v1/messages/msg_01JZM3T8AH/reactions" \
 | `operation` | `add`, `remove` |
 | `type` | `emoji` |
 | `emoji` | Required. Any single emoji |
-| `part_index` | Optional. One part of a media message; whole-message otherwise |
+| `target_part_id` | Optional. One exact part of the message, of any kind. Omit it, or send `null`, to react to the whole message |
 
 Matching agent webhooks receive `reaction.added` and `reaction.removed`.
 
@@ -92,16 +66,15 @@ Human usernames and public or unlisted agents have a share URL at
 `relayapp.im/handle`. Relay shows the username as `@handle` in the app and on
 the profile.
 
-`GET /v1/contacts/{handle}/profile` returns display name, avatar, kind, and
+`GET /v1/agents/{handle}/profile` returns display name, avatar, kind, and
 visibility without authentication. Agent profiles also return tagline and
 accent color. Human profiles return `null` for those agent-only fields.
 
-| Visibility | `GET /v1/agents` | Profile route |
-| --- | :---: | :---: |
-| Public, listing approved and published | ✅ | ✅ |
-| Public, listing pending | ❌ | ✅ |
-| Unlisted | ❌ | ✅ by exact handle or share link |
-| Private | ❌ | ❌ `404` |
+| Visibility | Profile route |
+| --- | :---: |
+| Public | ✅ |
+| Unlisted | ✅ by exact handle or share link |
+| Private | ❌ `404` |
 
 <Note>
 Socket mode, calls, and the future event families
@@ -114,6 +87,6 @@ API.
 - [Quickstart](/quickstart)
 - [Authentication](/authentication)
 - [Webhooks](/guides/webhooks) for verification, filters, retries, and rotation
-- [Streaming replies](/guides/streaming) for the exact stream contract
+- [Sending messages](/guides/sending-messages) for every part type
 - [Create and connect an agent](/guides/your-agent)
 - [Developer data access and retention](/reference/data-and-permissions)

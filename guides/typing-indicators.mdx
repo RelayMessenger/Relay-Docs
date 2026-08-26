@@ -1,76 +1,62 @@
 ---
 title: "Typing indicators"
-description: "Send temporary response or proactive typing state without changing delivery receipts."
-keywords: ["typing indicator", "typing", "responding", "ephemeral", "presence"]
+description: "Start and stop an ephemeral typing indicator in a conversation without changing delivery receipts."
+keywords: ["typing indicator", "typing", "typing.started", "typing.stopped", "ephemeral", "presence"]
 ---
 
-Use `/responding` for ordinary replies. It commits Read for the consumed message
-before it starts typing:
-
-```bash
-curl -sS -X POST "https://api.relayapp.im/v1/conversations/cnv_01JZC7K4RQ/responding" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message_id": "msg_01JZM3T8AH",
-    "label": "Searching the web…"
-  }'
-```
-
-Group responses also require the matching `invocation_id`.
-
-## Proactive typing
-
-Use `/typing` when activity has no inbound target:
+Start typing with `/typing`:
 
 ```bash
 curl -sS -X POST "https://api.relayapp.im/v1/conversations/cnv_01JZC7K4RQ/typing" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{ "started": true, "label": "Preparing an update…" }'
+  -d '{ "started": true }'
 ```
 
 Relay returns `204 No Content`.
 
-- **Independent state.** Typing does not advance Delivered or Read.
-- **Ephemeral state.** Relay pushes it to active devices and never logs it.
-- **Temporary state.** A start is a 10-second lease. Refresh it before it
-  lapses.
-- **Scoped state.** Group typing requires a pending `invocation_id`.
+- **Independent state.** Typing does not advance Delivered or Read. Mark the
+  inbound message read with [`/read`](/guides/read-receipts), then start typing.
+- **Ephemeral state.** Relay pushes the signal to active devices. Nothing is
+  stored, it takes no sequence, and it never enters the event log.
+- **Temporary state.** A start lasts `timeout_ms`. Send the start again while
+  you are still composing to keep it alive.
 - **Budgeted state.** Past 120 signals a minute the route answers
   `429 rate_limited` with `Retry-After` in seconds. Refresh on a timer, not on
   every token.
 
+## Who sees it
+
+The signal reaches the other people in the conversation, on every device they
+have open. Other agents in the same conversation are not an audience for it.
+
+In a group, that is every other active human member. Your agent must still be
+installed and unblocked, or the call answers `403 forbidden`.
+
 ## The indicator expires on its own
 
-A `typing.started` carries its own expiry, so a recipient never depends on a
-`typing.stopped` arriving. Render the indicator until `expires_at` and then
-stop, whether or not the stop signal ever lands.
+A `typing.started` carries the timeout a client renders against, so a recipient
+never depends on a `typing.stopped` arriving. Show the indicator until
+`timeout_ms` milliseconds pass with no further start, then stop.
 
 ```json
 {
   "conversation_id": "cnv_01k1m4q9vn2r7t9b4c6qdh8xwy",
   "participant": { "id": "agt_01k1m7v9wr4t2b8n5c3qjd6hzx", "kind": "agent" },
-  "invocation_id": "ivk_01k1m4q9vn2r7t9b4c6qdh8xwy",
-  "expires_at": "2026-08-24T20:00:10.000Z",
-  "expires_in_ms": 10000,
-  "label": "Searching the web…"
+  "timeout_ms": 90000
 }
 ```
 
 | Field | Read it for |
 | --- | --- |
-| `participant` | Who is typing, as `{ id, kind }`. This is the field to read |
-| `expires_at` | When to stop on your own. Authority on a `typing.started` |
-| `expires_in_ms` | The same fact pre-subtracted, if you would rather not trust your clock |
-| `invocation_id` | Present when an agent is typing inside a group invocation |
-| `label` | Short status line. Present only on a start |
+| `conversation_id` | The conversation the signal belongs to |
+| `participant` | Who is typing, as `{ id, kind }` |
+| `timeout_ms` | How long to keep the indicator up without another start. Currently 90000 |
 
-A `typing.stopped` carries no expiry. The payload also repeats the typist as a
-legacy `user` or `contact` object for builds that shipped before `participant`
-existed; read `participant`.
+A `typing.stopped` carries the same three fields and clears the indicator
+immediately.
 
-That expiry is what makes a dropped socket a recovered indicator rather than a
+That timeout is what makes a dropped socket a recovered indicator rather than a
 stuck one. Without it, a lost `typing.stopped` leaves a bubble pulsing forever.
 
 A conversation can correctly show Delivered and typing together. This means the
@@ -87,12 +73,12 @@ curl -sS -X POST "https://api.relayapp.im/v1/conversations/cnv_01JZC7K4RQ/typing
   -d '{ "started": false }'
 ```
 
-Sending a message also clears the visible indicator. Cleanup still needs an
-explicit stop when no message follows.
+An indicator you leave running clears itself once `timeout_ms` passes. An
+explicit stop clears it at once, which is what a reader expects when your reply
+has already landed.
 
 ## Next steps
 
 - [Message model](/concepts/message-model)
 - [Read receipts](/guides/read-receipts)
-- [Streaming replies](/guides/streaming)
 - [Sending messages](/guides/sending-messages)

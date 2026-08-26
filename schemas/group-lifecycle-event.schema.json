@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://relayapp.im/schemas/group-lifecycle-event.schema.json",
+  "title": "Relay group lifecycle",
+  "description": "What a roster or metadata change produces. Two things land together and describe the same mutation: a `conversation.*` event in every member's log, and a NOTICE MESSAGE in the conversation. The notice is a normal message of kind `notice`, sent by the person who did the thing — there is no system participant — with a text part for the human line and a `data` part carrying GroupMutationData. Clients render the notice from the message; the event is what tells them the roster moved.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["conversation_id", "actor", "membership_version", "mutation", "message"],
+  "properties": {
+    "conversation_id": { "$ref": "#/$defs/conversationId" },
+    "actor": {
+      "$ref": "#/$defs/actor",
+      "description": "The person who made the change. Only humans mutate a group."
+    },
+    "affected_participant": {
+      "$ref": "#/$defs/participant",
+      "description": "Present on every membership.* mutation; absent on group.created and metadata.updated."
+    },
+    "membership_version": { "type": "integer", "minimum": 1 },
+    "mutation": {
+      "$ref": "#/$defs/GroupMutationData",
+      "description": "The same object the notice message carries in its `data` part."
+    },
+    "message": {
+      "$ref": "https://api.relayapp.im/schemas/message-v2.schema.json#/$defs/Message",
+      "description": "The notice, committed through the one message path, so every member's log, push and the conversation sequence see it exactly like any other message."
+    },
+    "event_data": {
+      "$ref": "#/$defs/ConversationEventData",
+      "description": "The `data` of the conversation.* event that accompanies the notice."
+    }
+  },
+  "allOf": [{
+    "if": {
+      "properties": {
+        "mutation": {
+          "type": "object",
+          "properties": { "mutation": { "type": "string", "pattern": "^membership\\." } },
+          "required": ["mutation"]
+        }
+      },
+      "required": ["mutation"]
+    },
+    "then": {
+      "type": "object",
+      "required": ["affected_participant"],
+      "properties": { "affected_participant": { "$ref": "#/$defs/participant" } }
+    }
+  }],
+  "$defs": {
+    "conversationId": { "type": "string", "pattern": "^cnv_[0-9a-hjkmnp-tv-z]{26}$" },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": { "const": "user" },
+        "id": { "type": "string", "pattern": "^usr_[0-9a-hjkmnp-tv-z]{26}$" }
+      }
+    },
+    "participant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": { "enum": ["user", "agent"] },
+        "id": { "type": "string", "pattern": "^(usr|agt)_[0-9a-hjkmnp-tv-z]{26}$" }
+      }
+    },
+    "GroupMutationData": {
+      "title": "Group mutation",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "mutation", "actor", "changes"],
+      "description": "The structured half of a group notice: what changed, by whom. Rides as the notice message's `data` part, beside the human-readable text part.",
+      "properties": {
+        "type": { "const": "group.mutation" },
+        "mutation": {
+          "enum": ["group.created", "metadata.updated", "membership.added", "membership.removed", "membership.left"]
+        },
+        "actor": { "$ref": "#/$defs/actor" },
+        "affected_participant": { "$ref": "#/$defs/participant" },
+        "changes": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["old", "new"],
+            "properties": { "old": true, "new": true }
+          }
+        }
+      },
+      "allOf": [{
+        "if": { "type": "object", "properties": { "mutation": { "type": "string", "pattern": "^membership\\." } }, "required": ["mutation"] },
+        "then": {
+          "type": "object",
+          "required": ["affected_participant"],
+          "properties": { "affected_participant": { "$ref": "#/$defs/participant" } }
+        }
+      }]
+    },
+    "ConversationEventData": {
+      "title": "conversation.* event data",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["conversation_id", "actor"],
+      "description": "The payload of the conversation.created / conversation.added / conversation.updated / conversation.removed / conversation.left event that accompanies the notice. The recipient's own relationship to the change picks the type: the participant who was added gets `conversation.added` (an agent) or `conversation.created` (a person), the one who left gets `conversation.left`, the one removed gets `conversation.removed`, and everybody else gets `conversation.updated`.",
+      "properties": {
+        "conversation_id": { "$ref": "#/$defs/conversationId" },
+        "actor": { "$ref": "#/$defs/actor" },
+        "affected_participant": { "$ref": "#/$defs/participant" },
+        "membership_version": { "type": "integer", "minimum": 1 },
+        "changes": {
+          "type": "object",
+          "description": "Metadata updates only.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["old", "new"],
+            "properties": { "old": true, "new": true }
+          }
+        },
+        "updated_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

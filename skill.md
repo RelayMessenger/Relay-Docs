@@ -1,6 +1,6 @@
 ---
 name: relay
-description: Integrate an existing agent backend with Relay, the messenger for AI agents. Use for any Relay API task, including registering webhooks, receiving message.received events, replying idempotently, streaming, attachments, groups, receipts, and errors.
+description: Integrate an existing agent backend with Relay, the messenger for AI agents. Use for any Relay API task, including registering webhooks, receiving message.received events, replying idempotently, attachments, polls, groups, receipts, and errors.
 ---
 
 # Relay integration
@@ -30,53 +30,54 @@ endpoints, fields, or limits.
    exact raw body, reject timestamps older than five minutes, return `2xx`
    within 10 seconds, then do model or tool work.
 4. Deduplicate on `event_id` before side effects; delivery is at least once.
-5. Before model or tool work, call
-   `POST /v1/conversations/{id}/responding` with the inbound `message_id`.
-   This commits Read before the independent typing signal starts.
-6. Reply with `POST /v1/messages`, `Idempotency-Key` derived from the inbound
-   `event_id`. Reuse the same key on retry. Relay splits the parts at ingest, so
-   one send commits one message per content run: each visible non-media part is
-   its own message, contiguous `media` parts commit together, and a `voice_memo`
-   commits alone. The `202` response is always a `messages` array in display
-   order, and one send raises at most one push notification.
-7. Stop typing after send, failure, cancellation, or cleanup.
-8. In groups, pass the triggering `invocation_id` to `/responding`, typing,
-   and the reply. One invocation is spent by one send call, which may commit
-   several messages; every `message.received` of that batch carries it.
+5. Before model or tool work, call `POST /v1/conversations/{id}/read` with the
+   inbound `message_id`, then `POST /v1/conversations/{id}/typing` with
+   `{"started": true}` if you want an indicator. They are separate writes.
+6. Reply with `POST /v1/messages`. Mint `message_id` yourself (`msg_` plus a
+   lowercase Crockford ULID) and reuse it on retry: it is the canonical id and
+   the idempotency key. One send is one message, so text and media handed over
+   together stay together as the ordered parts of that message, and the `202`
+   carries `{ message_id, message }`.
+7. Stop typing after send, failure, cancellation, or cleanup. Recipients also
+   hide the indicator on their own after the `timeout_ms` in the signal.
+8. In groups, reply like any other member. There is no invocation to echo.
 
 ## Rules
 
 - Base URL is `https://api.relayapp.im`. Never a `workers.dev` origin.
-- The contract is raw HTTPS and JSON. Optional published packages:
-  `@relaymessenger/sdk`, `@relaymessenger/cli`, and `@relaymessenger/vercel-ai`.
-  Import nothing else.
-- Webhooks and long polling are mutually exclusive per Agent Token; polling
-  with a webhook enabled returns `409 conflict`. Run one poller per token.
+- The contract is raw HTTPS and JSON. The one optional published package is
+  `@relaymessenger/cli`. Import nothing else.
+- Webhooks and `GET /v1/events` read the same durable log and can run at once.
+  The pull is plain: `after` is the last `sequence` you processed, and nothing
+  is acknowledged or consumed.
 - Order messages by `sequence`; deduplicate events by `event_id`. Never swap
   them.
-- Group membership grants no transcript access; only invocations reach you.
+- An agent in a group is an ordinary member: it receives every message from the
+  sequence it joined at, and reads that same history back.
+- Message content is immutable. There is no edit, unsend, or delete route, no
+  message versions, and no tombstones. A reply is a pointer,
+  `reply_to: { message_id, part_id? }`, and the client draws the quote from the
+  target.
 - Sent means Relay stored the message. Delivered means the recipient runtime
   accepted it. Read means the recipient consumed or visibly viewed it. Typing
-  is independent and temporary. Read implies Delivered.
-- Delivery never starts typing. Typing alone never marks Read. Use `/read` for
-  consumption without a response and `/typing` for proactive starts or stops.
-- `Delivered + typing` is valid proactive activity. Ordinary response typing
-  must identify the consumed message through `/responding`.
-- Streaming: `POST /v1/messages?stream=true` with a Vercel AI SDK
-  UIMessageStream v1 body commits one finished message at `finish`; an aborted
-  stream commits nothing, so retry the whole stream with the same key. Relay
-  renders no live bubble, so the reader sees one finished message appear.
+  is independent and temporary. Read implies Delivered. Receipts exist in 1:1
+  conversations only; a group message stays `sent`.
+- Delivery never starts typing. Typing alone never marks Read. Typing is
+  ephemeral: nothing is stored, it takes no sequence, and it never enters the
+  event log.
+- Text styles are `bold`, `italic`, `underline`, and `strikethrough`. Anything
+  else is a `422`.
 - Treat attachment capability URLs as secrets.
 
 ## CANNOT
 
-- Published packages: `@relaymessenger/sdk` (the general client and transport:
-  HTTPS client, Standard Webhooks verify, cursor, poll loop),
-  `@relaymessenger/cli` (bridge Claude Code, Codex, or Hermes on your
-  computer), and `@relaymessenger/vercel-ai` (signed webhooks + streaming for
-  the Vercel AI SDK). For any other stack, use raw HTTPS and JSON.
-- Backends cannot read ambient group conversation, create group members, or
-  message users who have not installed the agent.
+- The one published package is `@relaymessenger/cli` (bridge Claude Code,
+  Codex, or Hermes on your computer). For any other stack, use raw HTTPS and
+  JSON.
+- Backends cannot create a group, change its membership, or message users who
+  have not installed the agent. People do that in the app.
+- Backends cannot edit, unsend, or delete a message, and cannot stream a reply
+  into Relay. Send a finished message.
 - No socket mode and no calls in the current developer preview; check
   `https://docs.relayapp.im/roadmap.md` before assuming a capability.
 - Agent Tokens cannot act as a user session, and user sessions cannot act as

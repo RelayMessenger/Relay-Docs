@@ -1,19 +1,19 @@
 ---
 title: "Sending messages"
-description: "Send ordered parts with POST /v1/messages, reply to a message, and make retries safe."
-keywords: ["send message", "parts", "text", "media", "voice memo", "data", "reply_to", "idempotency"]
+description: "Send ordered parts as one message with POST /v1/messages, reply to a message, and make retries safe."
+keywords: ["send message", "parts", "text", "media", "voice memo", "data", "reply_to", "message_id"]
 ---
 
-Send a message with `conversation_id`, an ordered `parts[]` array, and an
-`Idempotency-Key`. All three are required: a send with no `parts`, or with an
-empty array, returns `422 invalid_request`.
+Send a message with `conversation_id` and an ordered `parts[]` array. Both are
+required: a send with no `parts`, or with an empty array, returns
+`422 invalid_request`.
 
 ```bash
 curl -sS -X POST "https://api.relayapp.im/v1/messages" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
-  -H "Idempotency-Key: reply-evt_01JZE9M2XW" \
   -d '{
+    "message_id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
     "conversation_id": "cnv_01JZC7K4RQ",
     "parts": [
       { "type": "text", "text": "Found three options. The best one:" },
@@ -22,35 +22,49 @@ curl -sS -X POST "https://api.relayapp.im/v1/messages" \
   }'
 ```
 
-Relay splits the parts at ingest: each visible non-media part commits as its
-own message, contiguous `media` parts commit together as one media message,
-and a `voice_memo` always commits as its own message. Each bubble in the app
-is a message. The send above commits two messages: a text message, then a
-link preview message. One send raises one push notification, no matter how
-many messages it commits.
+One send is one message. The parts stay together in the order you sent them,
+and every committed part carries a permanent `part_id` that replies and
+reactions address.
 
-The notification carries the first text-bearing message's `fallback_text`,
-so the alert reads as the words, not as an attachment placeholder. A send
-with no text at all falls back to the first message's media fallback. In a
-group, a message that mentions the recipient anchors the notification
-instead, so a mention still cuts through a muted group.
+The notification carries the message's `fallback_text`, so the alert reads as
+the words, not as an attachment placeholder. In a group, a message that
+mentions the recipient reaches them even with the group muted.
 
 The send body takes an optional `fallback_text`, a plain-language
-representation for notifications and search. The server applies it to the
-last committed message of the send; every other committed message keeps its
-derived fallback.
+representation for notifications and search. Relay derives one when it is
+absent.
 
-The `202 Accepted` response is always a `messages` array listing every
-committed message in display order:
+The `202 Accepted` response carries the canonical id and the committed message:
 
 ```json
 {
-  "messages": [
-    { "id": "msg_01JZM4Q9VN", "sequence": 8, "parts": [{ "type": "text", "text": "Found three options. The best one:" }], "...": "..." },
-    { "id": "msg_01JZM4QA2C", "sequence": 9, "parts": [{ "type": "link_preview", "url": "https://example.com/listing/42" }], "...": "..." }
-  ]
+  "message_id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
+  "message": {
+    "id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
+    "conversation_id": "cnv_01JZC7K4RQ",
+    "sequence": 8,
+    "kind": "message",
+    "sender": { "kind": "agent", "id": "agt_01k1m7v9wr4t2b8n5c3qjd6hzx" },
+    "is_from_me": true,
+    "parts": [
+      { "part_id": "prt_01k1ma0m5sy2k8f3b7wnq4hdvc", "part_index": 0, "position": 0, "type": "text", "text": "Found three options. The best one:" },
+      { "part_id": "prt_01k1ma0m6t3rd9v2h8xkq5wzbf", "part_index": 1, "position": 1, "type": "link_preview", "url": "https://example.com/listing/42" }
+    ],
+    "reply_to": null,
+    "fallback_text": "Found three options. The best one:",
+    "status": "sent",
+    "created_at": "2026-07-13T20:01:04.000Z"
+  }
 }
 ```
+
+Three routes commit a send, and each of them commits exactly one message:
+
+| Route | Success | Body |
+| --- | --- | --- |
+| `POST /v1/messages` | `202` | `{ message_id, message }` |
+| `POST /v1/conversations/{conversation_id}/messages` | `201` | `{ messages: [message] }`, an array of exactly one |
+| `POST /v2/conversations/{conversation_id}/messages` | `201` | `{ message }` |
 
 ## Part types
 
@@ -61,6 +75,8 @@ committed message in display order:
 | `data` | `{ "type": "data", "data": { ... } }` | any JSON, 16 KB; stored and delivered as sent, rendered through fallback text |
 | `media` | `{ "type": "media", "url": "https://…", "content_type": "video/mp4" }` or `{ "attachment_id": "att_…" }` | send one source; optional `content_type`, `media_kind` (`image` \| `video` \| `audio` \| `file`), and `width` + `height` in pixels (always together) |
 | `voice_memo` | `{ "type": "voice_memo", "url": "https://…" }` or `{ "type": "voice_memo", "attachment_id": "att_…" }` | send `url` or `attachment_id`, never both; `duration_ms` is optional |
+
+A message carries 1 to 32 parts.
 
 <Tip>
 Upload a file to get an `attachment_id`, or pass a public `url`. See [Attachments](/guides/attachments).
@@ -73,20 +89,31 @@ Relay returns every canonical `media` part with `content_type` and `media_kind`.
 
 ## Mentions
 
-A `text` part carries up to 16 `mentions`, each
-`{ "start", "length", "participant_id" }` naming a `usr_…` or `agt_…`
-participant.
+A `text` part carries up to 16 `mentions`: bare handles, each of which must be
+written as `@handle` in that part's `text`.
+
+```json
+{ "type": "text", "text": "Ask @hermes about it", "mentions": ["hermes"] }
+```
 
 | Rule | Detail |
 | --- | --- |
-| Offsets | `start` and `length` are UTF-16 code units over that part's `text` |
-| Stored text | The display name the sender inserted. It never contains an "@" |
-| Ordering | Ranges sort by `start` and never overlap |
+| Shape | Bare handles, no leading `@`, no offsets |
+| Must appear | Each handle has to be written as `@handle` in `text`, or the send answers `422` |
+| Where the `@` may start | At the start of the text, or after a space, newline, bracket or quote |
+| Where the handle ends | At the first character outside `[A-Za-z0-9_]`, so `@hermes, thanks` works |
+| Identity | The handle must name a real user or agent; being in the conversation is not required |
+| Duplicates | One entry per handle; every legal occurrence in the part renders as a mention |
 | Notification | The named participant is notified even with the group muted |
-| Invocation | A human's mention of an active agent invokes it, with `method: "mention"`, exactly as `invoked_agent_ids` would |
+
+Because a mention has to be the handle, no range can turn an unrelated word
+into a mention of someone. It also means a handle a person typed but never
+picked from your suggestion list is simply absent from the array and stays
+ordinary text.
 
 The text reads the same without the mentions. See
-[group conversations](/guides/group-conversations) for the invocation contract.
+[group conversations](/guides/group-conversations) for how a group reaches an
+agent.
 
 ## Structured data
 
@@ -95,16 +122,15 @@ The text reads the same without the mentions. See
 | Case | Behavior |
 | --- | --- |
 | Any `data` shape | Stored and delivered as sent, up to 16 KB JSON-encoded, so clients render fallback text instead of dropping the part |
-| `data.type: "group_invite"` | Reserved for cards committed by `POST /v1/groups/invites`; sending it through the ordinary message endpoint returns `422 invalid_request` |
-| `data.type: "contact_card"` | Reserved for sharing a Relay agent. You send the handle, Relay writes the card |
+| `data.type: "agent_card"` | Reserved for sharing a Relay agent. You send the handle, Relay writes the card |
 
-### Share an agent with a contact card
+### Share an agent with an agent card
 
-A contact card is the one data part Relay does not carry through as sent. Name
+An agent card is the one data part Relay does not carry through as sent. Name
 the agent and nothing else:
 
 ```json
-{ "type": "data", "data": { "type": "contact_card", "handle": "scheduler" } }
+{ "type": "data", "data": { "type": "agent_card", "handle": "scheduler" } }
 ```
 
 Relay reads the agent record inside the same transaction that commits the
@@ -112,8 +138,8 @@ message and replaces your `data` with the card recipients receive:
 
 ```json
 {
-  "type": "contact_card",
-  "contact": {
+  "type": "agent_card",
+  "agent": {
     "kind": "agent",
     "id": "agt_01JZSCHED",
     "handle": "scheduler",
@@ -134,64 +160,55 @@ message and replaces your `data` with the card recipients receive:
 | `verified` | Read from the agent record, so a convincing handle cannot borrow the seal. True only for a first-party Relay agent |
 | `tagline` | Always present, and an empty string when the agent has not set one |
 | After the send | The card is a snapshot. Renaming the agent later never rewrites cards already sent |
-| Editing | A message carrying a contact card cannot be edited |
 
-Clients that cannot render a part use its `data.fallback` string when present, then the message's [`fallback_text`](/concepts#messages-and-ordered-parts).
+Clients that cannot render a part use its `data.fallback` string when present, then the message's [`fallback_text`](/concepts).
 
 Use [Voice memos](/guides/voice-memos) for audio in the inline voice player. Use [Rich link previews](/guides/rich-link-previews) when a URL should render as a preview card.
 
 ## Replying to a message
 
-In a group, Relay invokes an agent when a human selects it or replies to one of
-its messages. That `message.received` event carries an `invocation_id`. Echo the
-value as `invocation_id` in the finalized JSON request, or as the query parameter
-for a streamed reply.
-
-`reply_to` targets a message by id, and optionally one exact part of it:
+`reply_to` is a pointer, never a copy. It names a message of this conversation,
+and optionally one exact part of it:
 
 ```json
-{ "reply_to": { "message_id": "msg_01JZM3T8AH" } }
+{ "reply_to": { "message_id": "msg_01k1m4q9vn2r7t9b4c6qdh8xwy" } }
 ```
 
 ```json
 {
   "reply_to": {
-    "message_id": "msg_01JZM3T8AH",
+    "message_id": "msg_01k1m4q9vn2r7t9b4c6qdh8xwy",
     "part_id": "prt_01k1ma0m5sy2k8f3b7wnq4hdvc"
   }
 }
 ```
 
 Use the message id from the stored message in `message.received`, and the
-`part_id` from the part you are answering. Relay freezes a quote of the target
-when the reply commits, so an edit to the target later changes the reply's
-`quote_state` rather than the words it quoted.
-
-A legacy `part_index` is accepted here and is translated to that part's
-`part_id` before anything is stored. Send `part_id`.
+`part_id` from the part you are answering. The client draws the quote from the
+target itself, so a reply carries no copy of the words it answers.
 
 ## Idempotency
 
-The `Idempotency-Key` header is **required** and accepts 8 to 255 characters. Derive it from the inbound `event_id`.
+The client-minted `message_id` is the idempotency key. Mint it once per logical
+send, with any ULID generator that emits lowercase Crockford base32, and reuse
+it across retries.
 
 | Retry | Result |
 | --- | --- |
-| Same key, same request | Relay returns the originally committed messages instead of sending twice |
-| Same key, different request | `409 idempotency_conflict` |
+| Same id, same request | Relay replays the stored message instead of sending twice |
+| Same id, different content, or another sender's id | `409 idempotency_conflict` |
+| No `message_id` on `/v1` | Relay mints one, and the send is not idempotent |
 
-Generate the key once per logical send and reuse it across retries.
+On `/v1` the id may also arrive as `clientMessageId`, or in an
+`Idempotency-Key` header when that header value is itself a `msg_` id. Any
+other header value is ignored. `/v2` requires `message_id` in the body and
+reads no header.
 
-## Long replies
+## Send with /v2
 
-Split content longer than the per-part limit across `text` parts. Each part
-renders as its own bubble, because each becomes its own message.
-
-## Send one message with /v2
-
-`POST /v2/conversations/{conversation_id}/messages` commits the whole send as
-one message. Text and media stay together as ordered parts instead of being
-split into a run of messages, and every part comes back with a permanent
-`part_id` that replies, reactions, and edits address.
+`POST /v2/conversations/{conversation_id}/messages` returns the committed
+message on its own and validates the body strictly: any field outside
+`message_id`, `parts`, `reply_to`, and `fallback_text` returns `422`.
 
 ```bash
 curl -sS -X POST "https://api.relayapp.im/v2/conversations/cnv_01k1m4q9vn2r7t9b4c6qdh8xwy/messages" \
@@ -206,34 +223,18 @@ curl -sS -X POST "https://api.relayapp.im/v2/conversations/cnv_01k1m4q9vn2r7t9b4
   }'
 ```
 
-The client mints `message_id` before queueing the send, and it is both the
-canonical id of the message and the retry key. There is no `Idempotency-Key`
-header on `/v2`.
-
-| Retry | Result |
-| --- | --- |
-| Same id, same request | `201` replaying the original message |
-| Same id, different content | `409 idempotency_conflict` |
-| Same id, after the message was unsent | `201` replaying the tombstone |
-
-Mint the id with any ULID generator that emits lowercase Crockford base32, and
-mint it once per logical send so a retry after a lost response resolves to the
-same message.
-
 | Difference from `/v1` | `/v2` |
 | --- | --- |
-| Messages committed | Exactly one |
-| Retry key | `message_id` in the body |
-| `reply_to` | `part_id` only. `part_index` answers `422` |
+| Response | `{ message }`, where `/v1` wraps the same message in an array of one |
+| `message_id` | Required, and read only from the body |
+| Unknown body fields | `422 invalid_request`, where `/v1` ignores them |
 
-`/v1` keeps splitting sends into content runs for the clients already shipped
-against it, and both wires read and write the same rows. See
-[Compatibility and migration](/concepts/message-model#compatibility-and-migration).
+Both wires commit one message and read and write the same rows.
 
 ## Next steps
 
-- [Message model](/concepts/message-model) for part ids, edits, and unsend
-- [Streaming replies](/guides/streaming)
-- [Reactions](/guides/reactions)
+- [Message model](/concepts/message-model) for part ids and reply targets
 - [Attachments](/guides/attachments)
+- [Voice memos](/guides/voice-memos)
+- [Reactions](/guides/reactions)
 - [Delivery model](/guides/delivery-model)

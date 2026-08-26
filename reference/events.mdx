@@ -9,8 +9,10 @@ Every event uses the same envelope:
 ```json
 {
   "event_id": "evt_01JZE9M2XW",
+  "sequence": 118,
   "event_type": "message.received",
   "agent_id": "agt_01JZRELAY",
+  "conversation_id": "cnv_01JZC7K4RQ",
   "created_at": "2026-07-12T01:21:03.000Z",
   "schema_version": "2026-08-24",
   "data": { }
@@ -20,6 +22,11 @@ Every event uses the same envelope:
 `event_id` is globally unique and serves as the deduplication key. Delivery is
 at least once. Ignore unknown `event_type` values, so new types cannot break the
 consumer.
+
+`sequence` is this agent's position in its own durable log. Pass the highest one
+you have processed as `after` on the next [`GET /v1/events`](/guides/long-polling).
+Webhook deliveries carry the same number, so a consumer that runs both
+transports reads one ordering.
 
 `schema_version` is the envelope shape this delivery was rendered as. It is a
 date rather than an integer: pin the day the shape you wrote against was
@@ -35,105 +42,87 @@ idempotent writes, live state, and recovery.
 
 ## Emitted in v0
 
+Ten event types, and every one of them is available to both webhooks and
+`GET /v1/events`.
+
+| Event | Fires when |
+| --- | --- |
+| `message.received` | Someone sent a message in one of the agent's conversations |
+| `message.delivered` | A recipient received the agent's message |
+| `message.read` | A recipient read the agent's message |
+| `conversation.added` | The agent was added to a group |
+| `conversation.updated` | A group's roster or metadata changed |
+| `conversation.removed` | The agent was removed from a group |
+| `conversation.left` | A participant left a group of their own accord |
+| `reaction.added` | Someone reacted to the agent's message |
+| `reaction.removed` | Someone took a reaction off |
+
 ### `message.received`
 
-A participant sent a message in one of the agent's direct conversations, or a
-human explicitly invoked the agent in a group.
+A participant sent a message in one of the agent's conversations, direct or
+group.
 
 | Field | Contents |
 | --- | --- |
-| `data.message` | The full stored message: `id`, `conversation_id`, `sequence`, `sender`, `is_from_me`, ordered `parts[]`, `reply_to`, `fallback_text`, `status`, `created_at` |
-| `data.invocation_id` | Group deliveries only. Required when replying, see [group conversations](/guides/group-conversations) |
+| `data.message` | The full stored message: `id`, `conversation_id`, `sequence`, `kind`, `sender`, `is_from_me`, ordered `parts[]`, `reply_to`, `fallback_text`, `status`, `created_at` |
 
-The agent's own messages never echo back as `message.received`. When one send
-splits into several messages, each arrives as its own `message.received`
-event: `reply_to` projects on the first of them, and every event of an
-invoking group batch carries the same `invocation_id`.
+One send is one message, so one send is one `message.received`. The agent's own
+messages never echo back.
 
-### `message.edited`
-
-The original sender replaced a text-bearing message within its 15-minute edit
-window.
-
-| Field | Contents |
-| --- | --- |
-| `data.message` | The full updated message |
-| `edited_at` | The time of the latest edit |
-| `version` | The message's current version number, 1 through 6 |
-| `edit_capabilities` | What the reader may do to this message now |
-| `revisions` | Each prior version, oldest to newest, with its `version`, `parts`, `fallback_text`, `created_at`, and `replaced_at`. The current version is never among them |
-| `data.revision_count` | The number of stored revisions, from 1 through 5 |
-
-Every part in `parts` and in each revision carries a `part_id` that survives
-the edit, so a consumer can tell an updated part from a replaced one instead of
-diffing positions.
+A group membership or metadata change also arrives here, as a message whose
+`kind` is `notice`. It carries the human-readable line as a text part and the
+structured `group.mutation` as a `data` part, and it is sent by the person who
+made the change rather than by a system account. The app renders only the text
+line.
 
 ```json
 {
-  "event_type": "message.edited",
+  "event_type": "message.received",
   "data": {
     "message": {
-      "id": "msg_01K1M9EDITEXAMPLE",
-      "conversation_id": "cnv_01K1M9CONVERSATION",
-      "sequence": 9,
-      "sender": { "kind": "user", "id": "usr_01K1M9ALICE" },
+      "id": "msg_01JZM3T8AH",
+      "conversation_id": "cnv_01JZC7K4RQ",
+      "sequence": 4,
+      "kind": "notice",
+      "sender": { "kind": "user", "id": "usr_01JZU1F0BD" },
       "is_from_me": false,
       "parts": [
-        { "part_id": "prt_01k1ma0m5r9xd4t7c2vqj6nzbh", "part_index": 0, "position": 0, "type": "text", "text": "Tomorrow at 3:00 PM works." }
-      ],
-      "reply_to": null,
-      "reactions": [],
-      "fallback_text": "Tomorrow at 3:00 PM works.",
-      "status": "sent",
-      "edited_at": "2026-07-24T20:15:00.000Z",
-      "version": 2,
-      "revisions": [
         {
-          "version": 1,
-          "parts": [
-            { "part_id": "prt_01k1ma0m5r9xd4t7c2vqj6nzbh", "part_index": 0, "position": 0, "type": "text", "text": "Tomorrow at 2:00 PM works." }
-          ],
-          "fallback_text": "Tomorrow at 2:00 PM works.",
-          "created_at": "2026-07-24T20:05:00.000Z",
-          "replaced_at": "2026-07-24T20:15:00.000Z"
+          "part_id": "prt_01k1ma0m5r9xd4t7c2vqj6nzbh",
+          "part_index": 0,
+          "position": 0,
+          "type": "text",
+          "text": "Scheduler was added"
+        },
+        {
+          "part_id": "prt_01k1ma0m5sy2k8f3b7wnq4hdvc",
+          "part_index": 1,
+          "position": 1,
+          "type": "data",
+          "data": {
+            "type": "group.mutation",
+            "mutation": "membership.added",
+            "actor": { "kind": "user", "id": "usr_01JZU1F0BD" },
+            "affected_participant": { "kind": "agent", "id": "agt_01JZRELAY" },
+            "changes": {
+              "state": { "old": null, "new": "active" }
+            }
+          }
         }
       ],
-      "created_at": "2026-07-24T20:05:00.000Z"
-    },
-    "revision_count": 1
+      "reply_to": null,
+      "fallback_text": "Scheduler was added",
+      "status": "sent",
+      "created_at": "2026-07-17T12:00:00.000Z"
+    }
   }
 }
 ```
-
-- **In a direct conversation**, Relay sends the event to the counterpart agent.
-- **In a group**, only agents with an invocation relationship to that message
-  receive it.
-- **An edit** sends no push notification, and never changes message sequence.
-
-### `message.unsent`
-
-The original sender unsent a message within two minutes of creation. The event
-identifies the stable tombstone:
-
-```json
-{
-  "event_type": "message.unsent",
-  "data": {
-    "message_id": "msg_01K1M9UNSENT",
-    "conversation_id": "cnv_01K1M9CONVERSATION",
-    "sequence": 10
-  }
-}
-```
-
-History keeps the id, sequence, sender, status `deleted`, and original
-`created_at`. It omits parts and reactions. Unsend uses the same direct and
-group agent scope as `message.edited`, and sends no push notification.
 
 ### `message.delivered`
 
-A recipient's runtime durably accepted the agent's message. Everything through
-`through_sequence` is delivered to `participant`.
+A recipient durably received the agent's message. Everything through
+`through_sequence` is delivered to `recipient`.
 
 ```json
 {
@@ -142,23 +131,31 @@ A recipient's runtime durably accepted the agent's message. Everything through
     "message_id": "msg_01KXEKDSH8M3V5P2R7T9B4C6QD",
     "conversation_id": "cnv_01JZU1CONV",
     "through_sequence": 42,
+    "recipient": { "kind": "user", "id": "usr_01JZU1X4" },
     "participant": { "kind": "user", "id": "usr_01JZU1X4" },
     "at": "2026-07-13T20:00:01Z"
   }
 }
 ```
 
+`participant` repeats `recipient` for consumers written before the field was
+renamed. Read `recipient`.
+
+Receipts exist in 1:1 conversations only. A group message reports no
+per-recipient state, the way iMessage does not, so its `status` stays `sent`
+and neither receipt event fires.
+
 ### `message.read`
 
-The payload matches `message.delivered`. The participant has read the
-conversation through `through_sequence`. Read implies Delivered. Neither event
+The payload matches `message.delivered`. The recipient has read the
+conversation through `through_sequence`. Read implies delivered. Neither event
 starts or stops typing.
 
 To advance the agent's own read watermark, see [Read receipts](/guides/read-receipts).
 
 ### `reaction.added` / `reaction.removed`
 
-A participant added or removed a reaction from the agent's message.
+A participant added or removed a reaction on the agent's message.
 
 ```json
 {
@@ -166,8 +163,6 @@ A participant added or removed a reaction from the agent's message.
   "data": {
     "reaction": {
       "message_id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
-      "part_index": 1,
-      "target_scope": "part",
       "target_part_id": "prt_01k1ma0m5sy2k8f3b7wnq4hdvc",
       "type": "emoji",
       "emoji": "🔥",
@@ -181,9 +176,7 @@ A participant added or removed a reaction from the agent's message.
 
 | Field | Contents |
 | --- | --- |
-| `target_scope` | `message` or `part` |
-| `target_part_id` | The part this reaction is anchored to. Null exactly when `target_scope` is `message`. This is the identity |
-| `part_index` | The target part's position when the write happened. Null on a whole-message reaction. Retained for shipped clients; never an identity |
+| `target_part_id` | The part this reaction is anchored to, and the identity for it. Null when the reaction is on the whole message |
 | `type` | Always `"emoji"` |
 | `actor.kind` | `user` or `agent` |
 | `changed` | Always true on an emitted event. Relay emits nothing for a no-op |
@@ -192,85 +185,32 @@ A message projected in history carries its reactions in the flatter
 `reactions[]` shape, which uses `actor_kind` and `actor_id` in place of a
 nested `actor` and adds `created_at`.
 
-### `conversation.left`
+### `conversation.added`, `conversation.updated`, `conversation.removed`, `conversation.left`
 
-A participant left a group of their own accord. It is a different fact from
-`conversation.removed`: nobody removed them, so there is no actor to attribute
-it to, and an agent that left has no membership left to re-check.
+Relay emits these when a person changes a group the agent is in. A removed
+agent receives no further events for that group.
 
-`data` carries the same fields as the events below, with `system_mutation.mutation`
-set to `membership.left`.
-
-### `conversation.added`, `conversation.updated`, and `conversation.removed`
-
-Relay emits these to every active group agent when a human adds or removes the
-authenticated agent, renames the group, or changes its avatar. A removed agent
-receives no further group events. Pending invocation IDs from an ended
-membership period cannot be reused after re-addition.
-
-An agent's group history stays limited to the messages that invoked it and its
-own replies. No lifecycle event adds access to the rest of the conversation.
-
-`data` carries these fields:
+An agent in a group is an ordinary member: it receives every message from the
+sequence it joined at, and reads that same history back from
+`GET /v1/conversations/{id}/messages`.
 
 | Field | Contents |
 | --- | --- |
 | `conversation_id` | The group the change happened in |
-| `actor` | The human who made the change |
-| `affected_participant` | The targeted participant. Omitted on `conversation.updated`, because metadata updates target no single member |
-| `membership_version` | The current membership version |
-| `system_mutation` | The mutation, with old and new fields |
-| `message` | The system message stored in the conversation |
+| `actor` | The person who made the change |
+| `affected_participant` | The participant added, removed, or departed. Absent on a metadata update |
+| `membership_version` | The roster version after the change. Present on a roster change |
+| `changes` | Each changed field, with its old and new value. Present on a metadata change |
+| `updated_at` | When the metadata changed |
 
 <CodeGroup>
 
-```json Membership change
+```json Roster change
 {
   "conversation_id": "cnv_01JZC7K4RQ",
   "actor": { "kind": "user", "id": "usr_01JZU1F0BD" },
   "affected_participant": { "kind": "agent", "id": "agt_01JZRELAY" },
-  "membership_version": 2,
-  "system_mutation": {
-    "type": "group.mutation",
-    "mutation": "membership.added",
-    "actor": { "kind": "user", "id": "usr_01JZU1F0BD" },
-    "affected_participant": { "kind": "agent", "id": "agt_01JZRELAY" },
-    "changes": {
-      "state": { "old": null, "new": "active" },
-      "membership_version": { "old": 1, "new": 2 }
-    }
-  },
-  "message": {
-    "id": "msg_01JZM3T8AH",
-    "conversation_id": "cnv_01JZC7K4RQ",
-    "sequence": 4,
-    "sender": { "kind": "system", "id": "system" },
-    "parts": [
-      {
-        "part_index": 0,
-        "type": "text",
-        "text": "Scheduler was added"
-      },
-      {
-        "part_index": 1,
-        "type": "data",
-        "data": {
-          "type": "group.mutation",
-          "mutation": "membership.added",
-          "actor": { "kind": "user", "id": "usr_01JZU1F0BD" },
-          "affected_participant": { "kind": "agent", "id": "agt_01JZRELAY" },
-          "changes": {
-            "state": { "old": null, "new": "active" },
-            "membership_version": { "old": 1, "new": 2 }
-          }
-        }
-      }
-    ],
-    "reply_to": null,
-    "fallback_text": "Scheduler was added",
-    "status": "sent",
-    "created_at": "2026-07-17T12:00:00.000Z"
-  }
+  "membership_version": 2
 }
 ```
 
@@ -278,104 +218,28 @@ own replies. No lifecycle event adds access to the rest of the conversation.
 {
   "conversation_id": "cnv_01JZC7K4RQ",
   "actor": { "kind": "user", "id": "usr_01JZU1F0BD" },
-  "membership_version": 2,
-  "system_mutation": {
-    "type": "group.mutation",
-    "mutation": "metadata.updated",
-    "actor": { "kind": "user", "id": "usr_01JZU1F0BD" },
-    "changes": {
-      "title": { "old": "Weekend", "new": "Weekend plans" },
-      "avatar_url": { "old": null, "new": "https://cdn.relayapp.im/group.png" }
-    }
+  "changes": {
+    "title": { "old": "Weekend", "new": "Weekend plans" },
+    "avatar_url": { "old": null, "new": "https://cdn.relayapp.im/group.png" }
   },
-  "message": {
-    "id": "msg_01JZM3T8AH",
-    "conversation_id": "cnv_01JZC7K4RQ",
-    "sequence": 5,
-    "sender": { "kind": "system", "id": "system" },
-    "parts": [
-      {
-        "part_index": 0,
-        "type": "text",
-        "text": "Mira updated the group"
-      },
-      {
-        "part_index": 1,
-        "type": "data",
-        "data": {
-          "type": "group.mutation",
-          "mutation": "metadata.updated",
-          "actor": { "kind": "user", "id": "usr_01JZU1F0BD" },
-          "changes": {
-            "title": { "old": "Weekend", "new": "Weekend plans" },
-            "avatar_url": { "old": null, "new": "https://cdn.relayapp.im/group.png" }
-          }
-        }
-      }
-    ],
-    "reply_to": null,
-    "fallback_text": "Mira updated the group",
-    "status": "sent",
-    "created_at": "2026-07-17T12:00:00.000Z"
-  }
+  "updated_at": "2026-07-17T12:00:00.000Z"
 }
 ```
 
 </CodeGroup>
 
-A group system message is the one shape the split leaves untouched: one
-message carrying the human-readable line as a text part and the structured
-`group.mutation` as a `data` part. The data part is membership metadata, not
-a bubble; the app renders only the text line.
+The matching notice arrives separately, as the `message.received` shown above.
+`conversation.left` is a different fact from `conversation.removed`: nobody
+removed the participant, so the change is attributed to them.
 
 A backend receives these lifecycle events, but cannot create a group or change
-its membership. See [API availability](/roadmap).
+its membership. People do that in the app. See [API availability](/roadmap).
 
-### `group.invite.joined` / `group.invite.declined`
+## Not in the event log
 
-| Event | Fires when | Payload |
-| --- | --- | --- |
-| `group.invite.joined` | One person accepts | `invite_id`, the `conversation_id` that person is now in, `user_id` |
-| `group.invite.declined` | One person declines | `invite_id`, `user_id` |
-
-The first accept creates that conversation. Later accepts join it.
-
-```json
-{
-  "event_type": "group.invite.joined",
-  "data": {
-    "invite_id": "inv_01K1M8FOUNDERSDINNER",
-    "conversation_id": "cnv_01K1M8NEWGROUP",
-    "user_id": "usr_01K1M8ALICE"
-  }
-}
-```
-
-### `group.invite.completed` / `group.invite.expired`
-
-An invite reaches its terminal state once every invited user answers, or its
-deadline passes.
-
-| Event | Fires when | Payload |
-| --- | --- | --- |
-| `group.invite.completed` | A conversation went live | `invite_id`, `conversation_id` |
-| `group.invite.expired` | Nobody joined | `invite_id` |
-
-```json
-{
-  "event_type": "group.invite.completed",
-  "data": {
-    "invite_id": "inv_01K1M8FOUNDERSDINNER",
-    "conversation_id": "cnv_01K1M8NEWGROUP"
-  }
-}
-```
-
-A decline closes that person's card alone. It leaves the conversation and the
-rest of the invite untouched.
-
-Existing group history stays readable when group mutations are turned off. The
-gate prevents new membership and metadata writes.
+Typing is ephemeral. `typing.started` and `typing.stopped` are pushed to a
+person's live devices, take no sequence, never enter the log, and are never
+replayed. See [Typing indicators](/guides/typing-indicators).
 
 ## Specified, coming soon
 
@@ -394,7 +258,6 @@ See [API availability](/roadmap).
 ## See also
 
 - [Message model](/concepts/message-model)
-
 - [Webhooks](/guides/webhooks)
 - [Delivery model](/guides/delivery-model)
 - [API availability](/roadmap)

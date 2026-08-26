@@ -5,9 +5,9 @@ info:
   description: >
     Add Relay as a channel for your agent, receive messages, and reply with
     plain HTTPS and JSON. Authenticate every request with an Agent Token unless
-    the endpoint is marked public. Data parts are stored and delivered as sent
-    and render through their fallback text, except for the reserved `data.type`
-    values Relay resolves itself.
+    the endpoint is marked otherwise. Data parts are stored and delivered as
+    sent and render through their fallback text, except for the reserved
+    `data.type` values Relay resolves itself.
   license:
     name: Proprietary
     identifier: LicenseRef-Proprietary
@@ -20,25 +20,28 @@ tags:
   - name: Agent
     description: Inspect the agent controlled by the current Agent Token.
   - name: Messages
-    description: Send finalized messages, pipe native agent output, and react.
-  - name: Groups
-    description: Propose consent-based groups and observe their terminal state.
+    description: Send a message, read history, and react.
+  - name: Conversations
+    description: >
+      List the conversations an agent is in, advance receipts, and show the
+      typing indicator.
   - name: Events
     description: >
       Receive durable inbound events, either through signed webhook receivers
-      or by long-polling `GET /v1/events`. The two modes are mutually
-      exclusive per agent, enforced per request; around a webhook
-      registration or disable there is a brief transition window in which
-      both paths can observe the same events. Delivery is at least once
-      everywhere; always deduplicate by `event_id`.
+      or by pulling `GET /v1/events`. Both work at once: one durable log per
+      agent feeds both transports. Delivery is at least once everywhere;
+      always deduplicate by `event_id`.
+  - name: Attachments
+    description: Upload bytes once and reference them from any number of parts.
   - name: Pairing
     description: >
-      Device-code pairing for terminal bridges: create a pairing code on a
-      computer, let the Relay app claim it, and recover the minted Agent Token
-      only with that computer's poll credential. The token never travels to
-      the phone.
+      Device authorization (RFC 8628) for terminal bridges. Four calls, in this
+      order: the computer asks for a code, the person opens the verification URI
+      so the code is claimed for their account, the person approves it, and the
+      computer exchanges the code for a session it uses to provision its agent
+      and mint that agent's token. The token never travels to the phone.
   - name: Public
-    description: Read approved Store agents and share profiles without authentication.
+    description: Share profiles.
 
 paths:
   /v1/agents/me:
@@ -72,10 +75,10 @@ paths:
         number, enough to greet them or match them to an existing account.
 
 
-        Scope: the user must currently share an active conversation (direct or
-        group) with your agent. Any other id (unknown, or a user you have no
-        active conversation with) returns `404` so the endpoint can neither
-        enumerate accounts nor confirm who owns a phone number.
+        Scope: the user must currently share an active conversation with your
+        agent. Any other id (unknown, or a user you have no active
+        conversation with) returns `404` so the endpoint can neither enumerate
+        accounts nor confirm who owns a phone number.
       operationId: getUser
       parameters:
         - name: user_id
@@ -106,475 +109,86 @@ paths:
       tags: [Messages]
       summary: Send a message
       description: >
-        Send as the authenticated agent. Relay splits the accepted parts at
-        ingest: each visible non-media part becomes its own message,
-        contiguous media parts stay one media message, and a voice memo
-        always commits as its own message. The 202 lists every committed
-        message in display order. When one send commits several messages,
-        `reply_to` projects on the first committed message. Requires an
-        `Idempotency-Key`
-        header of 8–255 characters; reusing the same key with the same request
-        returns the originally committed messages. To pipe native agent
-        output, set `stream=true` and pipe a Vercel AI SDK UIMessageStream v1
-        SSE body into this same request. Relay commits one or more finished
-        messages after the stream's semantic `finish` event; recipients
-        receive only finished committed messages.
+        Send as the authenticated agent. One send is one message: text and
+        media handed over together stay together as the ordered parts of a
+        single message, and every committed part is given a permanent
+        `part_id`.
+
+
+        `message_id` is the canonical id of the resulting message and the
+        send's idempotency key. Mint it before queueing the send: retrying with
+        the same id replays the stored message, and an id already committed by
+        another sender answers `409 idempotency_conflict` without revealing
+        whose it is. Omit it and Relay mints one, which makes the send
+        non-idempotent; an `Idempotency-Key` header is read only when it is
+        itself a `msg_` id.
+
+
+        `reply_to` is a pointer, never a copy: it names a message of this
+        conversation and optionally one exact part of it, and the client draws
+        the quote from the target.
       operationId: sendMessage
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
-        - name: stream
-          in: query
-          schema: { type: boolean, default: false }
-          description: Set true when the request body is a Vercel AI SDK UIMessageStream v1.
-        - name: conversation_id
-          in: query
-          schema: { type: string }
-          description: Required when `stream=true`; use the conversation id from `message.received`.
-        - name: reply_to
-          in: query
-          schema: { type: string }
-          description: Optional message id to reply to when `stream=true`.
-        - name: invocation_id
-          in: query
-          schema:
-            $ref: "#/components/schemas/InvocationId"
-          description: Required for a streaming reply to an agent invocation in a group.
-        - name: x-vercel-ai-ui-message-stream
-          in: header
-          schema: { type: string, const: v1 }
-          description: >
-            Required when `stream=true`, and rejected with 422 when absent.
-            It names the stream protocol version, so a body framed for a
-            later protocol cannot be read as this one.
-        - name: Content-Type
-          in: header
-          schema: { type: string }
-          description: >
-            `application/json` for a finalized send. Must be
-            `text/event-stream` when `stream=true`; any other value returns
-            422 before the body is read.
+        - $ref: "#/components/parameters/OptionalIdempotencyKey"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [conversation_id, parts]
-              properties:
-                conversation_id:
-                  type: string
-                  description: Conversation to send into, from `message.received`.
-                  example: cnv_01JZC7K4RQ
-                invocation_id:
-                  $ref: "#/components/schemas/InvocationId"
-                  description: >
-                    Required when this agent replies in a group. Echo the
-                    invocation id from Relay's `message.received` event.
-                parts:
-                  type: array
-                  minItems: 1
-                  maxItems: 32
-                  description: >
-                    Ordered parts for this send. Required: an absent or empty
-                    array returns 422. The server splits them at ingest: each
-                    visible non-media part commits as its own message,
-                    contiguous media parts commit together as one media
-                    message, and a voice memo always commits as its own
-                    message.
-                  items:
-                    $ref: "#/components/schemas/PartInput"
-                fallback_text:
-                  type: string
-                  description: >
-                    Optional plain-language representation for notifications
-                    and search. The server applies it to the last committed
-                    message of the send; every other committed message keeps
-                    its derived fallback.
-                reply_to:
-                  $ref: "#/components/schemas/ReplyRefInput"
-          text/event-stream:
-            schema:
-              type: string
-              description: >
-                Vercel AI SDK UIMessageStream v1: `data: <UIMessageChunk>` SSE
-                frames ending with `data: [DONE]`. Also send
-                `x-vercel-ai-ui-message-stream: v1`.
+              $ref: "#/components/schemas/SendMessageInput"
       responses:
         "202":
-          description: Send accepted; every committed message, in display order.
+          description: Send accepted; the committed message.
           content:
             application/json:
               schema:
                 type: object
-                required: [messages]
+                required: [message_id, message]
                 properties:
                   message_id:
                     type: string
-                    deprecated: true
-                    description: >
-                      Deprecated alias for `messages[0].id`, kept one release
-                      for agents written against the pre-split response. Read
-                      `messages` instead.
-                  messages:
-                    type: array
-                    minItems: 1
-                    description: >
-                      The messages this send committed, in display order. A
-                      single non-media part commits one message; mixed parts
-                      commit several.
-                    items:
-                      $ref: "#/components/schemas/Message"
-                  stream:
-                    type: object
-                    properties:
-                      protocol: { type: string, const: vercel-ai-ui-message-stream-v1 }
-                      source_message_id: { type: string }
-                      finish_reason: { type: string }
+                    description: The canonical id, equal to `message.id`.
+                    example: msg_01k1m4q9vn2r7t9b4c6qdh8xwy
+                  message:
+                    $ref: "#/components/schemas/Message"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: The agent is not an active participant or is not installed for the user.
+          description: The agent is not an active participant, or is blocked or not installed for the user.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
         "404":
-          description: The conversation does not exist, or a requested preview message part is unavailable.
+          description: The conversation does not exist, or the reply target does not.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
         "409":
-          description: The idempotency key was already used with a different request.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "400":
-          description: A streamed request contains malformed SSE framing, JSON, or UTF-8.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "408":
-          description: A streamed request exceeded Relay's idle or total ingestion deadline.
+          description: >
+            `idempotency_conflict`: this `message_id` is already committed by a
+            different sender or with a different request.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
         "413":
-          description: A streamed request exceeded Relay's byte, line, or event ceiling.
+          description: The request body exceeds 512 KB.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
         "422":
-          description: The key, conversation ID, parts, attachment reference, or reply target is invalid.
+          description: The message id, conversation id, parts, attachment reference, or reply target is invalid.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
         "429":
           $ref: "#/components/responses/RateLimited"
-
-  /v1/messages/{message_id}:
-    patch:
-      tags: [Messages]
-      summary: Edit a message
-      description: >
-        Replace a text message's text without changing its conversation
-        sequence. User-sent messages require that user's session. Agent-sent
-        messages require that agent's token. Messages can be edited for 15
-        minutes after creation and at most five times. The stored message
-        must be text-bearing, and the replacement is exactly one text part;
-        anything else answers 422. A message carrying a `contact_card` data
-        part cannot be edited at all: the card is resolved against the agent
-        record during a send commit, and the edit path has no such step.
-        Relay does not send a push notification for edits.
-      operationId: editMessage
-      security:
-        - agentToken: []
-        - userSession: []
-      parameters:
-        - $ref: "#/components/parameters/MessageId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/MessageEditInput"
-      responses:
-        "200":
-          description: Canonical edited message with revision history from oldest to newest.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MessageEditResponse"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          description: The message does not exist or was not sent by this actor.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "409":
-          description: The 15-minute edit window or five-revision limit has passed.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "422":
-          description: >
-            The replacement is not exactly one valid text part, the stored
-            message carries an attachment or a `contact_card` data part, or
-            the replacement carries a `group_invite` data part in a group.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-    delete:
-      tags: [Messages]
-      summary: Unsend a message
-      description: >
-        Unsend the authenticated sender's message within two minutes of
-        creation. Relay keeps its id and conversation sequence as a deleted
-        tombstone, removes its stored parts, and does not send a push
-        notification. User-sent messages require that user's session.
-        Agent-sent messages require that agent's token.
-      operationId: unsendMessage
-      security:
-        - agentToken: []
-        - userSession: []
-      parameters:
-        - $ref: "#/components/parameters/MessageId"
-      responses:
-        "200":
-          description: Bare deleted-message tombstone.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MessageUnsendResponse"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          description: The message does not exist or was not sent by this actor.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "409":
-          description: The two-minute unsend window has passed.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-
-  /v2/conversations/{conversation_id}/messages:
-    post:
-      tags: [Messages]
-      summary: Send one message
-      description: >
-        One send is one message. Mixed text and media stay together as ordered
-        parts of a single message instead of being split into a run of
-        messages, and every committed part is given a permanent `part_id` that
-        survives edits, reordering and removal.
-
-
-        The client mints `message_id` before queueing the send. It is the
-        canonical id and the idempotency key: retrying with the same id and the
-        same request replays the original `201`, the same id with different
-        content answers `409 idempotency_conflict`, and an id already taken by
-        another sender answers the same `409` without revealing whose it is. No
-        `Idempotency-Key` header is involved.
-
-
-        `reply_to.part_id` targets one exact part. The legacy `part_index` form
-        is not accepted here; see
-        [Compatibility and migration](/concepts/message-model#compatibility-and-migration).
-      operationId: sendMessageV2
-      security:
-        - agentToken: []
-        - userSession: []
-      parameters:
-        - $ref: "#/components/parameters/ConversationId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SendMessageV2Input"
-      responses:
-        "201":
-          description: >
-            The committed message. A retry whose message has since been unsent
-            replays the tombstone rather than the content, so this is `Message`
-            and not `VisibleMessage`.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SendMessageV2Response"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          description: The sender is not an active participant of this conversation.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "409":
-          description: >
-            `idempotency_conflict`: this `message_id` is already committed with
-            a different request, or is still in flight. A `Retry-After` header
-            is present in the in-flight case.
-          headers:
-            Retry-After:
-              description: Whole seconds until the in-flight operation should be retried.
-              schema:
-                type: integer
-                minimum: 1
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "422":
-          description: >
-            The message id, conversation id, parts, an attachment reference, or
-            the reply target is invalid.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "429":
-          $ref: "#/components/responses/RateLimited"
-
-  /v2/messages/{message_id}:
-    patch:
-      tags: [Messages]
-      summary: Edit a message with part operations
-      description: >
-        Apply ordered operations to a message's parts. Each part keeps its
-        identity across the edit, so a reply or reaction that named a part
-        still names the same part afterwards, and a removed part leaves a
-        tombstoned identity rather than shifting its neighbours into its place.
-
-
-        `expected_version` is optimistic concurrency: two devices editing
-        version 2 produce exactly one version 3 and the loser is refused.
-        `operation_id` is the retry key, on the same terms as `message_id` is
-        for a send. A message may be edited for 15 minutes after it was sent
-        and at most five times, giving version 6 as the ceiling.
-
-
-        Which operations a part accepts is per kind, and the server publishes
-        the answer on every message as `edit_capabilities`. Relay does not send
-        a push notification for edits, and an edit never invokes an agent.
-      operationId: editMessageV2
-      security:
-        - agentToken: []
-        - userSession: []
-      parameters:
-        - $ref: "#/components/parameters/MessageId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/MessageEditV2Input"
-      responses:
-        "200":
-          description: The message at its new version, with the prior version in `revisions`.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MessageEditResponse"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          description: >
-            The message does not exist, was not sent by this actor, or has
-            already been unsent. One answer for all three: an editor must not
-            learn about messages that are not theirs.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "409":
-          description: >
-            `expected_version` is stale, the 15-minute window or the five-edit
-            limit has passed, or `operation_id` was reused with different
-            operations.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "422":
-          description: >
-            An operation names a part that is not active on this message, or
-            asks a part for something its kind does not support.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-
-    delete:
-      tags: [Messages]
-      summary: Unsend a message
-      description: >
-        Unsend the authenticated sender's message within two minutes of
-        sending. Relay keeps the id and the conversation sequence as a deleted
-        tombstone and redacts everything else it controls: every version, every
-        stored part, every quote of the message in someone else's reply, and
-        the stored replay bodies of the operations that produced it. Every
-        identity survives, so nothing dangles.
-
-
-        Unsending is idempotent. A second unsend answers with the same
-        tombstone rather than a 404, and a send retry that arrives afterwards
-        replays the tombstone rather than resurrecting the content.
-
-
-        What Relay cannot erase is listed in
-        [Deletion limits](/concepts/message-model#deletion-limits).
-      operationId: unsendMessageV2
-      security:
-        - agentToken: []
-        - userSession: []
-      parameters:
-        - $ref: "#/components/parameters/MessageId"
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/MessageUnsendV2Input"
-      responses:
-        "200":
-          description: Bare deleted-message tombstone.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MessageUnsendResponse"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          description: The message does not exist or was not sent by this actor.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "409":
-          description: The two-minute unsend window has passed.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "422":
-          description: The message id or `operation_id` is malformed.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
+        "503":
+          $ref: "#/components/responses/CommitUnavailable"
 
   /v1/messages/{message_id}/reactions:
     post:
@@ -585,17 +199,19 @@ paths:
         Recipients receive `reaction.added` / `reaction.removed` events.
 
 
-        One reaction per actor per target slot: adding a second emoji to a slot
-        replaces the first, and removing one that is not there is a documented
-        no-op that answers `200` with `changed: false`. Events are emitted only
-        when `changed` is true.
+        One reaction per actor per target slot, the way an iMessage tapback
+        behaves: adding a second emoji to a slot replaces the first, and
+        removing one that is not there is a documented no-op that answers `200`
+        with `changed: false`. Events are emitted only when `changed` is true,
+        so a retry costs the recipient nothing and no operation id is needed.
 
 
-        Omit both target fields to react to the whole message. Send
-        `target_part_id` to react to one part, of any kind. The legacy
-        `part_index` form is accepted for shipped clients and keeps its
-        media-only rule.
+        Omit `target_part_id` to react to the whole message. Send it to react
+        to one part, of any kind.
       operationId: reactToMessage
+      security:
+        - agentToken: []
+        - userSession: []
       parameters:
         - $ref: "#/components/parameters/MessageId"
       requestBody:
@@ -623,7 +239,7 @@ paths:
         "403":
           description: >
             The actor is not an active participant, the target sits outside
-            the actor's membership periods, or the agent is blocked or not
+            the actor's membership window, or the agent is blocked or not
             installed for this conversation.
           content:
             application/json:
@@ -637,8 +253,8 @@ paths:
                 $ref: "#/components/schemas/Error"
         "422":
           description: >
-            The operation, type, or emoji is invalid, or part_index names a
-            part the message does not have.
+            The operation, type, or emoji is invalid, or `target_part_id` names
+            a part this message does not have.
           content:
             application/json:
               schema:
@@ -646,60 +262,6 @@ paths:
         "429":
           $ref: "#/components/responses/WriteBudgetExceeded"
 
-  /v1/groups/invites:
-    post:
-      tags: [Groups]
-      summary: Propose a group
-      description: >
-        Ask verified users who have installed the authenticated agent to join
-        a new group or an existing group that already contains the agent.
-        Relay commits the invite into each target's direct conversation with
-        the agent: a text message carrying the reason when one was given, then
-        the consent card message. The agent never changes membership
-        directly. The first
-        accept makes the conversation live, each later accept joins that same
-        conversation, and the invite stays open for whoever has not answered
-        until everyone answers or it expires.
-      operationId: createGroupInvite
-      parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/GroupInviteCreateInput"
-      responses:
-        "201":
-          description: Invite created, or the original response for an idempotent replay.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/GroupInviteResponse"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          description: >
-            A target has not installed the agent, has blocked it, or the agent
-            is not an active participant in the destination group.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "409":
-          description: >
-            The idempotency key conflicts, or an unexpired open invite
-            already exists for the same agent, targets, and destination.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "422":
-          description: The request shape, target set, TTL, existing membership, or group cap is invalid.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
   /v1/conversations:
     get:
       tags: [Conversations]
@@ -708,7 +270,8 @@ paths:
         List conversations where the authenticated agent is an active
         participant. Results are ordered by `last_message_at` descending, with
         conversations that have no messages last. Pass the opaque
-        `next_cursor` unchanged to read the next page.
+        `next_cursor` unchanged to read the next page; it is omitted on the
+        final page.
       operationId: listConversations
       parameters:
         - name: cursor
@@ -739,29 +302,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
-  /v1/groups/invites/{invite_id}:
-    get:
-      tags: [Groups]
-      summary: Get a group invite
-      description: Read the current member acceptance states for an invite created by the authenticated agent.
-      operationId: getGroupInvite
-      parameters:
-        - $ref: "#/components/parameters/GroupInviteId"
-      responses:
-        "200":
-          description: Current invite snapshot.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/GroupInviteResponse"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          description: No invite with this id belongs to the authenticated agent.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
   /v1/conversations/{conversation_id}:
     get:
       tags: [Conversations]
@@ -772,12 +312,7 @@ paths:
         agent's active membership both return 404.
       operationId: getConversation
       parameters:
-        - name: conversation_id
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: "^cnv_"
+        - $ref: "#/components/parameters/ConversationId"
       responses:
         "200":
           description: The conversation visible to this agent.
@@ -790,175 +325,26 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /v1/groups/invites/{invite_id}/accept:
-    post:
-      tags: [Groups]
-      summary: Accept a group invite
-      description: >
-        Accept as one invited Relay user, with immediate effect. The first
-        accept atomically creates the group, or adds the caller to the existing
-        destination group, and puts the caller in it beside the proposing
-        agent. Every later accept joins that same conversation. Repeating an
-        accept returns the live conversation and adds nobody twice.
-      operationId: acceptGroupInvite
-      security:
-        - userSession: []
-      parameters:
-        - $ref: "#/components/parameters/GroupInviteId"
-      responses:
-        "200":
-          description: Current invite state, plus the conversation_id the caller joined.
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required: [invite]
-                properties:
-                  invite:
-                    $ref: "#/components/schemas/GroupInvite"
-                  conversation_id:
-                    type: string
-                    pattern: "^cnv_"
-        "401":
-          description: A Relay user session is required.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "404":
-          description: The invite does not exist or the caller is not a target.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "409":
-          description: >
-            The invite is closed, the caller already declined, or the caller
-            failed relationship, block, membership, or group-cap revalidation.
-            A refusal here applies to the caller alone and leaves the invite
-            open for everyone else.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-
-  /v1/groups/invites/{invite_id}/decline:
-    post:
-      tags: [Groups]
-      summary: Decline a group invite
-      description: >
-        Decline as one invited Relay user. Declining answers for the caller
-        alone: it removes nobody from a live conversation and never blocks
-        another target from joining. Once every target has answered, the invite
-        reaches its terminal state.
-      operationId: declineGroupInvite
-      security:
-        - userSession: []
-      parameters:
-        - $ref: "#/components/parameters/GroupInviteId"
-      responses:
-        "200":
-          description: Current invite state. Repeating a decline is a no-op.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/GroupInviteResponse"
-        "401":
-          description: A Relay user session is required.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "404":
-          description: The invite does not exist or the caller is not a target.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "409":
-          description: The invite is closed, or the caller already joined the conversation.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-
-  /v1/conversations/direct:
-    post:
-      tags: [Conversations]
-      summary: Create or reuse a human direct conversation
-      description: >
-        Creates the single direct conversation for the authenticated Relay
-        user and a verified target user, or reuses the existing conversation
-        for that normalized pair.
-      operationId: createDirectConversation
-      security:
-        - userSession: []
-      parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [user_id]
-              properties:
-                user_id:
-                  type: string
-                  pattern: "^usr_"
-                  description: Verified Relay user to message.
-      responses:
-        "200":
-          description: Existing conversation for this user pair.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DirectConversationResponse"
-        "201":
-          description: New conversation for this user pair.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DirectConversationResponse"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          description: The feature is unavailable or the verified target user does not exist.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "422":
-          description: Idempotency-Key or a valid non-self user_id is missing.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-
   /v1/conversations/{conversation_id}/messages:
     get:
       tags: [Messages]
       summary: Read conversation history
       description: >
-        Read a conversation's messages, newest first. The authenticated agent
-        must be a participant. Page backwards with `before_sequence`.
+        Read a conversation's messages, newest first, inside the caller's
+        membership window. Page backwards with `before_sequence`. Group
+        membership is what grants access: an agent in a group reads the group's
+        history from the sequence it joined at, exactly as a person does.
 
-        In a group, this is not the transcript. An agent reads only the
-        messages inside its own invocations: each message that invoked it and
-        each message it committed in reply, including every message of a
-        split reply batch. A group an agent has never been invoked in returns
-        an empty array. In a 1:1 conversation an agent reads the whole
-        history its membership covers.
+
+        History projections carry the reader's view of each message: the
+        current `reactions` and — in a 1:1 conversation — the sender's
+        `delivered_at` / `read_at` stamps.
       operationId: listConversationMessages
+      security:
+        - agentToken: []
+        - userSession: []
       parameters:
-        - name: conversation_id
-          in: path
-          required: true
-          schema:
-            type: string
-          description: Conversation id from `message.received`.
+        - $ref: "#/components/parameters/ConversationId"
         - name: limit
           in: query
           schema:
@@ -992,12 +378,163 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Messages]
+      summary: Send a message into a conversation
+      description: >
+        The conversation-scoped form of a send, with the same body and the same
+        idempotency rules as `POST /v1/messages`. It answers `201` and wraps
+        the committed message in an array of one, which is the shape shipped
+        clients read; `/v2` returns the message on its own. Both commit exactly
+        one message.
+      operationId: sendConversationMessage
+      security:
+        - agentToken: []
+        - userSession: []
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+        - $ref: "#/components/parameters/OptionalIdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendMessageBody"
+      responses:
+        "201":
+          description: The committed message, as an array of one.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [messages]
+                properties:
+                  messages:
+                    type: array
+                    minItems: 1
+                    maxItems: 1
+                    items:
+                      $ref: "#/components/schemas/Message"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: The sender is not an active participant of this conversation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`idempotency_conflict`: this `message_id` belongs to a different request."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: The request body exceeds 512 KB.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: The message id, parts, an attachment reference, or the reply target is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/CommitUnavailable"
+
+  /v2/conversations/{conversation_id}/messages:
+    post:
+      tags: [Messages]
+      summary: Send one message
+      description: >
+        The current send. One send is one message, the response is the message
+        on its own, and the request body is validated strictly: any field
+        outside `message_id`, `parts`, `reply_to` and `fallback_text` answers
+        `422`.
+
+
+        The client mints `message_id` before queueing the send. It is the
+        canonical id and the idempotency key: retrying with the same id and the
+        same request replays the original `201`, and an id already taken by
+        another sender answers `409 idempotency_conflict` without revealing
+        whose it is. No `Idempotency-Key` header is involved, and unlike `/v1`
+        the id is required.
+      operationId: sendMessageV2
+      security:
+        - agentToken: []
+        - userSession: []
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendMessageV2Input"
+      responses:
+        "201":
+          description: The committed message.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendMessageV2Response"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: The sender is not an active participant of this conversation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            `idempotency_conflict`: this `message_id` is already committed with
+            a different request, or is still in flight. A `Retry-After` header
+            is present in the in-flight case.
+          headers:
+            Retry-After:
+              description: Whole seconds until the in-flight operation should be retried.
+              schema:
+                type: integer
+                minimum: 1
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: The request body exceeds 512 KB.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: >
+            An unexpected field is present, or the message id, parts, an
+            attachment reference, or the reply target is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/CommitUnavailable"
 
   /v1/webhooks:
     get:
       tags: [Events]
       summary: List webhooks
-      description: List the authenticated agent's webhook endpoints. Signing secrets are never returned.
+      description: List the authenticated agent's webhook endpoints, newest first. Signing secrets are never returned.
       operationId: listWebhooks
       responses:
         "200":
@@ -1019,9 +556,7 @@ paths:
       summary: Register a webhook
       description: >
         Register a public HTTPS receiver. The signing secret is returned only
-        in this response. Matching events from the preceding 24 hours are
-        queued on first registration, capped at 1,000. An agent may have up to
-        five enabled endpoints.
+        in this response. An agent may have up to five enabled endpoints.
       operationId: createWebhook
       requestBody:
         required: true
@@ -1039,7 +574,9 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "409":
-          description: URL already registered or five enabled endpoints already exist.
+          description: >
+            `conflict`: this URL is already registered. `limit_exceeded`: five
+            endpoints already exist.
           content:
             application/json:
               schema:
@@ -1050,19 +587,21 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/WriteBudgetExceeded"
         "503":
           $ref: "#/components/responses/WebhookDeliveryUnavailable"
 
   /v1/webhooks/{webhook_id}:
     parameters:
-      - name: webhook_id
-        in: path
-        required: true
-        schema: { type: string, pattern: "^wh_" }
+      - $ref: "#/components/parameters/WebhookId"
     patch:
       tags: [Events]
       summary: Update a webhook
-      description: Change the URL, event filters, or enabled state.
+      description: >
+        Change the URL, event filters, or enabled state. At least one field is
+        required. Disabling stamps `disabled_at` and records
+        `disabled_by_agent`.
       operationId: updateWebhook
       requestBody:
         required: true
@@ -1090,7 +629,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "409":
-          description: URL already registered or five enabled endpoints already exist.
+          description: URL already registered, or five enabled endpoints already exist.
           content:
             application/json:
               schema:
@@ -1120,16 +659,14 @@ paths:
 
   /v1/webhooks/{webhook_id}/rotate-secret:
     parameters:
-      - name: webhook_id
-        in: path
-        required: true
-        schema: { type: string, pattern: "^wh_" }
+      - $ref: "#/components/parameters/WebhookId"
     post:
       tags: [Events]
       summary: Rotate a webhook secret
       description: >
         Returns a new signing secret once. For 24 hours Relay includes
-        signatures from both the new and previous secret for zero-downtime rotation.
+        signatures from both the new and previous secret for zero-downtime
+        rotation.
       operationId: rotateWebhookSecret
       responses:
         "200":
@@ -1146,55 +683,56 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/WriteBudgetExceeded"
         "503":
           $ref: "#/components/responses/WebhookDeliveryUnavailable"
 
   /v1/events:
     get:
       tags: [Events]
-      summary: Long-poll for events
+      summary: Pull events
       description: >
-        Drain the agent's durable event log past `cursor` (Telegram getUpdates
-        model). When no newer events exist the request holds open up to
-        `timeout` seconds and returns as soon as one lands. Passing a cursor
-        durably acknowledges every event at or below it. Before making the
-        next request, atomically persist this page's events to the engine queue
-        together with `next_cursor`; never advance the cursor before the events
-        are durable. While any webhook endpoint is enabled this endpoint
-        returns `409 conflict`; the check runs per request and on every wake,
-        so around a registration or disable both paths may briefly observe the
-        same events; deduplicate by `event_id`. One consumer per agent:
-        starting a newer poll terminates an older held-open request with
-        `409 terminated_by_other_consumer`.
+        Drain the agent's durable event log past `after`. This is a plain pull:
+        `after` is the last `sequence` you have processed, the page is
+        everything newer, and nothing is acknowledged or consumed. A consumer
+        that sees an event twice ignores it by `event_id`.
+
+
+        `timeout` greater than zero holds the request open until something
+        arrives, up to thirty seconds. Persist the events and the new cursor
+        together before advancing, and read `has_more` to know whether to pull
+        again immediately.
+
+
+        Polling works alongside webhooks: both transports read one log, so an
+        agent may run either or both.
       operationId: pollEvents
       parameters:
-        - name: cursor
+        - name: after
           in: query
           schema: { type: integer, minimum: 0, default: 0 }
           description: >
-            The `next_cursor` from a previous response. It durably acknowledges
-            that handed-out page and advances message delivery receipts; Relay
-            rejects values above the highest cursor it has delivered. `0`
-            starts from the beginning of the retained log.
+            The highest `sequence` this consumer has processed. `0` starts from
+            the beginning of the retained log. `cursor` is accepted as an alias.
         - name: timeout
           in: query
-          required: true
-          schema: { type: integer, minimum: 0, maximum: 30 }
+          schema: { type: integer, minimum: 0, maximum: 30, default: 0 }
           description: >-
             Seconds to hold the request open when no events are pending.
-            0 returns immediately with any pending events (nonblocking poll).
+            0 returns immediately with any pending events (nonblocking pull).
         - name: limit
           in: query
           schema: { type: integer, minimum: 1, maximum: 100, default: 100 }
       responses:
         "200":
-          description: Events past the cursor, oldest first, and the cursor to persist.
+          description: Events past the cursor, oldest first.
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties: false
-                required: [events, next_cursor]
+                required: [events, next_cursor, latest, has_more]
                 properties:
                   events:
                     type: array
@@ -1203,180 +741,33 @@ paths:
                       $ref: "#/components/schemas/Event"
                   next_cursor:
                     type: integer
-                    description: Pass as `cursor` on the next poll; equal to the request cursor when empty.
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "409":
-          description: >
-            `conflict`: a webhook endpoint is enabled; disable or delete your
-            webhooks to poll. `terminated_by_other_consumer`: a newer poll
-            with this Agent Token took over the consumer slot.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "410":
-          description: >
-            `cursor_expired`: the requested cursor precedes the seven-day
-            retained event log. Reconcile canonical conversation history,
-            persist the recovered state, then call `POST /v1/events/reconcile`
-            with `error.details.highest_delivered_cursor`. Relay returns the
-            exact cursor from which polling can resume.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "422":
-          description: >
-            Cursor, timeout, or limit does not satisfy its exact integer
-            bounds, or cursor acknowledges a sequence Relay has not delivered.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "429":
-          $ref: "#/components/responses/RateLimited"
-
-  /v1/events/reconcile:
-    post:
-      tags: [Events]
-      summary: Resume after an expired event cursor
-      description: >
-        Call only after `GET /v1/events` returns `410 cursor_expired` and the
-        bridge has read canonical conversation history. Relay advances the
-        durable consumer only across the proven retention gap. Persist the
-        returned `resume_cursor` before polling again. Repeating the same
-        request with the same Idempotency-Key replays the same response.
-      operationId: reconcileExpiredEventCursor
-      parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [expired_cursor, history_reconciled]
-              properties:
-                expired_cursor:
-                  type: integer
-                  minimum: 0
-                  description: The `highest_delivered_cursor` value from the 410 response details.
-                history_reconciled:
-                  type: boolean
-                  const: true
-                  description: Confirms that canonical conversation history was read first.
-      responses:
-        "200":
-          description: The retention gap was reconciled and polling can resume.
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required: [reconciled, resume_cursor]
-                properties:
-                  reconciled:
-                    type: boolean
-                    const: true
-                  resume_cursor:
-                    type: integer
-                    minimum: 0
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "409":
-          description: The supplied cursor does not match Relay's delivered ledger or no gap remains.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "422":
-          description: The idempotency key, cursor, or history confirmation is invalid.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-
-  /v1/pairings:
-    post:
-      tags: [Pairing]
-      summary: Create a pairing
-      description: >
-        Start device-code pairing from a terminal. No authentication; the
-        source IP is rate-limited. Show the returned `code` (and a QR of
-        `url`) to the user, then long-poll the pairing with `poll_token` until
-        the Relay app claims it. Codes are single-use and expire after
-        `expires_in` seconds. If a JSON body is present it must be an object
-        containing only the documented fields.
-      operationId: createPairing
-      security: []
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              properties:
-                device_name:
-                  type: string
-                  minLength: 1
-                  maxLength: 80
-                  pattern: ".*\\S.*"
-                  description: Shown on the phone's claim sheet, e.g. the computer's hostname.
-                  example: Advait's MacBook Pro
-                engine:
-                  type: string
-                  pattern: "^[a-z0-9][a-z0-9._-]{0,39}$"
-                  description: Bridge engine identifier shown on the claim sheet.
-                  example: claude
-      responses:
-        "201":
-          description: Pairing created; poll it until claimed.
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required: [pairing_id, code, url, poll_token, expires_in]
-                properties:
-                  pairing_id:
-                    type: string
-                    pattern: ^pair_
-                    example: pair_01jz9x2m8ktqv4
-                  code:
-                    type: string
-                    pattern: "^[A-Z]+-[A-Z]+-[A-Z]+-[0-9]{4}$"
-                    description: Human-typable single-use code the user enters in the Relay app.
-                    example: AMBER-KITE-ROYAL-0472
-                  url:
-                    type: string
-                    format: uri
-                    description: Universal link that opens the claim sheet directly.
-                    example: https://relayapp.im/pair/AMBER-KITE-ROYAL-0472
-                  poll_token:
-                    type: string
-                    pattern: ^rlyp_
                     description: >
-                      Bearer credential for `GET /v1/pairings/{pairing_id}`
-                      only. It never authorizes the platform API.
-                  expires_in:
+                      The `sequence` of the last event on this page. Pass it as
+                      `after` on the next pull; it equals the request's `after`
+                      when the page is empty.
+                  latest:
                     type: integer
-                    const: 600
-                    description: Seconds until the code stops being claimable.
-                    example: 600
+                    description: The highest sequence Relay has written to this agent's log.
+                  has_more:
+                    type: boolean
+                    description: True when `next_cursor` is behind `latest`, so another page is waiting.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "422":
-          description: Invalid device_name or engine.
+          description: >
+            `after`, `timeout`, or `limit` does not satisfy its exact integer
+            bounds.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
         "429":
-          description: Too many pairings created from this address.
+          description: >
+            Too many held-open pulls. Charged only when `timeout` is greater
+            than zero.
           headers:
             Retry-After:
-              description: Whole seconds until another pairing may be created.
+              description: Whole seconds before another held-open pull.
               schema:
                 type: integer
                 minimum: 1
@@ -1384,216 +775,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-
-  /v1/pairings/code/{code}:
-    get:
-      tags: [Pairing]
-      summary: Preview a pairing claim
-      description: >
-        App-internal authenticated preview used before the user confirms Add.
-        Claimed and pending codes are visible only until their advertised
-        ten-minute expiry; lookup attempts are rate-limited independently
-        from final claims.
-      operationId: previewPairing
-      security:
-        - userSession: []
-      parameters:
-        - name: code
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: "^[A-Za-z]+-[A-Za-z]+-[A-Za-z]+-[0-9]{4}$"
-      responses:
-        "200":
-          description: Pairing metadata for the claim sheet.
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required: [pairing]
-                properties:
-                  pairing:
-                    $ref: "#/components/schemas/PairingPreview"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          description: Unknown or expired pairing code.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "429":
-          description: Too many pairing previews for this user or address.
-          headers:
-            Retry-After:
-              description: Whole seconds before another preview attempt.
-              schema: { type: integer, minimum: 1 }
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-
-  /v1/pairings/{code}/claim:
-    post:
-      tags: [Pairing]
-      summary: Claim a pairing
-      description: >
-        App-internal authenticated claim. Creates the private agent and its
-        conversation but never returns the Agent Token. Repeating the same
-        unexpired claim from the same user returns the existing agent.
-      operationId: claimPairing
-      security:
-        - userSession: []
-      parameters:
-        - name: code
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: "^[A-Za-z]+-[A-Za-z]+-[A-Za-z]+-[0-9]{4}$"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/PairingClaimInput"
-      responses:
-        "200":
-          description: Idempotent replay by the user who already claimed this pairing.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PairingClaimResponse"
-        "201":
-          description: Pairing claimed and agent created.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PairingClaimResponse"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          description: Unknown or expired pairing code.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "409":
-          description: Pairing belongs to another user, or the requested handle is unavailable.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "422":
-          description: Body is malformed, contains unknown fields, or fails field validation.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "429":
-          description: Too many pairing claims for this user or address.
-          headers:
-            Retry-After:
-              description: Whole seconds before another claim attempt.
-              schema: { type: integer, minimum: 1 }
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "503":
-          $ref: "#/components/responses/PairingDeliveryUnavailable"
-
-  /v1/pairings/{pairing_id}:
-    get:
-      tags: [Pairing]
-      summary: Poll a pairing
-      description: >
-        Poll pairing state with the pairing's `poll_token` as the bearer
-        credential. With `wait=true` the request holds open (≤30 s) and
-        returns as soon as the pairing is claimed. After a claim, the computer
-        receives the minted Agent Token. A lost response is recoverable: the
-        same poll credential receives the same token until its first successful
-        Agent API use or ten minutes after first delivery. Then Relay scrubs
-        the recovery copy and returns `410`. An expired unclaimed pairing
-        returns `404`. A newer concurrent poll terminates the older one with
-        `409 terminated_by_other_consumer`.
-      operationId: pollPairing
-      security:
-        - pollToken: []
-      parameters:
-        - name: pairing_id
-          in: path
-          required: true
-          schema: { type: string, pattern: ^pair_ }
-        - name: wait
-          in: query
-          schema: { type: boolean, default: false }
-          description: Hold the request open until claimed or ~25 s pass.
-      responses:
-        "200":
-          description: Current pairing state.
-          content:
-            application/json:
-              schema:
-                oneOf:
-                  - title: Pending
-                    type: object
-                    additionalProperties: false
-                    required: [status]
-                    properties:
-                      status: { type: string, const: pending }
-                  - title: Claimed
-                    type: object
-                    additionalProperties: false
-                    required: [status, agent_token, agent]
-                    properties:
-                      status: { type: string, const: claimed }
-                      agent_token:
-                        type: string
-                        pattern: ^rly_live_
-                        description: Recoverably re-delivered only during the bounded delivery window; store it now.
-                      agent:
-                        $ref: "#/components/schemas/AgentProfile"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          description: Unknown pairing, or the code expired before it was claimed.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "409":
-          description: A newer pairing poll took over this request's consumer slot.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "410":
-          description: The Agent Token was used, revoked, or aged out of its delivery-recovery window.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "422":
-          description: The wait query parameter is not exactly true or false.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "429":
-          description: Too many concurrent/long-lived pairing polls from this address.
-          headers:
-            Retry-After:
-              description: Whole seconds before another long poll.
-              schema: { type: integer, minimum: 1 }
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "503":
-          $ref: "#/components/responses/PairingDeliveryUnavailable"
 
   /v1/attachments:
     post:
@@ -1608,6 +789,9 @@ paths:
         counted in megabytes rather than requests, and it is charged from the
         declared `Content-Length` before the body streams.
       tags: [Attachments]
+      security:
+        - agentToken: []
+        - userSession: []
       parameters:
         - in: header
           name: Content-Length
@@ -1639,14 +823,16 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [attachment]
                 properties:
                   attachment:
                     type: object
-                    required: [id, url, content_type, size_bytes]
+                    required: [id, url, content_type, filename, size_bytes]
                     properties:
                       id: { type: string, example: att_01KXGWNZFR }
                       url: { type: string, description: Capability download URL. }
                       content_type: { type: string, example: image/png }
+                      filename: { type: string, example: chart.png }
                       size_bytes: { type: integer }
         "401":
           $ref: "#/components/responses/Unauthorized"
@@ -1657,19 +843,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "422":
-          description: Content-Length is missing or invalid, the body is empty, or the stored size does not match the declaration.
+          description: >
+            Content-Length is missing or invalid, the body is empty, the stored
+            size does not match the declaration, or the bytes do not match the
+            declared type.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
         "429":
           $ref: "#/components/responses/WriteBudgetExceeded"
+
   /v1/attachments/{attachment_id}:
     get:
       operationId: getAttachment
       summary: Get attachment metadata
       description: Uploader-only. Others receive 404.
       tags: [Attachments]
+      security:
+        - agentToken: []
+        - userSession: []
       parameters:
         - in: path
           name: attachment_id
@@ -1682,13 +875,15 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [attachment]
                 properties:
                   attachment:
                     type: object
                     properties:
                       id: { type: string }
-                      state: { type: string, enum: [pending, available, failed] }
+                      state: { type: string, enum: [pending, available, failed, rejected, deleted] }
                       content_type: { type: string }
+                      filename: { type: string }
                       size_bytes: { type: integer }
                       url: { type: [string, "null"] }
                       created_at: { type: string, format: date-time }
@@ -1696,91 +891,67 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           description: Not found or not the uploader.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /v1/conversations/{conversation_id}/typing:
     post:
       operationId: setTyping
       summary: Start or stop the typing indicator
       description: >-
-        Ephemeral: pushed to the user's live devices, never enters the event
-        log. Use this route for proactive activity or an explicit stop. An
-        ordinary response should use `/responding` so the consumed message is
-        marked Read before typing starts. `label` (≤ 80 chars) renders a short
-        status line while started.
+        Ephemeral, the way iMessage treats it: the signal is pushed to the
+        other people's live devices and nothing is stored, so it takes no
+        sequence, never enters the event log, and is never replayed. Recipients
+        receive `typing.started` or `typing.stopped` carrying `timeout_ms`, and
+        hide the indicator on their own once that many milliseconds pass
+        without a refresh. Send the start again while still composing to keep
+        it alive.
+
+
+        The signal reaches the conversation's other people, never other agents,
+        and its payload is
+        `{ "conversation_id": "cnv_…", "participant": { "kind": "agent", "id":
+        "agt_…" }, "timeout_ms": 90000 }`.
       tags: [Conversations]
+      security:
+        - agentToken: []
+        - userSession: []
       parameters:
-        - in: path
-          name: conversation_id
-          required: true
-          schema: { type: string }
+        - $ref: "#/components/parameters/ConversationId"
       requestBody:
+        required: false
         content:
           application/json:
             schema:
               type: object
-              required: [started]
+              additionalProperties: false
               properties:
-                started: { type: boolean, default: true }
-                label: { type: string, maxLength: 80, example: "Searching the web…" }
-                invocation_id:
-                  $ref: "#/components/schemas/InvocationId"
-                  description: Required for typing in a group; must name this agent's pending invocation.
+                started:
+                  type: boolean
+                  default: true
+                  description: >
+                    `false` stops the indicator. Any other value, and an absent
+                    or unparseable body, mean started.
       responses:
         "204":
+          description: Signal accepted. There is no body.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
           description: >
-            Accepted. The signal is a 10-second lease: recipients receive a
-            `typing.started` carrying `expires_at`, and stop on their own at
-            that instant whether or not the matching `typing.stopped` arrives.
-            Refresh by sending again before it lapses.
+            The actor is not a participant, or the agent is blocked or not
+            installed for this conversation.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TypingEventData"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          description: Agent is not a participant.
-        "429":
-          $ref: "#/components/responses/WriteBudgetExceeded"
-  /v1/conversations/{conversation_id}/responding:
-    post:
-      operationId: beginResponding
-      summary: Mark one inbound message Read and start typing
-      description: >-
-        The normal agent response transition. Relay validates the exact
-        inbound target, commits a monotonic Read receipt, then emits a
-        best-effort typing signal. Read implies Delivered. Typing is not
-        emitted when validation or receipt persistence fails. Repeating the
-        request is safe: Read is idempotent and typing refreshes its expiry.
-        Group responses require the matching pending `invocation_id`.
-      tags: [Conversations]
-      parameters:
-        - in: path
-          name: conversation_id
-          required: true
-          schema: { type: string, pattern: "^cnv_" }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BeginRespondingInput"
-      responses:
-        "200":
-          description: Read receipt state after the call.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ReceiptResult"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          description: The agent, group invocation, or message scope is not authorized.
+                $ref: "#/components/schemas/Error"
         "404":
-          description: The conversation or message was not found.
-        "422":
-          description: message_id or invocation_id is missing or malformed.
+          $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/WriteBudgetExceeded"
+
   /v1/conversations/{conversation_id}/delivered:
     post:
       operationId: markDelivered
@@ -1789,21 +960,20 @@ paths:
         Records that the caller received everything through `message_id`.
         Only a recipient can advance this watermark. Older or repeated targets
         are idempotent no-ops and never imply that the messages were read.
+        Pulling a page of `/v1/events` already stamps the messages in it
+        delivered, so an agent needs this only for an explicit stamp.
       tags: [Conversations]
+      security:
+        - agentToken: []
+        - userSession: []
       parameters:
-        - in: path
-          name: conversation_id
-          required: true
-          schema: { type: string }
+        - $ref: "#/components/parameters/ConversationId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [message_id]
-              properties:
-                message_id: { type: string, example: msg_01JZM3T8AH }
+              $ref: "#/components/schemas/ReceiptInput"
       responses:
         "200":
           description: Delivery watermark state after the call.
@@ -1813,6 +983,12 @@ paths:
                 $ref: "#/components/schemas/ReceiptResult"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: The actor is not a participant, or the message is outside its membership window.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "404":
           description: The conversation or message was not found.
           content:
@@ -1820,32 +996,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "422":
-          description: message_id is missing, malformed, or belongs to the caller.
+          description: message_id is missing, malformed, or names the caller's own message.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "429":
           $ref: "#/components/responses/WriteBudgetExceeded"
+
   /v1/conversations/{conversation_id}/read:
     post:
       operationId: markRead
       summary: Advance the read watermark
       description: >-
-        Marks everything through `message_id` read for the caller without
-        starting a response. Read implies delivered; older or repeated targets
-        are idempotent no-ops.
+        Marks everything through `message_id` read for the caller. Read implies
+        delivered; older or repeated targets are idempotent no-ops.
       tags: [Conversations]
+      security:
+        - agentToken: []
+        - userSession: []
       parameters:
-        - in: path
-          name: conversation_id
-          required: true
-          schema: { type: string }
+        - $ref: "#/components/parameters/ConversationId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [message_id]
-              properties:
-                message_id: { type: string, example: msg_01JZM3T8AH }
+              $ref: "#/components/schemas/ReceiptInput"
       responses:
         "200":
           description: Watermark state after the call.
@@ -1855,6 +1032,12 @@ paths:
                 $ref: "#/components/schemas/ReceiptResult"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: The actor is not a participant, or the message is outside its membership window.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "404":
           description: The conversation or message was not found.
           content:
@@ -1862,50 +1045,333 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "422":
-          description: message_id missing or malformed.
-        "429":
-          $ref: "#/components/responses/WriteBudgetExceeded"
-  /v1/agents:
-    get:
-      tags: [Public]
-      summary: List Store agents
-      description: >
-        Returns active public agents whose Store listing is approved and
-        published. Public visibility alone does not put an agent in this
-        catalog. This read never installs an agent or creates a conversation.
-        Consumer projections never expose an owner, prompt, provider, model,
-        runtime, credential, or backend configuration.
-      operationId: listStoreAgents
-      security: []
-      responses:
-        "200":
-          description: Effective Store catalog.
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required: [agents]
-                properties:
-                  agents:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/Agent"
-        default:
-          description: Unexpected server or gateway error.
+          description: message_id is missing, malformed, or names the caller's own message.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  /v1/contacts/{handle}/profile:
+        "429":
+          $ref: "#/components/responses/WriteBudgetExceeded"
+
+  /api/auth/device/code:
+    post:
+      tags: [Pairing]
+      summary: Request a device code
+      description: >
+        Step one of RFC 8628 device authorization, and the way a terminal
+        bridge pairs with a Relay account. No authentication; show the returned
+        `user_code` (and a QR of `verification_uri_complete`) to the person,
+        then poll `POST /api/auth/device/token` every `interval` seconds. Codes
+        expire after `expires_in` seconds.
+
+
+        The person must open the verification URI before approving. That read
+        is what binds the pending request to their account; approving a code
+        nobody has opened answers `400 invalid_request`.
+      operationId: requestDeviceCode
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [client_id]
+              properties:
+                client_id:
+                  type: string
+                  description: The identifier of the bridge asking to pair.
+                  example: relay-cli
+                scope:
+                  type: string
+                  description: Space-separated scopes, when the bridge asks for any.
+      responses:
+        "200":
+          description: Codes issued; show the user code and start polling.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [device_code, user_code, verification_uri, verification_uri_complete, expires_in, interval]
+                properties:
+                  device_code:
+                    type: string
+                    description: The bridge's secret half. Never show it to the person.
+                  user_code:
+                    type: string
+                    description: The short code the person types into the Relay app.
+                    example: ABCD-EFGH
+                  verification_uri:
+                    type: string
+                    format: uri
+                  verification_uri_complete:
+                    type: string
+                    format: uri
+                    description: The same URI with the user code embedded, for a QR or a deep link.
+                  expires_in:
+                    type: integer
+                    description: Seconds until the codes stop being claimable.
+                    example: 600
+                  interval:
+                    type: integer
+                    description: Minimum seconds between token polls.
+                    example: 5
+        "400":
+          description: >
+            `invalid_request` or `invalid_client`, in the RFC 8628 error shape.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceAuthorizationError"
+
+  /api/auth/device:
+    get:
+      tags: [Pairing]
+      summary: Claim a device code
+      description: >
+        Step two, and not only a read. Looking a pending `user_code` up while
+        signed in CLAIMS it for that account, which is the binding
+        `POST /api/auth/device/approve` requires. Skip this call and the
+        approval answers `400 invalid_request`.
+
+
+        The Relay app calls this to render the approval sheet. `client_id` and
+        `scope` come back only to the person the request is now bound to.
+      operationId: getDeviceAuthorization
+      security:
+        - userSession: []
+      parameters:
+        - name: user_code
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Current status of the device authorization.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user_code, status]
+                properties:
+                  user_code: { type: string }
+                  status:
+                    type: string
+                    enum: [pending, approved, denied]
+                  client_id: { type: string }
+                  scope: { type: string }
+        "400":
+          description: The user code is unknown or expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceAuthorizationError"
+
+  /api/auth/device/approve:
+    post:
+      tags: [Pairing]
+      summary: Approve a device
+      description: >
+        Step three. The signed-in person approves the pairing they are looking
+        at. Only the account that claimed the code with `GET /api/auth/device`
+        may approve it, and only while it is still pending. An unclaimed code
+        answers `400 invalid_request`.
+      operationId: approveDeviceAuthorization
+      security:
+        - userSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userCode]
+              properties:
+                userCode:
+                  type: string
+                  description: The code shown on the computer.
+      responses:
+        "200":
+          description: Approved. The waiting computer's next token poll succeeds.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                properties:
+                  success: { type: boolean, const: true }
+        "400":
+          description: The user code is unknown, expired, unclaimed, or already answered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceAuthorizationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: "`access_denied`: this account may not approve that request."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceAuthorizationError"
+
+  /api/auth/device/token:
+    post:
+      tags: [Pairing]
+      summary: Exchange a device code for a session
+      description: >
+        Step four. Poll no faster than the `interval` returned with the code. `authorization_pending` means keep waiting, `slow_down` means
+        wait longer, and `expired_token` or `access_denied` end the attempt.
+
+
+        A success returns a Relay user session. That session is not an Agent
+        Key: use it once to create the bridge's agent with `POST /v1/me/agents`,
+        store the `rly_live_…` key that call returns, and authenticate every
+        later API request with the token alone.
+      operationId: exchangeDeviceCode
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [grant_type, device_code, client_id]
+              properties:
+                grant_type:
+                  type: string
+                  const: "urn:ietf:params:oauth:grant-type:device_code"
+                device_code:
+                  type: string
+                client_id:
+                  type: string
+      responses:
+        "200":
+          description: The approved session.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, token_type, expires_in]
+                properties:
+                  access_token:
+                    type: string
+                    description: Bearer session token for the paired Relay account.
+                  token_type: { type: string, const: Bearer }
+                  expires_in: { type: integer }
+                  scope: { type: string }
+        "400":
+          description: >
+            `authorization_pending`, `slow_down`, `expired_token`,
+            `access_denied`, `invalid_request`, or `invalid_grant`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceAuthorizationError"
+
+  /v1/me/agents:
+    post:
+      tags: [Pairing]
+      summary: Create an agent and mint its token
+      description: >
+        Creates an agent owned by the signed-in person and returns its Agent
+        Token. This is the only response that carries the token; store it now.
+        A terminal bridge calls this once, with the session it received from
+        the device flow, and then uses the token for everything else.
+      operationId: createOwnedAgent
+      security:
+        - userSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAgentInput"
+      responses:
+        "201":
+          description: Agent created; store the token now.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [agent, token, conversation_id]
+                properties:
+                  agent:
+                    $ref: "#/components/schemas/Agent"
+                  token:
+                    type: string
+                    pattern: "^rly_live_"
+                    description: The Agent Token. Returned once and never again.
+                  conversation_id:
+                    type: string
+                    pattern: "^cnv_"
+                    description: The owner's direct conversation with the new agent.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: >
+            `handle_taken`: the handle is in use. `handle_reserved`: the handle
+            belongs to Relay.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: An unsupported field is present, or the handle, name, tagline, or opening message is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/WriteBudgetExceeded"
+
+  /v1/me/agents/{agent_id}/tokens/rotate:
+    post:
+      tags: [Pairing]
+      summary: Rotate an agent token
+      description: >
+        Disables every enabled token for one of the caller's agents and mints a
+        replacement. The old token stops working immediately, so update the
+        bridge before the next request.
+      operationId: rotateAgentToken
+      security:
+        - userSession: []
+      parameters:
+        - name: agent_id
+          in: path
+          required: true
+          schema: { type: string, pattern: "^agt_" }
+      responses:
+        "201":
+          description: New token minted; store it now.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [agent_id, token]
+                properties:
+                  agent_id: { type: string, pattern: "^agt_" }
+                  token:
+                    type: string
+                    pattern: "^rly_live_"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: No agent with this id belongs to the caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/agents/{handle}/profile:
     get:
       tags: [Public]
       summary: Public participant profile
       description: >
         The profile behind a human username or an agent's public or unlisted
-        share link (`relayapp.im/handle`). Private agents return 404. Exposes
+        share link (`relayapp.im/@handle`). Private agents return 404. Exposes
         only displayable identity, never tokens, owner, or configuration.
-      operationId: getContactProfile
+      operationId: getAgentProfile
       security: []
       parameters:
         - name: handle
@@ -1926,7 +1392,7 @@ paths:
                   agent:
                     type: object
                     additionalProperties: false
-                    required: [handle, display_name, tagline, avatar_url, accent_color, kind, visibility]
+                    required: [handle, display_name, tagline, avatar_url, accent_color, kind, creator, visibility]
                     properties:
                       handle:
                         type: string
@@ -1946,6 +1412,20 @@ paths:
                       kind:
                         type: string
                         enum: [user, agent]
+                      creator:
+                        description: >
+                          Who an unauthenticated reader may be told made this
+                          agent: the creator organization when there is one,
+                          otherwise the owner's username, and only for a public
+                          agent. Null for an unlisted agent and for a human.
+                        oneOf:
+                          - type: object
+                            additionalProperties: false
+                            required: [kind, name]
+                            properties:
+                              kind: { type: string, enum: [organization, person] }
+                              name: { type: string }
+                          - type: "null"
                       visibility:
                         type: string
                         enum: [unlisted, public]
@@ -1965,14 +1445,16 @@ webhooks:
       description: >
         Relay sends this request to each matching enabled endpoint. Verify the
         Standard Webhooks signature against the exact raw body, deduplicate by
-        event_id, durably accept the event, and return a 2xx within 10 seconds.
+        `event_id`, durably accept the event, and return a 2xx within 10
+        seconds. A 408, 429, or 5xx is retried; a 3xx or any other 4xx is a
+        permanent failure.
       security: []
       parameters:
         - name: webhook-id
           in: header
           required: true
           schema: { type: string }
-          description: Stable event ID; unchanged across retries.
+          description: The event id. Unchanged across retries, and the dedupe key.
         - name: webhook-timestamp
           in: header
           required: true
@@ -1982,7 +1464,19 @@ webhooks:
           in: header
           required: true
           schema: { type: string }
-          description: Space-separated Standard Webhooks signatures such as `v1,<base64>`.
+          description: >
+            Space-separated Standard Webhooks signatures such as `v1,<base64>`.
+            Two are present during the 24 hours after a secret rotation.
+        - name: webhook-delivery-id
+          in: header
+          required: true
+          schema: { type: string }
+          description: This endpoint's delivery row. Stable across retries, distinct per endpoint.
+        - name: relay-webhook-version
+          in: header
+          required: true
+          schema: { type: string, format: date }
+          description: The envelope version this endpoint is pinned to.
       requestBody:
         required: true
         content:
@@ -1998,28 +1492,24 @@ components:
     agentToken:
       type: http
       scheme: bearer
-      description: Agent Token (`rly_live_…`), shown once at agent creation.
-    pollToken:
-      type: http
-      scheme: bearer
-      description: >
-        Pairing poll token (`rlyp_…`) from `POST /v1/pairings`. Authorizes
-        only polling that pairing, never the platform API.
+      description: Agent Token (`rly_live_…`), shown once when the agent is created.
     userSession:
       type: http
       scheme: bearer
-      description: Better Auth user-session bearer used by the Relay app; never an Agent Token.
+      description: Better Auth user-session bearer used by the Relay app and by a paired bridge; never an Agent Token.
 
   parameters:
-    IdempotencyKey:
+    OptionalIdempotencyKey:
       name: Idempotency-Key
       in: header
-      required: true
+      required: false
       schema:
         type: string
-        minLength: 8
-        maxLength: 255
-      description: Deriving it from the triggering `event_id` makes a retry safe.
+        pattern: "^msg_[0-9a-hjkmnp-tv-z]{26}$"
+      description: >
+        A legacy way to carry `message_id` for clients that cannot put it in
+        the body. It is read only when it is itself a `msg_` id; any other
+        value is ignored and the server mints the id.
     ConversationId:
       name: conversation_id
       in: path
@@ -2034,19 +1524,20 @@ components:
       required: true
       schema:
         type: string
-      example: msg_01JZM4Q9VN
-    GroupInviteId:
-      name: invite_id
+        pattern: "^msg_[0-9a-hjkmnp-tv-z]{26}$"
+      example: msg_01k1m4q9vn2r7t9b4c6qdh8xwy
+    WebhookId:
+      name: webhook_id
       in: path
       required: true
       schema:
         type: string
-        pattern: "^inv_"
-      example: inv_01K1M8FOUNDERSDINNER
+        pattern: "^wh_"
+      example: wh_01JZWEBHOOK
 
   responses:
     Unauthorized:
-      description: Token is absent or invalid.
+      description: The token or session is absent or invalid.
       content:
         application/json:
           schema:
@@ -2057,14 +1548,23 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
-    PairingDeliveryUnavailable:
-      description: Relay's pairing-token encryption service is temporarily unavailable; retry safely.
+    CommitUnavailable:
+      description: >
+        `temporarily_unavailable`: the commit was busy, the database was
+        briefly unreachable, or the transaction exceeded its time budget. Retry
+        with the same `message_id`; idempotency makes that safe.
+      headers:
+        Retry-After:
+          description: Whole seconds before retrying.
+          schema:
+            type: integer
+            minimum: 1
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
     NotFound:
-      description: The resource does not exist or is not visible to this agent.
+      description: The resource does not exist or is not visible to this caller.
       content:
         application/json:
           schema:
@@ -2114,13 +1614,18 @@ components:
               type: string
               example: conversation_id is required
 
-    DirectConversationResponse:
+    DeviceAuthorizationError:
       type: object
-      additionalProperties: false
-      required: [conversation]
+      description: >
+        The RFC 8628 error shape, which is not Relay's `Error` envelope: the
+        device endpoints answer in the OAuth idiom their clients already parse.
+      required: [error, error_description]
       properties:
-        conversation:
-          $ref: "#/components/schemas/DirectConversationSnapshot"
+        error:
+          type: string
+          example: authorization_pending
+        error_description:
+          type: string
 
     AgentConversationListResponse:
       type: object
@@ -2170,57 +1675,14 @@ components:
         last_message_at: { type: [string, "null"], format: date-time }
         created_at: { type: string, format: date-time }
 
-    DirectConversationSnapshot:
-      type: object
-      additionalProperties: false
-      required:
-        - id
-        - kind
-        - title
-        - avatar_url
-        - membership_version
-        - participants
-        - contact_id
-        - counterpart_user
-        - created_at
-        - last_message_at
-        - last_message_preview
-        - last_sequence
-        - unread
-        - messages
-      properties:
-        id: { type: string, pattern: "^cnv_" }
-        kind: { type: string, const: direct }
-        title: { type: [string, "null"] }
-        avatar_url: { type: [string, "null"], format: uri }
-        membership_version: { type: integer, minimum: 1 }
-        participants:
-          type: array
-          maxItems: 0
-        contact_id:
-          type: [string, "null"]
-          pattern: "^agt_"
-        counterpart_user:
-          oneOf:
-            - $ref: "#/components/schemas/CounterpartUser"
-            - type: "null"
-        created_at: { type: string, format: date-time }
-        last_message_at: { type: [string, "null"], format: date-time }
-        last_message_preview: { type: string }
-        last_sequence: { type: integer, minimum: 0 }
-        unread: { type: integer, minimum: 0 }
-        messages:
-          type: array
-          items:
-            $ref: "#/components/schemas/Message"
-
     CounterpartUser:
       type: object
       additionalProperties: false
-      required: [id, display_name, avatar_url]
+      required: [id, display_name, username, avatar_url]
       properties:
         id: { type: string, pattern: "^usr_" }
         display_name: { type: string }
+        username: { type: [string, "null"] }
         avatar_url: { type: [string, "null"], format: uri }
 
     AgentProfile:
@@ -2298,21 +1760,61 @@ components:
           type: string
           format: date-time
 
+    CreateAgentInput:
+      type: object
+      additionalProperties: false
+      required: [handle, displayName]
+      description: >
+        Camel-cased, like the `Agent` projection it creates. Any field outside
+        this list answers 422 rather than being ignored.
+      properties:
+        handle:
+          type: string
+          pattern: "^[a-z][a-z0-9_]{2,31}$"
+          description: Lowercased on write. Reserved handles answer 409.
+          example: scheduler
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 80
+        tagline:
+          type: string
+          maxLength: 120
+        avatarUrl:
+          type: [string, "null"]
+          format: uri
+          maxLength: 2048
+          pattern: "^https://(?![^/?#]*@)"
+        accentColor:
+          type: [string, "null"]
+          example: "#0B75FF"
+        openingMessage:
+          type: [object, "null"]
+          description: >
+            The message the agent sends when someone installs it, as a `parts`
+            array. Null for no opening message.
+          properties:
+            parts:
+              type: array
+              minItems: 1
+              items:
+                $ref: "#/components/schemas/PartInput"
+
     Agent:
       type: object
       description: >
-        Consumer-safe agent identity. Installation is present only on an
-        installed-agent projection, and the Store presentation fields
-        (category, prompts, about) only on an agent that has a Store listing.
-        Owner identity, system prompt, provider/model, runtime, credentials,
-        and backend configuration are never included.
+        Consumer-safe agent identity. Top-level keys are camelCase here and the
+        nested `creator` object is snake_case, which is the shape the app
+        reads; every other body in this API is snake_case throughout.
+        Installation is present only on an installed-agent projection. A
+        system prompt, provider, model, runtime, credential, or backend
+        configuration is never included.
       additionalProperties: false
       required:
         - id
         - handle
         - displayName
         - tagline
-        - capabilities
         - visibility
         - status
         - createdAt
@@ -2339,56 +1841,13 @@ components:
         accentColor:
           type: string
           example: "#0B75FF"
-        capabilities:
-          type: array
-          uniqueItems: true
-          items:
-            type: string
-            enum: [text, image, voice, video, files]
         visibility:
           type: string
           enum: [private, unlisted, public]
         installation:
           $ref: "#/components/schemas/AgentInstallation"
-        operator:
-          $ref: "#/components/schemas/AgentOperator"
-        category:
-          type: string
-          description: >
-            Store category, always one of these slugs. Present on every agent
-            that has a Store listing, including one still pending review.
-          enum:
-            - shopping
-            - customer-support
-            - productivity
-            - lifestyle
-            - health-fitness
-            - business
-            - finance
-            - social
-            - travel
-            - entertainment
-            - essentials
-            - other
-          example: productivity
-        prompts:
-          type: array
-          description: >
-            Sample prompts the app renders as starters on the Store detail
-            surface. Omitted when the operator has set none.
-          maxItems: 3
-          items:
-            type: string
-            maxLength: 160
-          example: ["Find a time next week", "Move my 3pm"]
-        about:
-          type: string
-          maxLength: 600
-          description: >
-            The operator's longer description of the agent, shown under About
-            on the profile. Omitted when the operator has set none. The tagline
-            is the separate one-line summary shown under the name.
-          example: Reads your calendar and proposes times that clear everyone.
+        creator:
+          $ref: "#/components/schemas/AgentCreator"
         preinstalled:
           type: boolean
           description: >
@@ -2398,7 +1857,7 @@ components:
           type: boolean
           description: >
             Present only on an agent a user may not remove. Every other agent
-            omits the field, and AgentInstallation.canRemove carries the same
+            omits the field, and `installation.canRemove` carries the same
             state on an installed projection.
         status:
           type: string
@@ -2407,45 +1866,6 @@ components:
           type: string
           format: date-time
 
-    PairingPreview:
-      type: object
-      additionalProperties: false
-      required: [pairing_id, code, status, device_name, engine, expires_at]
-      properties:
-        pairing_id: { type: string, pattern: ^pair_ }
-        code: { type: string, pattern: "^[A-Z]+-[A-Z]+-[A-Z]+-[0-9]{4}$" }
-        status: { type: string, enum: [pending, claimed] }
-        device_name: { type: [string, "null"], minLength: 1, maxLength: 80 }
-        engine: { type: [string, "null"], pattern: "^[a-z0-9][a-z0-9._-]{0,39}$" }
-        expires_at: { type: string, format: date-time }
-
-    PairingClaimInput:
-      type: object
-      additionalProperties: false
-      required: [display_name]
-      properties:
-        display_name: { type: string, minLength: 1, maxLength: 80, pattern: ".*\\S.*" }
-        handle: { type: string, pattern: "^[a-z][a-z0-9_]{2,31}$" }
-        avatar_url:
-          type: [string, "null"]
-          format: uri
-          maxLength: 2048
-          pattern: "^https://(?![^/?#]*@)"
-
-    PairingClaimResponse:
-      type: object
-      additionalProperties: false
-      required: [pairing_id, status, agent, conversation_id]
-      properties:
-        pairing_id: { type: string, pattern: ^pair_ }
-        status: { type: string, const: claimed }
-        agent:
-          allOf:
-            - $ref: "#/components/schemas/Agent"
-            - type: object
-              required: [installation]
-        conversation_id: { type: string, pattern: ^cnv_ }
-
     AgentInstallation:
       type: object
       description: >
@@ -2453,7 +1873,7 @@ components:
         canRemove hides and rejects ordinary removal; Block and Report remain
         available as safety overrides.
       additionalProperties: false
-      required: [id, state, source, conversationId, canRemove]
+      required: [id, state, conversationId, canRemove]
       properties:
         id:
           type: string
@@ -2461,24 +1881,22 @@ components:
         state:
           type: string
           enum: [installed, removed]
-        source:
-          type: string
-          enum: [system, owner_create, store, share_link, exact_handle]
         conversationId:
           type: string
           pattern: ^cnv_
         canRemove:
           type: boolean
 
-    AgentOperator:
+    AgentCreator:
       type: object
       description: >
-        The organization accountable for the agent, as the app shows it under
-        Operator on the profile. These values reflect the operator's live
-        record: Relay writes the row when the agent is created and updates it
-        whenever the operator's details change, so a rename or a new logo
-        reaches every one of that operator's agents without a resubmission.
-        Sub-keys are snake_case.
+        Who is accountable for the agent, as the app shows it under Creator on
+        the profile. `kind` is `organization` for a business creator and
+        `person` for an account that made the agent in the app; a person's
+        `display_name` and `avatar_url` ride along only on a public agent.
+        Organization values reflect the creator's live record, so a rename or
+        a new logo reaches every one of that creator's agents without a
+        resubmission. Sub-keys are snake_case.
       additionalProperties: false
       required: [id, name, verified]
       properties:
@@ -2488,10 +1906,23 @@ components:
         name:
           type: string
           example: Relay
+        kind:
+          type: string
+          enum: [person, organization]
+          description: Absent on older servers, which clients must read as `organization`.
+        display_name:
+          type: string
+          description: Person creators on a public agent only.
+        avatar_url:
+          type: string
+          format: uri
+          maxLength: 2048
+          pattern: "^https://(?![^/?#]*@)"
+          description: Person creators on a public agent only.
         domain:
           type: string
           description: >
-            The operator's verified domain. Omitted when the operator has not
+            The creator's verified domain. Omitted when the creator has not
             verified one.
           example: relayapp.im
         logo_url:
@@ -2499,170 +1930,20 @@ components:
           format: uri
           maxLength: 2048
           pattern: "^https://(?![^/?#]*@)"
-          description: Square operator mark. Omitted when the operator has set none.
+          description: Square creator mark. Omitted when the creator has set none.
         support_url:
           type: string
           format: uri
           maxLength: 2048
           pattern: "^https://(?![^/?#]*@)"
           description: >
-            Where a user reaches the operator about this agent. Omitted when
-            the operator has set none.
+            Where a user reaches the creator about this agent. Omitted when
+            the creator has set none.
         verified:
           type: boolean
           description: >
-            True when Relay has verified the operator's domain, the operator is
-            not suspended, and the agent's Store listing is approved with a
-            current version above zero. A false value does not mean the
-            operator failed review: an agent still in review reads false until
-            its first version goes live.
-
-    GroupInviteCreateInput:
-      type: object
-      additionalProperties: false
-      required: [title, user_ids]
-      properties:
-        title:
-          type: string
-          minLength: 1
-          maxLength: 100
-          pattern: ".*\\S.*"
-        user_ids:
-          type: array
-          minItems: 1
-          maxItems: 24
-          uniqueItems: true
-          items:
-            type: string
-            pattern: "^usr_"
-        reason:
-          type: string
-          minLength: 1
-          maxLength: 200
-          pattern: ".*\\S.*"
-        conversation_id:
-          type: string
-          pattern: "^cnv_"
-          description: Existing group in which the authenticated agent is active. Omit to propose a new group.
-        ttl_seconds:
-          type: integer
-          default: 259200
-          description: Requested lifetime in seconds. Relay clamps it to 600 through 604800.
-
-    GroupInviteMember:
-      type: object
-      additionalProperties: false
-      required: [user_id, display_name, avatar_url, state]
-      properties:
-        user_id:
-          type: string
-          pattern: "^usr_"
-        display_name:
-          type: string
-        avatar_url:
-          type: [string, "null"]
-        state:
-          type: string
-          enum: [invited, accepted, declined]
-          description: >
-            invited has not answered yet, accepted is in the live conversation,
-            and declined answered no.
-
-    GroupInvite:
-      type: object
-      additionalProperties: false
-      required: [id, state, title, expires_at, created_at, members]
-      properties:
-        id:
-          type: string
-          pattern: "^inv_"
-        state:
-          type: string
-          enum: [pending, active, completed, expired]
-          description: >
-            pending is open with nobody joined yet, active is open with the
-            conversation already live, completed is closed with a live
-            conversation, and expired is closed without one.
-        title:
-          type: string
-          minLength: 1
-          maxLength: 100
-        reason:
-          type: string
-          minLength: 1
-          maxLength: 200
-        conversation_id:
-          type: string
-          pattern: "^cnv_"
-          description: >
-            The live conversation once the state is active or completed. On an
-            invite into an existing group it also carries the destination while
-            the state is pending, so read the caller's own member state before
-            offering to open it.
-        expires_at:
-          type: string
-          format: date-time
-        created_at:
-          type: string
-          format: date-time
-        members:
-          type: array
-          minItems: 1
-          maxItems: 24
-          items:
-            $ref: "#/components/schemas/GroupInviteMember"
-
-    GroupInviteResponse:
-      type: object
-      additionalProperties: false
-      required: [invite]
-      properties:
-        invite:
-          $ref: "#/components/schemas/GroupInvite"
-
-    GroupInviteComponentData:
-      type: object
-      additionalProperties: false
-      description: >
-        Internal consent card committed by POST /v1/groups/invites. Ordinary
-        agent message sends cannot supply this component.
-      required: [type, invite_id, title, expires_at, members]
-      properties:
-        type:
-          type: string
-          const: group_invite
-        invite_id:
-          type: string
-          pattern: "^inv_"
-        title:
-          type: string
-          minLength: 1
-          maxLength: 100
-        reason:
-          type: string
-          minLength: 1
-          maxLength: 200
-        expires_at:
-          type: string
-          format: date-time
-        conversation:
-          type: object
-          additionalProperties: false
-          required: [id, title]
-          properties:
-            id:
-              type: string
-              pattern: "^cnv_"
-            title:
-              type: string
-              minLength: 1
-              maxLength: 100
-        members:
-          type: array
-          minItems: 1
-          maxItems: 24
-          items:
-            $ref: "#/components/schemas/GroupInviteMember"
+            True when Relay has verified the creator's domain and the creator
+            is not suspended. A person creator is never verified.
 
     PartInput:
       oneOf:
@@ -2673,22 +1954,6 @@ components:
         - $ref: "#/components/schemas/DataPartInput"
       discriminator:
         propertyName: type
-
-    MessageEditInput:
-      type: object
-      additionalProperties: false
-      required: [parts]
-      properties:
-        parts:
-          type: array
-          minItems: 1
-          maxItems: 1
-          description: >
-            Exactly one text part that replaces the message's text. Anything
-            else, including a second part or a media, voice memo, link
-            preview, or data part, is rejected with 422.
-          items:
-            $ref: "#/components/schemas/TextPartInput"
 
     TextPartInput:
       type: object
@@ -2704,16 +1969,15 @@ components:
           type: array
           maxItems: 16
           description: >
-            Inline mentions of conversation participants. Each range covers
-            the display name the sender inserted into `text` (the stored text
-            never contains an "@"), with `start` and `length` measured in
-            UTF-16 code units. Ranges must be sorted by `start` and must not
-            overlap. The text stays canonical without the mentions, but they
-            are not inert: a mention notifies the named participant even when
-            they have muted the group, and in a group conversation a human
-            sender's mention of an active agent invokes that agent (an
-            invocation with `method: "mention"`) exactly as if it had been
-            named in `invoked_agent_ids`.
+            The handles this message mentions, each of which must be written
+            as `@handle` in `text`: at its start or after a space, newline,
+            bracket or quote, running to the first character outside
+            `[A-Za-z0-9_]`. There are no offsets: a mention can only ever be
+            the handle itself. A handle typed but never confirmed against the
+            sender's suggestion list is absent here and stays plain text. The
+            text stays canonical without the mentions, but they are not inert:
+            a mention notifies the named participant even when they have muted
+            the group.
           items:
             $ref: "#/components/schemas/Mention"
         styles:
@@ -2746,8 +2010,7 @@ components:
             hostnames are rejected. At commit the server imports the bytes
             into Relay-owned attachment storage and rewrites the part to
             reference the copy, so delivered history never depends on the
-            third-party host staying alive. If the import fails, the part
-            ships with this URL unchanged.
+            third-party host staying alive.
         attachment_id:
           type: string
           pattern: "^att_"
@@ -2835,8 +2098,7 @@ components:
             private and reserved ranges, loopback, and IP-literal hostnames
             are rejected. At commit the server imports audio bytes into
             Relay-owned attachment storage and rewrites the part to
-            reference the copy; a failed or non-audio import ships the part
-            with this URL unchanged.
+            reference the copy.
         attachment_id:
           type: string
           pattern: "^att_"
@@ -2893,17 +2155,15 @@ components:
             fallback string when present, then the message fallback_text.
             Consumers must ignore unknown fields inside a data part.
 
-            Two `data.type` values are reserved and are not carried through
-            as sent. `group_invite` is committed only by the invite endpoint;
-            ordinary agent message sends that contain it return 422.
-            `contact_card` names an agent to share and Relay resolves the
-            card itself: what you send is ContactCardDataInput, and what
-            recipients receive is ContactCardData.
+            One `data.type` value is reserved and is not carried through as
+            sent: `agent_card` names an agent to share and Relay resolves the
+            card itself, so what you send is AgentCardDataInput and what
+            recipients receive is AgentCardData.
           anyOf:
-            - $ref: "#/components/schemas/ContactCardDataInput"
+            - $ref: "#/components/schemas/AgentCardDataInput"
             - description: Other integration-defined JSON data.
 
-    ContactCardDataInput:
+    AgentCardDataInput:
       type: object
       additionalProperties: false
       required: [type, handle]
@@ -2915,24 +2175,24 @@ components:
         property beyond `type` and `handle` returns 422, as does a handle
         that names no agent or names a retired one.
       properties:
-        type: { type: string, const: contact_card }
+        type: { type: string, const: agent_card }
         handle:
           type: string
           description: Relay agent handle, without the "@". Lowercased on commit.
           example: relay
 
-    ContactCardData:
+    AgentCardData:
       type: object
       additionalProperties: false
-      required: [type, contact, fallback]
+      required: [type, agent, fallback]
       description: >
         The `data` value recipients receive in place of what was sent. It is
         a snapshot, not a live join: the card keeps saying what was true when
         it was sent, so renaming an agent never rewrites cards already in a
         transcript.
       properties:
-        type: { type: string, const: contact_card }
-        contact:
+        type: { type: string, const: agent_card }
+        agent:
           type: object
           additionalProperties: false
           required: [kind, id, handle, display_name, tagline, verified]
@@ -2961,11 +2221,8 @@ components:
       pattern: "^prt_[0-9a-hjkmnp-tv-z]{26}$"
       example: prt_01k1m4q9vn2r7t9b4c6qdh8xwy
       description: >
-        Permanent part identity. It is minted when the part is committed and
-        survives every edit: updating a part's text keeps it, moving a part
-        keeps it, and removing a part leaves it behind as a tombstone so a
-        reply that named it still resolves to the right thing. Replacing media
-        is the one exception, because new bytes are a new identity.
+        Permanent part identity, minted when the part is committed. It is what
+        a reply or a reaction names, so a target never depends on a position.
 
     Part:
       description: >
@@ -2989,10 +2246,7 @@ components:
       required: [part_index, type]
       description: >
         The catch-all that keeps `Part` open. Anything whose `type` is not one
-        of the published kinds matches here and still carries its identity:
-        every part the current server stores has `part_id` and `position`, and
-        they are optional here only so a payload Relay stored before part
-        identities existed still validates when `/v1/events` replays it.
+        of the published kinds matches here and still carries its identity.
       properties:
         part_index: { type: integer, minimum: 0 }
         part_id:
@@ -3001,10 +2255,9 @@ components:
           type: integer
           minimum: 0
           description: >
-            Dense presentation position in the current version, and always
-            equal to `part_index`. `part_index` is retained for shipped
-            clients; neither is ever an identity. Reactions and replies key on
-            `part_id`.
+            Dense presentation position, always equal to `part_index`.
+            `part_index` is retained for shipped clients; neither is ever an
+            identity. Reactions and replies key on `part_id`.
         type:
           type: string
           not:
@@ -3025,19 +2278,14 @@ components:
         position:
           type: integer
           minimum: 0
-          description: >
-            Dense presentation position in the current version, and always
-            equal to `part_index`. `part_index` is retained for shipped
-            clients; neither is ever an identity. Reactions and replies key on
-            `part_id`.
         type: { type: string, const: text }
         text: { type: string }
         mentions:
           type: array
           maxItems: 16
           description: >
-            Inline mentions carried by this text part, as validated at send
-            time. Offsets are UTF-16 code units over `text`.
+            The handles this text part mentions, as validated at send time.
+            Each is written as `@handle` in `text`.
           items:
             $ref: "#/components/schemas/Mention"
         styles:
@@ -3052,22 +2300,11 @@ components:
             $ref: "#/components/schemas/StyleRange"
 
     Mention:
-      type: object
-      additionalProperties: false
-      required: [start, length, participant_id]
-      properties:
-        start:
-          type: integer
-          minimum: 0
-          description: UTF-16 code-unit offset of the mentioned name in `text`.
-        length:
-          type: integer
-          minimum: 1
-          description: Length of the mentioned name in UTF-16 code units.
-        participant_id:
-          type: string
-          pattern: "^(usr|agt)_[0-9a-hjkmnp-tv-z]{26}$"
-          description: The mentioned user or agent.
+      type: string
+      pattern: "^[a-z][a-z0-9_]{2,31}$"
+      description: >
+        The handle of a mentioned user or agent, without the leading "@". It
+        must be written as `@handle` in the part's `text`.
 
     StyleRange:
       type: object
@@ -3087,14 +2324,12 @@ components:
           minItems: 1
           items:
             type: string
-            enum: [bold, italic, underline, strikethrough, monospace, spoiler]
+            enum: [bold, italic, underline, strikethrough]
           description: >
-            Formats applied to the run. The server deduplicates the names
-            and stores them in this enum's order, so equal formatting
-            always serializes identically. `spoiler` is carried like any
-            other style range but renders concealed: the text stays hidden
-            until the reader reveals it, and it re-conceals after a moment.
-            It never changes the text's layout or metrics.
+            Formats applied to the run: the four every reference messenger
+            ships. The server deduplicates the names and stores them in this
+            enum's order, so equal formatting always serializes identically.
+            Any other name answers 422.
 
     MediaPart:
       type: object
@@ -3107,11 +2342,6 @@ components:
         position:
           type: integer
           minimum: 0
-          description: >
-            Dense presentation position in the current version, and always
-            equal to `part_index`. `part_index` is retained for shipped
-            clients; neither is ever an identity. Reactions and replies key on
-            `part_id`.
         type: { type: string, const: media }
         url: { type: string, format: uri }
         attachment_id: { type: string, pattern: "^att_" }
@@ -3171,11 +2401,6 @@ components:
         position:
           type: integer
           minimum: 0
-          description: >
-            Dense presentation position in the current version, and always
-            equal to `part_index`. `part_index` is retained for shipped
-            clients; neither is ever an identity. Reactions and replies key on
-            `part_id`.
         type: { type: string, const: voice_memo }
         url: { type: string, format: uri }
         attachment_id: { type: string, pattern: "^att_" }
@@ -3192,11 +2417,6 @@ components:
         position:
           type: integer
           minimum: 0
-          description: >
-            Dense presentation position in the current version, and always
-            equal to `part_index`. `part_index` is retained for shipped
-            clients; neither is ever an identity. Reactions and replies key on
-            `part_id`.
         type: { type: string, const: link_preview }
         url: { type: string, format: uri, maxLength: 2048 }
         title:
@@ -3225,95 +2445,49 @@ components:
         position:
           type: integer
           minimum: 0
-          description: >
-            Dense presentation position in the current version, and always
-            equal to `part_index`. `part_index` is retained for shipped
-            clients; neither is ever an identity. Reactions and replies key on
-            `part_id`.
         type: { type: string, const: data }
         data:
           anyOf:
-            - $ref: "#/components/schemas/GroupInviteComponentData"
-            - $ref: "#/components/schemas/ContactCardData"
+            - $ref: "#/components/schemas/AgentCardData"
+            - $ref: "#/components/schemas/GroupMutationData"
             - description: Other integration-defined JSON data.
+
+    GroupMutationData:
+      type: object
+      additionalProperties: false
+      required: [type, mutation, actor, changes]
+      description: >
+        The `data` part of a group notice, carried beside the notice's text so
+        a client can render the change itself rather than parsing a sentence.
+      properties:
+        type: { type: string, const: group.mutation }
+        mutation:
+          type: string
+          enum: [group.created, metadata.updated, membership.added, membership.removed, membership.left]
+        actor:
+          $ref: "#/components/schemas/Sender"
+        affected_participant:
+          allOf:
+            - $ref: "#/components/schemas/Sender"
+          description: The person or agent added, removed, or departed. Absent on a metadata update.
+        changes:
+          type: object
+          description: >-
+            Each changed field, as an object with `old` and `new`.
+          additionalProperties:
+            type: object
+            properties:
+              old: {}
+              new: {}
 
     ReplyRef:
       type: [object, "null"]
-      description: >
-        The reply edge as one reader sees it. `message_id` and `part_id` are
-        permanent and never repoint; `quote_state` and `quote` are what changed
-        since the reply was sent.
-      required: [message_id, quote_state]
-      properties:
-        message_id:
-          type: string
-          pattern: "^msg_[0-9a-hjkmnp-tv-z]{26}$"
-          example: msg_01k1m4q9vn2r7t9b4c6qdh8xwy
-        part_id:
-          allOf:
-            - $ref: "#/components/schemas/PartId"
-          description: >
-            Present when the reply targeted one exact part. It keeps naming
-            that part after an edit removes it, so a reply to the middle photo
-            never silently becomes a reply to a different photo.
-        quote_state:
-          type: string
-          enum: [active, unsent, part_removed, moderated, redacted, unavailable]
-          description: >
-            `active`: the quote below is live. `unsent`: the sender unsent the
-            target. `part_removed`: an edit removed the quoted part.
-            `moderated` / `redacted`: Relay removed the content. `unavailable`:
-            this reader's membership window does not include the target, so the
-            edge is visible and its content is not.
-        quote:
-          allOf:
-            - $ref: "#/components/schemas/ReplyQuote"
-          description: Present only when `quote_state` is `active`.
-
-    ReplyQuote:
-      type: object
       additionalProperties: false
-      required: [sender, target_kind, target_version_id]
       description: >
-        A snapshot of the target taken when the reply was committed, and frozen
-        after. Editing the target does not rewrite it, and losing the target
-        redacts it rather than repointing it, so a quote can never show
-        something the quoted message no longer says.
-      properties:
-        sender:
-          $ref: "#/components/schemas/Sender"
-        target_kind:
-          type: string
-          enum: [text, media, voice_memo, link_preview, data, contact_card, card, poll]
-          description: >
-            The stored kind of the quoted part, which is finer-grained than a
-            part's wire `type`: a contact card and a group-invite card both
-            project as a `data` part but quote as their own kind.
-        text_preview:
-          type: string
-          maxLength: 200
-        media:
-          type: object
-          additionalProperties: false
-          properties:
-            attachment_id: { type: string, pattern: "^att_" }
-            content_type: { type: string }
-            width: { type: integer, minimum: 1 }
-            height: { type: integer, minimum: 1 }
-            blur_hash: { type: string }
-        target_part_id:
-          $ref: "#/components/schemas/PartId"
-        target_version_id:
-          type: string
-          description: The message version this quote was taken from.
-
-    ReplyRefInput:
-      type: [object, "null"]
-      description: >
-        A reply target on a send. `part_id` names one exact part. On `/v1` a
-        legacy `part_index` is also accepted and is translated to that part's
-        `part_id` at the boundary; the index itself is never stored. `/v2`
-        rejects `part_index` with a 422.
+        A pointer, never a copy. `message_id` names a message of the same
+        conversation and `part_id` optionally names one exact part of it. The
+        client draws the quote from the target itself, so a reply always shows
+        what the target says now, and both ids are permanent.
       required: [message_id]
       properties:
         message_id:
@@ -3321,68 +2495,41 @@ components:
           pattern: "^msg_[0-9a-hjkmnp-tv-z]{26}$"
           example: msg_01k1m4q9vn2r7t9b4c6qdh8xwy
         part_id:
-          $ref: "#/components/schemas/PartId"
-        part_index:
-          type: integer
-          minimum: 0
-          deprecated: true
-          description: Legacy index form, accepted on `/v1` only. Use `part_id`.
+          allOf:
+            - $ref: "#/components/schemas/PartId"
+          description: >
+            Present when the reply targeted one exact part. Omitted, not null,
+            when the reply names the whole message.
 
     Sender:
       type: object
+      additionalProperties: false
       required: [kind, id]
+      description: >
+        A participant. Every message is sent by a person or an agent; there is
+        no system sender, and a group notice is sent by whoever caused it.
       properties:
         kind:
           type: string
-          enum: [user, agent, system]
+          enum: [user, agent]
         id:
           type: string
+          pattern: "^(usr|agt)_"
           example: usr_01JZU1F0BD
-
-    MessageRevision:
-      type: object
-      additionalProperties: false
-      required: [parts, fallback_text, replaced_at]
-      properties:
-        version:
-          type: integer
-          minimum: 1
-          description: The version number this snapshot was.
-        created_at:
-          type: string
-          format: date-time
-          description: Time this snapshot became the canonical content.
-        parts:
-          type: array
-          items:
-            $ref: "#/components/schemas/Part"
-        fallback_text:
-          type: string
-        replaced_at:
-          type: string
-          format: date-time
-          description: Time this snapshot stopped being the canonical content.
 
     ProjectedReaction:
       type: object
       additionalProperties: false
-      required: [emoji, actor_kind, actor_id, part_index, target_scope, target_part_id]
+      required: [target_part_id, emoji, actor_kind, actor_id, created_at]
+      description: One reaction as it appears in a message's `reactions` array.
       properties:
-        target_scope:
-          type: string
-          enum: [message, part]
-          description: Whether this reaction is on the whole message or on one part.
         target_part_id:
           oneOf:
             - $ref: "#/components/schemas/PartId"
             - type: "null"
           description: >
             The part this reaction is anchored to, and the only identity for
-            it. Null exactly when `target_scope` is `message`. A reaction
-            follows its part through a reorder and is deleted with it.
-        created_at:
-          type: string
-          format: date-time
+            it. Null exactly when the reaction is on the whole message.
         emoji:
           type: string
         actor_kind:
@@ -3391,54 +2538,72 @@ components:
         actor_id:
           type: string
           pattern: "^(usr|agt)_"
-        part_index:
-          type: [integer, "null"]
-          minimum: 0
-          description: >
-            The target part's CURRENT position, resolved at read time from the
-            live parts, so a reaction pill follows its photo when an edit
-            reorders the stack. Null on a whole-message reaction. Retained for
-            clients that key reaction slots by index; never an identity.
+        created_at:
+          type: string
+          format: date-time
 
-    VisibleMessage:
+    Message:
       type: object
       additionalProperties: false
-      required: [id, conversation_id, sequence, sender, parts, fallback_text, status, created_at]
+      description: >
+        One committed message. Content is immutable: there is no edit, no
+        unsend, no version and no tombstone, so a message a client has stored
+        never changes underneath it. Only the receipt stamps and the reactions
+        move.
+      required:
+        - id
+        - conversation_id
+        - sequence
+        - kind
+        - sender
+        - is_from_me
+        - parts
+        - reply_to
+        - fallback_text
+        - status
+        - created_at
       properties:
         id:
           type: string
-          example: msg_01JZM3T8AH
+          pattern: "^msg_[0-9a-hjkmnp-tv-z]{26}$"
+          example: msg_01k1m4q9vn2r7t9b4c6qdh8xwy
         conversation_id:
           type: string
-          example: cnv_01JZC7K4RQ
+          pattern: "^cnv_"
+          example: cnv_01k1m4q9vn2r7t9b4c6qdh8xwy
         sequence:
           type: integer
-          description: Order inside the conversation. It is unrelated to webhook event IDs.
+          description: Order inside the conversation. It is unrelated to event sequences.
+        kind:
+          type: string
+          enum: [message, notice]
+          description: >
+            `notice` is a group notice ("Alice added Bob"), sent by the person
+            who caused it and carrying a text part plus a `data` part with the
+            mutation. Render it as a centered system line, not as a bubble.
         sender:
           $ref: "#/components/schemas/Sender"
         is_from_me:
           type: boolean
           description: >
-            True when the authenticated caller this payload was projected for
-            is the sender. Relay resolves direction on the server and states it
-            here, because comparing sender.id against your own identity is
-            ambiguous for a caller that does not yet know it, and wrong for
-            every other participant in a group. Omitted only in payloads
-            Relay stored before this field existed.
+            True when the caller this payload was projected for is the sender.
+            Relay resolves direction on the server and states it here, because
+            comparing sender.id against your own identity is ambiguous for a
+            caller that does not yet know it, and wrong for every other
+            participant in a group.
         parts:
           type: array
+          minItems: 1
+          maxItems: 32
           items:
             $ref: "#/components/schemas/Part"
         reply_to:
           $ref: "#/components/schemas/ReplyRef"
-        invoked_agents:
-          type: array
-          uniqueItems: true
-          items: { type: string }
-          description: Agents explicitly invoked by this human group message.
         reactions:
           type: array
-          description: Current reactions. History and bootstrap projections include this array.
+          description: >
+            Current reactions. History and bootstrap projections include this
+            array; a send response carries the committed message alone.
           items:
             $ref: "#/components/schemas/ProjectedReaction"
         fallback_text:
@@ -3446,156 +2611,64 @@ components:
           description: Plain-language representation used by notifications and search.
         status:
           type: string
-          enum: [sent, delivered, read, completed, failed]
+          enum: [sent, delivered, read]
+          description: >
+            The sender's view of this message in a 1:1 conversation. A group
+            message is always `sent`: Relay reports no per-recipient receipts
+            in groups, the way iMessage does not.
           example: sent
         delivered_at:
           type: string
           format: date-time
+          description: Present in a 1:1 conversation once the recipient has it.
         read_at:
           type: string
           format: date-time
-        edited_at:
+          description: Present in a 1:1 conversation once the recipient has read it.
+        created_at:
           type: string
           format: date-time
-          description: Time of the latest edit. Omitted when the message has never been edited.
-        revisions:
+
+    SendMessageBody:
+      type: object
+      description: >
+        The `/v1` send body. Unknown fields are ignored rather than refused;
+        `/v2` refuses them.
+      required: [parts]
+      properties:
+        message_id:
+          type: string
+          pattern: "^msg_[0-9a-hjkmnp-tv-z]{26}$"
+          example: msg_01k1m4q9vn2r7t9b4c6qdh8xwy
+          description: >
+            The client-minted canonical id and idempotency key. Omit it and
+            Relay mints one, which makes the send non-idempotent.
+        parts:
           type: array
-          maxItems: 5
-          description: >
-            Prior canonical parts and fallback text, ordered from oldest to
-            newest. History and bootstrap projections include an empty array
-            for unedited messages. The current version is never in this list.
+          minItems: 1
+          maxItems: 32
+          description: Ordered parts of one message. An absent or empty array returns 422.
           items:
-            $ref: "#/components/schemas/MessageRevision"
-        version:
-          type: integer
-          minimum: 1
-          maximum: 6
-          description: >
-            The current version number. 1 for a message that has never been
-            edited; five successful edits is the ceiling, so 6 is the highest
-            value. Send it back as `expected_version` to edit.
-        edit_capabilities:
-          allOf:
-            - $ref: "#/components/schemas/EditCapabilities"
-          description: >
-            Resolved for the reader on history and bootstrap projections, and
-            on an edit response. A send response carries the committed message
-            alone.
-        receipt_summary:
-          $ref: "#/components/schemas/ReceiptSummary"
-        created_at:
+            $ref: "#/components/schemas/PartInput"
+        reply_to:
+          $ref: "#/components/schemas/ReplyRefInput"
+        fallback_text:
           type: string
-          format: date-time
+          description: >
+            Optional plain-language representation for notifications and
+            search. Relay derives one when it is absent.
 
-    EditedMessage:
+    SendMessageInput:
       allOf:
-        - $ref: "#/components/schemas/VisibleMessage"
+        - $ref: "#/components/schemas/SendMessageBody"
         - type: object
-          required: [edited_at, revisions]
+          required: [conversation_id]
           properties:
-            edited_at:
+            conversation_id:
               type: string
-              format: date-time
-            revisions:
-              type: array
-              minItems: 1
-              maxItems: 5
-              items:
-                $ref: "#/components/schemas/MessageRevision"
-
-    DeletedMessageTombstone:
-      type: object
-      additionalProperties: false
-      required: [id, conversation_id, sequence, sender, status, created_at]
-      properties:
-        id:
-          type: string
-          example: msg_01JZM3T8AH
-        conversation_id:
-          type: string
-          example: cnv_01JZC7K4RQ
-        sequence:
-          type: integer
-          minimum: 1
-        sender:
-          $ref: "#/components/schemas/Sender"
-        is_from_me:
-          type: boolean
-          description: >
-            True when the authenticated caller this payload was projected for
-            is the sender. A tombstone keeps the field because it is the only
-            thing left saying whether to render your own unsend or name the
-            other participant.
-        status:
-          type: string
-          const: deleted
-        created_at:
-          type: string
-          format: date-time
-        unsent_at:
-          type: string
-          format: date-time
-          description: >-
-            Present when the sender unsent the message. A tombstone without
-            unsent_at was removed some other way (for example moderation).
-            Clients may render "You unsent a message"-style copy only when
-            this field is present.
-
-    EditCapabilities:
-      type: object
-      additionalProperties: false
-      required: [can_edit, version, editable_parts]
-      description: >
-        The server's answer to what this reader may do to this message right
-        now. Hide controls it says are unavailable rather than deriving the
-        policy client-side: the window, the edit count and the per-kind rules
-        are all server state, and a client that guesses will offer an action
-        that then fails.
-      properties:
-        can_edit:
-          type: boolean
-          description: >
-            False for anyone but the sender, for a message outside its
-            15-minute window, for one that has already been edited five times,
-            and for one that is no longer active.
-        version:
-          type: integer
-          minimum: 1
-          maximum: 6
-        editable_parts:
-          type: object
-          description: >
-            Keyed by `part_id`. Each value lists the operations that part
-            accepts. Empty when `can_edit` is false.
-          additionalProperties:
-            type: array
-            items:
-              type: string
-              enum: [update, remove, move, replace]
-
-    ReceiptSummary:
-      type: object
-      additionalProperties: false
-      required: [eligible, delivered, read, delivered_state, read_state]
-      description: >
-        How many eligible recipients reached each state, so `read` on a group
-        message is never mistaken for everyone having read it.
-      properties:
-        eligible: { type: integer, minimum: 0 }
-        delivered: { type: integer, minimum: 0 }
-        read: { type: integer, minimum: 0 }
-        delivered_state: { type: string, enum: [none, partial, complete] }
-        read_state: { type: string, enum: [none, partial, complete] }
-        first_delivered_at: { type: string, format: date-time }
-        first_read_at: { type: string, format: date-time }
-        complete_delivered_at: { type: string, format: date-time }
-        complete_read_at: { type: string, format: date-time }
-
-    Message:
-      oneOf:
-        - $ref: "#/components/schemas/VisibleMessage"
-        - $ref: "#/components/schemas/DeletedMessageTombstone"
+              pattern: "^cnv_"
+              description: Conversation to send into, from `message.received`.
+              example: cnv_01k1m4q9vn2r7t9b4c6qdh8xwy
 
     SendMessageV2Input:
       type: object
@@ -3609,41 +2682,35 @@ components:
           description: >
             The client mints this before queueing the send: a lowercase
             Crockford base32 ULID with a `msg_` prefix. It is the canonical id
-            of the resulting message and the send's idempotency key.
+            of the resulting message and the send's idempotency key, and unlike
+            `/v1` it is required.
         parts:
           type: array
           minItems: 1
           maxItems: 32
-          description: >
-            Ordered parts of ONE message. Unlike `/v1`, they are not split:
-            text and media sent together arrive together.
+          description: Ordered parts of one message.
           items:
             $ref: "#/components/schemas/PartInput"
         reply_to:
-          type: [object, "null"]
-          additionalProperties: false
-          required: [message_id]
-          description: >
-            `/v2` accepts a stable `part_id` only. A `part_index` here is a
-            422.
-          properties:
-            message_id:
-              type: string
-              pattern: "^msg_[0-9a-hjkmnp-tv-z]{26}$"
-            part_id:
-              $ref: "#/components/schemas/PartId"
-        invoked_agent_ids:
-          type: array
-          uniqueItems: true
-          items: { type: string, pattern: "^agt_" }
-          description: Agents this human message explicitly invokes. User senders only.
+          $ref: "#/components/schemas/ReplyRefInput"
         fallback_text:
           type: string
           description: Plain-language representation for notifications and search.
-        invocation_id:
-          allOf:
-            - $ref: "#/components/schemas/InvocationId"
-          description: Agent senders only, and required when an agent replies in a group.
+
+    ReplyRefInput:
+      type: [object, "null"]
+      additionalProperties: false
+      description: >
+        A reply target on a send: a message of this conversation, optionally
+        one exact part of it.
+      required: [message_id]
+      properties:
+        message_id:
+          type: string
+          pattern: "^msg_[0-9a-hjkmnp-tv-z]{26}$"
+          example: msg_01k1m4q9vn2r7t9b4c6qdh8xwy
+        part_id:
+          $ref: "#/components/schemas/PartId"
 
     SendMessageV2Response:
       type: object
@@ -3653,115 +2720,10 @@ components:
         message:
           $ref: "#/components/schemas/Message"
 
-    MessageEditV2Input:
-      type: object
-      additionalProperties: false
-      required: [operation_id, expected_version, operations]
-      properties:
-        operation_id:
-          type: string
-          pattern: "^mut_[0-9a-hjkmnp-tv-z]{26}$"
-          example: mut_01k1m4q9vn2r7t9b4c6qdh8xwy
-          description: >
-            Client-minted id for this logical edit. Retrying with the same id
-            and the same operations replays the original result; the same id
-            with different operations is a 409.
-        expected_version:
-          type: integer
-          minimum: 1
-          maximum: 6
-          description: >
-            The `version` the client last read. A stale value is a 409 rather
-            than a silent overwrite of somebody else's edit.
-        operations:
-          type: array
-          minItems: 1
-          maxItems: 64
-          description: Applied in array order against `expected_version`.
-          items:
-            $ref: "#/components/schemas/PartOperation"
-
-    PartOperation:
-      oneOf:
-        - title: Update a part in place
-          type: object
-          additionalProperties: false
-          required: [action, part_id]
-          description: Text parts only. The part keeps its identity.
-          properties:
-            action: { type: string, const: update }
-            part_id: { $ref: "#/components/schemas/PartId" }
-            text: { type: string }
-            mentions:
-              type: array
-              maxItems: 16
-              items:
-                $ref: "#/components/schemas/Mention"
-            styles:
-              type: array
-              maxItems: 200
-              items:
-                $ref: "#/components/schemas/StyleRange"
-        - title: Add a part
-          type: object
-          additionalProperties: false
-          required: [action, part]
-          properties:
-            action: { type: string, const: add }
-            position:
-              type: integer
-              minimum: 0
-              description: Where it lands. Appended when omitted.
-            part:
-              $ref: "#/components/schemas/PartInput"
-        - title: Remove a part
-          type: object
-          additionalProperties: false
-          required: [action, part_id]
-          description: >
-            The identity is tombstoned rather than deleted, and reactions on
-            the part go with it. Remaining positions are densified.
-          properties:
-            action: { type: string, const: remove }
-            part_id: { $ref: "#/components/schemas/PartId" }
-        - title: Move a part
-          type: object
-          additionalProperties: false
-          required: [action, part_id, position]
-          properties:
-            action: { type: string, const: move }
-            part_id: { $ref: "#/components/schemas/PartId" }
-            position: { type: integer, minimum: 0 }
-        - title: Replace a part
-          type: object
-          additionalProperties: false
-          required: [action, part_id, part]
-          description: >
-            Media and voice bytes are never rewritten in place. Replacing
-            tombstones the old identity and mints a new one, and reactions on
-            the old part go with it.
-          properties:
-            action: { type: string, const: replace }
-            part_id: { $ref: "#/components/schemas/PartId" }
-            part:
-              $ref: "#/components/schemas/PartInput"
-
-    MessageUnsendV2Input:
-      type: object
-      additionalProperties: false
-      required: [operation_id]
-      properties:
-        operation_id:
-          type: string
-          pattern: "^mut_[0-9a-hjkmnp-tv-z]{26}$"
-          description: >
-            Client-minted id for this unsend. May also travel as an
-            `Idempotency-Key` header when it is itself a `mut_` id.
-
     ReactionInput:
       type: object
       additionalProperties: false
-      required: [operation, type, emoji]
+      required: [operation, emoji]
       properties:
         operation:
           type: string
@@ -3769,73 +2731,103 @@ components:
         type:
           type: string
           enum: [emoji]
+          description: Optional. The only accepted value is `emoji`.
         emoji:
           type: string
+          minLength: 1
           maxLength: 32
           description: The emoji to add or remove. Required.
           example: "🔥"
-        target_scope:
-          type: string
-          enum: [message, part]
-          description: >
-            Defaults to `message`. Supplying `target_part_id` alone implies
-            `part`.
         target_part_id:
-          allOf:
+          oneOf:
             - $ref: "#/components/schemas/PartId"
+            - type: "null"
           description: >
-            Required when `target_scope` is `part`. Targets a part of any kind,
-            and must name a part the message currently has.
-        part_index:
-          type: integer
-          minimum: 0
-          deprecated: true
-          description: >
-            Legacy index form for shipped clients. Translated to that part's
-            `part_id` at the boundary and never stored. It keeps its original
-            media-only rule: an index naming a non-media part is a 422. Use
-            `target_part_id`.
-        operation_id:
+            React to one exact part, of any kind. It must name a part this
+            message has. Omit it, or send null, to react to the whole message.
+
+    Reaction:
+      type: object
+      additionalProperties: false
+      required: [message_id, target_part_id, type, emoji, actor, operation, changed]
+      description: >
+        One reaction as Relay recorded it. The same object is the reaction
+        endpoint's response body and the `data.reaction` of a `reaction.added`
+        or `reaction.removed` event, so a consumer reads one shape from both
+        paths. It is flatter than the `reactions` array in a projected message,
+        which carries `actor_kind` and `actor_id` instead of a nested actor:
+        see ProjectedReaction.
+      properties:
+        message_id: { type: string, pattern: "^msg_" }
+        target_part_id:
+          oneOf:
+            - $ref: "#/components/schemas/PartId"
+            - type: "null"
+          description: Null exactly when the reaction is on the whole message.
+        type: { type: string, const: emoji }
+        emoji: { type: string, example: "❤️" }
+        actor:
+          $ref: "#/components/schemas/Sender"
+        operation:
           type: string
-          pattern: "^mut_[0-9a-hjkmnp-tv-z]{26}$"
+          enum: [add, remove]
+        changed:
+          type: boolean
           description: >
-            Client-minted id for this reaction change. Retrying with it replays
-            the original result and emits no second event.
+            False when the request was a no-op: removing a reaction that was
+            not there, or re-adding the one already in the slot. Events are
+            emitted only when this is true, so a retry costs the recipient
+            nothing.
 
-    MessageEditResponse:
+    ReceiptInput:
       type: object
       additionalProperties: false
-      required: [message]
+      required: [message_id]
       properties:
-        message:
-          $ref: "#/components/schemas/EditedMessage"
+        message_id:
+          type: string
+          pattern: "^msg_"
+          description: The message to advance the watermark through. It may not be the caller's own.
+          example: msg_01k1m4q9vn2r7t9b4c6qdh8xwy
 
-    MessageUnsendResponse:
+    ReceiptSnapshot:
       type: object
       additionalProperties: false
-      required: [message]
+      required: [message_id, conversation_id, through_sequence, recipient, status, at]
       properties:
-        message:
-          $ref: "#/components/schemas/DeletedMessageTombstone"
+        message_id: { type: string, pattern: "^msg_" }
+        conversation_id: { type: string, pattern: "^cnv_" }
+        through_sequence: { type: integer, minimum: 1 }
+        recipient:
+          $ref: "#/components/schemas/Sender"
+        status: { type: string, enum: [delivered, read] }
+        at: { type: string, format: date-time }
+
+    ReceiptResult:
+      type: object
+      additionalProperties: false
+      required: [receipt, advanced]
+      properties:
+        receipt:
+          $ref: "#/components/schemas/ReceiptSnapshot"
+        advanced:
+          type: boolean
+          description: >
+            False when this watermark was already at or past the target,
+            which is the ordinary answer to a repeated or older call.
 
     WebhookEventType:
       type: string
       enum:
         - message.received
-        - message.edited
-        - message.unsent
+        - message.delivered
+        - message.read
         - conversation.added
         - conversation.updated
         - conversation.removed
         - conversation.left
         - reaction.added
         - reaction.removed
-        - message.delivered
-        - message.read
-        - group.invite.joined
-        - group.invite.declined
-        - group.invite.completed
-        - group.invite.expired
 
     WebhookEndpoint:
       type: object
@@ -3876,16 +2868,14 @@ components:
             When `schema_version` stops being served for this endpoint. Null
             means not deprecated, which is every endpoint on the current
             version. When a version is retired this is set 90 days out and the
-            operator is told then, not at the end.
+            creator is told then, not at the end.
         disabled_at:
           type: [string, "null"]
           format: date-time
-          description: >
-            Start of the current disabled window. Re-enabling backfills events
-            emitted since this instant, bounded to 24 hours and 1,000 events.
+          description: Start of the current disabled window.
         last_disabled_reason:
           type: [string, "null"]
-          description: Why the endpoint was last switched off, for the operator listing.
+          description: Why the endpoint was last switched off, for the creator listing.
         created_at:
           type: string
           format: date-time
@@ -3950,12 +2940,18 @@ components:
       # Relay cannot ship anything to. See the deprecation policy in
       # [Webhooks](/guides/webhooks#versioning-and-deprecation).
       additionalProperties: true
-      required: [event_id, event_type, agent_id, created_at, data]
+      required: [event_id, sequence, event_type, agent_id, conversation_id, created_at, schema_version, data]
       properties:
         event_id:
           type: string
           description: Deduplicate on this; delivery is at least once.
           example: evt_01JZE9M2XW
+        sequence:
+          type: integer
+          minimum: 1
+          description: >
+            This agent's log position. Pass the highest one you have processed
+            as `after` on the next `GET /v1/events`.
         schema_version:
           type: string
           format: date
@@ -3971,344 +2967,95 @@ components:
         agent_id:
           type: string
           example: agt_01JZRELAY
+        conversation_id:
+          type: [string, "null"]
+          description: The conversation this event belongs to, when it belongs to one.
         created_at:
           type: string
           format: date-time
         data:
           description: >
-            The shape `event_type` names. This is `anyOf` rather than `oneOf`
-            on purpose: the variants are open to additive members, which makes
-            them overlap, and a payload that satisfies two of them is a
-            correctly extended payload rather than an ambiguous one. Switch on
-            `event_type`, never on which branch happens to match.
-          anyOf:
+            The shape `event_type` names. Switch on `event_type`, never on
+            which branch happens to match.
+          oneOf:
             - $ref: "#/components/schemas/MessageEventData"
-            - $ref: "#/components/schemas/MessageEditedEventData"
-            - $ref: "#/components/schemas/MessageUnsentEventData"
-            - $ref: "#/components/schemas/GroupLifecycleEventData"
-            - $ref: "#/components/schemas/GroupInviteEventData"
-            - $ref: "#/components/schemas/ReactionEventData"
             - $ref: "#/components/schemas/ReceiptEventData"
+            - $ref: "#/components/schemas/ConversationEventData"
+            - $ref: "#/components/schemas/ReactionEventData"
 
     MessageEventData:
       type: object
       # Open for the same reason Event is: members are added additively.
       additionalProperties: true
       required: [message]
+      description: The `data` of a `message.received`.
       properties:
         message:
           $ref: "#/components/schemas/Message"
-        invocation_id:
+
+    ReceiptEventData:
+      type: object
+      additionalProperties: true
+      required: [message_id, conversation_id, through_sequence, at, recipient]
+      description: >
+        The `data` of a `message.delivered` or `message.read`: one of this
+        agent's messages reached or was read by the other party. Only 1:1
+        conversations emit these.
+      properties:
+        message_id: { type: string, pattern: "^msg_" }
+        conversation_id: { type: string, pattern: "^cnv_" }
+        through_sequence: { type: integer, minimum: 1 }
+        at: { type: string, format: date-time }
+        recipient:
+          $ref: "#/components/schemas/Sender"
+        participant:
           allOf:
-            - $ref: "#/components/schemas/InvocationId"
-          description: >
-            Present on a group invocation. When the sender's one send
-            committed several messages, every message of that batch carries
-            the same `invocation_id`; `reply_to` and `invoked_agents` still
-            project on the first of them.
+            - $ref: "#/components/schemas/Sender"
+          description: The same actor as `recipient`, kept for shipped consumers.
 
-    MessageEditedEventData:
+    ConversationEventData:
       type: object
-      # Open for the same reason Event is: members are added additively.
       additionalProperties: true
-      required: [message, revision_count]
-      properties:
-        message:
-          $ref: "#/components/schemas/EditedMessage"
-        revision_count:
-          type: integer
-          minimum: 1
-          maximum: 5
-
-    MessageUnsentEventData:
-      type: object
-      # Open for the same reason Event is: members are added additively.
-      additionalProperties: true
-      required: [message_id, conversation_id, sequence]
-      properties:
-        message_id:
-          type: string
-          pattern: "^msg_"
-        conversation_id:
-          type: string
-          pattern: "^cnv_"
-        sequence:
-          type: integer
-          minimum: 1
-        unsent_at:
-          type: string
-          format: date-time
-          description: >
-            When the sender unsent the message. Additive, so a consumer written
-            before it existed is unaffected.
-
-    GroupLifecycleEventData:
-      type: object
-      # Open for the same reason Event is: members are added additively.
-      additionalProperties: true
-      required: [conversation_id, actor, membership_version, system_mutation, message]
+      required: [conversation_id, actor]
+      description: >
+        The `data` of `conversation.added`, `conversation.updated`,
+        `conversation.removed` and `conversation.left`. A roster change carries
+        `affected_participant` and `membership_version`; a metadata change
+        carries `changes` and `updated_at`. The matching notice arrives
+        separately as a `message.received` whose message `kind` is `notice`.
       properties:
         conversation_id: { type: string, pattern: "^cnv_" }
         actor:
-          type: object
-          required: [kind, id]
-          properties:
-            kind: { type: string, const: user }
-            id: { type: string, pattern: "^usr_" }
+          $ref: "#/components/schemas/Sender"
         affected_participant:
+          allOf:
+            - $ref: "#/components/schemas/Sender"
+          description: Present when the change adds, removes, or records the departure of one participant.
+        membership_version:
+          type: integer
+          minimum: 1
+          description: Present on a roster change. It increases by one per change.
+        changes:
           type: object
-          description: Present when the lifecycle mutation adds, removes, or records the departure of one participant; omitted for metadata updates.
-          required: [kind, id]
-          properties:
-            kind: { type: string, enum: [user, agent] }
-            id: { type: string, pattern: "^(usr|agt)_" }
-        membership_version: { type: integer, minimum: 1 }
-        system_mutation:
-          type: object
-          required: [type, mutation, actor, changes]
-          properties:
-            type: { type: string, const: group.mutation }
-            mutation:
-              type: string
-              enum: [group.created, metadata.updated, membership.added, membership.removed, membership.left]
-            actor: { type: object }
-            affected_participant: { type: object }
-            changes: { type: object }
-        message:
-          $ref: "#/components/schemas/Message"
-
-    GroupInviteEventData:
-      oneOf:
-        - title: Group invite join
-          type: object
-          additionalProperties: false
-          required: [invite_id, conversation_id, user_id]
-          properties:
-            invite_id:
-              type: string
-              pattern: "^inv_"
-            conversation_id:
-              type: string
-              pattern: "^cnv_"
-            user_id:
-              type: string
-              pattern: "^usr_"
-        - title: Group invite decline
-          type: object
-          additionalProperties: false
-          required: [invite_id, user_id]
-          properties:
-            invite_id:
-              type: string
-              pattern: "^inv_"
-            user_id:
-              type: string
-              pattern: "^usr_"
-        - title: Completed group invite
-          type: object
-          additionalProperties: false
-          required: [invite_id, conversation_id]
-          properties:
-            invite_id:
-              type: string
-              pattern: "^inv_"
-            conversation_id:
-              type: string
-              pattern: "^cnv_"
-        - title: Expired group invite
-          type: object
-          additionalProperties: false
-          required: [invite_id]
-          properties:
-            invite_id:
-              type: string
-              pattern: "^inv_"
-
-    Reaction:
-      type: object
-      additionalProperties: false
-      required: [message_id, part_index, target_scope, target_part_id, type, emoji, actor, operation, changed]
-      description: >
-        One reaction as Relay recorded it. The same object is the reaction
-        endpoint's response body and the `data.reaction` of a
-        `reaction.added` or `reaction.removed` event, so a consumer reads one
-        shape from both paths. It is flatter than the `reactions` array in a
-        projected message, which carries `actor_kind` and `actor_id` instead
-        of a nested actor: see ProjectedReaction.
-      properties:
-        message_id: { type: string, pattern: "^msg_" }
-        part_index:
-          type: [integer, "null"]
-          minimum: 0
-          description: >
-            The target part's position at the time of the write. Null on a
-            whole-message reaction. Retained for shipped clients; the identity
-            is `target_part_id`.
-        target_scope:
+          description: >-
+            Present on a metadata change: each changed field as an object with
+            `old` and `new`.
+          additionalProperties:
+            type: object
+            properties:
+              old: {}
+              new: {}
+        updated_at:
           type: string
-          enum: [message, part]
-        target_part_id:
-          oneOf:
-            - $ref: "#/components/schemas/PartId"
-            - type: "null"
-          description: Null exactly when `target_scope` is `message`.
-        type: { type: string, const: emoji }
-        emoji: { type: string, example: "❤️" }
-        actor:
-          type: object
-          additionalProperties: false
-          required: [kind, id]
-          properties:
-            kind:
-              type: string
-              enum: [user, agent]
-              description: >
-                The actor that reacted. `agent` here means the same thing it
-                means on a message `sender`.
-            id: { type: string, pattern: "^(usr|agt)_" }
-        operation:
-          type: string
-          enum: [add, remove]
-        changed:
-          type: boolean
-          description: >
-            False when the request was a no-op: removing a reaction that was
-            not there, or re-adding the one already in the slot. Events are
-            emitted only when this is true, so a retry costs the recipient
-            nothing.
+          format: date-time
+          description: Present on a metadata change.
 
     ReactionEventData:
       type: object
       # Open for the same reason Event is: members are added additively.
       additionalProperties: true
       required: [reaction]
+      description: The `data` of a `reaction.added` or `reaction.removed`.
       properties:
         reaction:
           $ref: "#/components/schemas/Reaction"
-
-    ReceiptEventData:
-      type: object
-      additionalProperties: true
-      required: [message_id, conversation_id, through_sequence, at]
-      properties:
-        message_id: { type: string, pattern: "^msg_" }
-        conversation_id: { type: string, pattern: "^cnv_" }
-        through_sequence: { type: integer, minimum: 1 }
-        at: { type: string, format: date-time }
-
-    TypingEventData:
-      type: object
-      additionalProperties: true
-      required: [conversation_id, participant]
-      description: >
-        The `data` of a `typing.started` or `typing.stopped`. Ephemeral: pushed
-        to live devices and never written to the event log, so it carries no
-        `event_id` and is never replayed.
-      properties:
-        conversation_id: { type: string, pattern: "^cnv_" }
-        participant:
-          type: object
-          required: [id, kind]
-          description: Who is typing. This is the field to read.
-          properties:
-            id: { type: string, pattern: "^(usr|agt)_" }
-            kind: { type: string, enum: [user, agent] }
-        user:
-          type: object
-          deprecated: true
-          description: Legacy shape for a human typist. Read `participant`.
-          properties:
-            id: { type: string, pattern: "^usr_" }
-        contact:
-          type: object
-          deprecated: true
-          description: Legacy shape for an agent typist. Read `participant`.
-          properties:
-            id: { type: string, pattern: "^agt_" }
-            handle: { type: string }
-        expires_at:
-          type: string
-          format: date-time
-          description: >
-            Authority on a `typing.started`. Render the indicator until this
-            instant and then stop, whether or not a `typing.stopped` arrives.
-            Absent on a `typing.stopped`.
-        expires_in_ms:
-          type: integer
-          minimum: 0
-          description: >
-            The same fact pre-subtracted, for clients that would rather not
-            trust their own clock.
-        invocation_id:
-          allOf:
-            - $ref: "#/components/schemas/InvocationId"
-          description: Present when an agent is typing inside a group invocation.
-        label:
-          type: string
-          maxLength: 80
-          description: Short status line. Present only on a `typing.started`.
-
-    BeginRespondingInput:
-      type: object
-      additionalProperties: false
-      required: [message_id]
-      properties:
-        message_id:
-          type: string
-          pattern: "^msg_"
-          description: The inbound message this response consumes.
-          example: msg_01JZM3T8AH
-        label:
-          type: string
-          maxLength: 80
-          example: Searching the web…
-        invocation_id:
-          allOf:
-            - $ref: "#/components/schemas/InvocationId"
-          description: Required for groups and must identify this message's pending invocation.
-
-    ReceiptSnapshot:
-      type: object
-      additionalProperties: false
-      required:
-        - message_id
-        - conversation_id
-        - through_sequence
-        - recipient
-        - status
-        - delivered_at
-      properties:
-        message_id: { type: string, pattern: "^msg_" }
-        conversation_id: { type: string, pattern: "^cnv_" }
-        through_sequence: { type: integer, minimum: 1 }
-        recipient:
-          type: object
-          additionalProperties: false
-          required: [kind, id]
-          properties:
-            kind: { type: string, enum: [user, agent] }
-            id: { type: string }
-        status: { type: string, enum: [delivered, read] }
-        delivered_at: { type: string, format: date-time }
-        read_at: { type: [string, "null"], format: date-time }
-
-    ReceiptResult:
-      type: object
-      additionalProperties: false
-      required: [receipt, advanced]
-      properties:
-        receipt:
-          $ref: "#/components/schemas/ReceiptSnapshot"
-        advanced:
-          type: boolean
-          description: >
-            False when this watermark was already at or past the target,
-            which is the ordinary answer to a repeated or older call.
-
-    InvocationId:
-      type: string
-      pattern: "^ivk_[0-9a-hjkmnp-tv-z]{26}$"
-      example: ivk_01k1m4q9vn2r7t9b4c6qdh8xwy
-      description: >
-        One pending, agent-specific group invocation. It is bound to the
-        agent's current membership period and becomes invalid on removal.
