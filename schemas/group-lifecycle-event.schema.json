@@ -2,7 +2,7 @@
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "https://relayapp.im/schemas/group-lifecycle-event.schema.json",
  "title": "Relay group lifecycle",
- "description": "What a roster or metadata change produces. Two things land together and describe the same mutation: an event in every member's log (participant.added / participant.removed for roster changes, chat.group_name_updated / chat.group_icon_updated for metadata), and a NOTICE MESSAGE in the chat. The notice is a message row with item_type != 0, chat.db's shape: item_type 1 is a participant change (group_action_type 0 = added, 1 = removed/left; other_handle = who), 2 a rename (group_title), 3 a group-photo change. It is sent by the person who did the thing, carries no parts, and its human line rides in `text`. Clients render the notice from the item_type columns; the event is what tells them the roster moved.",
+ "description": "What a roster or metadata change produces. Two things land together and describe the same mutation: an event in every member's log (participant.added / participant.removed for roster changes, chat.group_name_updated / chat.group_icon_updated for metadata), and a NOTICE MESSAGE in the chat. A notice is a message carrying a `group_event` \u2014 member_added, member_left, member_removed, name_changed or photo_changed \u2014 sent by the person who did the thing, carrying no parts. Its structured fields are authoritative; `fallback_text` is the rendered line for clients that will not render the structured form. The event is what tells them the roster moved.",
  "type": "object",
  "additionalProperties": false,
  "required": [
@@ -155,12 +155,24 @@
      "message": {
       "type": "object",
       "properties": {
-       "item_type": {
-        "const": 1
+       "group_event": {
+        "type": "object",
+        "properties": {
+         "event_type": {
+          "enum": [
+           "member_added",
+           "member_left",
+           "member_removed"
+          ]
+         }
+        },
+        "required": [
+         "event_type"
+        ]
        }
       },
       "required": [
-       "item_type"
+       "group_event"
       ]
      }
     },

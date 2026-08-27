@@ -2450,6 +2450,35 @@ components:
             Present when the reply targeted one exact part. Omitted, not null,
             when the reply names the whole message.
 
+    GroupEvent:
+      type: object
+      additionalProperties: false
+      required: [event_type, fallback_text]
+      description: >
+        What a group notice announces. Present only on a notice message; its
+        absence is what makes a message ordinary. The message's `sender_handle`
+        is who did it and `created_at` is when. Render a notice as a centered
+        system line, not as a bubble.
+      properties:
+        event_type:
+          type: string
+          enum: [member_added, member_left, member_removed, name_changed, photo_changed]
+        target_handle_id:
+          type: string
+          pattern: "^(usr|agt)_"
+          description: Who was added, left, or was removed.
+        new_title:
+          type: string
+          description: The name a rename set.
+        new_photo_url:
+          type: string
+          description: The photo a change set; absent means the photo was cleared.
+        fallback_text:
+          type: string
+          description: >
+            The rendered line, for push, webhooks, and agents that will not
+            render the structured event themselves. The structured fields are
+            authoritative.
     Sender:
       type: object
       additionalProperties: false
@@ -2511,7 +2540,6 @@ components:
         - id
         - chat_id
         - sequence
-        - item_type
         - sender_handle
         - is_from_me
         - parts
@@ -2531,28 +2559,13 @@ components:
         sequence:
           type: integer
           description: Order inside the conversation. It is unrelated to event sequences.
-        item_type:
-          type: integer
-          enum: [0, 1, 2, 3]
-          description: >
-            chat.db's item_type, with Apple's values: 0 an ordinary message,
-            1 a participant change (`group_action_type` 0 = added,
-            1 = removed/left; `other_handle` = who), 2 a rename
-            (`group_title`), 3 a group-photo change. A notice row (item_type
-            ≠ 0) is sent by the person who did the thing, carries no parts,
-            and its human line rides in `text`. Render it as a centered
-            system line, not as a bubble.
-        group_action_type:
-          type: integer
-          enum: [0, 1]
-        other_handle:
-          type: string
-          pattern: "^(usr|agt)_"
-        group_title:
-          type: string
+        group_event:
+          $ref: "#/components/schemas/GroupEvent"
         is_audio_message:
           type: boolean
-          description: "chat.db's is_audio_message: this message is a voice memo."
+          description: >
+            A voice memo: the message's only part is audio. Derived from the
+            parts rather than stored, so it can never disagree with them.
         sender_handle:
           $ref: "#/components/schemas/Sender"
         is_from_me:
@@ -2568,8 +2581,8 @@ components:
           minItems: 0
           maxItems: 32
           description: >
-            An item_type 0 message has at least one part; a notice carries
-            none.
+            An ordinary message has at least one part; a notice carries none —
+            what it announces is its `group_event`.
           items:
             $ref: "#/components/schemas/Part"
         reply_to:
