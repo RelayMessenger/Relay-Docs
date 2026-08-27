@@ -2921,7 +2921,7 @@ components:
       # Relay cannot ship anything to. See the deprecation policy in
       # [Webhooks](/guides/webhooks#versioning-and-deprecation).
       additionalProperties: true
-      required: [event_id, sequence, event_type, agent_id, chat_id, created_at, webhook_version, data]
+      required: [event_id, sequence, event_type, agent_id, chat_id, created_at, schema_version, data]
       properties:
         event_id:
           type: string
@@ -2933,7 +2933,7 @@ components:
           description: >
             This agent's log position. Pass the highest one you have processed
             as `after` on the next `GET /v1/events`.
-        webhook_version:
+        schema_version:
           type: string
           format: date
           example: "2026-08-24"
@@ -2966,14 +2966,13 @@ components:
             - $ref: "#/components/schemas/ReactionEventData"
 
     MessageEventData:
-      type: object
-      # Open for the same reason Event is: members are added additively.
-      additionalProperties: true
-      required: [message]
-      description: The `data` of a `message.received`.
-      properties:
-        message:
-          $ref: "#/components/schemas/Message"
+      # The `data` of a `message.received` IS the message, with no wrapper
+      # around it. The send response wraps one in `message`; an event does not.
+      allOf:
+        - $ref: "#/components/schemas/Message"
+      description: >-
+        The `data` of a `message.received`: the message itself, with no
+        wrapping field around it.
 
     ReceiptEventData:
       type: object
@@ -3039,11 +3038,11 @@ components:
           format: date-time
 
     ReactionEventData:
-      type: object
-      # Open for the same reason Event is: members are added additively.
-      additionalProperties: true
-      required: [reaction]
-      description: The `data` of a `reaction.added` or `reaction.removed`.
-      properties:
-        reaction:
-          $ref: "#/components/schemas/Reaction"
+      # The `data` of a reaction event IS the reaction, with no wrapper around
+      # it. The 200 body of the reactions endpoint wraps one in `reaction`; an
+      # event does not.
+      allOf:
+        - $ref: "#/components/schemas/Reaction"
+      description: >-
+        The `data` of a `reaction.added` or `reaction.removed`: the reaction
+        itself, with no wrapping field around it.
