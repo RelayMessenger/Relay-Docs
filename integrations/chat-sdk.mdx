@@ -66,7 +66,7 @@ enabled, such as Cloudflare Workers with `nodejs_compat`.
 
 <Check>
 A Relay conversation arrives as a Chat SDK thread whose id is
-`relay:<conversation_id>`. Handlers you already wrote for other platforms run
+`relay:<chat_id>`. Handlers you already wrote for other platforms run
 unchanged.
 </Check>
 
@@ -78,10 +78,10 @@ Each row is a contract from these docs that the adapter implements for you.
 | --- | --- |
 | [Signature verification](/guides/webhooks) | Standard Webhooks HMAC over the exact raw body. An unsigned, tampered, or stale request gets `401` before its content is read |
 | [At-least-once delivery](/guides/delivery-model) | The `event_id` is claimed before your handler runs, so two redeliveries racing each other cannot both dispatch, and released if the handler throws so a failed turn is redelivered |
-| [Idempotent sends](/guides/sending-messages) | Every send carries an `Idempotency-Key` derived from the inbound `event_id` and the send's position in the turn, and from nothing else. A retry carrying the same body replays the first response |
-| [Group invocations](/guides/group-conversations) | The `invocation_id` threads into the first send of a turn. A second send raises `RelayInvocationSpentError` instead of taking a `403` |
-| [Message size](/reference/limits) | A reply longer than one text part becomes more parts, then more messages. A split consumes the whitespace it lands on |
-| [Event compatibility](/reference/events) | Reaction, receipt, conversation, and invite events acknowledge `200` without dispatch, so new event types never break your route |
+| [Idempotent sends](/guides/sending-messages) | Every send carries a `message_id` derived from the inbound `event_id` and the send's position in the turn, and from nothing else. A retry carrying the same id replays the stored message |
+| [Group conversations](/guides/group-conversations) | The agent is an ordinary member, so every message in the group reaches your handlers and a reply is an ordinary send |
+| [Message size](/reference/limits) | A reply longer than one text part becomes more parts of the same message. A split consumes the whitespace it lands on |
+| [Event compatibility](/reference/events) | Reaction, receipt, and conversation events acknowledge `200` without dispatch, so new event types never break your route |
 
 <Warning>
 The dedupe window is a bounded set in memory in one process. A restart, or a
@@ -106,22 +106,23 @@ harmless.
 
 | | Chat SDK operation | Relay |
 | :---: | --- | --- |
-| ✅ | `postMessage`, `editMessage`, `deleteMessage` | `POST /v1/messages`, `PATCH` and `DELETE /v1/messages/{id}` |
+| ✅ | `postMessage` | `POST /v1/messages` |
 | ✅ | `addReaction`, `removeReaction` | [Reactions](/guides/reactions) on a message |
-| ✅ | `startTyping` | [Typing indicator](/guides/typing-indicators), ephemeral, 80 character label |
+| ✅ | `startTyping` | [Typing indicator](/guides/typing-indicators), ephemeral and never stored |
 | ✅ | `markAsRead` | [Read receipt](/guides/read-receipts) for the conversation |
 | ✅ | `fetchMessages`, `fetchThread` | [Conversation history](/guides/conversation-history), paged backwards |
 | ✅ | `getUser` | The user's profile, scoped to a shared conversation |
 | ✅ | Attachments, both directions | [Attachments](/guides/attachments) and [voice memos](/guides/voice-memos) |
-| ⚠️ | `stream` | Buffered, then committed as one finished message |
+| ⚠️ | `stream` | Buffered, then sent as one finished message |
+| ❌ | `editMessage` | A committed message is immutable, so this throws `NotImplementedError` |
+| ❌ | `deleteMessage` | A committed message cannot be unsent, so this throws `NotImplementedError` |
 | ❌ | `fetchMessages({ direction: "forward" })` | The history route pages backwards only, so this throws `NotImplementedError` |
 | ❌ | `openDM` | A conversation starts when a person adds the agent |
 | ❌ | Cards | Delivered as fallback text, because Relay has no interactive card surface |
-| ❌ | Edits carrying media | Relay requires an edit to stay text bearing |
 
-Set `streaming: false` where your host offers the choice. Relay commits one
-canonical message per turn, so nothing partial reaches the person you are
-answering. See [Streaming](/guides/streaming) for what Relay does with a stream.
+Set `streaming: false` where your host offers the choice. The adapter sends a
+finished message, so nothing partial reaches the person you are answering. See
+[Sending messages](/guides/sending-messages) for the send contract it uses.
 
 ## Formatting
 
@@ -135,16 +136,15 @@ across as style ranges.
 | `strong` | `bold` |
 | `emphasis` | `italic` |
 | `delete` | `strikethrough` |
-| Inline and fenced code | `monospace` |
 
 Constructs Relay has no style for keep their information in the text. A link
 whose label differs from its target renders as `label (url)`, a blockquote keeps
-its `> ` prefix, a list keeps its markers, and a table is drawn as a monospace
-grid.
+its `> ` prefix, a list keeps its markers, inline and fenced code keep their
+backticks, and a table is flattened to one text line per row.
 
 ## Next steps
 
 - [Webhooks](/guides/webhooks) for registration, verification, and secret rotation
 - [Sending messages](/guides/sending-messages) for parts, styles, and idempotency
-- [Vercel AI SDK](/integrations/vercel-ai-sdk) for answering webhooks without the Chat SDK
+- [Group conversations](/guides/group-conversations) for how an agent takes part in a group
 - [Integrations](/integrations) for every way to connect an agent

@@ -34,7 +34,7 @@ npx skills add https://github.com/relaymessenger/skills --skill relay
 ```
 
 The skill covers the quickstart loop, Agent Tokens, signed webhooks, typed
-message parts, streaming, groups, receipts, limits, and errors. Its topic files
+message parts, groups, receipts, limits, and errors. Its topic files
 are generated from these docs.
 
 ## Connect the MCP server
@@ -82,14 +82,19 @@ covers the current v0 HTTPS contract.
 # Relay agent integration brief
 
 Relay is a new messenger for AI agents. The integration uses HTTPS at
-https://api.relayapp.im. The contract is raw HTTPS and JSON. Optional
-published packages: @relaymessenger/cli and @relaymessenger/vercel-ai.
-Import nothing else. A public HTTPS webhook is one receive path; long
-polling is the other.
+https://api.relayapp.im. The contract is raw HTTPS and JSON. The one optional
+published package is @relaymessenger/cli. Import nothing else. A public HTTPS
+webhook is one receive path; pulling GET /v1/events is the other, and both
+read the same log so an agent may run either or both.
 
 ## Authentication
 Read `RELAY_AGENT_TOKEN` from the environment and send it as
-`Authorization: Bearer <token>`. Verify with GET /v1/agents/me. Update the credential before retrying a 401.
+`Authorization: Bearer <token>` (an `rly_live_…` Agent Token). Verify with
+GET /v1/agents/me. Update the credential before retrying a 401. A terminal
+bridge with no token yet pairs through RFC 8628 device authorization
+(POST /api/auth/device/code, the person approves in the Relay app, then
+POST /api/auth/device/token), and uses the session it receives once to call
+POST /v1/me/agents, which returns the agent and its `rly_live_…` token.
 
 ## Receive (signed webhook)
 Register with POST /v1/webhooks { "url": "https://..." } using the Agent Token.
@@ -99,94 +104,84 @@ Store the returned signing_secret; it is shown only on create or rotation.
   `<webhook-id>.<webhook-timestamp>.<raw-body>` using the base64-decoded bytes after whsec_.
 - Reject timestamps outside a 5-minute window and compare signatures in constant time.
 - Return 2xx only after the event is stored. Delivery is at-least-once; deduplicate on event_id.
-- Envelope: { event_id, event_type, agent_id, created_at, data }.
-- Event types today: message.received (data.message = full message),
-  message.edited (data.message + revision_count), message.unsent
-  (data.message_id + conversation_id + sequence), message.delivered /
-  message.read (receipt watermarks: data.through_sequence), reaction.added /
-  reaction.removed (data.reaction), conversation.added / conversation.updated /
-  conversation.removed (group lifecycle), group.invite.joined /
-  group.invite.declined (one person's answer, joined carries conversation_id
-  and user_id), group.invite.completed / group.invite.expired (terminal state).
-  Ignore unknown types.
+- Envelope: { event_id, sequence, event_type, agent_id, chat_id,
+  created_at, schema_version, data }.
+- The nine event types: message.received (data.message = the full message),
+  message.delivered / message.read (receipt watermarks: data.through_sequence,
+  data.recipient; 1:1 only), participant.added / chat.group_name_updated /
+  participant.removed / participant.removed (group lifecycle), reaction.added /
+  reaction.removed (data.reaction). Ignore unknown types.
 - Relay retries timeouts, connection errors, 408, 429, and 5xx with exponential
   backoff for up to 10 attempts. Any other non-2xx response is a permanent
   failure and is dead-lettered immediately.
 - A successful message.received delivery automatically marks it Delivered.
 
+## Receive (pull)
+GET /v1/events?after=N&timeout=0..30&limit=1..100 →
+{ events, next_cursor, latest, has_more }. `after` is the highest `sequence`
+you have processed; the page is everything newer. It is a plain pull: nothing
+is acknowledged or consumed, so persist the events and the cursor together and
+deduplicate on event_id. Handing a page over marks its messages Delivered.
+
 ## Send
-POST /v1/messages with the required Idempotency-Key header (8-255 chars; derive it from
-the inbound event_id so retries are safe; reuse the same key when you retry).
-Body: { "conversation_id": "cnv_…", "parts": [...], "fallback_text"?, "reply_to"?: { "message_id" } }
-Part types (1-32 parts per send, order = presentation order). The server splits
-the send at ingest: each visible non-media part commits as its own message;
-contiguous media parts commit together as one media message; a voice_memo
-always commits as its own message. Each bubble is a message. One send raises
-one push notification regardless of how many messages it commits. reply_to
-targets a message id only and projects on the first committed message; every
-message.received event of an invoking group batch carries the same
-invocation_id. Optional fallback_text applies to the last committed message:
-- { "type": "text", "text": "…" }                     (≤ 8 KB per part)
-- { "type": "link_preview", "url": "https://…" }
+One send is one message. Mint `message_id` yourself: `msg_` plus a lowercase
+Crockford base32 ULID. It is the canonical id and the idempotency key, so a
+retry with the same id replays the stored message and another sender's use of
+it answers 409 idempotency_conflict. There is no Idempotency-Key requirement.
+POST /v1/messages
+Body: { "message_id": "msg_…", "chat_id": "cnv_…", "parts": [...],
+"text"?, "reply_to"?: { "message_id", "part_id"? } }
+1-32 parts per message, order = presentation order. Text and media sent
+together stay together as parts of the one message:
+- { "type": "text", "text": "…", "mention"?, "mention_range"?, "styles"? }  (≤ 8 KB)
+- { "type": "link", "url": "https://…", "title"?, "description"? }
 - { "type": "data", "data": { any JSON } }            (≤ 16 KB)
 - { "type": "media", "url" | "attachment_id" }        (exactly one of the two)
-- { "type": "voice_memo", "url": "https://…", "duration_ms": 18400 }
-- { "type": "voice_memo", "attachment_id": "att_…", "duration_ms": 18400 }
-Response 202 { messages: [...] }: every committed message, in display order.
-
-## Stream an existing agent reply
-POST /v1/messages?stream=true&conversation_id=cnv_… with:
-- Content-Type: text/event-stream
-- x-vercel-ai-ui-message-stream: v1
-- the required Idempotency-Key
-- the SSE body returned by Vercel AI SDK toUIMessageStreamResponse()
-Relay consumes the stream and commits one or more finished messages only after
-the UIMessageStream `finish` event. `[DONE]` closes the transport but is not
-semantic completion. Abort, error, malformed ordering, or early EOF commits
-nothing. The stream is an ingestion format: Relay writes no partial row and
-renders no live bubble, so the reader sees finished messages appear. Relay
-presents tool state but never executes tools; the external agent continues to
-own its model and tool loop.
-Stream ceilings: 8 MB body, 64 KB per line, 256 KB per event, 30 s idle,
-10 min total. Breaching one commits nothing and returns 413 payload_too_large
-or 408 request_timeout; broken framing returns 400 malformed_stream.
+- { "type": "media", "url" | "attachment_id", "duration_ms"? }
+Text styles are bold, italic, underline, and strikethrough; anything else is 422.
+Request body ceiling 512 KB.
+Response 202 { message_id, message }. The conversation-scoped forms are
+POST /v1/chats/{id}/messages → 201 { messages: [message] } and
+POST /v2/chats/{id}/messages → 201 { message }, which requires
+message_id and rejects unknown fields with 422.
 
 ## Messaging state
 - Sent means Relay stored the message. Delivered means the recipient runtime
   durably accepted it. Read means consumed or visibly viewed. Typing is an
-  independent temporary signal. Read implies Delivered.
-- Normal response: POST /v1/conversations/{id}/responding
-  { "message_id", "label"?, "invocation_id"? }. Relay commits Read before
-  starting typing. Groups require the matching invocation_id.
-- Consumption without response: POST /v1/conversations/{id}/read
-  { "message_id" }. Watermarks are monotonic and idempotent.
-- Proactive typing or explicit stop: POST /v1/conversations/{id}/typing
-  { "started", "label"?, "invocation_id"? }. Typing never changes receipts.
+  independent temporary signal. Read implies Delivered. Receipts are 1:1 only;
+  a group message stays `sent`.
+- Message content is immutable. There is no edit, unsend, or delete route, no
+  message versions, and no tombstones.
+- Mark read: POST /v1/chats/{id}/read { "message_id" }. Mark delivered:
+  POST /v1/chats/{id}/delivered { "message_id" }. Watermarks are
+  monotonic and idempotent, and answer { receipt, advanced }.
+- Typing: POST /v1/chats/{id}/typing { "started": true|false } → 204.
+  Recipients get an ephemeral chat.typing_indicator.started/chat.typing_indicator.stopped carrying
+  { chat_id, participant, timeout_ms: 90000 }. Nothing is stored, it
+  never enters the event log, and clients hide the indicator after timeout_ms.
 - Reactions: POST /v1/messages/{id}/reactions
-  { "operation": "add"|"remove", "type": "emoji", "emoji", "part_index"? }.
-  part_index anchors on one part of a media message (per-photo pills) and must
-  name a real part; text and card messages take whole-message reactions only.
-- Edit: PATCH /v1/messages/{id} { "parts": [exactly one text part] } within
-  15 minutes, at most five revisions. Anything but one text part answers 422.
-  Only the original user session or Agent Token can edit, and the stored
-  message must be text-bearing.
-- Unsend: DELETE /v1/messages/{id} within two minutes. Only the original
-  sender can unsend. History keeps a bare status=deleted tombstone.
-- History: GET /v1/conversations/{id}/messages?limit=50&before_sequence=N,
-  newest first. Visible messages include receipt-projected status, reactions,
-  edited_at, and revisions. Unsent messages project as bare tombstones.
-- Media: POST /v1/attachments (raw body ≤ 100 MB, Content-Type + X-Relay-Filename
-  headers) → { attachment: { id: "att_…", url } }; send the id in a media/voice_memo part.
-  Attachments are private to their uploader.
+  { "operation": "add"|"remove", "type": "emoji", "emoji", "target_part_id"? }.
+  target_part_id anchors on one part of any kind; omit it for a whole-message
+  reaction. One reaction per actor per slot; a no-op answers 200 changed:false.
+- Replies are pointers: reply_to is { message_id, part_id? } and the client
+  draws the quote from the target.
+- Groups: an agent is an ordinary member and receives every message from the
+  sequence it joined at. There are no invocations and no invites. People change
+  membership in the app.
+- History: GET /v1/chats/{id}/messages?limit=50&before_sequence=N,
+  newest first, inside the caller's membership window. Projections include
+  reactions[] and 1:1 receipt stamps.
+- Media: POST /v1/attachments (raw body ≤ 100 MB, Content-Length required,
+  Content-Type + X-Relay-Filename headers) → { attachment: { id: "att_…", url } };
+  send the id in a media or media part. Attachments are private to their uploader.
 
 ## Errors
-Envelope: { "error": { "code", "message" } }. Codes: malformed_stream(400),
-unauthorized(401), forbidden(403), not_found(404), request_timeout(408),
-conflict(409), idempotency_conflict(409), limit_exceeded(409),
-terminated_by_other_consumer(409), cursor_expired(410), payload_too_large(413),
-invalid_request(422), rate_limited(429), internal_error(500),
-server_configuration_error(503). Retry only 429/5xx/network,
-with backoff, reusing the same Idempotency-Key.
+Envelope: { "error": { "code", "message" } }. Codes: unauthorized(401),
+forbidden(403), not_found(404), conflict(409), idempotency_conflict(409),
+limit_exceeded(409), handle_taken(409), handle_reserved(409),
+payload_too_large(413), invalid_request(422), rate_limited(429),
+internal_error(500), temporarily_unavailable(503). Retry only
+429/503/5xx/network, with backoff, reusing the same message_id.
 
 ## Coming later
 Treat these surfaces as unavailable in the current preview:
@@ -197,6 +192,6 @@ Full matrix: https://docs.relayapp.im/roadmap.md
 ## See also
 
 - [Quickstart, the curl-first receive-and-reply loop](/quickstart)
-- [Streaming replies, the direct AI SDK handoff](/guides/streaming)
+- [Sending messages, every part type and its limits](/guides/sending-messages)
 - [Message your coding agent](/integrations)
 - [API availability](/roadmap)

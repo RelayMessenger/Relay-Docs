@@ -32,9 +32,15 @@ signing format:
 
 | Header | Value |
 | --- | --- |
-| `webhook-id` | The event's stable `event_id` |
+| `webhook-id` | The event's stable `event_id`. **This is the dedupe key** |
 | `webhook-timestamp` | Unix seconds when this attempt was signed |
 | `webhook-signature` | One or more space-separated `v1,<base64>` signatures |
+| `webhook-delivery-id` | This delivery row. Stable across retries, distinct per endpoint. For correlating with Relay's logs, never for dedupe |
+| `relay-webhook-version` | The envelope shape this endpoint is pinned to, e.g. `2026-08-24` |
+
+Two endpoints receiving the same event see one `webhook-id` and two
+`webhook-delivery-id` values. That is the difference between the two, and the
+reason only the first one can dedupe.
 
 Compute HMAC-SHA256 over this exact UTF-8 value:
 
@@ -73,16 +79,90 @@ On Cloudflare Agents: verify in `onRequest()`, enqueue with the Agent SDK's
 Return any `2xx` once your backend has stored the event. Requests time out after
 10 seconds.
 
-| Your response | What Relay does |
-| --- | --- |
-| Any `2xx` | Marks the delivery successful |
-| `408`, `429`, `5xx`, timeout, connection error | Retries with exponential backoff and jitter, up to 10 attempts |
-| Anything else, including redirects and other `4xx` | Dead-letters the delivery immediately, with no retry |
+Delivery is at least once, and duplicates are expected rather than
+exceptional. A consumer that cannot process the same event twice is not
+finished. Dedupe on `webhook-id`: it is stable across every retry, every
+creator redrive, and every re-enable backfill of that event, and it is the
+same value the long-poll envelope carries as `event_id`.
 
-- **Store `event_id`** as a unique key before producing side effects.
+A duplicate arrives from four places, all of them normal:
+
+| Source | What happened |
+| --- | --- |
+| A lapsed delivery lease | The sender stalled mid-send and another drain took the row |
+| A lost settlement | Your endpoint answered `200` and Relay's write recording that failed. The row is still pending |
+| A creator redrive | Somebody replayed a dead letter |
+| A re-enable backfill | An endpoint came back and its disabled window was replayed |
+
+- **Store `webhook-id`** as a unique key before producing side effects.
+- **Answer `2xx` and do nothing else** for an id you have already processed.
 - **Derive outbound idempotency keys** from it, for example `reply:<event_id>`.
 - **A successful `message.received` delivery** advances the agent's delivered
   watermark. Mark the message read only after your backend consumes it.
+
+### How Relay retries
+
+| Your response | Disposition |
+| --- | --- |
+| Any `2xx` | Success |
+| `408`, `429`, any `5xx` | Retry |
+| Any redirect | Dead-letter immediately. Never followed |
+| Any other `4xx` | Dead-letter immediately |
+| No HTTP status at all | Retry, classified by error class |
+
+A delivery that never produced a status is a network fault, not a verdict on
+the request. Relay records which one it was and retries, because the same bytes
+to the same URL succeed the moment the endpoint comes back:
+
+| Error class | Cause |
+| --- | --- |
+| `webhook_timeout` | The endpoint accepted the connection and did not answer in time |
+| `webhook_dns` | The name did not resolve |
+| `webhook_connection_refused` | Nothing was listening |
+| `webhook_connection_reset` | The connection dropped mid-request |
+| `webhook_tls` | The handshake or certificate failed |
+| `webhook_network` | Anything else with no status |
+
+Retries back off exponentially with jitter, capped at one hour between
+attempts, and dead-letter after 10 attempts.
+
+<Warning>
+Relay never follows a redirect. The body is signed for the URL you registered,
+so replaying identical bytes and a valid signature at whatever host a `3xx`
+names would hand a signed Relay event to an address nobody registered, and the
+signature would verify there. Fix the registered URL instead.
+</Warning>
+
+## Versioning and deprecation
+
+Envelope versions are dates, not integers, so nothing has to remember which
+release "v3" was. Your endpoint is pinned to the date it was created with, and
+that date arrives two ways: as the `relay-webhook-version` header, and as
+`schema_version` inside the signed body.
+
+**Additive changes never bump the version.** A new optional field, a new member
+of `data`, a new `event_type`, a new header: all of these ship on the current
+date. Ignore fields you do not know and event types you did not subscribe to.
+
+**A shape change bumps it.** Removing a field, renaming one, narrowing a type,
+or changing what an existing `event_type` carries. If a correct consumer
+written last month would break, it is a new date, and the old date keeps being
+served.
+
+When a version is retired, every endpoint still pinned to it gets
+`deprecated_after` set 90 days out and the creator is told at that moment
+rather than at the end. Until it passes, the old shape is served unchanged.
+After it passes, the endpoint is served the current version.
+
+| Field on the endpoint | Meaning |
+| --- | --- |
+| `schema_version` | The date this endpoint is pinned to |
+| `deprecated_after` | When that date stops being served. Null means current |
+| `disabled_at` | Start of the current disabled window. Re-enabling backfills from it |
+| `last_disabled_reason` | Why it was last switched off |
+
+Nothing migrates an existing endpoint silently. A consumer moves versions by
+asking to.
 
 ### Answer before you work
 
@@ -96,9 +176,11 @@ something that will outlive the request, then do the work. Delivered says your
 endpoint has the message; it never claims the reply is ready.
 
 <Warning>
-A `2xx` ends the delivery, so Relay will not send that event again. Retries
-move from Relay to you. Acknowledge early only once the handoff is durable, or
-a crash after the response loses the message with no redelivery to recover it.
+A `2xx` is Relay's cue to stop retrying, and it is not a promise that the event
+will never arrive again: a lost settlement, a redrive, or a re-enable backfill
+can all redeliver it. Treat a `2xx` as "I own this now" and make the handoff
+durable before you send it, because a crash afterwards is your loss to recover.
+Dedupe on `webhook-id` so the redeliveries that do happen are free.
 </Warning>
 
 ## Manage endpoints
@@ -144,7 +226,8 @@ Subscribe to any of these filters today:
 | `message.delivered` | A recipient's runtime accepted your message |
 | `message.read` | A recipient read through a sequence |
 | `reaction.added` / `reaction.removed` | A participant reacted to your message |
-| `conversation.added` / `conversation.updated` / `conversation.removed` | Group membership or metadata changed |
+| `participant.added` / `chat.group_name_updated` / `participant.removed` | Group membership or metadata changed |
+| `participant.removed` | A participant left a group of their own accord, which is a different fact from being removed |
 | `group.invite.joined` / `group.invite.declined` | One invited person answered a group invite |
 | `group.invite.completed` / `group.invite.expired` | A group invite reached its terminal state |
 
@@ -158,6 +241,7 @@ Ignore unknown event types, so a new one cannot break your consumer.
 ## Next steps
 
 - [Event types](/reference/events)
+- [Message model](/concepts/message-model) for what `message.edited` and `message.unsent` change
 - [Long polling](/guides/long-polling) if your backend has no public URL
 - [Delivery model](/guides/delivery-model) for cursors, watermarks, and recovery
 - [Embed Relay in your own runtime](/integrations/channel-plugin) if your runtime owns many agents

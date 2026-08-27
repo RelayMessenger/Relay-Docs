@@ -1,7 +1,7 @@
 ---
 title: "Core concepts"
 description: "Work with Relay's model: agents, conversations, messages, ordered parts, and delivery semantics."
-keywords: ["concepts", "data model", "agent", "conversation", "message", "parts", "part_index", "sequence", "fallback_text"]
+keywords: ["concepts", "data model", "agent", "conversation", "message", "parts", "part_id", "sequence", "text"]
 ---
 
 Relay uses five objects. Learn these once, then every endpoint follows the same
@@ -24,35 +24,31 @@ See [Your agent](/guides/your-agent) for creation, identity, distribution, and i
 
 ## Conversations and participants
 
-A conversation has a stable `conversation_id` and a set of participants. A
+A conversation has a stable `chat_id` and a set of participants. A
 direct conversation normally contains one user and one agent.
 
 The backend can send only while its agent remains installed and active in the
 conversation.
 
-Use the `conversation_id` from `message.received` for replies and history reads.
+Use the `chat_id` from `message.received` for replies and history reads.
 
 See [Conversation lifecycle](/guides/conversation-lifecycle) for how direct threads begin, remain authorized, and recover.
 
 ## Messages and ordered parts
 
-A message is either text or media, never both: it carries one visible
-non-media part, a run of contiguous `media` parts, or one `voice_memo` part.
-Each bubble in the app is a message.
-
-The send route accepts 1 to 32 parts, of five types, and splits them at
-ingest: each visible non-media part commits as its own message, contiguous
-media parts commit together as one media message, and a voice memo always
-commits as its own message. The 202 lists every committed message in display
-order.
+One send is one message. A message carries 1 to 32 ordered parts, of six
+types, and text and media handed over together stay together inside it.
 
 | Part type | Carries |
 | --- | --- |
 | `text` | Plain text, up to 8 KB per part |
-| `link_preview` | A public HTTPS URL Relay renders as a preview |
+| `link` | A public HTTPS URL Relay renders as a preview |
 | `data` | Any JSON, up to 16 KB, rendered through fallback text |
 | `media` | An image, video, audio file, or file, by URL or `attachment_id` |
-| `voice_memo` | Voice audio, by URL or `attachment_id` |
+
+
+Every committed part is given a permanent `part_id`. A reply or a reaction
+names that id, so a target never depends on a position.
 
 Exact shapes and limits are in [Sending messages](/guides/sending-messages).
 
@@ -61,40 +57,50 @@ Stored messages include:
 ```json
 {
   "id": "msg_01JZM3T8AH",
-  "conversation_id": "cnv_01JZC7K4RQ",
+  "chat_id": "cnv_01JZC7K4RQ",
   "sequence": 7,
-  "sender": { "kind": "agent", "id": "agt_01JZRELAY" },
+  "item_type": 0,
+  "sender_handle": { "kind": "agent", "id": "agt_01JZRELAY" },
   "is_from_me": true,
   "parts": [
-    { "type": "link_preview", "url": "https://example.com" }
+    {
+      "part_id": "prt_01k1m4q9vn2r7t9b4c6qdh8xwy",
+      "part_index": 0,
+      "position": 0,
+      "type": "link",
+      "url": "https://example.com"
+    }
   ],
   "reply_to": null,
-  "fallback_text": "https://example.com",
+  "text": "https://example.com",
   "status": "sent",
   "created_at": "2026-07-12T01:21:08.000Z"
 }
 ```
 
-`fallback_text` is the plain-language representation used by notifications, search, and clients that cannot render a part. Relay derives it, in this order: the first text part, then the first link preview, then the first data part's `fallback`, then `Voice memo` or `[attachment]`. A sender-supplied `fallback_text` replaces the derived one on the last committed message of that send.
+`text` is the plain-language representation used by notifications, search, and clients that cannot render a part. Relay derives it, in this order: the first text part, then the first link preview, then the first data part's `fallback`, then `Voice memo` or `[attachment]`. A sender-supplied `text` replaces the derived one.
 
 `is_from_me` states direction for the caller the payload was projected for. Relay resolves it on the server against the authenticated identity.
 
-Read direction from that field alone. Comparing `sender.id` against your own id is ambiguous before a client knows its own identity, and wrong for every other participant in a group.
+Read direction from that field alone. Comparing `sender_handle.id` against your own id is ambiguous before a client knows its own identity, and wrong for every other participant in a group.
 
-## Edit and unsend
+`kind` separates the two things a conversation stores. A `message` is
+something someone sent. A `notice` is a group membership or metadata change,
+committed by the person who caused it, carrying a text part and a `data` part
+that names the mutation. Render a notice as a centered line, not as a bubble.
 
-Only a message's original sender can mutate it. Every other actor receives `404`.
+## Messages do not change
 
-Use `PATCH /v1/messages/{message_id}` within 15 minutes to replace a text
-message's text, up to five times. An edit carries exactly one text part;
-anything else answers `422`. Each successful edit appends the prior parts and
-`fallback_text` to `revisions`, sets `edited_at`, and keeps the original
-`sequence`.
+A committed message is immutable. There is no edit, no unsend, and no delete,
+so a message a client has stored never changes underneath it.
 
-Use `DELETE /v1/messages/{message_id}` within two minutes to unsend. Relay
-removes the stored parts but keeps a bare `status: "deleted"` tombstone with
-the original id, sequence, sender, and creation time. Neither operation sends a
-push notification.
+Two things about a message do move. Its receipt stamps advance as the other
+party receives and reads it, and its `reactions` array changes as people react.
+Both are separate writes with their own events.
+
+This is why a reply is a pointer rather than a copy. `reply_to` names a
+`message_id` and optionally one `part_id`, and the client draws the quote from
+the target itself.
 
 ## Delivery and recovery
 

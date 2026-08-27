@@ -1,0 +1,277 @@
+---
+title: "Message model"
+description: "One send is one message: part identities, client-generated message ids, replies as pointers, reactions, and the numbers that order a conversation."
+keywords: ["message model", "part_id", "message_id", "reply", "reaction", "mention", "sequence", "idempotency", "handles"]
+---
+
+One send is one message. Its ordered parts stay together, each part is given a
+permanent id, and everything that points at a message points at an id rather
+than a position.
+
+| Object | Identity | Mutable |
+| --- | --- | --- |
+| Message | `message_id`, minted by the client | Never. Content is immutable once committed |
+| Part | `part_id`, minted by the server | Never |
+| Reply edge | The replying message | Never. It is a pointer, not a copy |
+| Reaction | (message, target slot, actor) | Its emoji, one per slot |
+| Receipt | (message, recipient) | Advances forward, in a 1:1 conversation |
+
+## The smallest send
+
+```bash
+curl -sS -X POST "https://api.relayapp.im/v2/chats/cnv_01k1m4q9vn2r7t9b4c6qdh8xwy/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message_id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
+    "parts": [
+      { "type": "text", "text": "Three options, best one first:" },
+      { "type": "media", "attachment_id": "att_01k1m9zc4d8jr2wq6nvy0h5tpb" }
+    ]
+  }'
+```
+
+The `201` carries one message holding both parts, each with its own `part_id`:
+
+```json
+{
+  "message": {
+    "id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
+    "chat_id": "cnv_01k1m4q9vn2r7t9b4c6qdh8xwy",
+    "sequence": 41,
+    "item_type": 0,
+    "sender_handle": { "kind": "agent", "id": "agt_01JZRELAY" },
+    "is_from_me": true,
+    "parts": [
+      { "part_id": "prt_01k1ma0m5r9xd4t7c2vqj6nzbh", "part_index": 0, "position": 0, "type": "text", "text": "Three options, best one first:" },
+      { "part_id": "prt_01k1ma0m5sy2k8f3b7wnq4hdvc", "part_index": 1, "position": 1, "type": "media", "attachment_id": "att_01k1m9zc4d8jr2wq6nvy0h5tpb" }
+    ],
+    "reply_to": null,
+    "text": "Three options, best one first:",
+    "status": "sent",
+    "created_at": "2026-08-24T20:00:00.000Z"
+  }
+}
+```
+
+## Message identity and part identity
+
+A message id is minted by the client before the send is queued. A part id is
+minted by the server when the part is committed. Both are lowercase Crockford
+base32 ULIDs behind a type prefix, and a well-formed id proves nothing about
+existence, ownership, or access.
+
+| Prefix | Names |
+| --- | --- |
+| `msg_` | One message |
+| `prt_` | One part, for its whole life |
+| `att_` | One uploaded attachment |
+
+Both ids are permanent. A message is never rewritten and a part is never moved,
+so an id stored today resolves to the same thing a year from now.
+
+## Content is immutable
+
+A committed message does not change. There is no edit route, no unsend, and no
+delete, so a client that has stored a message never has to reconcile it against
+a newer version, and a transcript never has to be re-read to be trusted.
+
+Two things around a message do move, and each is its own write with its own
+event.
+
+| Moves | Write | Event |
+| --- | --- | --- |
+| Receipt stamps | `POST /v1/chats/{id}/delivered` and `/read` | `message.delivered`, `message.read` |
+| Reactions | `POST /v1/messages/{id}/reactions` | `reaction.added`, `reaction.removed` |
+
+## Message kinds
+
+`kind` separates the two things a conversation stores.
+
+| `kind` | Is |
+| --- | --- |
+| `message` | Something a person or an agent sent |
+| `notice` | A group membership or metadata change |
+
+A notice is committed by the person who caused it, not by a system account, and
+it carries a text part plus a `data` part holding
+`{ "type": "group.mutation", "mutation": …, "actor": …, "affected_participant": …, "changes": … }`.
+Render it as a centered line rather than a bubble.
+
+## Sequence, position, and part_index
+
+Three numbers, none of them interchangeable.
+
+| Field | Scope | Means |
+| --- | --- | --- |
+| `sequence` | Conversation | Where this message sits in the thread. Assigned once and never reused |
+| `position` | Message | Where this part renders. Dense, from 0 |
+| `part_index` | Message | The same number as `position`, retained for clients that predate part ids |
+
+Order on `sequence`, and deduplicate on `event_id`. Never use one for the other.
+Neither `position` nor `part_index` is an identity: reactions and replies key on
+`part_id`.
+
+## Client-generated ids and retries
+
+The client mints `message_id`, so the identity of a send exists before the
+request does. That makes a retry unambiguous without any separate idempotency
+header.
+
+| Second request | Answer |
+| --- | --- |
+| Same id, same content | The original message, replayed |
+| Same id, different content | `409 idempotency_conflict` |
+| Same id, different sender | `409 idempotency_conflict`, naming no owner |
+| Two different ids, identical text | Two messages, because two sends were intended |
+
+The conflict for another sender's id says nothing about who holds it. A
+message id is not an existence oracle.
+
+`/v2` requires `message_id` in the body. `/v1` accepts it in `message_id` or
+`clientMessageId`, and reads an `Idempotency-Key` header only when that header's
+value is itself a `msg_` id. Any other header value is ignored and the server
+mints the id, which makes that send non-idempotent.
+
+## Replies
+
+A reply names a target message, and optionally one exact part of it. It is a
+pointer, never a copy.
+
+```json
+{
+  "reply_to": {
+    "message_id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
+    "part_id": "prt_01k1ma0m5sy2k8f3b7wnq4hdvc"
+  }
+}
+```
+
+| Field | Means |
+| --- | --- |
+| `message_id` | The target message. Required, and must belong to this conversation |
+| `part_id` | One exact part of that target. Omitted when the reply names the whole message |
+
+The client draws the quote from the target itself. Because the target can never
+change, the quote a reader sees and the message the reply points at are always
+the same thing, and there is no stored snapshot to fall out of date.
+
+A reader whose membership window does not include the target sees the reply and
+cannot read the target, so a reply can never carry history past a membership
+boundary.
+
+## Reactions
+
+A reaction targets a slot, and a slot is either the whole message or one exact
+part.
+
+| Request | Slot |
+| --- | --- |
+| No `target_part_id` | The whole message |
+| `target_part_id` | That part, of any kind |
+
+One reaction per actor per slot. Adding a second emoji to a slot replaces the
+first; removing one that is not there answers `200` with `changed: false`.
+Events are emitted only when `changed` is true, so a retry costs recipients
+nothing and no operation id is needed.
+
+## Text styles
+
+A text part carries formatting as ranges over its `text`, the way an attributed
+string does, rather than as markup inside it.
+
+| Style | Renders |
+| --- | --- |
+| `bold` | Bold |
+| `italic` | Italic |
+| `underline` | Underlined |
+| `strikethrough` | Struck through |
+
+Ranges are sorted by `start`, do not overlap, and measure `start` and `length`
+in UTF-16 code units. Any style name outside that list answers `422`.
+
+An empty `styles: []` is meaningful and is kept: it marks the part as structured
+plain text, which is how a client tells it apart from a legacy Markdown body.
+Omit the field entirely for a legacy body.
+
+## Mentions
+
+A text part carries one mention. `mention` is the handle it names, without the
+leading `@`, and `mention_range` is the `[start, end)` run of UTF-16 offsets
+over `text` that the mention marks.
+
+```json
+{
+  "type": "text",
+  "text": "Ask Hermes about the rooftop",
+  "mention": "hermes",
+  "mention_range": [4, 10]
+}
+```
+
+The ranged text is display text. It does not have to spell the handle, so a
+client inserts the name a person picked from its suggestions and the handle
+underneath still names the participant.
+
+The handle is what makes a mention confirmed. A client offers suggestions as
+someone types, and until one is picked the part carries no `mention` at all and
+the text is ordinary text.
+
+A message that mentions two people carries two text parts, one mention each.
+The text stays canonical, so a client that ignores the fields renders a correct
+sentence. A mention notifies the named participant in a group they have muted.
+
+## Handles are labels, not identities
+
+A handle is a mutable label over a stable participant id. Users and agents share
+one namespace, so a name is taken or free without reference to what kind of
+thing holds it.
+
+| Rule | Value |
+| --- | --- |
+| Format | `^[a-z][a-z0-9_]{2,31}$`, lowercased on write |
+| Reserved names | Refused with `409 handle_reserved` |
+| A name already in use | Refused with `409 handle_taken` |
+| A released name | Returns to the pool |
+
+Renaming closes the old label and opens the new one. No message row changes, and
+the old handle resolves to nobody rather than acting as an alias. Resolve
+handles to participant ids once and store the id.
+
+## Limits
+
+| Limit | Value |
+| --- | --- |
+| Parts per message | 32 |
+| Text per part | 8 KiB |
+| Data payload per part | 16 KiB |
+| Mentions per text part | 16 |
+| Style ranges per text part | 200 |
+| Media per part | 100 MB |
+| Send request body | 512 KB |
+| Poll question | 500 characters |
+| Poll options | 2 to 10, 200 characters each |
+
+## /v1 and /v2
+
+`/v1` and `/v2` are the same model over two wires. They read and write the same
+rows, so a message sent on one is a message the other serves, and both commit
+exactly one message per send.
+
+| Behaviour | `/v1` | `/v2` |
+| --- | --- | --- |
+| Send response | `{ "messages": [message] }`, an array of one | `{ "message": message }` |
+| Message id | Optional. Server-minted when absent | Required in the body |
+| Unknown request fields | Ignored | `422` |
+| `Idempotency-Key` header | Read only when it holds a `msg_` id | Not read |
+
+Nothing inside Relay holds a positional reference. That is what lets a client
+name a part once, in a reply or a reaction, and keep naming the same part.
+
+## See also
+
+- [Sending messages](/guides/sending-messages)
+- [Reactions](/guides/reactions)
+- [Limits](/reference/limits)
+- [Event types](/reference/events)
+- [Core concepts](/concepts)

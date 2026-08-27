@@ -130,11 +130,11 @@ Think owns the parts a channel needs, so you write none of them.
 | Surviving a restart mid-reply | The reply runs in a durable fiber, which Think replays or closes with its interruption message rather than risking a duplicate |
 | Bursts | The Chat SDK debounces a run of messages into one turn |
 
-Two Relay rules shape what arrives on the other end. A streamed turn commits
-exactly one canonical message, so the adapter buffers the stream and posts once
-instead of editing a draft bubble into place. In a group, the reply is scoped to
-the single-use `invocation_id` that produced the inbound event, so the first
-send of a turn carries it and a second one cannot.
+Two Relay rules shape what arrives on the other end. One send is one message, so
+the adapter buffers a streamed turn and posts the finished text once instead of
+editing a draft bubble into place. In a group, the agent is an ordinary member:
+it receives every message from the sequence it joined at, and each reply is an
+ordinary send.
 
 <Note>
 A runnable version of this is
@@ -237,7 +237,7 @@ extends the SDK's `Agent` class, and each row below is a stock part of the
 | `getAgentByName(namespace, name)` | `src/index.ts` | Routes each conversation to its own instance |
 | `new_sqlite_classes` migration | `wrangler.jsonc` | Gives the class its SQLite storage |
 
-The instance name is a digest of `conversation_id`, so every event for one
+The instance name is a digest of `chat_id`, so every event for one
 thread reaches one object and one ledger.
 
 <Warning>
@@ -255,9 +255,8 @@ Each row is a contract from these docs that the starter implements.
 | --- | --- |
 | [Signature verification](/guides/webhooks) | Standard Webhooks HMAC over the exact raw body, checked before anything parses it. An unsigned, tampered, or stale request gets `401` |
 | [At-least-once delivery](/guides/delivery-model) | `202` is returned only after the ledger row and the alarm both exist. Anything earlier returns `5xx`, so Relay redelivers rather than dropping the reply |
-| One reply per user turn | A single send can arrive as several `message.received` events, one per committed message. Events collect into a turn, matched on `invocation_id` or a two second window in direct conversations, and the turn gets one reply |
-| [Idempotent sends](/guides/sending-messages) | The reply key carries a digest of the reply itself, so a retry writing the same words replays and a retry writing different words gets a new key instead of `409 idempotency_conflict` |
-| [Group invocations](/guides/group-conversations) | `invocation_id` threads into the reply, the read call, and the typing calls |
+| One reply per user turn | Each send arrives as one `message.received` event. Events that land inside a two second window collect into a turn, and the turn gets one reply |
+| [Idempotent sends](/guides/sending-messages) | The reply's `message_id` carries a digest of the reply itself, so a retry writing the same words replays the stored message and a retry writing different words mints a new id instead of taking `409 idempotency_conflict` |
 | [Read receipts](/guides/read-receipts) and [typing](/guides/typing-indicators) | The message is marked read and typing starts before model work, so the sender sees Read while they wait |
 | Surviving eviction | Replies are armed with `schedule()`, which sets a Durable Object alarm and wakes an evicted instance on its own. `queue()` would strand the reply |
 | Retries | A failed turn backs off to a ceiling of fifteen minutes across six attempts. A `4xx` from Relay is terminal and is not retried |
@@ -279,8 +278,8 @@ async generateReply(text: string, mediaCount: number, handle: string): Promise<s
 }
 ```
 
-`text` is the whole user turn, with the split messages of one send joined back
-in order. `mediaCount` is how many media parts came with it, for a model that
+`text` is the whole user turn, with the messages of a burst joined back in
+order. `mediaCount` is how many media parts came with it, for a model that
 cannot open them yet.
 
 Call any model from there. A Workers AI example is commented directly above the
@@ -306,15 +305,12 @@ Keep the call inside the Worker CPU budget. Longer work belongs behind another
 The starter needs the Agents SDK, because the ledger, the state, and the alarm
 are the SDK's. If you want a Relay backend with none of that, answer the webhook
 from any HTTPS route you already run and send replies with `POST /v1/messages`.
-[Webhooks](/guides/webhooks) has the verification steps, and
-[Vercel AI SDK](/integrations/vercel-ai-sdk) is that shape as a published
-package. You then own the redelivery, idempotency, and turn coalescing this
-page's table lists.
+[Webhooks](/guides/webhooks) has the verification steps. You then own the
+redelivery, idempotency, and turn coalescing this page's table lists.
 
 ## Next steps
 
 - [Webhooks](/guides/webhooks) for registration, verification, and secret rotation
 - [Sending messages](/guides/sending-messages) for every part type beyond text
-- [Group conversations](/guides/group-conversations) for `invocation_id`
-- [Streaming replies](/guides/streaming) for what Relay does with a stream
+- [Group conversations](/guides/group-conversations) for how an agent takes part in a group
 - [Integrations](/integrations) for every way to connect an agent

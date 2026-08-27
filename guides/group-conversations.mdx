@@ -1,48 +1,52 @@
 ---
 title: "Group conversations"
-description: "Receive explicit invocations in a group, reply to them, and follow membership changes."
-keywords: ["groups", "group conversations", "invocation", "invocation_id", "mention", "invites"]
+description: "Receive every group message from the sequence your agent joined at, reply into the group, and follow membership changes."
+keywords: ["groups", "group conversations", "membership", "participants", "notice", "participant.added"]
 ---
 
-An agent added to a group receives only the messages that invoke it, plus its
-own replies. It never receives the rest of the conversation, including anything
-the group said before the agent was added.
-
-Reading history does not widen that scope. `GET
-/v1/conversations/{id}/messages` returns the same invocation-scoped set, so
-there is no route to the group transcript. See [conversation
+An agent in a group is an ordinary member. From the sequence it joined at it
+receives every message the group sends, and `GET
+/v1/chats/{id}/messages` returns that same history. See [conversation
 history](/guides/conversation-history).
+
+Membership is what grants access. A member added later starts at the sequence
+of the add, and a member added back after a removal starts again at the
+sequence of the re-add.
 
 ```mermaid
 flowchart TB
   subgraph G["Group conversation"]
-    M1["Alice: dinner Thursday?"]
-    M2["Bob: works for me"]
-    M3["Alice: @scheduler when are we free?"]
+    M1["seq 8: Alice adds @scheduler"]
+    M2["seq 9: Alice: dinner Thursday?"]
+    M3["seq 10: Bob: works for me"]
   end
-  M1 -.->|not delivered| X["Your backend"]
-  M2 -.->|not delivered| X
-  M3 ==>|"message.received<br/>+ invocation_id"| X
-  X ==>|"POST /v1/messages<br/>+ invocation_id"| G
+  M1 ==>|"participant.added"| X["Your backend"]
+  M2 ==>|"message.received"| X
+  M3 ==>|"message.received"| X
+  X ==>|"POST /v1/messages"| G
 ```
 
-## Receive an invocation
+## Receive a group message
 
-A group `message.received` carries an extra `data.invocation_id` alongside the
-usual message envelope.
+Every group message arrives as `message.received`, with the same envelope a
+direct conversation uses.
 
 ```json
 {
   "event_type": "message.received",
   "agent_id": "agt_01JZRELAY",
+  "chat_id": "cnv_01JZC7K4RQ",
   "data": {
-    "invocation_id": "ivk_01k1m4q9vn2r7t9b4c6qdh8xwy",
     "message": {
       "id": "msg_01JZM3T8AH",
-      "conversation_id": "cnv_01JZC7K4RQ",
+      "chat_id": "cnv_01JZC7K4RQ",
       "sequence": 12,
-      "sender": { "kind": "user", "id": "usr_01JZU1F0BD" },
-      "parts": [{ "part_index": 0, "type": "text", "text": "@scheduler when are we free?" }],
+      "item_type": 0,
+      "sender_handle": { "kind": "user", "id": "usr_01JZU1F0BD" },
+      "is_from_me": false,
+      "parts": [{ "part_id": "prt_01JZM3T8AJ", "part_index": 0, "type": "text", "text": "when are we free?" }],
+      "reply_to": null,
+      "text": "when are we free?",
       "status": "sent",
       "created_at": "2026-07-17T12:00:00.000Z"
     }
@@ -50,147 +54,113 @@ usual message envelope.
 }
 ```
 
-Store `invocation_id` with the `event_id` you are already deduplicating on. The
-reply is rejected without it.
+A group message's `status` is always `sent`. Relay reports no per-recipient
+delivery or read stamps in a group, the way iMessage does not. See [read
+receipts](/guides/read-receipts).
 
-## Reply to an invocation
+## Reply in a group
 
-Reply as you would in a direct conversation, and pass the `invocation_id` back.
+Reply as you would in a direct conversation. Mint the `message_id` yourself and
+reuse it on every retry, so a retry replays the stored message instead of
+posting twice.
 
 ```bash
-curl -sS -X POST "$RELAY_API_URL/v1/messages" \
+curl -sS -X POST "https://api.relayapp.im/v1/messages" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
-  -H "Idempotency-Key: reply-evt_01JZE9M2XW" \
   -d '{
-    "conversation_id": "cnv_01JZC7K4RQ",
-    "invocation_id": "ivk_01k1m4q9vn2r7t9b4c6qdh8xwy",
+    "message_id": "msg_01k1m4q9vn2r7t9b4c6qdh8xwy",
+    "chat_id": "cnv_01JZC7K4RQ",
     "parts": [{ "type": "text", "text": "Thursday after 4pm works for everyone." }]
   }'
 ```
 
-A streaming reply carries it as a **query parameter**, not a body field:
-
-```bash
-curl -sS -X POST \
-  "$RELAY_API_URL/v1/messages?stream=true&conversation_id=cnv_01JZC7K4RQ&invocation_id=ivk_01k1m4q9vn2r7t9b4c6qdh8xwy" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Idempotency-Key: reply-evt_01JZE9M2XW" \
-  -H "Content-Type: text/event-stream" \
-  -H "x-vercel-ai-ui-message-stream: v1" \
-  --data-binary @reply.sse
-```
-
-An invocation is consumed once. Reuse the same `Idempotency-Key` to retry a
-reply safely. Never reuse the `invocation_id` for a second, different message.
-
-Relay creates an invocation in three cases:
-
-- The sender names your agent in `invoked_agent_ids`.
-- The sender replies to your agent's active message.
-- A human text part [mentions your agent](/guides/sending-messages).
-
-All three arrive as `message.received` with a `data.invocation_id`. A
-mention uses `method: "mention"`. When the invoking send committed several
-messages, every one of those events carries the same `invocation_id`; reply
-once, it stays single-use.
-
-### Invocation errors
-
-| Status | Message | Cause |
-| --- | --- | --- |
-| `403 forbidden` | `group agent replies require invocation_id` | A group reply omitted it |
-| `403 forbidden` | `group agent streams require invocation_id` | A group stream omitted the query parameter |
-| `403 forbidden` | `invocation is invalid, completed, or belongs to another agent` | The invocation was already consumed, or is not yours |
-| `403 forbidden` | `invocation belongs to an ended membership period` | Your agent was removed and re-added since |
-| `403 forbidden` | `message is outside this agent's invocation scope` | The reply targets content you were never invoked on |
-| `422 invalid_request` | `invocation_id must be a Relay invocation id` | Malformed ID |
+Relay answers `202` with `{ message_id, message }`. See [sending
+messages](/guides/sending-messages) for every part type.
 
 ## Lifecycle events
 
-Relay emits these to every active group agent.
+Relay emits these to an agent in a group.
 
 | Event | Emitted when |
 | --- | --- |
-| `conversation.added` | A human adds your agent to a group |
-| `conversation.updated` | A human renames the group or changes its avatar |
-| `conversation.removed` | A human removes your agent |
+| `participant.added` | A person adds your agent to a group |
+| `chat.group_name_updated` | The roster or the group's title or avatar changes while your agent is a member |
+| `participant.removed` | A person removes your agent |
 
 Each payload carries these fields:
 
 | Field | Contents |
 | --- | --- |
-| `conversation_id` | The group the change happened in |
-| `actor` | The human who made the change |
-| `affected_participant` | The targeted participant, when the mutation targets one |
-| `membership_version` | The current membership version |
-| `system_mutation` | The change, with old and new values |
-| `message` | The system message stored in the conversation |
+| `chat_id` | The group the change happened in |
+| `actor` | The person who made the change |
+| `affected_participant` | The participant the change targeted. Roster changes only |
+| `membership_version` | The roster version after the change. Roster changes only |
+| `changes` | The old and new values. Title and avatar changes only |
+| `updated_at` | When the metadata changed. Title and avatar changes only |
 
 Full payloads are in [event types](/reference/events).
 
-## Propose a group
+## The notice in the transcript
 
-`POST /v1/groups/invites` commits the invite into each target's direct
-conversation with your agent: a text message carrying the `reason` when one
-was given, then the consent card message. Every target must already have your
-agent added. Each person answers for themselves.
+A membership or metadata change also commits a message into the conversation,
+sent by the person who caused it. It arrives separately as `message.received`,
+carries `kind: "notice"`, and holds a text part to render plus a `data` part
+naming the change.
 
-```bash
-curl -sS -X POST "$RELAY_API_URL/v1/groups/invites" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: invite-founders-dinner" \
-  -d '{
-    "title": "Founders dinner",
-    "user_ids": ["usr_01K1M8ALICE", "usr_01K1M8BOB"],
-    "reason": "You both asked for an introduction"
-  }'
+```json
+{
+  "id": "msg_01K1M9NOTICE",
+  "chat_id": "cnv_01JZC7K4RQ",
+  "sequence": 8,
+  "item_type": 1,
+  "sender_handle": { "kind": "user", "id": "usr_01JZU1F0BD" },
+  "is_from_me": false,
+  "parts": [
+    { "part_id": "prt_01K1M9NOT01", "part_index": 0, "type": "text", "text": "Scheduler was added" },
+    {
+      "part_id": "prt_01K1M9NOT02",
+      "part_index": 1,
+      "type": "data",
+      "data": {
+        "type": "group.mutation",
+        "mutation": "membership.added",
+        "actor": { "kind": "user", "id": "usr_01JZU1F0BD" },
+        "affected_participant": { "kind": "agent", "id": "agt_01JZRELAY" },
+        "changes": {
+          "state": { "old": null, "new": "active" },
+          "membership_version": { "old": 1, "new": 2 }
+        }
+      }
+    }
+  ],
+  "reply_to": null,
+  "text": "Scheduler was added",
+  "status": "sent",
+  "created_at": "2026-07-17T11:59:40.000Z"
+}
 ```
 
-- **The first accept** creates the conversation and puts that person in it
-  beside your agent.
-- **Every later accept** joins the same conversation right away.
-- **The invite stays open** for whoever has not answered yet.
-
-| Invite `state` | Meaning | Conversation |
-| --- | --- | --- |
-| `pending` | Open, nobody has joined yet | Not created, unless the invite targeted an existing group; then `conversation_id` names it |
-| `active` | Open, at least one person joined | Live, at `conversation_id` |
-| `completed` | Closed because everyone answered or the deadline passed | Live, at `conversation_id` |
-| `expired` | Closed with nobody joined | Never created |
-
-| Member `state` | Meaning |
+| `mutation` | Committed when |
 | --- | --- |
-| `invited` | Has not answered yet |
-| `accepted` | Joined the live conversation |
-| `declined` | Answered no, and stays out of the conversation |
+| `group.created` | A person creates the group |
+| `metadata.updated` | A person changes the title or avatar |
+| `membership.added` | A person adds a participant |
+| `membership.removed` | A person removes a participant |
+| `membership.left` | A person leaves the group |
 
-Read one member's `state` to know whether that person is in the conversation. A
-`conversation_id` on a `pending` invite names the destination group your agent
-proposed into. It tells you where the invite leads, not who consented.
-
-| Event | Emitted when |
-| --- | --- |
-| `group.invite.joined` | One person accepts. Carries `conversation_id` and `user_id` |
-| `group.invite.declined` | One person declines. Carries `user_id` |
-| `group.invite.completed` | The invite closes with a live conversation |
-| `group.invite.expired` | The invite closes with nobody joined |
-
-<Info>
-A decline answers for that person alone. It removes nobody from a live
-conversation and leaves the invite open for everyone still deciding.
-</Info>
+<Note>
+Render the text part and treat the `data` part as the machine-readable form of
+the same fact. The two describe one change.
+</Note>
 
 ## Limits
 
 | Limit | Value |
 | --- | --- |
 | Participants per group | 25, including every human and agent |
-| Historical participants tracked | 100 |
+| Members selected at creation | At least 2, besides the creator |
 | Group title | 1 to 100 characters |
-| Agents required per group | At least 1 |
-| Invocation stream claim | 5 minutes |
 
 ## Who does what
 
@@ -203,10 +173,9 @@ person's Relay session. There is no Agent Token route for them.
 | Add or remove a participant | A person, in the app |
 | Rename the group or change its avatar | A person, in the app |
 | Leave the group | A person, in the app |
-| Invoke an agent | A person, in the app |
-| Reply to an invocation | Your backend |
-| Send a group invite card | Your backend, via `POST /v1/groups/invites`; the person consents in the app |
-| Accept or decline an invite | A person, in the app |
+| Send a message into the group | Your backend, via `POST /v1/messages` |
+| React to a group message | Your backend, or a person in the app |
+| Read the group's history | Your backend, via `GET /v1/chats/{id}/messages` |
 
 <Note>
 Fuller agent-initiated group management is on the [API availability](/roadmap).
@@ -216,5 +185,5 @@ Fuller agent-initiated group management is on the [API availability](/roadmap).
 
 - [Event types](/reference/events) for the exact lifecycle payloads
 - [Sending messages](/guides/sending-messages) for every part type
-- [Streaming replies](/guides/streaming)
+- [Conversation history](/guides/conversation-history) to rebuild a group prompt window
 - [Developer data access and retention](/reference/data-and-permissions)
