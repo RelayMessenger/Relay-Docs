@@ -11,7 +11,7 @@ that person with a session bearer.
 | Credential | Value | Held by | Reaches |
 | --- | --- | --- | --- |
 | Agent Token | `rly_live_…` | Your agent backend | The `/v1` agent surface, scoped to one agent |
-| Session bearer | An opaque token | The Relay app, or a paired terminal | The signed-in person's own routes, including agent creation and token rotation |
+| Session bearer | An opaque token | The Relay app, or a paired terminal | The signed-in person's own routes |
 
 ## Authenticate as an agent
 
@@ -25,32 +25,18 @@ curl -sS "https://api.relayapp.im/v1/agents/me" \
 `GET /v1/agents/me` verifies the token and returns the agent's `id`, `handle`,
 and profile.
 
-## Mint an Agent Token
+## Get an Agent Token
 
-`POST /v1/me/agents` creates an agent owned by the signed-in person and returns
-its token. This is the only response that carries the token, so store it before
-you do anything else.
-
-```bash
-curl -sS -X POST "https://api.relayapp.im/v1/me/agents" \
-  -H "Authorization: Bearer $RELAY_SESSION_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{ "handle": "scheduler", "displayName": "Scheduler" }'
-```
-
-Relay returns `201`:
-
-| Field | What it is |
-| --- | --- |
-| `agent` | The new agent's profile |
-| `token` | The `rly_live_…` Agent Token, returned once and never again |
-| `chat_id` | The owner's direct conversation with the new agent |
+An agent, and the Agent Token that authenticates it, comes from
+[Relay for Business](/business). Relay shows the `rly_live_…` value once, when
+the agent is created, and never returns it again. Store it before you do
+anything else.
 
 ## Pair a terminal
 
 A terminal bridge starts with no credential at all. Relay pairs it with RFC 8628
-device authorization, then the bridge provisions its own agent. The Agent Token
-never travels to the phone.
+device authorization, which gives the bridge a session bearer for the person who
+approved it. The Agent Token never travels to the phone.
 
 <Steps>
   <Step title="Ask for a code">
@@ -118,23 +104,17 @@ never travels to the phone.
     | `invalid_grant` | Stop. The device code is not usable |
   </Step>
 
-  <Step title="Provision the agent">
-    `access_token` is a session bearer, not an Agent Token. Use it once to call
-    `POST /v1/me/agents`, store the `rly_live_…` token that call returns, and
-    authenticate every later request with that token alone.
+  <Step title="Act as the person">
+    `access_token` is a session bearer, not an Agent Token. It reaches the
+    signed-in person's own routes. The bridge's agent authenticates separately,
+    with the `rly_live_…` token it was given when the agent was created.
   </Step>
 </Steps>
 
 ## Rotate a token
 
-`POST /v1/me/agents/{agent_id}/tokens/rotate` mints a replacement with the
-owner's session and returns `201 { agent_id, token }`.
-
-```bash
-curl -sS -X POST \
-  "https://api.relayapp.im/v1/me/agents/agt_01JZRELAY/tokens/rotate" \
-  -H "Authorization: Bearer $RELAY_SESSION_TOKEN"
-```
+Rotate an Agent Token where the agent was created, in
+[Relay for Business](/business).
 
 <Warning>
 Rotation disables every previous token immediately. Deploy the new token before

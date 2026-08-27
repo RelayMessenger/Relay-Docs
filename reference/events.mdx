@@ -14,7 +14,7 @@ Every event uses the same envelope:
   "agent_id": "agt_01JZRELAY",
   "chat_id": "cnv_01JZC7K4RQ",
   "created_at": "2026-07-12T01:21:03.000Z",
-  "schema_version": "2026-08-24",
+  "webhook_version": "2026-08-27",
   "data": { }
 }
 ```
@@ -28,13 +28,13 @@ you have processed as `after` on the next [`GET /v1/events`](/guides/long-pollin
 Webhook deliveries carry the same number, so a consumer that runs both
 transports reads one ordering.
 
-`schema_version` is the envelope shape this delivery was rendered as. It is a
+`webhook_version` is the envelope shape this delivery was rendered as. It is a
 date rather than an integer: pin the day the shape you wrote against was
 frozen. It is repeated inside the body so a consumer that queues the envelope
 still has it an hour later, and so it sits inside the signed bytes.
 
 Additive members never bump that date, so ignore fields you do not recognise
-too, not just event types you did not subscribe to. See
+as well as event types you do not. See
 [Versioning and deprecation](/guides/webhooks#versioning-and-deprecation).
 
 See [Delivery model](/guides/delivery-model) for webhook acknowledgement,
@@ -166,8 +166,7 @@ A participant added or removed a reaction on the agent's message.
     "type": "custom",
     "custom_emoji": "🔥",
     "actor": { "kind": "user", "id": "usr_01k1m8t3zq7v2r9c4b6ndh5xwj" },
-    "operation": "add",
-    "changed": true
+    "operation": "add"
   }
 }
 ```
@@ -175,10 +174,13 @@ A participant added or removed a reaction on the agent's message.
 | Field | Contents |
 | --- | --- |
 | `target_part_id` | The part this reaction is anchored to, and the identity for it. Null when the reaction is on the whole message |
-| `type` | One of `love`, `like`, `dislike`, `laugh`, `emphasize`, `question`, `custom` — Apple's six tapback verbs plus a custom emoji |
+| `type` | One of `love`, `like`, `dislike`, `laugh`, `emphasize`, `question`, `custom`, Apple's six tapback verbs plus a custom emoji |
 | `custom_emoji` | The emoji, present exactly when `type` is `custom` |
 | `actor.kind` | `user` or `agent` |
-| `changed` | Always true on an emitted event. Relay emits nothing for a no-op |
+
+Relay emits an event only for a reaction that changed something, so there is no
+`changed` member here. The reaction endpoint's own response carries it, and
+that is the only place a no-op is reported.
 
 A message projected in history carries its reactions in the flatter
 `reactions[]` shape, which uses `actor_kind` and `actor_id` in place of a
@@ -200,7 +202,9 @@ Roster events (`participant.added` / `participant.removed`) carry:
 | `chat_id` | The group the change happened in |
 | `actor` | The person who made the change |
 | `affected_participant` | The participant added or removed. On a leave, the actor and the affected participant are the same person |
-| `membership_version` | The roster version after the change |
+
+Roster changes are ordered by the event's own `sequence`. There is no separate
+roster version.
 
 Metadata events (`chat.group_name_updated` / `chat.group_icon_updated`) carry:
 
@@ -217,8 +221,7 @@ Metadata events (`chat.group_name_updated` / `chat.group_icon_updated`) carry:
 {
   "chat_id": "cnv_01JZC7K4RQ",
   "actor": { "kind": "user", "id": "usr_01JZU1F0BD" },
-  "affected_participant": { "kind": "agent", "id": "agt_01JZRELAY" },
-  "membership_version": 2
+  "affected_participant": { "kind": "agent", "id": "agt_01JZRELAY" }
 }
 ```
 
@@ -243,11 +246,18 @@ the person who made the change. A leave is a `participant.removed` whose
 A backend receives these lifecycle events, but cannot create a group or change
 its membership. People do that in the app. See [API availability](/roadmap).
 
-## Not in the event log
+## Not delivered to an agent
 
 Typing is ephemeral. `chat.typing_indicator.started` and `chat.typing_indicator.stopped` are pushed to a
 person's live devices, take no sequence, never enter the log, and are never
 replayed. See [Typing indicators](/guides/typing-indicators).
+
+Install events go to the person, not to the agent. `agent.installed` carries
+`{ agent_id }` and `agent.removed` carries `{ agent_id, removed_at }`, and both
+land in the log of the person whose agent list changed. They drive that
+person's app; neither reaches a webhook receiver or `GET /v1/events`. Your
+first sign that somebody installed your agent is the `message.received` they
+send.
 
 ## Specified, coming soon
 
@@ -258,7 +268,6 @@ The Relay contract also defines these. v0 emits none of them.
 | ⏳ | `message.failed` |
 | ⏳ | Typing events entering the event log |
 | ⏳ | `attachment.available` |
-| ⏳ | Install events |
 | ⏳ | The `call.*` family |
 
 See [API availability](/roadmap).

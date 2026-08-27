@@ -23,8 +23,9 @@ endpoints, fields, or limits.
 
 1. Ask the user for their Agent Token (`rly_live_…`, shown once at agent
    creation). Store it in `RELAY_AGENT_TOKEN`. Verify with `GET /v1/agents/me`.
-2. Register a public HTTPS endpoint with `POST /v1/webhooks`. Store the
-   `signing_secret` from the response; it is never returned again.
+2. Set a public HTTPS receiver with `PUT /v1/webhook` and a body of
+   `{"url": "https://..."}`. Store the `signing_secret` from the response; it
+   is never returned again.
 3. On each delivery: verify the Standard Webhooks signature
    (`webhook-id`, `webhook-timestamp`, `webhook-signature` headers) over the
    exact raw body, reject timestamps older than five minutes, return `2xx`

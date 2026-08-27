@@ -38,8 +38,7 @@ tags:
       Device authorization (RFC 8628) for terminal bridges. Four calls, in this
       order: the computer asks for a code, the person opens the verification URI
       so the code is claimed for their account, the person approves it, and the
-      computer exchanges the code for a session it uses to provision its agent
-      and mint that agent's token. The token never travels to the phone.
+      computer exchanges the code for a session.
   - name: Public
     description: Share profiles.
 
@@ -530,88 +529,19 @@ paths:
         "503":
           $ref: "#/components/responses/CommitUnavailable"
 
-  /v1/webhooks:
+  /v1/webhook:
     get:
       tags: [Events]
-      summary: List webhooks
-      description: List the authenticated agent's webhook endpoints, newest first. Signing secrets are never returned.
-      operationId: listWebhooks
+      summary: Read the webhook receiver
+      description: >
+        Read the authenticated agent's receiver. `transport` is the switch:
+        `webhook` means Relay POSTs events to `url`, `polling` means the agent
+        reads them with `GET /v1/events`. The signing secret is never returned
+        here.
+      operationId: getWebhook
       responses:
         "200":
-          description: Registered webhook endpoints.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [webhooks]
-                properties:
-                  webhooks:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/WebhookEndpoint"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-    post:
-      tags: [Events]
-      summary: Register a webhook
-      description: >
-        Register a public HTTPS receiver. The signing secret is returned only
-        in this response. An agent may have up to five enabled endpoints.
-      operationId: createWebhook
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/WebhookCreateInput"
-      responses:
-        "201":
-          description: Webhook registered; store the signing secret now.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/WebhookSecretResponse"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "409":
-          description: >
-            `conflict`: this URL is already registered. `limit_exceeded`: five
-            endpoints already exist.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "422":
-          description: Invalid URL or event filter.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "429":
-          $ref: "#/components/responses/WriteBudgetExceeded"
-        "503":
-          $ref: "#/components/responses/WebhookDeliveryUnavailable"
-
-  /v1/webhooks/{webhook_id}:
-    parameters:
-      - $ref: "#/components/parameters/WebhookId"
-    patch:
-      tags: [Events]
-      summary: Update a webhook
-      description: >
-        Change the URL, event filters, or enabled state. At least one field is
-        required. Disabling stamps `disabled_at` and records
-        `disabled_by_agent`.
-      operationId: updateWebhook
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/WebhookUpdateInput"
-      responses:
-        "200":
-          description: Updated endpoint.
+          description: The agent's receiver.
           content:
             application/json:
               schema:
@@ -619,66 +549,42 @@ paths:
                 required: [webhook]
                 properties:
                   webhook:
-                    $ref: "#/components/schemas/WebhookEndpoint"
+                    $ref: "#/components/schemas/Webhook"
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "404":
-          description: Webhook not found.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "409":
-          description: URL already registered, or five enabled endpoints already exist.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "422":
-          description: Invalid update.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-    delete:
+    put:
       tags: [Events]
-      summary: Delete a webhook
-      description: Permanently deletes the endpoint and stops new deliveries to it.
-      operationId: deleteWebhook
-      responses:
-        "204":
-          description: Webhook deleted.
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          description: Webhook not found.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-
-  /v1/webhooks/{webhook_id}/rotate-secret:
-    parameters:
-      - $ref: "#/components/parameters/WebhookId"
-    post:
-      tags: [Events]
-      summary: Rotate a webhook secret
+      summary: Set the webhook receiver
       description: >
-        Returns a new signing secret once. For 24 hours Relay includes
-        signatures from both the new and previous secret for zero-downtime
-        rotation.
-      operationId: rotateWebhookSecret
+        Set the receiver URL and switch the agent to the `webhook` transport.
+        A signing secret is minted only when the agent has none, and its
+        plaintext is returned only in the response that minted it. An agent has
+        one receiver, so calling this again replaces the URL and keeps the
+        existing secret, and the response then carries no `signing_secret`. To
+        rotate, `DELETE` the receiver and `PUT` it again.
+      operationId: setWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookInput"
       responses:
         "200":
-          description: Secret rotated; store the new secret now.
+          description: Receiver set; store the signing secret now.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/WebhookSecretResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "404":
-          description: Webhook not found.
+        "422":
+          description: >
+            `invalid_request`: the body is not a JSON object, carries a field
+            other than `url`, or `url` is not an absolute URL of 2048
+            characters or fewer. A URL carrying credentials or a fragment is
+            rejected, and in production so is a non-HTTPS URL or a private
+            host.
           content:
             application/json:
               schema:
@@ -687,6 +593,18 @@ paths:
           $ref: "#/components/responses/WriteBudgetExceeded"
         "503":
           $ref: "#/components/responses/WebhookDeliveryUnavailable"
+    delete:
+      tags: [Events]
+      summary: Remove the webhook receiver
+      description: >
+        Clear the receiver and switch the agent back to `polling`. Events keep
+        accumulating in the agent's log, so read them with `GET /v1/events`.
+      operationId: deleteWebhook
+      responses:
+        "204":
+          description: Receiver cleared; the transport is now `polling`.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   /v1/events:
     get:
@@ -1224,10 +1142,10 @@ paths:
         wait longer, and `expired_token` or `access_denied` end the attempt.
 
 
-        A success returns a Relay user session. That session is not an Agent
-        Key: use it once to create the bridge's agent with `POST /v1/me/agents`,
-        store the `rly_live_…` key that call returns, and authenticate every
-        later API request with the token alone.
+        A success returns a Relay user session. That session acts as the person
+        who approved it, and it is not an Agent Token: the bridge's agent
+        authenticates separately with the `rly_live_…` token issued when that
+        agent was created.
       operationId: exchangeDeviceCode
       security: []
       requestBody:
@@ -1269,108 +1187,14 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeviceAuthorizationError"
 
-  /v1/me/agents:
-    post:
-      tags: [Pairing]
-      summary: Create an agent and mint its token
-      description: >
-        Creates an agent owned by the signed-in person and returns its Agent
-        Token. This is the only response that carries the token; store it now.
-        A terminal bridge calls this once, with the session it received from
-        the device flow, and then uses the token for everything else.
-      operationId: createOwnedAgent
-      security:
-        - userSession: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateAgentInput"
-      responses:
-        "201":
-          description: Agent created; store the token now.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [agent, token, chat_id]
-                properties:
-                  agent:
-                    $ref: "#/components/schemas/Agent"
-                  token:
-                    type: string
-                    pattern: "^rly_live_"
-                    description: The Agent Token. Returned once and never again.
-                  chat_id:
-                    type: string
-                    pattern: "^cnv_"
-                    description: The owner's direct conversation with the new agent.
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "409":
-          description: >
-            `handle_taken`: the handle is in use. `handle_reserved`: the handle
-            belongs to Relay.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "422":
-          description: An unsupported field is present, or the handle, name, tagline, or opening message is invalid.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "429":
-          $ref: "#/components/responses/WriteBudgetExceeded"
-
-  /v1/me/agents/{agent_id}/tokens/rotate:
-    post:
-      tags: [Pairing]
-      summary: Rotate an agent token
-      description: >
-        Disables every enabled token for one of the caller's agents and mints a
-        replacement. The old token stops working immediately, so update the
-        bridge before the next request.
-      operationId: rotateAgentToken
-      security:
-        - userSession: []
-      parameters:
-        - name: agent_id
-          in: path
-          required: true
-          schema: { type: string, pattern: "^agt_" }
-      responses:
-        "201":
-          description: New token minted; store it now.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [agent_id, token]
-                properties:
-                  agent_id: { type: string, pattern: "^agt_" }
-                  token:
-                    type: string
-                    pattern: "^rly_live_"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          description: No agent with this id belongs to the caller.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-
   /v1/agents/{handle}/profile:
     get:
       tags: [Public]
       summary: Public participant profile
       description: >
-        The profile behind a human username or an agent's public or unlisted
-        share link (`relayapp.im/@handle`). Private agents return 404. Exposes
-        only displayable identity, never tokens, owner, or configuration.
+        The profile behind a human username or an agent's share link
+        (`relayapp.im/@handle`). A suspended or retired identity returns 404.
+        Exposes only displayable identity, never tokens or configuration.
       operationId: getAgentProfile
       security: []
       parameters:
@@ -1392,7 +1216,7 @@ paths:
                   agent:
                     type: object
                     additionalProperties: false
-                    required: [handle, display_name, tagline, avatar_url, accent_color, kind, creator, visibility]
+                    required: [handle, display_name, tagline, avatar_url, accent_color, kind, creator]
                     properties:
                       handle:
                         type: string
@@ -1414,21 +1238,17 @@ paths:
                         enum: [user, agent]
                       creator:
                         description: >
-                          Who an unauthenticated reader may be told made this
-                          agent: the creator organization when there is one,
-                          otherwise the owner's username, and only for a public
-                          agent. Null for an unlisted agent and for a human.
+                          The creator organization behind the agent. Null when
+                          the agent has none, and always null for a human
+                          profile.
                         oneOf:
                           - type: object
                             additionalProperties: false
                             required: [kind, name]
                             properties:
-                              kind: { type: string, enum: [organization, person] }
+                              kind: { type: string, enum: [organization] }
                               name: { type: string }
                           - type: "null"
-                      visibility:
-                        type: string
-                        enum: [unlisted, public]
         "404":
           description: No public profile with that handle.
           content:
@@ -1443,7 +1263,7 @@ webhooks:
       summary: Receive an agent event
       operationId: receiveAgentEventWebhook
       description: >
-        Relay sends this request to each matching enabled endpoint. Verify the
+        Relay sends every deliverable event to the agent's receiver. Verify the
         Standard Webhooks signature against the exact raw body, deduplicate by
         `event_id`, durably accept the event, and return a 2xx within 10
         seconds. A 408, 429, or 5xx is retried; a 3xx or any other 4xx is a
@@ -1465,18 +1285,18 @@ webhooks:
           required: true
           schema: { type: string }
           description: >
-            Space-separated Standard Webhooks signatures such as `v1,<base64>`.
-            Two are present during the 24 hours after a secret rotation.
+            One or more space-separated Standard Webhooks signatures such as
+            `v1,<base64>`. Verify against any of them.
         - name: webhook-delivery-id
           in: header
           required: true
           schema: { type: string }
-          description: This endpoint's delivery row. Stable across retries, distinct per endpoint.
+          description: Relay's delivery row. Stable across retries, for correlating with Relay's logs rather than for dedupe.
         - name: relay-webhook-version
           in: header
           required: true
           schema: { type: string, format: date }
-          description: The envelope version this endpoint is pinned to.
+          description: The envelope version this delivery was rendered as.
       requestBody:
         required: true
         content:
@@ -1492,7 +1312,7 @@ components:
     agentToken:
       type: http
       scheme: bearer
-      description: Agent Token (`rly_live_…`), shown once when the agent is created.
+      description: Agent Token (`rly_live_…`), shown once when the agent is created in Relay Console.
     userSession:
       type: http
       scheme: bearer
@@ -1526,14 +1346,6 @@ components:
         type: string
         pattern: "^msg_[0-9a-hjkmnp-tv-z]{26}$"
       example: msg_01k1m4q9vn2r7t9b4c6qdh8xwy
-    WebhookId:
-      name: webhook_id
-      in: path
-      required: true
-      schema:
-        type: string
-        pattern: "^wh_"
-      example: wh_01JZWEBHOOK
 
   responses:
     Unauthorized:
@@ -1688,7 +1500,7 @@ components:
     AgentProfile:
       type: object
       additionalProperties: false
-      required: [id, handle, display_name, tagline, avatar_url, visibility, owner_user_id, created_at]
+      required: [id, handle, display_name, tagline, avatar_url, created_at]
       properties:
         id:
           type: string
@@ -1707,17 +1519,6 @@ components:
           format: uri
           maxLength: 2048
           pattern: "^https://(?![^/?#]*@)"
-        visibility:
-          type: string
-          enum: [private, unlisted, public]
-        owner_user_id:
-          type: [string, "null"]
-          description: >
-            The user who created and owns this agent. Gate inbound senders
-            against this id instead of trusting the first sender seen. Null
-            only for Relay system agents or after the owner deleted their
-            account.
-          example: usr_01JZU1F0BD
         created_at:
           type: string
           format: date-time
@@ -1760,46 +1561,6 @@ components:
           type: string
           format: date-time
 
-    CreateAgentInput:
-      type: object
-      additionalProperties: false
-      required: [handle, displayName]
-      description: >
-        Camel-cased, like the `Agent` projection it creates. Any field outside
-        this list answers 422 rather than being ignored.
-      properties:
-        handle:
-          type: string
-          pattern: "^[a-z][a-z0-9_]{2,31}$"
-          description: Lowercased on write. Reserved handles answer 409.
-          example: scheduler
-        displayName:
-          type: string
-          minLength: 1
-          maxLength: 80
-        tagline:
-          type: string
-          maxLength: 120
-        avatarUrl:
-          type: [string, "null"]
-          format: uri
-          maxLength: 2048
-          pattern: "^https://(?![^/?#]*@)"
-        accentColor:
-          type: [string, "null"]
-          example: "#0B75FF"
-        openingMessage:
-          type: [object, "null"]
-          description: >
-            The message the agent sends when someone installs it, as a `parts`
-            array. Null for no opening message.
-          properties:
-            parts:
-              type: array
-              minItems: 1
-              items:
-                $ref: "#/components/schemas/PartInput"
-
     Agent:
       type: object
       description: >
@@ -1815,7 +1576,6 @@ components:
         - handle
         - displayName
         - tagline
-        - visibility
         - status
         - createdAt
       properties:
@@ -1841,9 +1601,6 @@ components:
         accentColor:
           type: string
           example: "#0B75FF"
-        visibility:
-          type: string
-          enum: [private, unlisted, public]
         installation:
           $ref: "#/components/schemas/AgentInstallation"
         creator:
@@ -1869,33 +1626,22 @@ components:
     AgentInstallation:
       type: object
       description: >
-        User-agent messaging relationship, not a runtime connection. A false
-        canRemove hides and rejects ordinary removal; Block and Report remain
-        available as safety overrides.
+        Present exactly when this person has the agent installed, so the
+        block's presence is the relationship. All it carries is whether they
+        may leave: a false `canRemove` hides and rejects ordinary removal,
+        while Block and Report remain available as safety overrides.
       additionalProperties: false
-      required: [id, state, conversationId, canRemove]
+      required: [canRemove]
       properties:
-        id:
-          type: string
-          pattern: ^ins_
-        state:
-          type: string
-          enum: [installed, removed]
-        conversationId:
-          type: string
-          pattern: ^cnv_
         canRemove:
           type: boolean
 
     AgentCreator:
       type: object
       description: >
-        Who is accountable for the agent, as the app shows it under Creator on
-        the profile. `kind` is `organization` for a business creator and
-        `person` for an account that made the agent in the app; a person's
-        `display_name` and `avatar_url` ride along only on a public agent.
-        Organization values reflect the creator's live record, so a rename or
-        a new logo reaches every one of that creator's agents without a
+        The organization accountable for the agent, as the app shows it under
+        Creator on the profile. Values reflect the creator's live record, so a
+        rename reaches every one of that creator's agents without a
         resubmission. Sub-keys are snake_case.
       additionalProperties: false
       required: [id, name, verified]
@@ -1908,42 +1654,19 @@ components:
           example: Relay
         kind:
           type: string
-          enum: [person, organization]
+          enum: [organization]
           description: Absent on older servers, which clients must read as `organization`.
-        display_name:
-          type: string
-          description: Person creators on a public agent only.
-        avatar_url:
-          type: string
-          format: uri
-          maxLength: 2048
-          pattern: "^https://(?![^/?#]*@)"
-          description: Person creators on a public agent only.
         domain:
           type: string
           description: >
             The creator's verified domain. Omitted when the creator has not
             verified one.
           example: relayapp.im
-        logo_url:
-          type: string
-          format: uri
-          maxLength: 2048
-          pattern: "^https://(?![^/?#]*@)"
-          description: Square creator mark. Omitted when the creator has set none.
-        support_url:
-          type: string
-          format: uri
-          maxLength: 2048
-          pattern: "^https://(?![^/?#]*@)"
-          description: >
-            Where a user reaches the creator about this agent. Omitted when
-            the creator has set none.
         verified:
           type: boolean
           description: >
             True when Relay has verified the creator's domain and the creator
-            is not suspended. A person creator is never verified.
+            is not suspended.
 
     PartInput:
       oneOf:
@@ -2095,18 +1818,31 @@ components:
           type: string
           maxLength: 512
           description: >
-            Optional page title you resolved for this URL. Relay carries the
-            sender's metadata with the message rather than fetching the page
-            for each recipient, the way Signal carries an OWSLinkPreviewDraft
-            and iMessage carries an LPLinkMetadata, so no recipient opens a
-            connection to a URL somebody else chose. Send it with the
-            message: Relay never backfills it later.
+            Optional page title you resolved for this URL. Relay stores it
+            with the part and echoes it back, so no recipient opens a
+            connection to a URL somebody else chose.
+        preview_state:
+          type: string
+          enum: [pending]
+          description: >
+            Send `pending` when you have not resolved the page yourself and
+            want Relay to. The message commits immediately with the part
+            marked pending, Relay fetches the page, and a `message.updated`
+            event carries the settled title. Relay always settles it: a page
+            with no title clears the marker too, so a pending part is a
+            preview that is coming, never one that silently failed.
         description:
           type: string
           maxLength: 512
+          deprecated: true
           description: >
-            Optional page description you resolved for this URL, carried
-            with the same rules as title.
+            Accepted and ignored. A link part stores its URL and a title and
+            nothing else; the description, hero image and site name a card
+            draws come from `GET /v1/links/unfurl` at render time. Older
+            senders may still include it (along with `preview_version`,
+            `preview_kind`, `canonical_url`, `site_name`, `image_url`,
+            `attachment_id`, `mime_type`, `filename`, `size_bytes`, `width`,
+            `height` and `blur_hash`) and are not rejected for it.
 
     DataPartInput:
       type: object
@@ -2372,16 +2108,18 @@ components:
           type: string
           maxLength: 512
           description: >
-            Page title the sender resolved, present only when the sender
-            sent one. Relay carries the sender's metadata and never fetches
-            the page on a recipient's behalf, so a part with neither title
-            nor description renders as a plain link.
-        description:
+            The page title, present only once somebody has read the page:
+            the sender resolved it, or Relay did while settling a pending
+            preview. A part with no title renders as a plain link.
+        preview_state:
           type: string
-          maxLength: 512
+          enum: [pending]
           description: >
-            Page description the sender resolved, present under the same
-            rule as title.
+            Present only while Relay is still fetching the page. A settled
+            part carries no `preview_state` key at all, which is the same
+            shape a bare link has always had. Everything else a card draws --
+            description, hero image, site name -- is live detail from
+            `GET /v1/links/unfurl`, not something the message stores.
 
     DataPart:
       type: object
@@ -2742,12 +2480,11 @@ components:
       additionalProperties: false
       required: [message_id, target_part_id, type, actor, operation, changed]
       description: >
-        One reaction as Relay recorded it. The same object is the reaction
-        endpoint's response body and the `data.reaction` of a `reaction.added`
-        or `reaction.removed` event, so a consumer reads one shape from both
-        paths. It is flatter than the `reactions` array in a projected message,
-        which carries `actor_kind` and `actor_id` instead of a nested actor:
-        see ProjectedReaction.
+        One reaction as Relay recorded it, in the reaction endpoint's response
+        body. The event that follows carries the same members minus `changed`:
+        see ReactionEventData. Both are flatter than the `reactions` array in a
+        projected message, which carries `actor_kind` and `actor_id` instead of
+        a nested actor: see ProjectedReaction.
       properties:
         message_id: { type: string, pattern: "^msg_" }
         target_part_id:
@@ -2823,108 +2560,59 @@ components:
         - reaction.added
         - reaction.removed
 
-    WebhookEndpoint:
+    Webhook:
       type: object
-      required: [id, url, events, enabled, secret_prefix, created_at, updated_at]
+      additionalProperties: false
+      required: [url, transport]
+      description: >
+        An agent's one receiver. Every deliverable event type goes to it: an
+        agent chooses a transport, not a filter, so there is no per-receiver
+        subscription list and no enabled flag.
       properties:
-        id:
-          type: string
-          example: wh_01JZWEBHOOK
         url:
-          type: string
+          type: [string, "null"]
           format: uri
+          maxLength: 2048
+          description: Null when the agent has no receiver set.
           example: https://agent.example/webhooks/relay
-        events:
-          type: array
-          minItems: 1
-          uniqueItems: true
-          items:
-            $ref: "#/components/schemas/WebhookEventType"
-        enabled:
-          type: boolean
-        secret_prefix:
-          type: string
-          description: Non-secret prefix for identifying the configured signing key.
-          example: whsec_MfKQ9r8G…
-        schema_version:
-          type: string
-          format: date
-          example: "2026-08-24"
+        transport:
+          type: [string, "null"]
+          enum: [webhook, polling, null]
           description: >
-            The envelope shape this endpoint is pinned to. Versions are dates,
-            not integers: pin the day the shape you wrote against was frozen.
-            An endpoint keeps the date it was created with; nothing migrates it
-            silently.
-        deprecated_after:
-          type: [string, "null"]
-          format: date-time
-          description: >
-            When `schema_version` stops being served for this endpoint. Null
-            means not deprecated, which is every endpoint on the current
-            version. When a version is retired this is set 90 days out and the
-            creator is told then, not at the end.
-        disabled_at:
-          type: [string, "null"]
-          format: date-time
-          description: Start of the current disabled window.
-        last_disabled_reason:
-          type: [string, "null"]
-          description: Why the endpoint was last switched off, for the creator listing.
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
+            `webhook` when Relay POSTs events to `url`, `polling` when the
+            agent reads them with `GET /v1/events`. Null on an agent that has
+            never set one, which behaves as `polling`.
 
-    WebhookCreateInput:
+    WebhookInput:
       type: object
       additionalProperties: false
       required: [url]
+      description: Any field other than `url` answers 422 rather than being ignored.
       properties:
         url:
           type: string
           format: uri
           pattern: "^https://"
           maxLength: 2048
-          description: Public HTTPS receiver URL.
-        events:
-          type: array
-          minItems: 1
-          uniqueItems: true
-          description: Omit to subscribe to every current event type.
-          items:
-            $ref: "#/components/schemas/WebhookEventType"
-
-    WebhookUpdateInput:
-      type: object
-      additionalProperties: false
-      minProperties: 1
-      properties:
-        url:
-          type: string
-          format: uri
-          pattern: "^https://"
-          maxLength: 2048
-        events:
-          type: array
-          minItems: 1
-          uniqueItems: true
-          items:
-            $ref: "#/components/schemas/WebhookEventType"
-        enabled:
-          type: boolean
+          description: >
+            Public HTTPS receiver URL, without credentials and without a
+            fragment.
+          example: https://agent.example/webhooks/relay
 
     WebhookSecretResponse:
       type: object
-      required: [webhook, signing_secret]
+      additionalProperties: false
+      required: [webhook]
       properties:
         webhook:
-          $ref: "#/components/schemas/WebhookEndpoint"
+          $ref: "#/components/schemas/Webhook"
         signing_secret:
           type: string
           pattern: "^whsec_"
-          description: Base64-encoded 256-bit HMAC key. Returned only on create or rotation.
+          description: >
+            Base64-encoded 256-bit HMAC key, present only in the response that
+            minted it, which is only when the agent had no secret. Relay never
+            returns it again, and a `PUT` that merely moves the URL omits it.
           example: whsec_EXAMPLEKEYDONOTUSE0000000000000000
 
     Event:
@@ -2949,7 +2637,7 @@ components:
         webhook_version:
           type: string
           format: date
-          example: "2026-08-24"
+          example: "2026-08-27"
           description: >
             The envelope shape this delivery was rendered as, repeated inside
             the body so a consumer that queues the envelope still has it an
@@ -3011,12 +2699,13 @@ components:
     RosterEventData:
       type: object
       additionalProperties: true
-      required: [chat_id, actor, affected_participant, membership_version]
+      required: [chat_id, actor, affected_participant]
       description: >
         The `data` of `participant.added` and `participant.removed`. On a
         leave, the actor and the affected participant are the same person. The
         matching notice arrives separately as a `message.received` whose
-        message has `item_type` 1.
+        message has `item_type` 1. Roster changes are ordered by the event's
+        own `sequence`; there is no separate roster version.
       properties:
         chat_id: { type: string, pattern: "^cnv_" }
         actor:
@@ -3025,10 +2714,6 @@ components:
           allOf:
             - $ref: "#/components/schemas/Sender"
           description: The participant added or removed.
-        membership_version:
-          type: integer
-          minimum: 1
-          description: The roster version after the change. It increases by one per change.
 
     ChatMetadataEventData:
       type: object
@@ -3055,8 +2740,25 @@ components:
       type: object
       # Open for the same reason Event is: members are added additively.
       additionalProperties: true
-      required: [reaction]
-      description: The `data` of a `reaction.added` or `reaction.removed`.
+      required: [message_id, target_part_id, type, actor, operation]
+      description: >
+        The `data` of a `reaction.added` or `reaction.removed`. It carries no
+        `changed` member: Relay emits an event only for a reaction that
+        changed something, so the reaction endpoint's own response is the only
+        place that reports a no-op.
       properties:
-        reaction:
-          $ref: "#/components/schemas/Reaction"
+        message_id: { type: string, pattern: "^msg_" }
+        target_part_id:
+          oneOf:
+            - $ref: "#/components/schemas/PartId"
+            - type: "null"
+          description: Null exactly when the reaction is on the whole message.
+        type:
+          type: string
+          enum: [love, like, dislike, laugh, emphasize, question, custom]
+        custom_emoji: { type: string, example: "❤️" }
+        actor:
+          $ref: "#/components/schemas/Sender"
+        operation:
+          type: string
+          enum: [add, remove]

@@ -40,18 +40,55 @@ Relay preserves part order, so a preview can follow text in the same send:
 }
 ```
 
-The send commits two messages in display order: a text message, then the
-preview card message. Replies and reactions can target the text or the card
-separately, because each is its own message.
+That is one message with two parts, in the order you sent them. A reply or a
+reaction targets the message, and can name one part of it.
 
-## Preview metadata and fallback
+## What a link part stores
 
-Relay's iOS app loads page metadata through the native Link Presentation
-framework. The destination decides which card renders.
+A link part keeps two things: the URL, and the page title.
+
+```json
+{ "part_index": 0, "type": "link", "url": "https://example.com/article", "title": "The article" }
+```
+
+Everything else a card draws — the description, the hero image, the site name —
+is live detail rather than stored content. Fetch it with `GET /v1/links/unfurl`
+when you render:
+
+```bash
+curl -sS "https://api.relayapp.im/v1/links/unfurl?url=https%3A%2F%2Fexample.com%2Farticle" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+Relay fetches the page itself and caches the result, so no recipient opens a
+connection to a URL somebody else chose, and the hero image comes back as a
+Relay URL rather than the publisher's own image host.
+
+The older sender-resolved preview fields (`description`, `site_name`,
+`image_url`, `canonical_url`, `preview_kind`, `preview_version`,
+`attachment_id`, `mime_type`, `filename`, `size_bytes`, `width`, `height`,
+`blur_hash`) are still accepted on a send, so existing integrations keep
+working, but they are not stored and not echoed back.
+
+## Let Relay resolve the title
+
+Send `preview_state: "pending"` when you have not read the page yourself:
+
+```json
+{ "type": "link", "url": "https://example.com/article", "preview_state": "pending" }
+```
+
+The message commits immediately with the part marked pending. Relay fetches the
+page and then emits a `message.updated` event carrying the settled title. This
+always settles — a page with no title clears the marker too — so a pending part
+is a preview that is coming, never one that silently failed. A settled part
+carries no `preview_state` key at all.
+
+## Fallback
 
 | Destination | Card |
 | --- | --- |
-| Public page with a title and image | ✅ Full preview card |
+| Public page with a title | ✅ Preview card with the title, plus whatever the unfurl adds |
 | Page that blocks metadata requests, sits behind auth, or is on a private network | ⚠️ Simpler card showing the host and URL |
 
 The server never rewrites or shortens the destination.

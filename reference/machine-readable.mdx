@@ -93,24 +93,29 @@ Read `RELAY_AGENT_TOKEN` from the environment and send it as
 GET /v1/agents/me. Update the credential before retrying a 401. A terminal
 bridge with no token yet pairs through RFC 8628 device authorization
 (POST /api/auth/device/code, the person approves in the Relay app, then
-POST /api/auth/device/token), and uses the session it receives once to call
-POST /v1/me/agents, which returns the agent and its `rly_live_…` token.
+POST /api/auth/device/token), which yields a session bearer for that person,
+not an Agent Token. Agents and their tokens are created in Relay for Business.
 
 ## Receive (signed webhook)
-Register with POST /v1/webhooks { "url": "https://..." } using the Agent Token.
-Store the returned signing_secret; it is shown only on create or rotation.
+Set the receiver with PUT /v1/webhook { "url": "https://..." } using the Agent
+Token. `url` is the only accepted field. Store the returned signing_secret; it
+is shown only in the response that mints it. An agent has one receiver, and
+calling PUT again replaces the URL and rotates the secret. GET /v1/webhook
+reads it back as { url, transport }; DELETE /v1/webhook clears it and returns
+204, leaving the events to be pulled.
 - Relay POSTs the event as raw JSON with webhook-id, webhook-timestamp, and
   webhook-signature headers. Verify HMAC-SHA256 over
   `<webhook-id>.<webhook-timestamp>.<raw-body>` using the base64-decoded bytes after whsec_.
 - Reject timestamps outside a 5-minute window and compare signatures in constant time.
 - Return 2xx only after the event is stored. Delivery is at-least-once; deduplicate on event_id.
 - Envelope: { event_id, sequence, event_type, agent_id, chat_id,
-  created_at, schema_version, data }.
-- The nine event types: message.received (data.message = the full message),
+  created_at, webhook_version, data }.
+- The ten event types: message.received (data.message = the full message),
   message.delivered / message.read (receipt watermarks: data.through_sequence,
-  data.recipient; 1:1 only), participant.added / chat.group_name_updated /
-  participant.removed / participant.removed (group lifecycle), reaction.added /
-  reaction.removed (data.reaction). Ignore unknown types.
+  data.recipient; 1:1 only), chat.created / chat.group_name_updated /
+  chat.group_icon_updated / participant.added / participant.removed (group
+  lifecycle), reaction.added / reaction.removed (data carries message_id,
+  target_part_id, type, custom_emoji?, actor, operation). Ignore unknown types.
 - Relay retries timeouts, connection errors, 408, 429, and 5xx with exponential
   backoff for up to 10 attempts. Any other non-2xx response is a permanent
   failure and is dead-lettered immediately.

@@ -10,8 +10,8 @@ only.
 
 Choose long polling when your backend cannot accept inbound HTTPS: a laptop, a
 host behind NAT, or a process you do not want exposed. If your backend has a
-public HTTPS endpoint, use [webhooks](/guides/webhooks) instead. The two
-transports are mutually exclusive per Agent Token.
+public HTTPS endpoint, use [webhooks](/guides/webhooks) instead. Both read the
+same log, so an agent may run either or both.
 
 ## The poll loop
 
@@ -61,18 +61,18 @@ older one with `409 terminated_by_other_consumer`. Run exactly one poller; a
 second process with the same token steals the slot, and restarting does not win
 it back.
 
-## Webhooks exclude polling
+## Polling alongside a webhook
 
-Polling while any webhook endpoint is enabled returns `409 conflict`. Disable
-or delete the webhooks to poll. Around a registration or disable, both paths
-may briefly observe the same events; deduplicate on `event_id`.
+Both transports read the same durable log, so an agent may run either or both.
+An agent with a receiver set still answers `GET /v1/events`, and the same event
+can reach both paths; deduplicate on `event_id`. To stop the webhook deliveries
+entirely, `DELETE /v1/webhook`, which leaves the log intact.
 
 ## Failure and recovery
 
 | Status | Code | What to do |
 | --- | --- | --- |
 | `409` | `terminated_by_other_consumer` | Stop this poller, or stop the other one. Do not retry in a loop |
-| `409` | `conflict` | A webhook is enabled. Disable it, or use webhooks instead |
 | `410` | `cursor_expired` | The cursor fell behind the seven-day retention ceiling. Recover below |
 | `422` | `invalid_request` | The cursor is ahead of Relay's delivered ledger. Reconcile history, then resume from `error.details.highest_delivered_cursor` |
 | `429`, `5xx`, network error | | Retry with exponential backoff and jitter. Start around 500 ms and cap near 30 s |

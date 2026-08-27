@@ -1,29 +1,35 @@
 ---
 title: "Webhooks"
-description: "Register an HTTPS receiver, verify signatures, and process at-least-once delivery safely."
-keywords: ["webhooks", "standard webhooks", "signature", "whsec", "retries", "rotation", "event filters"]
+description: "Set your agent's HTTPS receiver, verify signatures, and process at-least-once delivery safely."
+keywords: ["webhooks", "standard webhooks", "signature", "whsec", "retries", "rotation", "transport"]
 ---
 
-Relay sends each agent event to its registered HTTPS endpoints.
+Relay sends each agent event to the agent's HTTPS receiver.
 
-## Register an endpoint
+## Set the receiver
 
 ```bash
-curl -sS -X POST "https://api.relayapp.im/v1/webhooks" \
+curl -sS -X PUT "https://api.relayapp.im/v1/webhook" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://agent.example/webhooks/relay",
-    "events": ["message.received", "reaction.added", "reaction.removed"]
-  }'
+  -d '{"url": "https://agent.example/webhooks/relay"}'
 ```
 
-- **Public HTTPS only** for production endpoints.
-- **Five enabled endpoints** per agent. Disabled endpoints do not count.
-- **Signing secret returned once**, on creation and on rotation. Store the
+```json
+{
+  "webhook": { "url": "https://agent.example/webhooks/relay", "transport": "webhook" },
+  "signing_secret": "whsec_EXAMPLEKEYDONOTUSE0000000000000000"
+}
+```
+
+- **One receiver per agent.** `url` is the only field the body accepts; any
+  other field answers `422`.
+- **Public HTTPS only** for production receivers. A URL carrying credentials or
+  a fragment is rejected everywhere.
+- **Signing secret returned once**, in the response that minted it. Store the
   `whsec_...` value in a secret manager.
-- **First registration replays** matching events from the preceding 24 hours,
-  capped at 1,000.
+- **Every deliverable event goes to it.** An agent chooses a transport, not a
+  filter, so there is no per-receiver subscription list.
 
 ## Verify every request
 
@@ -34,13 +40,12 @@ signing format:
 | --- | --- |
 | `webhook-id` | The event's stable `event_id`. **This is the dedupe key** |
 | `webhook-timestamp` | Unix seconds when this attempt was signed |
-| `webhook-signature` | One or more space-separated `v1,<base64>` signatures |
-| `webhook-delivery-id` | This delivery row. Stable across retries, distinct per endpoint. For correlating with Relay's logs, never for dedupe |
-| `relay-webhook-version` | The envelope shape this endpoint is pinned to, e.g. `2026-08-24` |
+| `webhook-signature` | One or more space-separated `v1,<base64>` signatures. Accept the request when any of them verifies |
+| `webhook-delivery-id` | This delivery row. Stable across retries. For correlating with Relay's logs, never for dedupe |
+| `relay-webhook-version` | The envelope shape this delivery was rendered as, e.g. `2026-08-27` |
 
-Two endpoints receiving the same event see one `webhook-id` and two
-`webhook-delivery-id` values. That is the difference between the two, and the
-reason only the first one can dedupe.
+A retried delivery repeats both ids. `webhook-id` is the one that identifies
+the event, so it is the one to dedupe on.
 
 Compute HMAC-SHA256 over this exact UTF-8 value:
 
@@ -81,18 +86,17 @@ Return any `2xx` once your backend has stored the event. Requests time out after
 
 Delivery is at least once, and duplicates are expected rather than
 exceptional. A consumer that cannot process the same event twice is not
-finished. Dedupe on `webhook-id`: it is stable across every retry, every
-creator redrive, and every re-enable backfill of that event, and it is the
-same value the long-poll envelope carries as `event_id`.
+finished. Dedupe on `webhook-id`: it is stable across every retry and every
+creator redrive of that event, and it is the same value the long-poll envelope
+carries as `event_id`.
 
-A duplicate arrives from four places, all of them normal:
+A duplicate arrives from three places, all of them normal:
 
 | Source | What happened |
 | --- | --- |
 | A lapsed delivery lease | The sender stalled mid-send and another drain took the row |
 | A lost settlement | Your endpoint answered `200` and Relay's write recording that failed. The row is still pending |
 | A creator redrive | Somebody replayed a dead letter |
-| A re-enable backfill | An endpoint came back and its disabled window was replayed |
 
 - **Store `webhook-id`** as a unique key before producing side effects.
 - **Answer `2xx` and do nothing else** for an id you have already processed.
@@ -136,33 +140,22 @@ signature would verify there. Fix the registered URL instead.
 ## Versioning and deprecation
 
 Envelope versions are dates, not integers, so nothing has to remember which
-release "v3" was. Your endpoint is pinned to the date it was created with, and
-that date arrives two ways: as the `relay-webhook-version` header, and as
-`schema_version` inside the signed body.
+release "v3" was. The current date is `2026-08-27`, and it arrives two ways: as
+the `relay-webhook-version` header, and as `webhook_version` inside the signed
+body.
 
 **Additive changes never bump the version.** A new optional field, a new member
 of `data`, a new `event_type`, a new header: all of these ship on the current
-date. Ignore fields you do not know and event types you did not subscribe to.
+date. Ignore fields and event types you do not recognise.
 
 **A shape change bumps it.** Removing a field, renaming one, narrowing a type,
 or changing what an existing `event_type` carries. If a correct consumer
 written last month would break, it is a new date, and the old date keeps being
-served.
+served for its deprecation window.
 
-When a version is retired, every endpoint still pinned to it gets
-`deprecated_after` set 90 days out and the creator is told at that moment
-rather than at the end. Until it passes, the old shape is served unchanged.
-After it passes, the endpoint is served the current version.
-
-| Field on the endpoint | Meaning |
-| --- | --- |
-| `schema_version` | The date this endpoint is pinned to |
-| `deprecated_after` | When that date stops being served. Null means current |
-| `disabled_at` | Start of the current disabled window. Re-enabling backfills from it |
-| `last_disabled_reason` | Why it was last switched off |
-
-Nothing migrates an existing endpoint silently. A consumer moves versions by
-asking to.
+Read the date off each delivery rather than assuming it. A consumer that
+switches on it can accept a new shape the day it ships and keep handling the
+old one until you retire that code path.
 
 ### Answer before you work
 
@@ -177,62 +170,63 @@ endpoint has the message; it never claims the reply is ready.
 
 <Warning>
 A `2xx` is Relay's cue to stop retrying, and it is not a promise that the event
-will never arrive again: a lost settlement, a redrive, or a re-enable backfill
-can all redeliver it. Treat a `2xx` as "I own this now" and make the handoff
-durable before you send it, because a crash afterwards is your loss to recover.
-Dedupe on `webhook-id` so the redeliveries that do happen are free.
+will never arrive again: a lost settlement or a redrive can redeliver it. Treat
+a `2xx` as "I own this now" and make the handoff durable before you send it,
+because a crash afterwards is your loss to recover. Dedupe on `webhook-id` so
+the redeliveries that do happen are free.
 </Warning>
 
-## Manage endpoints
+## Manage the receiver
 
 <CodeGroup>
 
-```bash List
-# Signing secrets are never returned.
-curl -sS "https://api.relayapp.im/v1/webhooks" \
+```bash Read
+# The signing secret is never returned here.
+curl -sS "https://api.relayapp.im/v1/webhook" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
-```bash Update
-# Change URL, event filters, or enabled state.
-curl -sS -X PATCH "https://api.relayapp.im/v1/webhooks/wh_..." \
+```bash Change the URL
+# Replaces the URL and keeps the secret. No signing_secret comes back.
+curl -sS -X PUT "https://api.relayapp.im/v1/webhook" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"enabled":false}'
+  -d '{"url": "https://agent.example/webhooks/relay-v2"}'
 ```
 
-```bash Rotate secret
-# The new signing secret is returned once. Relay signs with both the new and
-# previous secret for 24 hours.
-curl -sS -X POST "https://api.relayapp.im/v1/webhooks/wh_.../rotate-secret" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-```
-
-```bash Delete
-# Permanent.
-curl -sS -X DELETE "https://api.relayapp.im/v1/webhooks/wh_..." \
+```bash Remove
+# 204. The transport falls back to polling; events keep accumulating.
+curl -sS -X DELETE "https://api.relayapp.im/v1/webhook" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
 </CodeGroup>
 
-Subscribe to any of these filters today:
+`PUT` mints a signing secret only when your agent has none, so moving the URL
+leaves your verifier alone: the response carries no `signing_secret` and the
+secret you already hold keeps signing.
+
+To rotate, `DELETE` the receiver and `PUT` it again. The delete drops the URL
+and the secret together and falls back to polling; the `PUT` that follows finds
+no secret and returns a fresh one, which is the only time you see the
+plaintext. The replacement takes effect on the next delivery, and the secret it
+replaces stops signing anything at that moment. Deploy the new secret to your
+verifier before you call it, or verify against both for the length of your
+deploy: the `webhook-signature` header is a space-separated list, so a verifier
+that accepts any matching signature already handles a receiver holding two
+secrets.
+
+These event types reach a receiver today:
 
 | Event | Fires when |
 | --- | --- |
-| `message.received` | A user messages your agent, or invokes it in a group |
-| `message.edited` | A sender edited a visible message |
-| `message.unsent` | A sender unsent a message, leaving a tombstone |
-| `message.delivered` | A recipient's runtime accepted your message |
+| `message.received` | A participant sent a message in one of the agent's conversations |
+| `message.delivered` | A recipient received the agent's message |
 | `message.read` | A recipient read through a sequence |
-| `reaction.added` / `reaction.removed` | A participant reacted to your message |
-| `participant.added` / `chat.group_name_updated` / `participant.removed` | Group membership or metadata changed |
-| `participant.removed` | A participant left a group of their own accord, which is a different fact from being removed |
-| `group.invite.joined` / `group.invite.declined` | One invited person answered a group invite |
-| `group.invite.completed` / `group.invite.expired` | A group invite reached its terminal state |
-
-Group invite consent runs through the invite endpoint. It reports each
-individual answer, then the terminal state.
+| `chat.created` | A chat the agent belongs to was created |
+| `chat.group_name_updated` / `chat.group_icon_updated` | A group was renamed, or its photo changed |
+| `participant.added` / `participant.removed` | A participant was added to, removed from, or left a group |
+| `reaction.added` / `reaction.removed` | A participant reacted to the agent's message, or took a reaction off |
 
 <Note>
 Ignore unknown event types, so a new one cannot break your consumer.
@@ -241,7 +235,7 @@ Ignore unknown event types, so a new one cannot break your consumer.
 ## Next steps
 
 - [Event types](/reference/events)
-- [Message model](/concepts/message-model) for what `message.edited` and `message.unsent` change
+- [Message model](/concepts/message-model)
 - [Long polling](/guides/long-polling) if your backend has no public URL
 - [Delivery model](/guides/delivery-model) for cursors, watermarks, and recovery
 - [Embed Relay in your own runtime](/integrations/channel-plugin) if your runtime owns many agents
