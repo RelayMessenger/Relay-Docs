@@ -37,18 +37,16 @@ direct conversation uses.
   "agent_id": "agt_01JZRELAY",
   "chat_id": "cnv_01JZC7K4RQ",
   "data": {
-    "message": {
-      "id": "msg_01JZM3T8AH",
-      "chat_id": "cnv_01JZC7K4RQ",
-      "sequence": 12,
-      "sender_handle": { "kind": "user", "id": "usr_01JZU1F0BD" },
-      "is_from_me": false,
-      "parts": [{ "part_id": "prt_01JZM3T8AJ", "part_index": 0, "type": "text", "text": "when are we free?" }],
-      "reply_to": null,
-      "text": "when are we free?",
-      "status": "sent",
-      "created_at": "2026-07-17T12:00:00.000Z"
-    }
+    "id": "msg_01JZM3T8AH",
+    "chat_id": "cnv_01JZC7K4RQ",
+    "sequence": 12,
+    "sender_handle": { "kind": "user", "id": "usr_01JZU1F0BD" },
+    "is_from_me": false,
+    "parts": [{ "part_id": "prt_01JZM3T8AJ", "part_index": 0, "type": "text", "text": "when are we free?" }],
+    "reply_to": null,
+    "text": "when are we free?",
+    "status": "sent",
+    "created_at": "2026-07-17T12:00:00.000Z"
   }
 }
 ```
@@ -102,9 +100,9 @@ Full payloads are in [event types](/reference/events).
 ## The notice in the transcript
 
 A membership or metadata change also commits a message into the conversation,
-sent by the person who caused it. It arrives separately as `message.received`,
-carries `kind: "notice"`, and holds a text part to render plus a `data` part
-naming the change.
+sent by the person who caused it. It arrives separately as `message.received`
+and carries a `group_event` naming the change. A notice has no parts: render
+`group_event.fallback_text` as a centered line.
 
 ```json
 {
@@ -114,23 +112,7 @@ naming the change.
   "group_event": { "event_type": "member_added", "target_handle_id": "agt_01k1m4q9vn2r7t9b4c6qdh8xwy", "fallback_text": "Scheduler was added" },
   "sender_handle": { "kind": "user", "id": "usr_01JZU1F0BD" },
   "is_from_me": false,
-  "parts": [
-    { "part_id": "prt_01K1M9NOT01", "part_index": 0, "type": "text", "text": "Scheduler was added" },
-    {
-      "part_id": "prt_01K1M9NOT02",
-      "part_index": 1,
-      "type": "data",
-      "data": {
-        "type": "group.mutation",
-        "mutation": "membership.added",
-        "actor": { "kind": "user", "id": "usr_01JZU1F0BD" },
-        "affected_participant": { "kind": "agent", "id": "agt_01JZRELAY" },
-        "changes": {
-          "state": { "old": null, "new": "active" }
-        }
-      }
-    }
-  ],
+  "parts": [],
   "reply_to": null,
   "text": "Scheduler was added",
   "status": "sent",
@@ -138,17 +120,18 @@ naming the change.
 }
 ```
 
-| `mutation` | Committed when |
+| `group_event.event_type` | Committed when |
 | --- | --- |
-| `group.created` | A person creates the group |
-| `metadata.updated` | A person changes the title or avatar |
-| `membership.added` | A person adds a participant |
-| `membership.removed` | A person removes a participant |
-| `membership.left` | A person leaves the group |
+| `member_added` | A person adds a participant |
+| `member_left` | A person leaves the group |
+| `member_removed` | A person removes a participant |
+| `name_changed` | A person renames the group |
+| `photo_changed` | A person changes or clears the group photo |
 
 <Note>
-Render the text part and treat the `data` part as the machine-readable form of
-the same fact. The two describe one change.
+The structured `group_event` fields are authoritative. `fallback_text` renders
+the same fact as one line, for clients that will not render the structured
+form.
 </Note>
 
 ## Limits

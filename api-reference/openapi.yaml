@@ -69,7 +69,7 @@ paths:
       summary: Get a user
       description: >
         Resolve a human participant your agent is in conversation with. Every
-        `message.received` event carries `data.message.sender.id` (a `usr_…`
+        `message.received` event carries `data.sender_handle.id` (a `usr_…`
         id); pass it here to read that sender's name and messaging phone
         number, enough to greet them or match them to an existing account.
 
@@ -2136,36 +2136,7 @@ components:
         data:
           anyOf:
             - $ref: "#/components/schemas/AgentCardData"
-            - $ref: "#/components/schemas/GroupMutationData"
             - description: Other integration-defined JSON data.
-
-    GroupMutationData:
-      type: object
-      additionalProperties: false
-      required: [type, mutation, actor, changes]
-      description: >
-        The `data` part of a group notice, carried beside the notice's text so
-        a client can render the change itself rather than parsing a sentence.
-      properties:
-        type: { type: string, const: group.mutation }
-        mutation:
-          type: string
-          enum: [group.created, metadata.updated, membership.added, membership.removed, membership.left]
-        actor:
-          $ref: "#/components/schemas/Sender"
-        affected_participant:
-          allOf:
-            - $ref: "#/components/schemas/Sender"
-          description: The person or agent added, removed, or departed. Absent on a metadata update.
-        changes:
-          type: object
-          description: >-
-            Each changed field, as an object with `old` and `new`.
-          additionalProperties:
-            type: object
-            properties:
-              old: {}
-              new: {}
 
     ReplyRef:
       type: [object, "null"]
@@ -2662,19 +2633,17 @@ components:
           oneOf:
             - $ref: "#/components/schemas/MessageEventData"
             - $ref: "#/components/schemas/ReceiptEventData"
+            - $ref: "#/components/schemas/ChatCreatedEventData"
             - $ref: "#/components/schemas/RosterEventData"
             - $ref: "#/components/schemas/ChatMetadataEventData"
             - $ref: "#/components/schemas/ReactionEventData"
 
     MessageEventData:
-      type: object
-      # Open for the same reason Event is: members are added additively.
-      additionalProperties: true
-      required: [message]
-      description: The `data` of a `message.received`.
-      properties:
-        message:
-          $ref: "#/components/schemas/Message"
+      description: >
+        The `data` of a `message.received`: the full stored message itself,
+        with no wrapper member around it.
+      allOf:
+        - $ref: "#/components/schemas/Message"
 
     ReceiptEventData:
       type: object
@@ -2691,10 +2660,18 @@ components:
         at: { type: string, format: date-time }
         recipient:
           $ref: "#/components/schemas/Sender"
-        participant:
-          allOf:
-            - $ref: "#/components/schemas/Sender"
-          description: The same actor as `recipient`, kept for shipped consumers.
+
+    ChatCreatedEventData:
+      type: object
+      additionalProperties: true
+      required: [chat_id, actor]
+      description: >
+        The `data` of `chat.created`: the conversation and the person who
+        created it.
+      properties:
+        chat_id: { type: string, pattern: "^cnv_" }
+        actor:
+          $ref: "#/components/schemas/Sender"
 
     RosterEventData:
       type: object
@@ -2704,8 +2681,9 @@ components:
         The `data` of `participant.added` and `participant.removed`. On a
         leave, the actor and the affected participant are the same person. The
         matching notice arrives separately as a `message.received` whose
-        message has `item_type` 1. Roster changes are ordered by the event's
-        own `sequence`; there is no separate roster version.
+        message carries a `group_event` of `member_added`, `member_left`, or
+        `member_removed`. Roster changes are ordered by the event's own
+        `sequence`; there is no separate roster version.
       properties:
         chat_id: { type: string, pattern: "^cnv_" }
         actor:
@@ -2720,10 +2698,9 @@ components:
       additionalProperties: true
       required: [chat_id, old_value, new_value, changed_by_handle, updated_at]
       description: >
-        The `data` of `chat.created`, `chat.group_name_updated` and
-        `chat.group_icon_updated`. The matching notice arrives separately as a
-        `message.received` whose message has `item_type` 2 (rename) or 3
-        (photo).
+        The `data` of `chat.group_name_updated` and `chat.group_icon_updated`.
+        The matching notice arrives separately as a `message.received` whose
+        message carries a `group_event` of `name_changed` or `photo_changed`.
       properties:
         chat_id: { type: string, pattern: "^cnv_" }
         old_value:
