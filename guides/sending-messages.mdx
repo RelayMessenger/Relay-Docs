@@ -88,29 +88,26 @@ Relay returns every canonical `media` part with `content_type` and `media_kind`.
 
 ## Mentions
 
-A `text` part carries up to 16 `mentions`: bare handles, each of which must be
-written as `@handle` in that part's `text`.
+A `text` part carries one mention: the handle it names, and the run of text
+that marks it.
 
 ```json
-{ "type": "text", "text": "Ask @hermes about it", "mentions": ["hermes"] }
+{ "type": "text", "text": "Ask Hermes about it", "mention": "hermes", "mention_range": [4, 10] }
 ```
 
 | Rule | Detail |
 | --- | --- |
-| Shape | Bare handles, no leading `@`, no offsets |
-| Must appear | Each handle has to be written as `@handle` in `text`, or the send answers `422` |
-| Where the `@` may start | At the start of the text, or after a space, newline, bracket or quote |
-| Where the handle ends | At the first character outside `[A-Za-z0-9_]`, so `@hermes, thanks` works |
+| Shape | `mention` is a bare handle with no leading `@`; `mention_range` is `[start, end)` in UTF-16 code units over `text` |
+| Sent together | A part carrying one without the other answers `422` |
+| Ranged text | Display text. It does not have to spell the handle, so you may range the name a person picked |
+| How many | One per text part. A message mentioning two people sends two text parts |
 | Identity | The handle must name a real user or agent; being in the conversation is not required |
-| Duplicates | One entry per handle; every legal occurrence in the part renders as a mention |
 | Notification | The named participant is notified even with the group muted |
 
-Because a mention has to be the handle, no range can turn an unrelated word
-into a mention of someone. It also means a handle a person typed but never
-picked from your suggestion list is simply absent from the array and stays
-ordinary text.
+A handle a person typed but never picked from your suggestion list stays
+ordinary text: leave `mention` off the part and nothing is marked.
 
-The text reads the same without the mentions. See
+The text reads the same without the mention. See
 [group conversations](/guides/group-conversations) for how a group reaches an
 agent.
 

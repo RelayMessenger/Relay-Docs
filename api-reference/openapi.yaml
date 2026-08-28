@@ -1534,6 +1534,49 @@ components:
           type: string
           format: date-time
 
+    CreateAgentInput:
+      type: object
+      additionalProperties: false
+      required: [handle, displayName]
+      description: >
+        Camel-cased, like the `Agent` projection it creates. Any field outside
+        this list answers 422 rather than being ignored.
+      properties:
+        handle:
+          type: string
+          pattern: "^[a-z][a-z0-9_]{2,31}$"
+          description: >
+            The agent's name, unique only among this creator's agents.
+            Lowercased on write. Reserved names answer 409, and a dot answers
+            422: the dot joins a name to its owner and belongs to neither half.
+          example: scheduler
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 80
+        tagline:
+          type: string
+          maxLength: 120
+        avatarUrl:
+          type: [string, "null"]
+          format: uri
+          maxLength: 2048
+          pattern: "^https://(?![^/?#]*@)"
+        accentColor:
+          type: [string, "null"]
+          example: "#0B75FF"
+        openingMessage:
+          type: [object, "null"]
+          description: >
+            The message the agent sends when someone installs it, as a `parts`
+            array. Null for no opening message.
+          properties:
+            parts:
+              type: array
+              minItems: 1
+              items:
+                $ref: "#/components/schemas/PartInput"
+
     Agent:
       type: object
       description: >
@@ -1558,7 +1601,12 @@ components:
           example: agt_01JZRELAY
         handle:
           type: string
-          pattern: ^[a-z][a-z0-9_]{2,31}$
+          pattern: ^[a-z][a-z0-9_]{2,31}(\.[a-z][a-z0-9_]{2,31})?$
+          description: >
+            The address people type. A system agent and a brand's front-door
+            agent wear a flat name; every other agent wears its creator's, as
+            name.creator. It is derived when the agent is read, so renaming a
+            creator changes it with no other call.
           example: relay
         displayName:
           type: string
@@ -1975,10 +2023,13 @@ components:
 
     Mention:
       type: string
-      pattern: "^[a-z][a-z0-9_]{2,31}$"
+      pattern: "^[a-z][a-z0-9_]{2,31}(\\.[a-z][a-z0-9_]{2,31})?$"
       description: >
-        The handle of a mentioned user or agent, without the leading "@". It
-        must be written as `@handle` in the part's `text`.
+        The address of a mentioned user or agent, without the leading "@". A
+        person, a system agent and a brand's front-door agent carry a flat
+        name; every other agent carries its creator's, as name.creator. The
+        text `mention_range` covers is display text and does not have to spell
+        it.
 
     StyleRange:
       type: object
@@ -2654,7 +2705,6 @@ components:
         status: { type: string, enum: [active, left, removed] }
         joined_at: { type: string, format: date-time }
         left_at: { type: [string, "null"], format: date-time }
-
     LinqHealthStatus:
       type: object
       additionalProperties: false

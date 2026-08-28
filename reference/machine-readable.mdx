@@ -131,6 +131,20 @@ POST /v1/messages
   "parts": [{ "type": "text", "text": "Hello" }]
 }
 
+1-32 parts per message, order = presentation order. Text and media sent
+together stay together as parts of the one message:
+- { "type": "text", "text": "…", "mention"?, "mention_range"?, "styles"? }  (≤ 8 KB)
+- { "type": "link", "url": "https://…", "title"?, "description"? }
+- { "type": "data", "data": { any JSON } }            (≤ 16 KB)
+- { "type": "media", "url" | "attachment_id" }        (exactly one of the two)
+- { "type": "media", "url" | "attachment_id", "duration_ms"? }
+Text styles are bold, italic, underline, and strikethrough; anything else is 422.
+Request body ceiling 512 KB.
+Response 202 { message_id, message }. The conversation-scoped forms are
+POST /v1/chats/{id}/messages → 201 { messages: [message] } and
+POST /v2/chats/{id}/messages → 201 { message }, which requires
+message_id and rejects unknown fields with 422.
+
 Mark the inbound message read with
 `POST /v1/chats/{chatId}/read { "message_id": "msg_..." }`. Typing is a
 separate ephemeral call to `POST /v1/chats/{chatId}/typing` with
