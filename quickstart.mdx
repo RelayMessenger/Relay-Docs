@@ -17,13 +17,18 @@ Receive one signed message, mark it Read, and send one reply.
 ```bash
 export RELAY_API_URL="${RELAY_API_URL:-http://127.0.0.1:8788}"
 export RELAY_AGENT_TOKEN="<existing-agent-token>"
-curl -sS "$RELAY_API_URL/v1/agents/me" -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+curl -sS "$RELAY_API_URL/v1/agents/me" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
 ## Create a subscription
 
 ```bash
-curl -sS -X POST "$RELAY_API_URL/v1/webhook-subscriptions"  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" -H "Content-Type: application/json"  -H "Idempotency-Key: quickstart-webhook-1"  -d '{"target_url":"https://agent.example/webhooks/relay","event_types":["message.received","message.delivered","message.read"],"webhook_version":"2026-08-28","enabled":true}'
+curl -sS -X POST "$RELAY_API_URL/v1/webhook-subscriptions" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: quickstart-webhook-1" \
+  -d '{"target_url":"https://agent.example/webhooks/relay","event_types":["message.received","message.delivered","message.read"],"webhook_version":"2026-08-28","enabled":true}'
 ```
 
 Save the one-time `signing_secret` from the `201` response. The subscription begins after `starts_after_sequence`.
@@ -41,13 +46,23 @@ That response records Delivered. Read `data.message.chat_id` and `data.message.i
 ## Mark Read and reply
 
 ```bash
-curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/read"  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" -H "Content-Type: application/json"  -H "Idempotency-Key: read-$EVENT_ID" -d "{\"through_message_id\":\"$MESSAGE_ID\"}"
+curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/read" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: read-$EVENT_ID" \
+  -d "{\"through_message_id\":\"$MESSAGE_ID\"}"
 
-curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/typing" -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/typing" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 
-curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/messages"  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" -H "Content-Type: application/json"  -H "Idempotency-Key: reply-$EVENT_ID"  -d "{\"message\":{\"parts\":[{\"type\":\"text\",\"text\":\"Tomorrow at 2:00 PM works.\"}],\"reply_to\":{\"message_id\":\"$MESSAGE_ID\"}}}"
+curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: reply-$EVENT_ID" \
+  -d "{\"message\":{\"parts\":[{\"type\":\"text\",\"text\":\"Tomorrow at 2:00 PM works.\"}],\"reply_to\":{\"message_id\":\"$MESSAGE_ID\"}}}"
 
-curl -sS -X DELETE "$RELAY_API_URL/v1/chats/$CHAT_ID/typing" -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+curl -sS -X DELETE "$RELAY_API_URL/v1/chats/$CHAT_ID/typing" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
 Run the model after Read and before the reply. Stop typing after success, failure, or cancellation.
