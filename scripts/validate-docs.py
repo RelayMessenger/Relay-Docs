@@ -21,6 +21,6 @@ for p in sorted(r.rglob('*.mdx')):
 for x in need:
  if not (r/f'{x}.mdx').is_file():raise SystemExit(f'missing {x}')
 t='\n'.join(p.read_text() for p in [*r.rglob('*.mdx'),r/'skill.md'])
-for n,q in {'event pull':r'GET /v1/events|/v1/events\?','global send':r'POST /v1/messages(?:\s|`|")','v2':r'/v2/','prefixed id':r'\b(?:msg|agt|usr|cnv|prt|att|evt|wh)_[A-Za-z0-9]','long polling':r'long[ -]poll'}.items():
+for n,q in {'event pull':r'GET /v1/events|/v1/events\?','global send':r'POST /v1/messages(?:\s|`|")','v2':r'/v2/','prefixed id':r'\b(?:msg|agt|usr|cnv|prt|att|evt|wh)_[A-Za-z0-9]','long polling':r'long[ -]poll','invalid shell JSON':r'-d \"\{(?!\\)'}.items():
  if re.search(q,t,re.I):raise SystemExit(f'stale {n}')
 print(f'validated {len(need)} pages, navigation, frontmatter, prose, and stale-contract bans')
