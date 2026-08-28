@@ -23,12 +23,10 @@ Branch on `code` and log `message`. Handle unknown codes by HTTP status class.
 | `malformed_stream` | 400 | A streamed reply broke UIMessageStream v1 framing. Fix the producer; retrying the same bytes fails again. |
 | `request_timeout` | 408 | A streamed reply stalled past the 30-second idle or 10-minute total ceiling. Nothing was committed. Retry the whole stream. |
 | `payload_too_large` | 413 | A streamed reply or an attachment upload exceeded its byte ceiling. See [Limits](/reference/limits). |
-| `idempotency_conflict` | 409 | The `Idempotency-Key` was reused with a *different* request body. Reusing it with the same body returns the original message instead. |
-| `conflict` | 409 | Either the webhook URL is already registered, or the agent long-polled while a webhook was enabled. Use the existing endpoint, or disable the webhook before polling. |
+| `idempotency_conflict` | 409 | The client-minted `message_id` was reused with a different request body or sender. Reusing it for the same send returns the original message. |
+| `conflict` | 409 | A webhook URL is already registered. Use the existing subscription or choose another URL. |
 | `limit_exceeded` | 409 | The agent already has five enabled webhook endpoints. Disable or delete one before enabling another. |
-| `terminated_by_other_consumer` | 409 | A newer poll took over this Agent Token. Run one poller per token. |
-| `cursor_expired` | 410 | The poll cursor fell behind the seven-day event retention. Reconcile from [conversation history](/guides/conversation-history), then call `POST /v1/events/reconcile`. Do not reset to zero. |
-| `rate_limited` | 429 | A ceiling was reached: too many messages in this conversation, or a spent write budget on reactions, receipts, typing, or attachment uploads. Wait for the `Retry-After` header (seconds), then retry the same request with the same `Idempotency-Key`. |
+| `rate_limited` | 429 | A ceiling was reached: too many messages in this conversation, or a spent write budget on reactions, receipts, typing, or attachment uploads. Wait for the `Retry-After` header, then retry the same send with the same `message_id`. |
 | `server_configuration_error` | 503 | Relay cannot perform this operation because required server-side delivery configuration is unavailable. Retry later. |
 | `internal_error` | 500 | Relay-side failure. Safe to retry with backoff; your idempotency key prevents duplicates. |
 
@@ -38,7 +36,7 @@ Outbound calls to Relay:
 
 | Response | What to do |
 | --- | --- |
-| Network error, timeout, `429`, `5xx` | Retry with exponential backoff and jitter, capped around 60 s. Reuse the same `Idempotency-Key` on every attempt |
+| Network error, timeout, `429`, `5xx` | Retry with exponential backoff and jitter, capped around 60 s. Reuse the same `message_id` on every send attempt |
 | Any other `4xx` | Update the request or the credential before trying again |
 
 Inbound webhook deliveries from Relay:

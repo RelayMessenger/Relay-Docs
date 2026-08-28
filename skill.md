@@ -23,9 +23,9 @@ endpoints, fields, or limits.
 
 1. Ask the user for their Agent Token (`rly_live_…`, shown once at agent
    creation). Store it in `RELAY_AGENT_TOKEN`. Verify with `GET /v1/agents/me`.
-2. Set a public HTTPS receiver with `PUT /v1/webhook` and a body of
-   `{"url": "https://..."}`. Store the `signing_secret` from the response; it
-   is never returned again.
+2. Create a webhook subscription with `POST /v1/webhooks` and a body of
+   `{"url": "https://...", "events": ["message.received", ...]}`. Store the
+   `signing_secret` from the response; it is never returned again.
 3. On each delivery: verify the Standard Webhooks signature
    (`webhook-id`, `webhook-timestamp`, `webhook-signature` headers) over the
    exact raw body, reject timestamps older than five minutes, return `2xx`
@@ -48,11 +48,10 @@ endpoints, fields, or limits.
 - Base URL is `https://api.relayapp.im`. Never a `workers.dev` origin.
 - The contract is raw HTTPS and JSON. The one optional published package is
   `@relaymessenger/cli`. Import nothing else.
-- Webhooks and `GET /v1/events` read the same durable log and can run at once.
-  The pull is plain: `after` is the last `sequence` you processed, and nothing
-  is acknowledged or consumed.
-- Order messages by `sequence`; deduplicate events by `event_id`. Never swap
-  them.
+- Webhook bodies use Linq's v3 envelope with `webhook_version: 2026-02-03`.
+  Do not invent a Relay envelope, extra delivery headers, or a polling route.
+- Deduplicate webhook deliveries by `event_id`. `sequence` orders messages in
+  conversation history; it is not part of Linq's webhook envelope.
 - An agent in a group is an ordinary member: it receives every message from the
   sequence it joined at, and reads that same history back.
 - Message content is immutable. There is no edit, unsend, or delete route, no

@@ -27,10 +27,8 @@ tags:
       typing indicator.
   - name: Events
     description: >
-      Receive durable inbound events, either through signed webhook receivers
-      or by pulling `GET /v1/events`. Both work at once: one durable log per
-      agent feeds both transports. Delivery is at least once everywhere;
-      always deduplicate by `event_id`.
+      Register signed webhook subscriptions and receive Linq-compatible event
+      payloads. Delivery is at least once; always deduplicate by `event_id`.
   - name: Attachments
     description: Upload bytes once and reference them from any number of parts.
   - name: Pairing
@@ -529,62 +527,55 @@ paths:
         "503":
           $ref: "#/components/responses/CommitUnavailable"
 
-  /v1/webhook:
+  /v1/webhooks:
     get:
       tags: [Events]
-      summary: Read the webhook receiver
-      description: >
-        Read the authenticated agent's receiver. `transport` is the switch:
-        `webhook` means Relay POSTs events to `url`, `polling` means the agent
-        reads them with `GET /v1/events`. The signing secret is never returned
-        here.
-      operationId: getWebhook
+      summary: List webhook subscriptions
+      description: List the authenticated agent's webhook subscriptions. Signing secrets are never returned.
+      operationId: listWebhooks
       responses:
         "200":
-          description: The agent's receiver.
+          description: The agent's webhook subscriptions, newest first.
           content:
             application/json:
               schema:
-                type: object
-                required: [webhook]
-                properties:
-                  webhook:
-                    $ref: "#/components/schemas/Webhook"
+                $ref: "#/components/schemas/WebhookListResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
-    put:
+    post:
       tags: [Events]
-      summary: Set the webhook receiver
+      summary: Create a webhook subscription
       description: >
-        Set the receiver URL and switch the agent to the `webhook` transport.
-        A signing secret is minted only when the agent has none, and its
-        plaintext is returned only in the response that minted it. An agent has
-        one receiver, so calling this again replaces the URL and keeps the
-        existing secret, and the response then carries no `signing_secret`. To
-        rotate, `DELETE` the receiver and `PUT` it again.
-      operationId: setWebhook
+        Register a public HTTPS receiver and a non-empty subset of supported
+        Linq event names. Omit `events` to subscribe to all supported events.
+        An agent can have up to five enabled subscriptions. The signing secret
+        is returned only in this response; store it now.
+      operationId: createWebhook
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/WebhookInput"
+              $ref: "#/components/schemas/WebhookCreateInput"
       responses:
-        "200":
-          description: Receiver set; store the signing secret now.
+        "201":
+          description: Subscription created; store the signing secret now.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/WebhookSecretResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: The URL is already registered, or five subscriptions are already enabled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "422":
           description: >
-            `invalid_request`: the body is not a JSON object, carries a field
-            other than `url`, or `url` is not an absolute URL of 2048
-            characters or fewer. A URL carrying credentials or a fragment is
-            rejected, and in production so is a non-HTTPS URL or a private
-            host.
+            The body, URL, or event subscription list is invalid. Credentials,
+            fragments, private hosts, and non-HTTPS production URLs are rejected.
           content:
             application/json:
               schema:
@@ -593,106 +584,98 @@ paths:
           $ref: "#/components/responses/WriteBudgetExceeded"
         "503":
           $ref: "#/components/responses/WebhookDeliveryUnavailable"
-    delete:
+
+  /v1/webhooks/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Webhook subscription ID.
+        schema:
+          type: string
+          pattern: "^wh_"
+    patch:
       tags: [Events]
-      summary: Remove the webhook receiver
-      description: >
-        Clear the receiver and switch the agent back to `polling`. Events keep
-        accumulating in the agent's log, so read them with `GET /v1/events`.
-      operationId: deleteWebhook
-      responses:
-        "204":
-          description: Receiver cleared; the transport is now `polling`.
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-
-  /v1/events:
-    get:
-      tags: [Events]
-      summary: Pull events
-      description: >
-        Drain the agent's durable event log past `after`. This is a plain pull:
-        `after` is the last `sequence` you have processed, the page is
-        everything newer, and nothing is acknowledged or consumed. A consumer
-        that sees an event twice ignores it by `event_id`.
-
-
-        `timeout` greater than zero holds the request open until something
-        arrives, up to thirty seconds. Persist the events and the new cursor
-        together before advancing, and read `has_more` to know whether to pull
-        again immediately.
-
-
-        Polling works alongside webhooks: both transports read one log, so an
-        agent may run either or both.
-      operationId: pollEvents
-      parameters:
-        - name: after
-          in: query
-          schema: { type: integer, minimum: 0, default: 0 }
-          description: >
-            The highest `sequence` this consumer has processed. `0` starts from
-            the beginning of the retained log. `cursor` is accepted as an alias.
-        - name: timeout
-          in: query
-          schema: { type: integer, minimum: 0, maximum: 30, default: 0 }
-          description: >-
-            Seconds to hold the request open when no events are pending.
-            0 returns immediately with any pending events (nonblocking pull).
-        - name: limit
-          in: query
-          schema: { type: integer, minimum: 1, maximum: 100, default: 100 }
+      summary: Update a webhook subscription
+      description: Change the receiver URL, subscribed event names, or enabled state.
+      operationId: updateWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookUpdateInput"
       responses:
         "200":
-          description: Events past the cursor, oldest first.
+          description: The updated subscription.
           content:
             application/json:
               schema:
                 type: object
                 additionalProperties: false
-                required: [events, next_cursor, latest, has_more]
+                required: [webhook]
                 properties:
-                  events:
-                    type: array
-                    maxItems: 100
-                    items:
-                      $ref: "#/components/schemas/Event"
-                  next_cursor:
-                    type: integer
-                    description: >
-                      The `sequence` of the last event on this page. Pass it as
-                      `after` on the next pull; it equals the request's `after`
-                      when the page is empty.
-                  latest:
-                    type: integer
-                    description: The highest sequence Relay has written to this agent's log.
-                  has_more:
-                    type: boolean
-                    description: True when `next_cursor` is behind `latest`, so another page is waiting.
+                  webhook:
+                    $ref: "#/components/schemas/Webhook"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The URL is already registered, or enabling this subscription would exceed the limit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "422":
-          description: >
-            `after`, `timeout`, or `limit` does not satisfy its exact integer
-            bounds.
+          description: No update was supplied, or an update value is invalid.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+    delete:
+      tags: [Events]
+      summary: Delete a webhook subscription
+      operationId: deleteWebhook
+      responses:
+        "204":
+          description: Subscription deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/webhooks/{id}/rotate-secret:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Webhook subscription ID.
+        schema:
+          type: string
+          pattern: "^wh_"
+    post:
+      tags: [Events]
+      summary: Rotate a webhook signing secret
+      description: >
+        Mint a new secret for this subscription. The previous secret remains
+        valid for 24 hours so receivers can deploy the new secret safely.
+      operationId: rotateWebhookSecret
+      responses:
+        "200":
+          description: Secret rotated; store the new plaintext secret now.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookSecretResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "429":
-          description: >
-            Too many held-open pulls. Charged only when `timeout` is greater
-            than zero.
-          headers:
-            Retry-After:
-              description: Whole seconds before another held-open pull.
-              schema:
-                type: integer
-                minimum: 1
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
+          $ref: "#/components/responses/WriteBudgetExceeded"
+        "503":
+          $ref: "#/components/responses/WebhookDeliveryUnavailable"
 
   /v1/attachments:
     post:
@@ -878,7 +861,7 @@ paths:
         Records that the caller received everything through `message_id`.
         Only a recipient can advance this watermark. Older or repeated targets
         are idempotent no-ops and never imply that the messages were read.
-        Pulling a page of `/v1/events` already stamps the messages in it
+        A successful webhook acknowledgement already stamps an inbound message
         delivered, so an agent needs this only for an explicit stamp.
       tags: [Conversations]
       security:
@@ -1263,9 +1246,9 @@ webhooks:
       summary: Receive an agent event
       operationId: receiveAgentEventWebhook
       description: >
-        Relay sends every deliverable event to the agent's receiver. Verify the
-        Standard Webhooks signature against the exact raw body, deduplicate by
-        `event_id`, durably accept the event, and return a 2xx within 10
+        Relay sends Linq's v3 envelope to each matching subscription. Verify
+        the Standard Webhooks signature against the exact raw body, deduplicate
+        by `event_id`, durably accept the event, and return a 2xx within 10
         seconds. A 408, 429, or 5xx is retried; a 3xx or any other 4xx is a
         permanent failure.
       security: []
@@ -1287,22 +1270,12 @@ webhooks:
           description: >
             One or more space-separated Standard Webhooks signatures such as
             `v1,<base64>`. Verify against any of them.
-        - name: webhook-delivery-id
-          in: header
-          required: true
-          schema: { type: string }
-          description: Relay's delivery row. Stable across retries, for correlating with Relay's logs rather than for dedupe.
-        - name: relay-webhook-version
-          in: header
-          required: true
-          schema: { type: string, format: date }
-          description: The envelope version this delivery was rendered as.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Event"
+              $ref: "#/components/schemas/LinqWebhookEnvelope"
       responses:
         "204":
           description: Event accepted.
@@ -2267,7 +2240,7 @@ components:
           example: cnv_01k1m4q9vn2r7t9b4c6qdh8xwy
         sequence:
           type: integer
-          description: Order inside the conversation. It is unrelated to event sequences.
+          description: Order inside stored conversation history. Linq webhook envelopes do not include it.
         group_event:
           $ref: "#/components/schemas/GroupEvent"
         is_audio_message:
@@ -2451,11 +2424,9 @@ components:
       additionalProperties: false
       required: [message_id, target_part_id, type, actor, operation, changed]
       description: >
-        One reaction as Relay recorded it, in the reaction endpoint's response
-        body. The event that follows carries the same members minus `changed`:
-        see ReactionEventData. Both are flatter than the `reactions` array in a
-        projected message, which carries `actor_kind` and `actor_id` instead of
-        a nested actor: see ProjectedReaction.
+        The reaction endpoint's synchronous response. Webhook subscribers
+        receive a separate `reaction.added` or `reaction.removed` event using
+        LinqReactionEventData.
       properties:
         message_id: { type: string, pattern: "^msg_" }
         target_part_id:
@@ -2520,6 +2491,7 @@ components:
     WebhookEventType:
       type: string
       enum:
+        - message.sent
         - message.received
         - message.delivered
         - message.read
@@ -2534,31 +2506,53 @@ components:
     Webhook:
       type: object
       additionalProperties: false
-      required: [url, transport]
-      description: >
-        An agent's one receiver. Every deliverable event type goes to it: an
-        agent chooses a transport, not a filter, so there is no per-receiver
-        subscription list and no enabled flag.
+      required: [id, url, events, enabled, secret_prefix, disabled_at, last_disabled_reason, created_at, updated_at]
       properties:
+        id:
+          type: string
+          pattern: "^wh_"
         url:
-          type: [string, "null"]
+          type: string
           format: uri
           maxLength: 2048
-          description: Null when the agent has no receiver set.
           example: https://agent.example/webhooks/relay
-        transport:
+        events:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/WebhookEventType"
+        enabled:
+          type: boolean
+        secret_prefix:
+          type: string
+          pattern: "^whsec_"
+        disabled_at:
           type: [string, "null"]
-          enum: [webhook, polling, null]
-          description: >
-            `webhook` when Relay POSTs events to `url`, `polling` when the
-            agent reads them with `GET /v1/events`. Null on an agent that has
-            never set one, which behaves as `polling`.
+          format: date-time
+        last_disabled_reason:
+          type: [string, "null"]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
 
-    WebhookInput:
+    WebhookListResponse:
+      type: object
+      additionalProperties: false
+      required: [webhooks]
+      properties:
+        webhooks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Webhook"
+
+    WebhookCreateInput:
       type: object
       additionalProperties: false
       required: [url]
-      description: Any field other than `url` answers 422 rather than being ignored.
       properties:
         url:
           type: string
@@ -2569,11 +2563,37 @@ components:
             Public HTTPS receiver URL, without credentials and without a
             fragment.
           example: https://agent.example/webhooks/relay
+        events:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          description: Omit to subscribe to every supported event.
+          items:
+            $ref: "#/components/schemas/WebhookEventType"
+
+    WebhookUpdateInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        url:
+          type: string
+          format: uri
+          pattern: "^https://"
+          maxLength: 2048
+        events:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/WebhookEventType"
+        enabled:
+          type: boolean
 
     WebhookSecretResponse:
       type: object
       additionalProperties: false
-      required: [webhook]
+      required: [webhook, signing_secret]
       properties:
         webhook:
           $ref: "#/components/schemas/Webhook"
@@ -2581,161 +2601,231 @@ components:
           type: string
           pattern: "^whsec_"
           description: >
-            Base64-encoded 256-bit HMAC key, present only in the response that
-            minted it, which is only when the agent had no secret. Relay never
-            returns it again, and a `PUT` that merely moves the URL omits it.
+            Base64-encoded 256-bit HMAC key. Returned only when a subscription
+            is created or its secret is rotated; Relay never returns it again.
           example: whsec_EXAMPLEKEYDONOTUSE0000000000000000
 
-    Event:
+    LinqWebhookEnvelope:
       type: object
-      # Additive members never bump the envelope version, so this stays open on
-      # purpose: a consumer that rejects a field it does not know is a consumer
-      # Relay cannot ship anything to. See the deprecation policy in
-      # [Webhooks](/guides/webhooks#versioning-and-deprecation).
-      additionalProperties: true
-      required: [event_id, sequence, event_type, agent_id, chat_id, created_at, webhook_version, data]
+      additionalProperties: false
+      required: [api_version, webhook_version, event_type, event_id, created_at, trace_id, partner_id, data]
+      description: Linq's v3 webhook envelope at webhook version 2026-02-03.
       properties:
-        event_id:
+        api_version:
           type: string
-          description: Deduplicate on this; delivery is at least once.
-          example: evt_01JZE9M2XW
-        sequence:
-          type: integer
-          minimum: 1
-          description: >
-            This agent's log position. Pass the highest one you have processed
-            as `after` on the next `GET /v1/events`.
+          const: v3
         webhook_version:
           type: string
-          format: date
-          example: "2026-08-27"
-          description: >
-            The envelope shape this delivery was rendered as, repeated inside
-            the body so a consumer that queues the envelope still has it an
-            hour later, and so it sits inside the signed bytes. Webhooks also
-            receive it as the `relay-webhook-version` header.
+          const: "2026-02-03"
         event_type:
           $ref: "#/components/schemas/WebhookEventType"
-          example: message.received
-        agent_id:
+        event_id:
           type: string
-          example: agt_01JZRELAY
-        chat_id:
-          type: [string, "null"]
-          description: The conversation this event belongs to, when it belongs to one.
+          description: Stable at-least-once delivery deduplication key.
         created_at:
           type: string
           format: date-time
+        trace_id:
+          type: string
+          description: Correlation ID for delivery debugging.
+        partner_id:
+          type: string
+          description: Receiving agent ID.
         data:
           description: >
-            The shape `event_type` names. Switch on `event_type`, never on
-            which branch happens to match.
+            Linq event-specific data. Select the branch using `event_type`.
           oneOf:
-            - $ref: "#/components/schemas/MessageEventData"
-            - $ref: "#/components/schemas/ReceiptEventData"
-            - $ref: "#/components/schemas/ChatCreatedEventData"
-            - $ref: "#/components/schemas/RosterEventData"
-            - $ref: "#/components/schemas/ChatMetadataEventData"
-            - $ref: "#/components/schemas/ReactionEventData"
+            - $ref: "#/components/schemas/LinqMessageEventData"
+            - $ref: "#/components/schemas/LinqReactionEventData"
+            - $ref: "#/components/schemas/LinqChatCreatedEventData"
+            - $ref: "#/components/schemas/LinqChatMetadataEventData"
+            - $ref: "#/components/schemas/LinqParticipantAddedEventData"
+            - $ref: "#/components/schemas/LinqParticipantRemovedEventData"
 
-    MessageEventData:
-      description: >
-        The `data` of a `message.received`: the full stored message itself,
-        with no wrapper member around it.
-      allOf:
-        - $ref: "#/components/schemas/Message"
-
-    ReceiptEventData:
+    LinqChatHandle:
       type: object
-      additionalProperties: true
-      required: [message_id, chat_id, through_sequence, at, recipient]
-      description: >
-        The `data` of a `message.delivered` or `message.read`: one of this
-        agent's messages reached or was read by the other party. Only 1:1
-        conversations emit these.
+      additionalProperties: false
+      required: [id, handle, is_me, service, status, joined_at, left_at]
       properties:
-        message_id: { type: string, pattern: "^msg_" }
-        chat_id: { type: string, pattern: "^cnv_" }
-        through_sequence: { type: integer, minimum: 1 }
-        at: { type: string, format: date-time }
-        recipient:
-          $ref: "#/components/schemas/Sender"
+        id: { type: string }
+        handle: { type: string }
+        is_me: { type: boolean }
+        service: { type: string, const: iMessage }
+        status: { type: string, enum: [active, left, removed] }
+        joined_at: { type: string, format: date-time }
+        left_at: { type: [string, "null"], format: date-time }
 
-    ChatCreatedEventData:
+    LinqHealthStatus:
       type: object
-      additionalProperties: true
-      required: [chat_id, actor]
-      description: >
-        The `data` of `chat.created`: the conversation and the person who
-        created it.
+      additionalProperties: false
+      required: [status, doc_url, updated_at]
       properties:
-        chat_id: { type: string, pattern: "^cnv_" }
-        actor:
-          $ref: "#/components/schemas/Sender"
-
-    RosterEventData:
-      type: object
-      additionalProperties: true
-      required: [chat_id, actor, affected_participant]
-      description: >
-        The `data` of `participant.added` and `participant.removed`. On a
-        leave, the actor and the affected participant are the same person. The
-        matching notice arrives separately as a `message.received` whose
-        message carries a `group_event` of `member_added`, `member_left`, or
-        `member_removed`. Roster changes are ordered by the event's own
-        `sequence`; there is no separate roster version.
-      properties:
-        chat_id: { type: string, pattern: "^cnv_" }
-        actor:
-          $ref: "#/components/schemas/Sender"
-        affected_participant:
-          allOf:
-            - $ref: "#/components/schemas/Sender"
-          description: The participant added or removed.
-
-    ChatMetadataEventData:
-      type: object
-      additionalProperties: true
-      required: [chat_id, old_value, new_value, changed_by_handle, updated_at]
-      description: >
-        The `data` of `chat.group_name_updated` and `chat.group_icon_updated`.
-        The matching notice arrives separately as a `message.received` whose
-        message carries a `group_event` of `name_changed` or `photo_changed`.
-      properties:
-        chat_id: { type: string, pattern: "^cnv_" }
-        old_value:
-          type: [string, "null"]
-        new_value:
-          type: [string, "null"]
-        changed_by_handle:
-          $ref: "#/components/schemas/Sender"
-        updated_at:
+        status: { type: string, const: HEALTHY }
+        doc_url:
           type: string
-          format: date-time
+          const: https://docs.linqapp.com/guides/chats/chat-health#healthy
+        updated_at: { type: string, format: date-time }
 
-    ReactionEventData:
+    LinqMessageChat:
       type: object
-      # Open for the same reason Event is: members are added additively.
-      additionalProperties: true
-      required: [message_id, target_part_id, type, actor, operation]
-      description: >
-        The `data` of a `reaction.added` or `reaction.removed`. It carries no
-        `changed` member: Relay emits an event only for a reaction that
-        changed something, so the reaction endpoint's own response is the only
-        place that reports a no-op.
+      additionalProperties: false
+      required: [id, is_group, owner_handle, health_status]
       properties:
-        message_id: { type: string, pattern: "^msg_" }
-        target_part_id:
+        id: { type: string }
+        is_group: { type: boolean }
+        owner_handle:
+          $ref: "#/components/schemas/LinqChatHandle"
+        health_status:
+          $ref: "#/components/schemas/LinqHealthStatus"
+
+    LinqTextPart:
+      type: object
+      additionalProperties: false
+      required: [type, value]
+      properties:
+        type: { type: string, const: text }
+        value: { type: string }
+        mention: { type: string }
+        mention_range:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items: { type: integer }
+        text_decorations:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [range, style]
+            properties:
+              range:
+                type: array
+                minItems: 2
+                maxItems: 2
+                items: { type: integer }
+              style: { type: string }
+
+    LinqMediaPart:
+      type: object
+      additionalProperties: false
+      required: [id, filename, mime_type, size_bytes, type, url]
+      properties:
+        id: { type: string }
+        filename: { type: string }
+        mime_type: { type: string }
+        size_bytes: { type: integer, minimum: 0 }
+        type: { type: string, const: media }
+        url: { type: string, format: uri }
+
+    LinqLinkPart:
+      type: object
+      additionalProperties: false
+      required: [type, value]
+      properties:
+        type: { type: string, const: link }
+        value: { type: string, format: uri }
+
+    LinqMessageEventData:
+      type: object
+      additionalProperties: false
+      required: [chat, id, direction, sender_handle, parts, effect, reply_to, sent_at, delivered_at, read_at, service]
+      properties:
+        chat:
+          $ref: "#/components/schemas/LinqMessageChat"
+        id: { type: string }
+        idempotency_key: { type: [string, "null"] }
+        direction: { type: string, enum: [inbound, outbound] }
+        sender_handle:
+          $ref: "#/components/schemas/LinqChatHandle"
+        parts:
+          type: array
+          items:
+            oneOf:
+              - $ref: "#/components/schemas/LinqTextPart"
+              - $ref: "#/components/schemas/LinqMediaPart"
+              - $ref: "#/components/schemas/LinqLinkPart"
+        effect: { type: [string, "null"] }
+        reply_to:
           oneOf:
-            - $ref: "#/components/schemas/PartId"
             - type: "null"
-          description: Null exactly when the reaction is on the whole message.
-        type:
-          type: string
-          enum: [love, like, dislike, laugh, emphasize, question, custom]
-        custom_emoji: { type: string, example: "❤️" }
-        actor:
-          $ref: "#/components/schemas/Sender"
-        operation:
-          type: string
-          enum: [add, remove]
+            - type: object
+              additionalProperties: false
+              required: [message_id]
+              properties:
+                message_id: { type: string }
+                part_index: { type: integer, minimum: 0 }
+        sent_at: { type: string, format: date-time }
+        delivered_at: { type: [string, "null"], format: date-time }
+        read_at: { type: [string, "null"], format: date-time }
+        service: { type: string, const: iMessage }
+        preferred_service: { type: [string, "null"] }
+
+    LinqReactionEventData:
+      type: object
+      additionalProperties: false
+      required: [chat_id, message_id, part_index, reaction_type, custom_emoji, is_from_me, from, from_handle, service, reacted_at, sticker]
+      properties:
+        chat_id: { type: string }
+        message_id: { type: string }
+        part_index: { type: integer, minimum: 0 }
+        reaction_type: { type: string, enum: [love, like, dislike, laugh, emphasize, question, custom] }
+        custom_emoji: { type: [string, "null"] }
+        is_from_me: { type: boolean }
+        from: { type: string }
+        from_handle:
+          $ref: "#/components/schemas/LinqChatHandle"
+        service: { type: string, const: iMessage }
+        reacted_at: { type: string, format: date-time }
+        sticker: { type: "null" }
+
+    LinqChatCreatedEventData:
+      type: object
+      additionalProperties: false
+      required: [id, display_name, service, handles, is_group, created_at, updated_at, health_status]
+      properties:
+        id: { type: string }
+        display_name: { type: string }
+        service: { type: string, const: iMessage }
+        handles:
+          type: array
+          items:
+            $ref: "#/components/schemas/LinqChatHandle"
+        is_group: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        health_status:
+          $ref: "#/components/schemas/LinqHealthStatus"
+
+    LinqChatMetadataEventData:
+      type: object
+      additionalProperties: false
+      required: [chat_id, old_value, new_value, changed_by_handle, updated_at]
+      properties:
+        chat_id: { type: string }
+        old_value: { type: [string, "null"] }
+        new_value: { type: [string, "null"] }
+        changed_by_handle:
+          $ref: "#/components/schemas/LinqChatHandle"
+        updated_at: { type: string, format: date-time }
+
+    LinqParticipantAddedEventData:
+      type: object
+      additionalProperties: false
+      required: [chat_id, handle, participant, added_at]
+      properties:
+        chat_id: { type: string }
+        handle: { type: string }
+        participant:
+          $ref: "#/components/schemas/LinqChatHandle"
+        added_at: { type: string, format: date-time }
+
+    LinqParticipantRemovedEventData:
+      type: object
+      additionalProperties: false
+      required: [chat_id, handle, participant, removed_at]
+      properties:
+        chat_id: { type: string }
+        handle: { type: string }
+        participant:
+          $ref: "#/components/schemas/LinqChatHandle"
+        removed_at: { type: string, format: date-time }

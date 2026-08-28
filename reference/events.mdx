@@ -1,252 +1,194 @@
 ---
 title: "Event types"
-description: "Handle every event envelope and payload Relay emits."
-keywords: ["events", "event types", "payloads", "message.received", "webhook events", "envelope"]
+description: "Handle the Linq-compatible webhook envelope and each event-specific data object Relay emits."
+keywords: ["events", "Linq", "message.received", "reactions", "webhook_version", "2026-02-03"]
 ---
 
-Every event uses the same envelope:
+Every delivered event uses Linq's current v3 webhook envelope.
 
 ```json
 {
-  "event_id": "evt_01JZE9M2XW",
-  "sequence": 118,
+  "api_version": "v3",
+  "webhook_version": "2026-02-03",
   "event_type": "message.received",
-  "agent_id": "agt_01JZRELAY",
-  "chat_id": "cnv_01JZC7K4RQ",
-  "created_at": "2026-07-12T01:21:03.000Z",
-  "webhook_version": "2026-08-27",
-  "data": { }
+  "event_id": "evt_01m135vfepewek1yqy3p82yszs",
+  "created_at": "2026-08-27T18:06:02.000Z",
+  "trace_id": "8af9171a45022df2eb74ba4e4c83be0f",
+  "partner_id": "agt_01jz9x4t2snbqe6m8v3kcyh7wd",
+  "data": {}
 }
 ```
 
-`event_id` is globally unique and serves as the deduplication key. Delivery is
-at least once. Ignore unknown `event_type` values, so new types cannot break the
-consumer.
+| Field | Contents |
+| --- | --- |
+| `api_version` | `v3` |
+| `webhook_version` | `2026-02-03` |
+| `event_type` | Linq event name |
+| `event_id` | Stable deduplication key, also sent as `webhook-id` |
+| `created_at` | Event creation time |
+| `trace_id` | Debugging correlation ID |
+| `partner_id` | Receiving agent ID |
+| `data` | Event-specific Linq payload |
 
-`sequence` is this agent's position in its own durable log. Pass the highest one
-you have processed as `after` on the next [`GET /v1/events`](/guides/long-polling).
-Webhook deliveries carry the same number, so a consumer that runs both
-transports reads one ordering.
+Relay's prefixed IDs remain the values because Relay owns those identities.
+The field names, nesting, and event names follow Linq.
 
-`webhook_version` is the envelope shape this delivery was rendered as. It is a
-date rather than an integer: pin the day the shape you wrote against was
-frozen. It is repeated inside the body so a consumer that queues the envelope
-still has it an hour later, and so it sits inside the signed bytes.
-
-Additive members never bump that date, so ignore fields you do not recognise
-as well as event types you do not. See
-[Versioning and deprecation](/guides/webhooks#versioning-and-deprecation).
-
-See [Delivery model](/guides/delivery-model) for webhook acknowledgement,
-idempotent writes, live state, and recovery.
-
-## Emitted in v0
-
-Every event type is available to both webhooks and `GET /v1/events`.
+## Supported events
 
 | Event | Fires when |
 | --- | --- |
-| `message.received` | Someone sent a message in one of the agent's conversations |
-| `message.delivered` | A recipient received the agent's message |
-| `message.read` | A recipient read the agent's message |
-| `chat.created` | A chat the agent belongs to was created |
-| `chat.group_name_updated` | A group was renamed |
-| `chat.group_icon_updated` | A group's photo changed |
-| `participant.added` | A participant (the agent included) was added to a group |
-| `participant.removed` | A participant (the agent included) was removed from, or left, a group |
-| `reaction.added` | Someone reacted to the agent's message |
-| `reaction.removed` | Someone took a reaction off |
+| `message.sent` | An outbound message was committed |
+| `message.received` | An inbound message arrived |
+| `message.delivered` | An outbound message reached its recipient |
+| `message.read` | An outbound message was read |
+| `reaction.added` / `reaction.removed` | A reaction was added or removed |
+| `chat.created` | A conversation was created |
+| `chat.group_name_updated` / `chat.group_icon_updated` | Group metadata changed |
+| `participant.added` / `participant.removed` | Group membership changed |
 
-### `message.received`
+## Message events
 
-A participant sent a message in one of the agent's conversations, direct or
-group.
+`message.sent`, `message.received`, `message.delivered`, and `message.read`
+share Linq's `MessageEventV2` data shape.
 
 | Field | Contents |
 | --- | --- |
-| `data` | The full stored message: `id`, `chat_id`, `sequence`, `sender_handle`, `is_from_me`, ordered `parts[]`, `reply_to`, `text`, `status`, `created_at` |
-
-One send is one message, so one send is one `message.received`. The agent's own
-messages never echo back.
-
-A group membership or metadata change also arrives here, as a message carrying
-a `group_event`: one of `member_added`, `member_left`, `member_removed`,
-`name_changed`, or `photo_changed`. A notice carries no parts. The structured
-fields are authoritative, `group_event.fallback_text` is the line to render,
-and the sender is the person who made the change rather than a system account.
-The app renders a notice as a centered line.
+| `chat` | `{ id, is_group, owner_handle, health_status }` |
+| `id` | Message ID |
+| `direction` | `inbound` or `outbound` |
+| `sender_handle` | Linq `ChatHandle` object |
+| `parts` | Ordered Linq text, media, or link parts |
+| `effect` | Message effect or `null` |
+| `reply_to` | `{ message_id, part_index? }` or `null` |
+| `sent_at` | Message send time |
+| `delivered_at` | Delivery time at the delivered/read stage, otherwise `null` |
+| `read_at` | Read time at the read stage, otherwise `null` |
+| `service` | `iMessage` |
+| `idempotency_key` | Outbound only, currently `null` |
+| `preferred_service` | Outbound only, currently `null` |
 
 ```json
 {
-  "event_type": "message.received",
-  "data": {
-    "id": "msg_01JZM3T8AH",
-    "chat_id": "cnv_01JZC7K4RQ",
-    "sequence": 4,
-    "group_event": { "event_type": "member_added", "target_handle_id": "agt_01k1m4q9vn2r7t9b4c6qdh8xwy", "fallback_text": "Scheduler was added" },
-    "sender_handle": { "kind": "user", "id": "usr_01JZU1F0BD" },
-    "is_from_me": false,
-    "parts": [],
-    "reply_to": null,
-    "text": "Scheduler was added",
-    "status": "sent",
-    "created_at": "2026-07-17T12:00:00.000Z"
-  }
+  "chat": {
+    "id": "cnv_01jz9x4t3af8rjq2w6y5nkd0vh",
+    "is_group": false,
+    "owner_handle": {
+      "id": "agt_01jz9x4t2snbqe6m8v3kcyh7wd",
+      "handle": "relay",
+      "is_me": true,
+      "service": "iMessage",
+      "status": "active",
+      "joined_at": "2026-08-27T18:00:00.000Z",
+      "left_at": null
+    },
+    "health_status": {
+      "status": "HEALTHY",
+      "doc_url": "https://docs.linqapp.com/guides/chats/chat-health#healthy",
+      "updated_at": "2026-08-27T18:06:02.000Z"
+    }
+  },
+  "id": "msg_01jz9xa2tqe8vh5k2wy7ncd4rb",
+  "direction": "inbound",
+  "sender_handle": {
+    "id": "usr_01jz8w2k5qnd7vh3e9tcyf4mrb",
+    "handle": "morrison",
+    "is_me": false,
+    "service": "iMessage",
+    "status": "active",
+    "joined_at": "2026-08-27T18:00:00.000Z",
+    "left_at": null
+  },
+  "parts": [{ "type": "text", "value": "Move standup to 10" }],
+  "effect": null,
+  "reply_to": null,
+  "sent_at": "2026-08-27T18:06:02.000Z",
+  "delivered_at": null,
+  "read_at": null,
+  "service": "iMessage"
 }
 ```
 
-### `message.delivered`
-
-A recipient durably received the agent's message. Everything through
-`through_sequence` is delivered to `recipient`.
-
-```json
-{
-  "event_type": "message.delivered",
-  "data": {
-    "message_id": "msg_01KXEKDSH8M3V5P2R7T9B4C6QD",
-    "chat_id": "cnv_01JZU1CONV",
-    "through_sequence": 42,
-    "recipient": { "kind": "user", "id": "usr_01JZU1X4" },
-    "at": "2026-07-13T20:00:01Z"
-  }
-}
-```
-
-Receipts exist in 1:1 conversations only. A group message reports no
-per-recipient state, the way iMessage does not, so its `status` stays `sent`
-and neither receipt event fires.
-
-### `message.read`
-
-The payload matches `message.delivered`. The recipient has read the
-conversation through `through_sequence`. Read implies delivered. Neither event
-starts or stops typing.
-
-To advance the agent's own read watermark, see [Read receipts](/guides/read-receipts).
-
-### `reaction.added` / `reaction.removed`
-
-A participant added or removed a reaction on the agent's message.
-
-```json
-{
-  "event_type": "reaction.added",
-  "data": {
-    "message_id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
-    "target_part_id": "prt_01k1ma0m5sy2k8f3b7wnq4hdvc",
-    "type": "custom",
-    "custom_emoji": "🔥",
-    "actor": { "kind": "user", "id": "usr_01k1m8t3zq7v2r9c4b6ndh5xwj" },
-    "operation": "add"
-  }
-}
-```
-
-| Field | Contents |
-| --- | --- |
-| `target_part_id` | The part this reaction is anchored to, and the identity for it. Null when the reaction is on the whole message |
-| `type` | One of `love`, `like`, `dislike`, `laugh`, `emphasize`, `question`, `custom`, Apple's six tapback verbs plus a custom emoji |
-| `custom_emoji` | The emoji, present exactly when `type` is `custom` |
-| `actor.kind` | `user` or `agent` |
-
-Relay emits an event only for a reaction that changed something, so there is no
-`changed` member here. The reaction endpoint's own response carries it, and
-that is the only place a no-op is reported.
-
-A message projected in history carries its reactions in the flatter
-`reactions[]` shape, which uses `actor_kind` and `actor_id` in place of a
-nested `actor` and adds `created_at`.
-
-### `chat.created`, `participant.added`, `participant.removed`, `chat.group_name_updated`, `chat.group_icon_updated`
-
-Relay emits these when a person changes a group the agent is in. A removed
-agent receives no further events for that group.
-
-An agent in a group is an ordinary member: it receives every message from the
-sequence it joined at, and reads that same history back from
-`GET /v1/chats/{id}/messages`.
-
-Roster events (`participant.added` / `participant.removed`) carry:
-
-| Field | Contents |
-| --- | --- |
-| `chat_id` | The group the change happened in |
-| `actor` | The person who made the change |
-| `affected_participant` | The participant added or removed. On a leave, the actor and the affected participant are the same person |
-
-Roster changes are ordered by the event's own `sequence`. There is no separate
-roster version.
-
-Metadata events (`chat.group_name_updated` / `chat.group_icon_updated`) carry:
-
-| Field | Contents |
-| --- | --- |
-| `chat_id` | The group the change happened in |
-| `old_value` / `new_value` | The name or icon before and after |
-| `changed_by_handle` | The person who made the change |
-| `updated_at` | When it changed |
+### Parts
 
 <CodeGroup>
 
-```json Roster change
+```json Text
+{ "type": "text", "value": "Hello" }
+```
+
+```json Media
 {
-  "chat_id": "cnv_01JZC7K4RQ",
-  "actor": { "kind": "user", "id": "usr_01JZU1F0BD" },
-  "affected_participant": { "kind": "agent", "id": "agt_01JZRELAY" }
+  "id": "att_01jz9xb72qfd4mv6kc0w3re8tn",
+  "filename": "photo.jpg",
+  "mime_type": "image/jpeg",
+  "size_bytes": 245678,
+  "type": "media",
+  "url": "https://api.relayapp.im/v1/attachments/att_01jz9xb72qfd4mv6kc0w3re8tn"
 }
 ```
 
-```json Metadata change
-{
-  "chat_id": "cnv_01JZC7K4RQ",
-  "old_value": "Weekend",
-  "new_value": "Weekend plans",
-  "changed_by_handle": { "kind": "user", "id": "usr_01JZU1F0BD" },
-  "updated_at": "2026-07-17T12:00:00.000Z"
-}
+```json Link
+{ "type": "link", "value": "https://example.com" }
 ```
 
 </CodeGroup>
 
-The matching notice arrives separately, as the `message.received` shown above:
-a message row carrying a `group_event` (member_added, member_left,
-member_removed, name_changed or photo_changed), sent by
-the person who made the change. A leave is a `participant.removed` whose
-`actor` and `affected_participant` are the same person.
+## Reaction events
 
-A backend receives these lifecycle events, but cannot create a group or change
-its membership. People do that in the app. See [API availability](/roadmap).
+`reaction.added` and `reaction.removed` use Linq's reaction shape. Removal
+creates its own event with `reacted_at` set to the removal time.
 
-## Not delivered to an agent
+```json
+{
+  "chat_id": "cnv_01jz9x4t3af8rjq2w6y5nkd0vh",
+  "message_id": "msg_01jz9xa2tqe8vh5k2wy7ncd4rb",
+  "part_index": 0,
+  "reaction_type": "custom",
+  "custom_emoji": "🔥",
+  "is_from_me": false,
+  "from": "morrison",
+  "from_handle": {
+    "id": "usr_01jz8w2k5qnd7vh3e9tcyf4mrb",
+    "handle": "morrison",
+    "is_me": false,
+    "service": "iMessage",
+    "status": "active",
+    "joined_at": "2026-08-27T18:00:00.000Z",
+    "left_at": null
+  },
+  "service": "iMessage",
+  "reacted_at": "2026-08-27T18:08:00.000Z",
+  "sticker": null
+}
+```
 
-Typing is ephemeral. `chat.typing_indicator.started` and `chat.typing_indicator.stopped` are pushed to a
-person's live devices, take no sequence, never enter the log, and are never
-replayed. See [Typing indicators](/guides/typing-indicators).
+`reaction_type` is one of `love`, `like`, `dislike`, `laugh`, `emphasize`,
+`question`, or `custom`. `custom_emoji` contains the emoji only for `custom`.
 
-Install events go to the person, not to the agent. `agent.installed` carries
-`{ agent_id }` and `agent.removed` carries `{ agent_id, removed_at }`, and both
-land in the log of the person whose agent list changed. They drive that
-person's app; neither reaches a webhook receiver or `GET /v1/events`. Your
-first sign that somebody installed your agent is the `message.received` they
-send.
+## Chat and participant events
 
-## Specified, coming soon
+`chat.created` carries the Linq chat object:
 
-The Relay contract also defines these. v0 emits none of them.
+| Field | Contents |
+| --- | --- |
+| `id` | Chat ID |
+| `display_name` | Current display name |
+| `service` | `iMessage` |
+| `handles` | Current Linq `ChatHandle` roster |
+| `is_group` | Group discriminator |
+| `created_at` / `updated_at` | Chat timestamps |
+| `health_status` | Linq health object |
 
-| | Event |
-| :---: | --- |
-| ⏳ | `message.failed` |
-| ⏳ | Typing events entering the event log |
-| ⏳ | `attachment.available` |
-| ⏳ | The `call.*` family |
+Group name and icon events carry `chat_id`, `old_value`, `new_value`,
+`changed_by_handle`, and `updated_at`.
 
-See [API availability](/roadmap).
+Participant events carry `chat_id`, `handle`, and the full `participant`
+handle. `participant.added` adds `added_at`; `participant.removed` adds
+`removed_at` and reports the participant with `status: "removed"`.
 
 ## See also
 
-- [Message model](/concepts/message-model)
+- [Linq webhook event reference](https://docs.linqapp.com/guides/webhooks/events/)
 - [Webhooks](/guides/webhooks)
 - [Delivery model](/guides/delivery-model)
-- [API availability](/roadmap)
+- [Message model](/concepts/message-model)

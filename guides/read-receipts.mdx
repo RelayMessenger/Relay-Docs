@@ -115,20 +115,14 @@ you consumed rather than every message behind it.
 
 ## Record delivery
 
-Relay records Delivered on the transports it hands messages to. Which transport
-you use decides whether you also call `/delivered`.
+Relay records Delivered when a subscribed webhook accepts a message.
 
-| Transport | Relay records Delivered |
+| Action | Relay records Delivered |
 | --- | --- |
 | Webhook | After your endpoint answers `2xx` |
-| Long poll on `GET /v1/events` | When a later cursor acknowledges the page |
-| Polling [conversation history](/guides/conversation-history) | Never. Reading history changes no receipt |
 | `/delivered` | When you call it |
 
-Webhook and `GET /v1/events` consumers get Delivered from Relay and need no
-extra call. A backend that discovers messages by polling conversation history
-must call `/delivered` itself, once per new inbound message, or the sender stays
-on Sent until the Read receipt arrives.
+Webhook consumers get Delivered from Relay and need no extra call.
 
 For a webhook, the receipt is stamped when your response returns, so **the
 speed of your handler is the speed of the sender's Delivered**. Acknowledge as
@@ -159,9 +153,8 @@ move from Relay to you, which is why step 3 comes before step 4. Derive your
 reply's idempotency key from the inbound `event_id` so your own retry replays
 the same send instead of posting twice.
 
-Call `/delivered` when your runtime accepts a message outside the two automatic
-transports, or when you want to stamp delivery at a point you control, such as
-after you durably enqueue the message:
+Call `/delivered` only when you explicitly need to stamp delivery at a point
+you control, such as after you durably enqueue the message:
 
 ```bash
 curl -sS -X POST "https://api.relayapp.im/v1/chats/cnv_01JZC7K4RQ/delivered" \
