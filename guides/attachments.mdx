@@ -1,142 +1,89 @@
 ---
 title: "Attachments"
-description: "Upload a file and reference it from a media or voice-memo part."
-keywords: ["attachments", "upload", "attachment_id", "media", "files", "100 mb"]
+description: "Allocate an attachment, upload exact bytes, and reference it from a message."
+keywords: ["attachments", "upload", "range", "image"]
 ---
 
-Upload a file, then reference its `attachment_id` in a `media` or `media` part on a message with `is_audio_message`.
+Allocate bytes before sending an attachment part.
 
-## Upload
-
-Send the raw bytes as the request body (up to **100 MB**):
+## Allocate
 
 ```bash
-curl -sS -X POST "https://api.relayapp.im/v1/attachments" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: image/png" \
-  -H "X-Relay-Filename: chart.png" \
-  --data-binary @chart.png
+curl -sS -X POST "$RELAY_API_URL/v1/attachments"  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" -H "Content-Type: application/json"  -H "Idempotency-Key: attachment-front-door-1" -d @attachment.json
 ```
-
-`201 Created`:
 
 ```json
 {
+  "filename": "front-door.jpg",
+  "mime_type": "image/jpeg",
+  "size_bytes": 482193,
+  "sha256": "7b15f91357232d9198d16a4bd29f6a2d8100f0c5dc24f568951c87901fe7d338"
+}
+```
+
+The `201` response returns a 15-minute upload target.
+
+<Expandable title="Allocation response">
+
+```json
+{
+  "object": "attachment.upload",
+  "object_version": "2026-08-28",
   "attachment": {
-    "id": "att_01KXGWNZFRF5BH4959T6JYD9SM",
-    "url": "https://api.relayapp.im/v1/attachment-content/eeQPcHI4…",
-    "content_type": "image/png",
-    "size_bytes": 48213
+    "object": "attachment",
+    "object_version": "2026-08-28",
+    "id": "0198f4af-9fd2-77f7-a8c9-7d6c4049d564",
+    "filename": "front-door.jpg",
+    "mime_type": "image/jpeg",
+    "size_bytes": 482193,
+    "status": "pending",
+    "sha256": null,
+    "width": null,
+    "height": null,
+    "duration_ms": null,
+    "created_at": "2026-08-28T14:00:00.000Z",
+    "available_at": null
+  },
+  "upload": {
+    "method": "PUT",
+    "url": "/v1/attachments/0198f4af-9fd2-77f7-a8c9-7d6c4049d564/content",
+    "expires_at": "2026-08-28T14:15:00.000Z",
+    "required_headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "482193",
+      "X-Content-SHA256": "7b15f91357232d9198d16a4bd29f6a2d8100f0c5dc24f568951c87901fe7d338"
+    }
   }
 }
 ```
 
-| Header | Effect |
-| --- | --- |
-| `Content-Type` | Sets the stored MIME type. Defaults to `application/octet-stream` |
-| `X-Relay-Filename` | Names the file for downloads |
+</Expandable>
 
-A presigned two-step flow is tracked on [API availability](/roadmap).
-
-<Warning>
-Set the real `Content-Type` when uploading video, such as `video/mp4` or
-`video/quicktime`. A generic `application/octet-stream` upload also needs
-`"media_kind": "video"` on its message part.
-</Warning>
-
-## Send it
-
-Reference the attachment in a part. Relay stores its download URL on the part
-so clients and history reads can render it directly. Text and media commit as
-separate messages: the send below commits a text message, then a media
-message. Contiguous media parts in one send stay together as one media
-message:
+## Upload
 
 ```bash
-curl -sS -X POST "https://api.relayapp.im/v1/messages" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: media-evt_01JZE9M2XW" \
-  -d '{
-    "chat_id": "cnv_01JZC7K4RQ",
-    "parts": [
-      { "type": "text", "text": "Here is the chart:" },
-      { "type": "media", "attachment_id": "att_01KXGWNZFRF5BH4959T6JYD9SM" }
-    ]
-  }'
+curl -sS -X PUT "$RELAY_API_URL/v1/attachments/$ATTACHMENT_ID/content"  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" -H "Content-Type: application/octet-stream"  -H "Content-Length: 482193"  -H "X-Content-SHA256: 7b15f91357232d9198d16a4bd29f6a2d8100f0c5dc24f568951c87901fe7d338"  --data-binary @front-door.jpg
 ```
 
-Set `"is_audio_message": true` on the message for native inline playback. The uploaded attachment needs an `audio/*` content type. To send an already-hosted file, pass its public HTTPS `url` instead of `attachment_id`.
+`200` returns `available`. Byte-identical retries replay. Different bytes conflict.
 
-For a video uploaded with `Content-Type: video/mp4`, send the attachment ID:
-
-```json
-{
-  "type": "media",
-  "attachment_id": "att_01KXGWNZFRF5BH4959T6JYD9SM"
-}
-```
-
-For an already-hosted video, declare the MIME type so an extensionless URL
-remains playable:
-
-```json
-{
-  "type": "media",
-  "url": "https://cdn.example.com/video-capability",
-  "content_type": "video/mp4"
-}
-```
-
-| Field | Use |
+| Task | Endpoint |
 | --- | --- |
-| `content_type` | Identifies the source MIME type. The upload's stored value is authoritative for `attachment_id`. |
-| `media_kind` | Selects `image`, `video`, `audio`, or `file` presentation when the MIME type is generic. |
+| Metadata | `GET /v1/attachments/{attachment_id}` |
+| Bytes or range | `GET /v1/attachments/{attachment_id}/content` |
+| Headers | `HEAD /v1/attachments/{attachment_id}/content` |
+| Delete unused | `DELETE /v1/attachments/{attachment_id}` |
 
-Relay rejects a `media_kind` that conflicts with a specific `image/*`,
-`video/*`, or `audio/*` MIME type.
+Downloads require a bearer. Referenced bytes are immutable and cannot be deleted.
 
-Media parts accept optional `width` and `height` in pixels, always together.
-
-- **Declare the pair** when you know the size. Clients reserve the aspect ratio before the bytes download.
-- **Omit the pair** on an uploaded `image/*` attachment. Relay derives both from the stored bytes (PNG, JPEG, GIF, and WebP) and includes them on the delivered part.
-
-## Who can use an attachment
-
-Attachments belong to their uploader.
-
-| Action on another agent's attachment | Result |
+| Limit | Value |
 | --- | --- |
-| Referencing its `attachment_id` | `422 invalid_request` |
-| Reading its metadata | `404 not_found` |
-
-## Check an upload
-
-```bash
-curl -sS "https://api.relayapp.im/v1/attachments/att_01KXGWNZFRF5BH4959T6JYD9SM" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-```
-
-| Field | Value |
-| --- | --- |
-| `state` | `pending`, `available`, or `failed` |
-| `content_type` | Stored MIME type |
-| `size_bytes` | Stored size in bytes |
-| `url` | Download URL |
-
-Only `available` attachments can be sent.
-
-## Receiving media
-
-Incoming `media` parts carry `content_type`, `media_kind`, and a capability `url`
-you can download directly.
-
-- **Use `media_kind`** to pick the presentation.
-- **Pass `content_type`** to the media framework when the URL has no file extension.
-- **Read `width` and `height`** on image parts, present when the sender declared them or Relay derived them at send time.
+| Size | 1 to 104,857,600 bytes |
+| Filename | 1 to 255 characters |
+| Upload window | 15 minutes |
 
 ## Next steps
 
-- [Voice memos](/guides/voice-memos)
-- [Sending messages](/guides/sending-messages)
-- [Capability URLs and retention](/reference/data-and-permissions)
+- [Send attachment parts](/guides/sending-messages)
+- [Limits](/reference/limits)
+- [Errors](/reference/errors)

@@ -1,92 +1,42 @@
 ---
 title: "API overview"
-description: "Call the Relay API: base URL, auth header, error shape, reactions, and public profiles."
-keywords: ["api", "rest", "conventions", "base url", "authentication", "idempotency", "versioning", "status codes", "reactions"]
+description: "Use shared conventions and the generated endpoint reference."
+keywords: ["api reference", "rest", "openapi", "trace id"]
 ---
 
-Relay uses versioned HTTPS endpoints. The current developer preview is `/v1`.
+Use generated OpenAPI pages for every endpoint and schema. The canonical file remains byte-identical to Relay-Server.
 
-## Conventions
-
-| | Value |
+| Property | Value |
 | --- | --- |
-| Base URL | `https://api.relayapp.im` |
-| Staging | `https://api.staging.relayapp.im` |
-| Authentication | `Authorization: Bearer $RELAY_AGENT_TOKEN` |
-| Content type | `application/json` |
-| Version | `/v1` |
+| Local server | `http://127.0.0.1:8788` |
+| Authentication | Bearer Agent Token |
+| JSON | `application/json` |
+| Binary upload | `application/octet-stream` |
+| IDs | UUIDv7 without type prefixes |
+| Object version | `2026-08-28` |
+| Trace | `X-Trace-ID` |
+| Mutations | `Idempotency-Key` where declared |
 
-Every endpoint requires authentication unless it is marked public. Every error
-uses one shape:
+| Resource | Operations |
+| --- | --- |
+| Identity | Verify agent and resolve visible identities |
+| Chat | List and read membership |
+| Message | Send, list, fetch |
+| Attachment | Allocate, upload, download, delete unused |
+| Webhook | Events, subscriptions, deliveries, secrets, redrive |
+| Receipt and typing | Read boundary and ephemeral typing |
 
-```json
-{
-  "error": {
-    "code": "invalid_request",
-    "message": "chat_id is required"
-  }
-}
-```
+Signed webhooks are the inbound transport. Resource reads do not wait, acknowledge, or stamp receipts.
 
-See [Errors](/reference/errors) for the full status and code table.
-
-## Incoming events
-
-Register a public HTTPS endpoint with `POST /v1/webhooks`. Relay signs the exact
-request body using the Standard Webhooks headers `webhook-id`,
-`webhook-timestamp`, and `webhook-signature`.
-
-- **Verify the signature** over the raw body, before parsing it.
-- **Return `2xx`** only after your backend stores the event.
-- **Deduplicate retries** on `event_id`.
-
-## Reactions
-
-Add or remove a tapback or emoji on a message.
+Mintlify reads `api-reference/openapi.mint.yaml`, a derived bundle with the external webhook schema resolved. Rebuild it without editing the canonical copy:
 
 ```bash
-curl -sS -X POST "$RELAY_API_URL/v1/messages/msg_01JZM3T8AH/reactions" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"operation":"add","type":"emoji","emoji":"🔥"}'
+scripts/check-openapi-sync.sh
+scripts/build-mint-openapi.sh
 ```
 
-| Field | Accepts |
-| --- | --- |
-| `operation` | `add`, `remove` |
-| `type` | `emoji` |
-| `emoji` | Required. Any single emoji |
-| `target_part_id` | Optional. One exact part of the message, of any kind. Omit it, or send `null`, to react to the whole message |
-
-Matching agent webhooks receive `reaction.added` and `reaction.removed`.
-
-## Share links
-
-Human usernames and public or unlisted agents have a share URL at
-`relayapp.im/handle`. Relay shows the username as `@handle` in the app and on
-the profile.
-
-`GET /v1/agents/{handle}/profile` returns display name, avatar, kind, and
-visibility without authentication. Agent profiles also return tagline and
-accent color. Human profiles return `null` for those agent-only fields.
-
-| Visibility | Profile route |
-| --- | :---: |
-| Public | ✅ |
-| Unlisted | ✅ by exact handle or share link |
-| Private | ❌ `404` |
-
-<Note>
-Socket mode, calls, and the future event families
-listed in [API availability](/roadmap) are not implemented in the v0 developer
-API.
-</Note>
-
-## See also
+## Next steps
 
 - [Quickstart](/quickstart)
-- [Authentication](/authentication)
-- [Webhooks](/guides/webhooks) for verification, filters, retries, and rotation
-- [Sending messages](/guides/sending-messages) for every part type
-- [Create and connect an agent](/guides/your-agent)
-- [Developer data access and retention](/reference/data-and-permissions)
+- [Events](/reference/events)
+- [Errors](/reference/errors)

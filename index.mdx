@@ -1,89 +1,40 @@
 ---
-title: "Build an agent people can message"
-sidebarTitle: "Home"
-description: "Receive a signed message event and send one reply over HTTPS."
-keywords: ["relay", "agent messenger", "ai agents", "quickstart", "send message", "webhook"]
+title: "Relay developer API"
+description: "Connect an agent backend with signed webhooks and idempotent REST writes."
+keywords: ["relay", "agent api", "webhooks", "messaging"]
 ---
 
-Relay sends messages to your backend as signed events. Your backend sends
-replies over HTTPS.
+Connect an agent backend to Relay with one bearer token, signed webhooks, and REST.
 
-You keep the model, tools, memory, and hosting. Relay runs the agent profile,
-conversation, delivery, media, and app.
+Relay owns the messenger and canonical conversation state. Your backend owns the model, tools, memory, and behavior.
 
-## Start with your coding agent
+## Message lifecycle
 
-Copy this into your coding agent, then answer its questions.
+| State | What happened |
+| --- | --- |
+| Sent | Relay accepted the message into PostgreSQL |
+| Delivered | Your `message.received` webhook durably accepted the event and returned `2xx` |
+| Read | Your backend called `POST /v1/chats/{chat_id}/read` |
+| Replied | Your backend created a separate message with an idempotent REST call |
 
-````markdown Agent prompt
-Build a Relay agent backend with me.
-
-1. Fetch https://docs.relayapp.im/llms.txt and follow its agent instructions.
-   If you cannot fetch it, stop and tell me.
-2. Before writing code, ask me: (a) for my Agent Token (rly_live_..., shown
-   once when I create the agent in the Relay app), and (b) whether my backend
-   has a public HTTPS URL. Public URL: use signed webhooks. No public URL:
-   use long polling.
-3. Implement the loop: verify the token with GET /v1/agents/me, receive one
-   message.received event, mark it read with POST /v1/chats/{id}/read,
-   start POST /v1/chats/{id}/typing, reply with POST /v1/messages
-   carrying a client-minted message_id, which is the send's idempotency key,
-   and stop typing when done.
-
-The contract is raw HTTPS and JSON at https://api.relayapp.im. Optional
-published packages: @relaymessenger/sdk and @relaymessenger/cli. Import
-nothing else.
-````
-
-<Columns cols={3}>
-  <Card title="Quickstart" icon="zap" href="/quickstart">
-    Receive one message and send one reply.
-  </Card>
-  <Card title="Connect a runtime" icon="blocks" href="/integrations">
-    Connect Claude Code, Codex, Hermes, OpenClaw, or your own runtime.
-  </Card>
-  <Card title="API reference" icon="square-terminal" href="/api-reference/overview">
-    Read every endpoint, field, response, and status code.
-  </Card>
-</Columns>
-
-## Send a message
-
-Every send uses an Agent Token. Mint the `message_id` yourself: it names the
-resulting message and is the send's idempotency key.
+## Verify your token
 
 ```bash
-curl -sS -X POST "https://api.relayapp.im/v1/messages" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message_id": "msg_01k1m4q9vn2r7t9b4c6qdh8xwy",
-    "chat_id": "cnv_01JZC7K4RQ",
-    "parts": [{ "type": "text", "text": "Tomorrow at 2:00 PM works." }]
-  }'
+export RELAY_API_URL="${RELAY_API_URL:-http://127.0.0.1:8788}"
+curl -sS "$RELAY_API_URL/v1/agents/me" -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
-Relay returns `202 Accepted` with `{ message_id, message }`. One send is one
-message: text and media handed over together stay together as its ordered
-parts.
+<Columns cols={2}>
+<Card title="Quickstart" icon="zap" href="/quickstart">Receive one message and send one reply.</Card>
+<Card title="Concepts" icon="boxes" href="/concepts">Learn the Relay object model.</Card>
+<Card title="Webhooks" icon="webhook" href="/guides/webhooks">Register and verify delivery.</Card>
+<Card title="API reference" icon="square-terminal" href="/api-reference/overview">Read endpoints and schemas.</Card>
+</Columns>
 
-## What Relay carries
+<Note>The current contract is proved locally. Check [Current status](/current-status) before choosing an environment.</Note>
 
-| Capability | Start here |
-| --- | --- |
-| Text, images, files, voice memos, and link previews | [Send messages](/guides/sending-messages) |
-| Signed events and retries | [Webhooks](/guides/webhooks) |
-| Group conversations an agent takes part in | [Group conversations](/guides/group-conversations) |
-| Delivery, Read, and typing state | [Read receipts](/guides/read-receipts) |
+## Next steps
 
-## Choose a start
-
-- [Create and connect an agent](/guides/your-agent)
 - [Complete the quickstart](/quickstart)
-- [Learn the five core objects](/concepts)
-- [Give the docs to a coding agent](/reference/machine-readable)
-
-<Note>
-Relay is in developer preview and ships through TestFlight.
-[See current availability](/current-status).
-</Note>
+- [Send messages](/guides/sending-messages)
+- [Read current status](/current-status)

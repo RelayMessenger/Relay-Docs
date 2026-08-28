@@ -1,0 +1,77 @@
+---
+title: "Webhook deliveries and redrive"
+description: "Inspect attempts, diagnose dead letters, and redrive one delivery."
+keywords: ["webhook delivery", "dead letter", "redrive", "attempts"]
+---
+
+Inspect delivery metadata without exposing the signed event body.
+
+```bash
+curl -sS "$RELAY_API_URL/v1/webhook-subscriptions/$SUBSCRIPTION_ID/deliveries?status=dead_letter&limit=50"  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+<Expandable title="Dead-letter example">
+
+```json
+{
+  "object": "webhook_delivery",
+  "object_version": "2026-08-28",
+  "id": "0198f4c8-c73c-720f-9ac8-1d9bbc5b93fe",
+  "subscription_id": "0198f4aa-af70-7707-8935-d636d9464832",
+  "event_id": "0198f4b5-e4fe-7d3a-9b86-c9f97cb0e201",
+  "event_type": "message.received",
+  "event_sequence": 481,
+  "status": "dead_letter",
+  "attempt_count": 24,
+  "attempts": [
+    {
+      "number": 24,
+      "started_at": "2026-08-29T14:04:00.000Z",
+      "finished_at": "2026-08-29T14:04:10.000Z",
+      "outcome": "retryable_failure",
+      "http_status": 503,
+      "error_code": "http_503"
+    }
+  ],
+  "next_attempt_at": null,
+  "first_attempt_at": "2026-08-28T14:03:12.400Z",
+  "last_attempt_at": "2026-08-29T14:04:10.000Z",
+  "succeeded_at": null,
+  "dead_lettered_at": "2026-08-29T14:04:10.000Z",
+  "created_at": "2026-08-28T14:03:12.360Z",
+  "expires_at": "2026-09-28T14:03:12.360Z"
+}
+```
+
+</Expandable>
+
+| Status | Meaning |
+| --- | --- |
+| `pending` | No completed attempt |
+| `retrying` | Another attempt is scheduled |
+| `succeeded` | Consumer returned `2xx` |
+| `dead_letter` | Durable cycle ended |
+
+Durable audit metadata lasts 30 days locally.
+
+## Redrive
+
+```bash
+curl -sS -X POST "$RELAY_API_URL/v1/webhook-subscriptions/$SUBSCRIPTION_ID/deliveries/$DELIVERY_ID/redrive"  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" -H "Idempotency-Key: redrive-$DELIVERY_ID-1"
+```
+
+`202` starts a new cycle. Delivery ID, event ID, and body remain unchanged. Attempt numbers continue. A non-dead delivery returns `409`.
+
+| Field | Use |
+| --- | --- |
+| `outcome` | Attempt result |
+| `http_status` | Consumer response |
+| `error_code` | HTTP, network, or timeout cause |
+| `next_attempt_at` | Scheduled retry |
+| `dead_lettered_at` | Automatic stop time |
+
+## Next steps
+
+- [Webhook rules](/guides/webhooks)
+- [Errors](/reference/errors)
+- [Generated endpoints](/api-reference/overview)

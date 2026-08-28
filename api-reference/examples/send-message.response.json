@@ -1,47 +1,3 @@
----
-title: "Sending messages"
-description: "Create one immutable message with ordered text, image, file, audio, or link parts."
-keywords: ["send message", "parts", "reply", "idempotency"]
----
-
-Create one message inside a known chat.
-
-```bash
-curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/messages"  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" -H "Content-Type: application/json"  -H "Idempotency-Key: reply-$EVENT_ID" -d @send-message.json
-```
-
-```json
-{
-  "message": {
-    "parts": [
-      {
-        "type": "text",
-        "text": "The package is by the front door."
-      },
-      {
-        "type": "image",
-        "attachment_id": "0198f4af-9fd2-77f7-a8c9-7d6c4049d564",
-        "alt_text": "Package beside the front door"
-      },
-      {
-        "type": "link",
-        "url": "https://example.com/delivery/42",
-        "fallback_text": "Delivery details"
-      }
-    ],
-    "reply_to": {
-      "message_id": "0198f493-f7db-7fc8-b26e-4a8503a7e6c1",
-      "part_index": 0
-    }
-  }
-}
-```
-
-`202 Accepted` confirms PostgreSQL acceptance, not delivery or read.
-
-<Expandable title="Canonical response">
-
-```json
 {
   "object": "message.acceptance",
   "object_version": "2026-08-28",
@@ -145,30 +101,3 @@ curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/messages"  -H "Authorization:
     "sent_at": null
   }
 }
-```
-
-</Expandable>
-
-## Parts
-
-| Type | Required | Limit |
-| --- | --- | --- |
-| `text` | `text` | 1 to 10,000 characters |
-| `image` | `attachment_id` | Alt text up to 1,000 characters |
-| `file` | `attachment_id` | Available attachment |
-| `audio` | ID, presentation, duration | Up to 200 waveform values |
-| `link` | URL and fallback text | HTTPS URL up to 2,048 characters |
-
-Relay preserves order and assigns stable UUIDv7 part IDs.
-
-## Replies and retries
-
-`reply_to.message_id` targets a message. Add zero-based `part_index` for one exact part.
-
-Each send requires `Idempotency-Key`. Exact retries replay the response. Changed requests under one key return `409 idempotency_conflict`.
-
-## Next steps
-
-- [Attachments](/guides/attachments)
-- [Reactions](/guides/reactions)
-- [Receipts](/guides/read-receipts)

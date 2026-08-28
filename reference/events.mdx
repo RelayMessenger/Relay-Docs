@@ -1,270 +1,72 @@
 ---
-title: "Event types"
-description: "Handle every event envelope and payload Relay emits."
-keywords: ["events", "event types", "payloads", "message.received", "webhook events", "envelope"]
+title: "Webhook events"
+description: "Reference the signed event envelope and supported event types."
+keywords: ["events", "message.received", "message.sent", "typing"]
 ---
 
-Every event uses the same envelope:
+Handle all events through one signed envelope.
 
 ```json
 {
-  "event_id": "evt_01JZE9M2XW",
-  "sequence": 118,
-  "event_type": "message.received",
-  "agent_id": "agt_01JZRELAY",
-  "chat_id": "cnv_01JZC7K4RQ",
-  "created_at": "2026-07-12T01:21:03.000Z",
-  "schema_version": "2026-08-24",
-  "data": { }
+  "api_version": "v1",
+  "webhook_version": "2026-08-28",
+  "event_id": "0198f4bc-19a2-7342-b03b-319bcc083563",
+  "event_type": "message.delivered",
+  "sequence": "484",
+  "created_at": "2026-08-28T14:05:00.100Z",
+  "trace_id": "9f4d3b65f2e54a98a4558f8877ef9a10",
+  "agent_id": "0198f49d-e5c7-78ba-a74f-7ff8186fc242",
+  "data": {
+    "object": "message_delivered_event_data",
+    "object_version": "2026-08-28",
+    "message_id": "0198f4ba-3c8e-7e73-9fe9-3d272d9d427e",
+    "chat_id": "0198f4a1-27ca-76d2-99ad-59b5d3bb13b2",
+    "chat_sequence": "49",
+    "recipient": {
+      "object": "identity",
+      "object_version": "2026-08-28",
+      "id": "0198f49e-1718-7559-a251-649968bf7a22",
+      "kind": "human",
+      "username": "advait",
+      "phone_number": "+13135550142",
+      "display_name": "Advait",
+      "avatar_url": null,
+      "created_at": "2026-08-28T12:00:00.000Z"
+    },
+    "delivered_at": "2026-08-28T14:05:20.000Z"
+  }
 }
 ```
 
-`event_id` is globally unique and serves as the deduplication key. Delivery is
-at least once. Ignore unknown `event_type` values, so new types cannot break the
-consumer.
-
-`sequence` is this agent's position in its own durable log. Pass the highest one
-you have processed as `after` on the next [`GET /v1/events`](/guides/long-polling).
-Webhook deliveries carry the same number, so a consumer that runs both
-transports reads one ordering.
-
-`schema_version` is the envelope shape this delivery was rendered as. It is a
-date rather than an integer: pin the day the shape you wrote against was
-frozen. It is repeated inside the body so a consumer that queues the envelope
-still has it an hour later, and so it sits inside the signed bytes.
-
-Additive members never bump that date, so ignore fields you do not recognise
-too, not just event types you did not subscribe to. See
-[Versioning and deprecation](/guides/webhooks#versioning-and-deprecation).
-
-See [Delivery model](/guides/delivery-model) for webhook acknowledgement,
-idempotent writes, live state, and recovery.
-
-## Emitted in v0
-
-Every event type is available to both webhooks and `GET /v1/events`.
+| Field | Use |
+| --- | --- |
+| `event_id` | UUIDv7 deduplication key |
+| `event_type` | Selects `data` shape |
+| `sequence` | Orders durable agent events |
+| `agent_id` | Recipient agent |
+| `trace_id` | Correlation |
+| `webhook_version` | Pinned contract |
 
 | Event | Fires when |
 | --- | --- |
-| `message.received` | Someone sent a message in one of the agent's conversations |
-| `message.delivered` | A recipient received the agent's message |
-| `message.read` | A recipient read the agent's message |
-| `chat.created` | A chat the agent belongs to was created |
-| `chat.group_name_updated` | A group was renamed |
-| `chat.group_icon_updated` | A group's photo changed |
-| `participant.added` | A participant (the agent included) was added to a group |
-| `participant.removed` | A participant (the agent included) was removed from, or left, a group |
-| `reaction.added` | Someone reacted to the agent's message |
-| `reaction.removed` | Someone took a reaction off |
+| `message.received` | Another participant message is accepted |
+| `message.sent` | Agent message is accepted |
+| `message.delivered` | Recipient Delivered advances |
+| `message.read` | Recipient Read advances |
+| `reaction.added` | Reaction becomes present |
+| `reaction.removed` | Reaction becomes absent |
+| `chat.created` | Visible chat is created |
+| `chat.title.updated` | Group title changes |
+| `chat.avatar.updated` | Group avatar changes |
+| `participant.added` | Participant joins |
+| `participant.removed` | Participant leaves or is removed |
+| `typing.started` | Typing starts or refreshes |
+| `typing.stopped` | Typing stops |
 
-### `message.received`
-
-A participant sent a message in one of the agent's conversations, direct or
-group.
-
-| Field | Contents |
-| --- | --- |
-| `data` | The full stored message: `id`, `chat_id`, `sequence`, `item_type`, `sender_handle`, `is_from_me`, ordered `parts[]`, `reply_to`, `text`, `status`, `created_at` |
-
-One send is one message, so one send is one `message.received`. The agent's own
-messages never echo back.
-
-A group membership or metadata change also arrives here, as a message whose
-`kind` is `notice`. It carries the human-readable line as a text part and the
-structured `group.mutation` as a `data` part, and it is sent by the person who
-made the change rather than by a system account. The app renders only the text
-line.
-
-```json
-{
-  "event_type": "message.received",
-  "data": {
-    "message": {
-      "id": "msg_01JZM3T8AH",
-      "chat_id": "cnv_01JZC7K4RQ",
-      "sequence": 4,
-      "item_type": 1,
-      "sender_handle": { "kind": "user", "id": "usr_01JZU1F0BD" },
-      "is_from_me": false,
-      "parts": [
-        {
-          "part_id": "prt_01k1ma0m5r9xd4t7c2vqj6nzbh",
-          "part_index": 0,
-          "position": 0,
-          "type": "text",
-          "text": "Scheduler was added"
-        },
-        {
-          "part_id": "prt_01k1ma0m5sy2k8f3b7wnq4hdvc",
-          "part_index": 1,
-          "position": 1,
-          "type": "data",
-          "data": {
-            "type": "group.mutation",
-            "mutation": "membership.added",
-            "actor": { "kind": "user", "id": "usr_01JZU1F0BD" },
-            "affected_participant": { "kind": "agent", "id": "agt_01JZRELAY" },
-            "changes": {
-              "state": { "old": null, "new": "active" }
-            }
-          }
-        }
-      ],
-      "reply_to": null,
-      "text": "Scheduler was added",
-      "status": "sent",
-      "created_at": "2026-07-17T12:00:00.000Z"
-    }
-  }
-}
-```
-
-### `message.delivered`
-
-A recipient durably received the agent's message. Everything through
-`through_sequence` is delivered to `recipient`.
-
-```json
-{
-  "event_type": "message.delivered",
-  "data": {
-    "message_id": "msg_01KXEKDSH8M3V5P2R7T9B4C6QD",
-    "chat_id": "cnv_01JZU1CONV",
-    "through_sequence": 42,
-    "recipient": { "kind": "user", "id": "usr_01JZU1X4" },
-    "participant": { "kind": "user", "id": "usr_01JZU1X4" },
-    "at": "2026-07-13T20:00:01Z"
-  }
-}
-```
-
-`participant` repeats `recipient` for consumers written before the field was
-renamed. Read `recipient`.
-
-Receipts exist in 1:1 conversations only. A group message reports no
-per-recipient state, the way iMessage does not, so its `status` stays `sent`
-and neither receipt event fires.
-
-### `message.read`
-
-The payload matches `message.delivered`. The recipient has read the
-conversation through `through_sequence`. Read implies delivered. Neither event
-starts or stops typing.
-
-To advance the agent's own read watermark, see [Read receipts](/guides/read-receipts).
-
-### `reaction.added` / `reaction.removed`
-
-A participant added or removed a reaction on the agent's message.
-
-```json
-{
-  "event_type": "reaction.added",
-  "data": {
-    "message_id": "msg_01k1m9x2ph4vb7k0d3wzr8ftqe",
-    "target_part_id": "prt_01k1ma0m5sy2k8f3b7wnq4hdvc",
-    "type": "custom",
-    "custom_emoji": "🔥",
-    "actor": { "kind": "user", "id": "usr_01k1m8t3zq7v2r9c4b6ndh5xwj" },
-    "operation": "add",
-    "changed": true
-  }
-}
-```
-
-| Field | Contents |
-| --- | --- |
-| `target_part_id` | The part this reaction is anchored to, and the identity for it. Null when the reaction is on the whole message |
-| `type` | One of `love`, `like`, `dislike`, `laugh`, `emphasize`, `question`, `custom` — Apple's six tapback verbs plus a custom emoji |
-| `custom_emoji` | The emoji, present exactly when `type` is `custom` |
-| `actor.kind` | `user` or `agent` |
-| `changed` | Always true on an emitted event. Relay emits nothing for a no-op |
-
-A message projected in history carries its reactions in the flatter
-`reactions[]` shape, which uses `actor_kind` and `actor_id` in place of a
-nested `actor` and adds `created_at`.
-
-### `chat.created`, `participant.added`, `participant.removed`, `chat.group_name_updated`, `chat.group_icon_updated`
-
-Relay emits these when a person changes a group the agent is in. A removed
-agent receives no further events for that group.
-
-An agent in a group is an ordinary member: it receives every message from the
-sequence it joined at, and reads that same history back from
-`GET /v1/chats/{id}/messages`.
-
-Roster events (`participant.added` / `participant.removed`) carry:
-
-| Field | Contents |
-| --- | --- |
-| `chat_id` | The group the change happened in |
-| `actor` | The person who made the change |
-| `affected_participant` | The participant added or removed. On a leave, the actor and the affected participant are the same person |
-| `membership_version` | The roster version after the change |
-
-Metadata events (`chat.group_name_updated` / `chat.group_icon_updated`) carry:
-
-| Field | Contents |
-| --- | --- |
-| `chat_id` | The group the change happened in |
-| `old_value` / `new_value` | The name or icon before and after |
-| `changed_by_handle` | The person who made the change |
-| `updated_at` | When it changed |
-
-<CodeGroup>
-
-```json Roster change
-{
-  "chat_id": "cnv_01JZC7K4RQ",
-  "actor": { "kind": "user", "id": "usr_01JZU1F0BD" },
-  "affected_participant": { "kind": "agent", "id": "agt_01JZRELAY" },
-  "membership_version": 2
-}
-```
-
-```json Metadata change
-{
-  "chat_id": "cnv_01JZC7K4RQ",
-  "old_value": "Weekend",
-  "new_value": "Weekend plans",
-  "changed_by_handle": { "kind": "user", "id": "usr_01JZU1F0BD" },
-  "updated_at": "2026-07-17T12:00:00.000Z"
-}
-```
-
-</CodeGroup>
-
-The matching notice arrives separately, as the `message.received` shown above:
-a message row with `item_type` 1 (roster), 2 (rename) or 3 (photo), sent by
-the person who made the change. A leave is a `participant.removed` whose
-`actor` and `affected_participant` are the same person.
-
-A backend receives these lifecycle events, but cannot create a group or change
-its membership. People do that in the app. See [API availability](/roadmap).
-
-## Not in the event log
-
-Typing is ephemeral. `chat.typing_indicator.started` and `chat.typing_indicator.stopped` are pushed to a
-person's live devices, take no sequence, never enter the log, and are never
-replayed. See [Typing indicators](/guides/typing-indicators).
-
-## Specified, coming soon
-
-The Relay contract also defines these. v0 emits none of them.
-
-| | Event |
-| :---: | --- |
-| ⏳ | `message.failed` |
-| ⏳ | Typing events entering the event log |
-| ⏳ | `attachment.available` |
-| ⏳ | Install events |
-| ⏳ | The `call.*` family |
-
-See [API availability](/roadmap).
+All except typing are durable. Typing is ephemeral. Successful `message.received` delivery records Delivered; Read remains explicit.
 
 ## See also
 
-- [Message model](/concepts/message-model)
 - [Webhooks](/guides/webhooks)
-- [Delivery model](/guides/delivery-model)
-- [API availability](/roadmap)
+- [Deliveries](/guides/webhook-deliveries)
+- [API schemas](/api-reference/overview)

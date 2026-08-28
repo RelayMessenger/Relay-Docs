@@ -1,0 +1,6174 @@
+openapi: 3.1.0
+info:
+  title: Relay Developer API
+  version: 1.0.0-local
+  summary: Webhook-only inbound delivery and idempotent REST writes for Relay agents.
+  description: |
+    Proposed local v1 replacement contract. Developer inbound events are delivered only
+    through signed webhooks. No event polling, long polling, SSE, WebSocket, or agent sync
+    route is part of this API. All named schemas use object version 2026-08-28.
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+servers:
+  - url: http://127.0.0.1:8788
+    description: Local Relay server
+security:
+  - AgentBearer: []
+tags:
+  - name: Agents
+  - name: Identities
+  - name: Chats
+  - name: Messages
+  - name: Attachments
+  - name: Webhooks
+paths:
+  /v1/agents/me:
+    get:
+      tags:
+        - Agents
+      operationId: getAuthenticatedAgent
+      summary: Get the authenticated agent identity.
+      responses:
+        '200':
+          description: Authenticated agent.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentIdentity'
+              examples:
+                default:
+                  $ref: '#/components/examples/AgentIdentityExample'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/identities/{identity_id}:
+    parameters:
+      - $ref: '#/components/parameters/IdentityId'
+    get:
+      tags:
+        - Identities
+      operationId: getIdentity
+      summary: Get an identity visible through an active shared chat.
+      responses:
+        '200':
+          description: Visible human or agent identity.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Identity'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/chats:
+    get:
+      tags:
+        - Chats
+      operationId: listChats
+      summary: List chats in which the authenticated agent is currently active.
+      description: Resource discovery only; this is not an inbound event or recovery feed.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Page ordered by most recent canonical chat activity, then chat ID.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/chats/{chat_id}:
+    parameters:
+      - $ref: '#/components/parameters/ChatId'
+    get:
+      tags:
+        - Chats
+      operationId: getChat
+      summary: Get one chat and current membership.
+      responses:
+        '200':
+          description: Chat resource.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Chat'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/chats/{chat_id}/messages:
+    parameters:
+      - $ref: '#/components/parameters/ChatId'
+    post:
+      tags:
+        - Messages
+      operationId: sendMessage
+      summary: Accept one immutable message with ordered parts.
+      description: |
+        One request creates at most one message. HTTP 202 confirms canonical acceptance,
+        not delivery or read. Reuse the same Idempotency-Key and exact body for retries.
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+            examples:
+              multipartReply:
+                value:
+                  message:
+                    parts:
+                      - type: text
+                        text: The package is by the front door.
+                      - type: image
+                        attachment_id: 0198f4af-9fd2-77f7-a8c9-7d6c4049d564
+                        alt_text: Package beside the front door
+                      - type: link
+                        url: https://example.com/delivery/42
+                        fallback_text: Delivery details
+                    reply_to:
+                      message_id: 0198f493-f7db-7fc8-b26e-4a8503a7e6c1
+                      part_index: 0
+      responses:
+        '202':
+          description: Message accepted and persisted.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendMessageResponse'
+              examples:
+                accepted:
+                  value:
+                    object: message.acceptance
+                    object_version: '2026-08-28'
+                    message:
+                      object: message
+                      object_version: '2026-08-28'
+                      id: 0198f4ba-3c8e-7e73-9fe9-3d272d9d427e
+                      chat_id: 0198f4a1-27ca-76d2-99ad-59b5d3bb13b2
+                      sequence: '49'
+                      direction: outbound
+                      sender:
+                        object: identity
+                        object_version: '2026-08-28'
+                        id: 0198f49d-e5c7-78ba-a74f-7ff8186fc242
+                        kind: agent
+                        username: concierge
+                        display_name: Relay Concierge
+                        avatar_url: null
+                        created_at: '2026-08-28T13:00:00.000Z'
+                      parts:
+                        - object: message_part
+                          object_version: '2026-08-28'
+                          id: 0198f4b5-e3cb-7617-a68a-b1db4ebd2bcc
+                          index: 0
+                          type: text
+                          text: The package is by the front door.
+                        - object: message_part
+                          object_version: '2026-08-28'
+                          id: 0198f4b5-e3cb-7617-a68a-b1db4ebd2bcd
+                          index: 1
+                          type: image
+                          attachment:
+                            object: attachment
+                            object_version: '2026-08-28'
+                            id: 0198f4af-9fd2-77f7-a8c9-7d6c4049d564
+                            filename: front-door.jpg
+                            mime_type: image/jpeg
+                            size_bytes: 482193
+                            status: available
+                            sha256: 7b15f91357232d9198d16a4bd29f6a2d8100f0c5dc24f568951c87901fe7d338
+                            width: 1600
+                            height: 1200
+                            duration_ms: null
+                            created_at: '2026-08-28T14:00:00.000Z'
+                            available_at: '2026-08-28T14:00:04.000Z'
+                          alt_text: Package beside the front door
+                        - object: message_part
+                          object_version: '2026-08-28'
+                          id: 0198f4b5-e3cb-7617-a68a-b1db4ebd2bce
+                          index: 2
+                          type: link
+                          url: https://example.com/delivery/42
+                          fallback_text: Delivery details
+                          preview:
+                            object: link_preview
+                            object_version: '2026-08-28'
+                            status: available
+                            title: Delivery 42
+                            description: Delivered at 2:00 PM
+                            image_attachment_id: null
+                      reply_to:
+                        object: reply_target
+                        object_version: '2026-08-28'
+                        message_id: 0198f493-f7db-7fc8-b26e-4a8503a7e6c1
+                        part_id: 0198f493-f859-7ba1-bde3-65463ec246e1
+                        part_index: 0
+                      status: accepted
+                      receipt_summary: none
+                      receipts:
+                        - object: message_receipt
+                          object_version: '2026-08-28'
+                          recipient:
+                            object: identity
+                            object_version: '2026-08-28'
+                            id: 0198f49e-1718-7559-a251-649968bf7a22
+                            kind: human
+                            username: advait
+                            phone_number: '+13135550142'
+                            display_name: Advait
+                            avatar_url: null
+                            created_at: '2026-08-28T12:00:00.000Z'
+                          delivered_at: null
+                          read_at: null
+                      failure: null
+                      created_at: '2026-08-28T14:03:12.300Z'
+                      sent_at: null
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    get:
+      tags:
+        - Messages
+      operationId: listChatMessages
+      summary: List canonical message history for reconciliation.
+      description: Side-effect-free newest-first resource history. It has no wait parameter, performs no delivery/read stamping, and returns an opaque history-page cursor rather than an inbound event cursor. Webhooks remain the only developer inbound-activity transport.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Newest-first message page; next_cursor continues toward older history.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessagePage'
+              examples:
+                history:
+                  value:
+                    object: list
+                    object_version: '2026-08-28'
+                    data:
+                      - object: message
+                        object_version: '2026-08-28'
+                        id: 0198f4b5-e293-7720-b503-5807baeea765
+                        chat_id: 0198f4a1-27ca-76d2-99ad-59b5d3bb13b2
+                        sequence: '42'
+                        direction: inbound
+                        sender:
+                          object: identity
+                          object_version: '2026-08-28'
+                          id: 0198f49e-1718-7559-a251-649968bf7a22
+                          kind: human
+                          username: advait
+                          phone_number: '+13135550142'
+                          display_name: Advait
+                          avatar_url: null
+                          created_at: '2026-08-28T12:00:00.000Z'
+                        parts:
+                          - object: message_part
+                            object_version: '2026-08-28'
+                            id: 0198f4b5-e3cb-7617-a68a-b1db4ebd2bcc
+                            index: 0
+                            type: text
+                            text: The package is by the front door.
+                          - object: message_part
+                            object_version: '2026-08-28'
+                            id: 0198f4b5-e3cb-7617-a68a-b1db4ebd2bcd
+                            index: 1
+                            type: image
+                            attachment:
+                              object: attachment
+                              object_version: '2026-08-28'
+                              id: 0198f4af-9fd2-77f7-a8c9-7d6c4049d564
+                              filename: front-door.jpg
+                              mime_type: image/jpeg
+                              size_bytes: 482193
+                              status: available
+                              sha256: 7b15f91357232d9198d16a4bd29f6a2d8100f0c5dc24f568951c87901fe7d338
+                              width: 1600
+                              height: 1200
+                              duration_ms: null
+                              created_at: '2026-08-28T14:00:00.000Z'
+                              available_at: '2026-08-28T14:00:04.000Z'
+                            alt_text: Package beside the front door
+                          - object: message_part
+                            object_version: '2026-08-28'
+                            id: 0198f4b5-e3cb-7617-a68a-b1db4ebd2bce
+                            index: 2
+                            type: link
+                            url: https://example.com/delivery/42
+                            fallback_text: Delivery details
+                            preview:
+                              object: link_preview
+                              object_version: '2026-08-28'
+                              status: available
+                              title: Delivery 42
+                              description: Delivered at 2:00 PM
+                              image_attachment_id: null
+                        reply_to:
+                          object: reply_target
+                          object_version: '2026-08-28'
+                          message_id: 0198f493-f7db-7fc8-b26e-4a8503a7e6c1
+                          part_id: 0198f493-f859-7ba1-bde3-65463ec246e1
+                          part_index: 0
+                        status: sent
+                        receipt_summary: none
+                        receipts:
+                          - object: message_receipt
+                            object_version: '2026-08-28'
+                            recipient:
+                              object: identity
+                              object_version: '2026-08-28'
+                              id: 0198f49d-e5c7-78ba-a74f-7ff8186fc242
+                              kind: agent
+                              username: concierge
+                              display_name: Relay Concierge
+                              avatar_url: null
+                              created_at: '2026-08-28T13:00:00.000Z'
+                            delivered_at: null
+                            read_at: null
+                        failure: null
+                        created_at: '2026-08-28T14:03:12.300Z'
+                        sent_at: '2026-08-28T14:03:12.340Z'
+                    page:
+                      next_cursor: aGlzdG9yeTpjaGF0OjAxOThmNGExOjQy
+                      has_more: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/messages/{message_id}:
+    parameters:
+      - $ref: '#/components/parameters/MessageId'
+    get:
+      tags:
+        - Messages
+      operationId: getMessage
+      summary: Get one known message by stable ID.
+      description: Fetch one stable resource directly. Chat history reconciliation uses GET /v1/chats/{chat_id}/messages; neither route is an inbound event feed.
+      responses:
+        '200':
+          description: Message resource.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/messages/{message_id}/reactions:
+    parameters:
+      - $ref: '#/components/parameters/MessageId'
+    post:
+      tags:
+        - Messages
+      operationId: changeReaction
+      summary: Set/replace or remove the agent reaction in an exact target slot.
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReactionChangeRequest'
+            examples:
+              setExactPart:
+                value:
+                  operation: set
+                  emoji: 👍
+                  part_index: 1
+      responses:
+        '200':
+          description: Canonical reaction slot result; repeated final state is a no-op.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReactionChangeResponse'
+              examples:
+                result:
+                  value:
+                    object: reaction.result
+                    object_version: '2026-08-28'
+                    changed: true
+                    slot_version: '7'
+                    reaction:
+                      object: reaction
+                      object_version: '2026-08-28'
+                      message_id: 0198f4b5-e293-7720-b503-5807baeea765
+                      target_part_id: 0198f4b5-e3cb-7617-a68a-b1db4ebd2bcd
+                      actor:
+                        object: identity
+                        object_version: '2026-08-28'
+                        id: 0198f49d-e5c7-78ba-a74f-7ff8186fc242
+                        kind: agent
+                        username: concierge
+                        display_name: Relay Concierge
+                        avatar_url: null
+                        created_at: '2026-08-28T13:00:00.000Z'
+                      emoji: 👍
+                      slot_version: '7'
+                      created_at: '2026-08-28T14:05:00.000Z'
+                      part_index: 1
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/chats/{chat_id}/read:
+    parameters:
+      - $ref: '#/components/parameters/ChatId'
+    post:
+      tags:
+        - Messages
+      operationId: markChatRead
+      summary: Advance the agent's monotonic read boundary through one message.
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarkReadRequest'
+            examples:
+              throughMessage:
+                value:
+                  through_message_id: 0198f4b5-e293-7720-b503-5807baeea765
+      responses:
+        '200':
+          description: Current receipt boundary; older/repeated targets are successful no-ops.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarkReadResponse'
+              examples:
+                result:
+                  value:
+                    object: read.result
+                    object_version: '2026-08-28'
+                    changed: true
+                    boundary:
+                      object: read_boundary
+                      object_version: '2026-08-28'
+                      chat_id: 0198f4a1-27ca-76d2-99ad-59b5d3bb13b2
+                      reader:
+                        object: identity
+                        object_version: '2026-08-28'
+                        id: 0198f49d-e5c7-78ba-a74f-7ff8186fc242
+                        kind: agent
+                        username: concierge
+                        display_name: Relay Concierge
+                        avatar_url: null
+                        created_at: '2026-08-28T13:00:00.000Z'
+                      through_sequence: '42'
+                      through_message_id: 0198f4b5-e293-7720-b503-5807baeea765
+                      read_at: '2026-08-28T14:06:00.000Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/attachments:
+    post:
+      tags:
+        - Attachments
+      operationId: createAttachment
+      summary: Allocate a durable attachment and raw upload target.
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAttachmentRequest'
+            examples:
+              image:
+                value:
+                  filename: front-door.jpg
+                  mime_type: image/jpeg
+                  size_bytes: 482193
+                  sha256: 7b15f91357232d9198d16a4bd29f6a2d8100f0c5dc24f568951c87901fe7d338
+      responses:
+        '201':
+          description: Attachment allocation. Upload expires in 15 minutes.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateAttachmentResponse'
+              examples:
+                allocated:
+                  value:
+                    object: attachment.upload
+                    object_version: '2026-08-28'
+                    attachment:
+                      object: attachment
+                      object_version: '2026-08-28'
+                      id: 0198f4af-9fd2-77f7-a8c9-7d6c4049d564
+                      filename: front-door.jpg
+                      mime_type: image/jpeg
+                      size_bytes: 482193
+                      status: pending
+                      sha256: null
+                      width: null
+                      height: null
+                      duration_ms: null
+                      created_at: '2026-08-28T14:00:00.000Z'
+                      available_at: null
+                    upload:
+                      method: PUT
+                      url: /v1/attachments/0198f4af-9fd2-77f7-a8c9-7d6c4049d564/content
+                      expires_at: '2026-08-28T14:15:00.000Z'
+                      required_headers:
+                        Content-Type: application/octet-stream
+                        Content-Length: '482193'
+                        X-Content-SHA256: 7b15f91357232d9198d16a4bd29f6a2d8100f0c5dc24f568951c87901fe7d338
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/attachments/{attachment_id}:
+    parameters:
+      - $ref: '#/components/parameters/AttachmentId'
+    get:
+      tags:
+        - Attachments
+      operationId: getAttachment
+      summary: Get attachment metadata and lifecycle state.
+      responses:
+        '200':
+          description: Attachment metadata.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Attachment'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags:
+        - Attachments
+      operationId: deleteAttachment
+      summary: Delete an unreferenced attachment allocation and bytes.
+      description: Committed message ownership returns attachment_in_use and bytes remain immutable.
+      parameters:
+        - $ref: '#/components/parameters/OptionalIdempotencyKey'
+      responses:
+        '204':
+          description: Attachment is absent/deleted.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/attachments/{attachment_id}/content:
+    parameters:
+      - $ref: '#/components/parameters/AttachmentId'
+    put:
+      tags:
+        - Attachments
+      operationId: uploadAttachmentContent
+      summary: Upload exact raw bytes to an allocated attachment.
+      description: Byte-identical retries return the same resource; different bytes conflict.
+      parameters:
+        - $ref: '#/components/parameters/ContentLength'
+        - $ref: '#/components/parameters/OptionalContentSha256'
+        - $ref: '#/components/parameters/OptionalIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              contentMediaType: application/octet-stream
+              contentEncoding: binary
+      responses:
+        '200':
+          description: Attachment content is available.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+            ETag:
+              $ref: '#/components/headers/ETag'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Attachment'
+              examples:
+                available:
+                  value:
+                    object: attachment
+                    object_version: '2026-08-28'
+                    id: 0198f4af-9fd2-77f7-a8c9-7d6c4049d564
+                    filename: front-door.jpg
+                    mime_type: image/jpeg
+                    size_bytes: 482193
+                    status: available
+                    sha256: 7b15f91357232d9198d16a4bd29f6a2d8100f0c5dc24f568951c87901fe7d338
+                    width: 1600
+                    height: 1200
+                    duration_ms: null
+                    created_at: '2026-08-28T14:00:00.000Z'
+                    available_at: '2026-08-28T14:00:04.000Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags:
+        - Attachments
+      operationId: downloadAttachmentContent
+      summary: Download attachment bytes, optionally by one byte range.
+      parameters:
+        - $ref: '#/components/parameters/Range'
+      responses:
+        '200':
+          description: Complete attachment bytes.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+            Accept-Ranges:
+              $ref: '#/components/headers/AcceptRanges'
+            Content-Length:
+              $ref: '#/components/headers/ResponseContentLength'
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                contentEncoding: binary
+        '206':
+          description: Requested byte range.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+            Accept-Ranges:
+              $ref: '#/components/headers/AcceptRanges'
+            Content-Length:
+              $ref: '#/components/headers/ResponseContentLength'
+            Content-Range:
+              $ref: '#/components/headers/ContentRange'
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                contentEncoding: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '416':
+          $ref: '#/components/responses/RangeNotSatisfiable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    head:
+      tags:
+        - Attachments
+      operationId: headAttachmentContent
+      summary: Inspect available attachment representation headers.
+      responses:
+        '200':
+          description: Content metadata without bytes.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+            Accept-Ranges:
+              $ref: '#/components/headers/AcceptRanges'
+            Content-Length:
+              $ref: '#/components/headers/ResponseContentLength'
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/webhook-events:
+    get:
+      tags:
+        - Webhooks
+      operationId: listWebhookEventTypes
+      summary: List event types supported by webhook version 2026-08-28.
+      responses:
+        '200':
+          description: Static event catalog.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookEventCatalog'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/webhook-subscriptions:
+    get:
+      tags:
+        - Webhooks
+      operationId: listWebhookSubscriptions
+      summary: List webhook subscriptions.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Subscription page; signing secrets are never returned.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookSubscriptionPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags:
+        - Webhooks
+      operationId: createWebhookSubscription
+      summary: Create a version-pinned webhook subscription.
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWebhookSubscriptionRequest'
+            examples:
+              localAgent:
+                value:
+                  target_url: http://127.0.0.1:9393/relay/webhooks
+                  event_types:
+                    - message.received
+                    - message.sent
+                    - message.delivered
+                    - message.read
+                    - reaction.added
+                    - reaction.removed
+                    - chat.created
+                    - chat.title.updated
+                    - chat.avatar.updated
+                    - participant.added
+                    - participant.removed
+                    - typing.started
+                    - typing.stopped
+                  webhook_version: '2026-08-28'
+                  enabled: true
+      responses:
+        '201':
+          description: Subscription plus one-time signing secret.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateWebhookSubscriptionResponse'
+              examples:
+                created:
+                  value:
+                    object: webhook_subscription.creation
+                    object_version: '2026-08-28'
+                    subscription:
+                      object: webhook_subscription
+                      object_version: '2026-08-28'
+                      id: 0198f4aa-af70-7707-8935-d636d9464832
+                      target_url: http://127.0.0.1:9393/relay/webhooks
+                      event_types:
+                        - message.received
+                        - message.sent
+                        - message.delivered
+                        - message.read
+                        - reaction.added
+                        - reaction.removed
+                        - chat.created
+                        - chat.title.updated
+                        - chat.avatar.updated
+                        - participant.added
+                        - participant.removed
+                        - typing.started
+                        - typing.stopped
+                      webhook_version: '2026-08-28'
+                      status: enabled
+                      starts_after_sequence: '480'
+                      created_at: '2026-08-28T14:02:00.000Z'
+                      updated_at: '2026-08-28T14:02:00.000Z'
+                    signing_secret: whsec_dGVzdC1vbmx5LXNlY3JldC0zMi1ieXRlcyEhISE=
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/webhook-subscriptions/{subscription_id}:
+    parameters:
+      - $ref: '#/components/parameters/SubscriptionId'
+    get:
+      tags:
+        - Webhooks
+      operationId: getWebhookSubscription
+      summary: Get one webhook subscription without its secret.
+      responses:
+        '200':
+          description: Subscription resource.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookSubscription'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    patch:
+      tags:
+        - Webhooks
+      operationId: updateWebhookSubscription
+      summary: Update target, filter, or enabled state without changing version.
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWebhookSubscriptionRequest'
+      responses:
+        '200':
+          description: Updated subscription and new start boundary when re-enabled.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookSubscription'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags:
+        - Webhooks
+      operationId: deleteWebhookSubscription
+      summary: Stop future deliveries and automatic attempts.
+      parameters:
+        - $ref: '#/components/parameters/OptionalIdempotencyKey'
+      responses:
+        '204':
+          description: Subscription is absent/deleted; retained delivery audit expires normally.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/webhook-subscriptions/{subscription_id}/secret/rotate:
+    parameters:
+      - $ref: '#/components/parameters/SubscriptionId'
+    post:
+      tags:
+        - Webhooks
+      operationId: rotateWebhookSigningSecret
+      summary: Rotate the Standard Webhooks secret with overlap.
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RotateWebhookSecretRequest'
+      responses:
+        '200':
+          description: One-time new secret and overlap deadline.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RotateWebhookSecretResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/webhook-subscriptions/{subscription_id}/deliveries:
+    parameters:
+      - $ref: '#/components/parameters/SubscriptionId'
+    get:
+      tags:
+        - Webhooks
+      operationId: listWebhookDeliveries
+      summary: List delivery metadata for operation and redrive.
+      description: This control-plane page never returns webhook event bodies.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/WebhookDeliveryStatus'
+        - name: created_after
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Delivery metadata page ordered newest first, then delivery ID.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookDeliveryPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/webhook-subscriptions/{subscription_id}/deliveries/{delivery_id}:
+    parameters:
+      - $ref: '#/components/parameters/SubscriptionId'
+      - $ref: '#/components/parameters/DeliveryId'
+    get:
+      tags:
+        - Webhooks
+      operationId: getWebhookDelivery
+      summary: Get delivery metadata and attempt history without event body.
+      responses:
+        '200':
+          description: Delivery metadata.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookDelivery'
+              examples:
+                deadLetter:
+                  value:
+                    object: webhook_delivery
+                    object_version: '2026-08-28'
+                    id: 0198f4c8-c73c-720f-9ac8-1d9bbc5b93fe
+                    subscription_id: 0198f4aa-af70-7707-8935-d636d9464832
+                    event_id: 0198f4b5-e4fe-7d3a-9b86-c9f97cb0e201
+                    event_type: message.received
+                    event_sequence: 481
+                    status: dead_letter
+                    attempt_count: 24
+                    attempts:
+                      - number: 24
+                        started_at: '2026-08-29T14:04:00.000Z'
+                        finished_at: '2026-08-29T14:04:10.000Z'
+                        outcome: retryable_failure
+                        http_status: 503
+                        error_code: http_503
+                    next_attempt_at: null
+                    first_attempt_at: '2026-08-28T14:03:12.400Z'
+                    last_attempt_at: '2026-08-29T14:04:10.000Z'
+                    succeeded_at: null
+                    dead_lettered_at: '2026-08-29T14:04:10.000Z'
+                    created_at: '2026-08-28T14:03:12.360Z'
+                    expires_at: '2026-09-28T14:03:12.360Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/webhook-subscriptions/{subscription_id}/deliveries/{delivery_id}/redrive:
+    parameters:
+      - $ref: '#/components/parameters/SubscriptionId'
+      - $ref: '#/components/parameters/DeliveryId'
+    post:
+      tags:
+        - Webhooks
+      operationId: redriveWebhookDelivery
+      summary: Start one new attempt cycle for a dead-letter delivery.
+      parameters:
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
+      responses:
+        '202':
+          description: Redrive accepted; event/body/delivery IDs remain unchanged.
+          headers:
+            X-Trace-ID:
+              $ref: '#/components/headers/TraceId'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookDelivery'
+              examples:
+                retrying:
+                  value:
+                    object: webhook_delivery
+                    object_version: '2026-08-28'
+                    id: 0198f4c8-c73c-720f-9ac8-1d9bbc5b93fe
+                    subscription_id: 0198f4aa-af70-7707-8935-d636d9464832
+                    event_id: 0198f4b5-e4fe-7d3a-9b86-c9f97cb0e201
+                    event_type: message.received
+                    event_sequence: 481
+                    status: retrying
+                    attempt_count: 24
+                    attempts:
+                      - number: 24
+                        started_at: '2026-08-29T14:04:00.000Z'
+                        finished_at: '2026-08-29T14:04:10.000Z'
+                        outcome: retryable_failure
+                        http_status: 503
+                        error_code: http_503
+                    next_attempt_at: '2026-08-29T14:10:00.000Z'
+                    first_attempt_at: '2026-08-28T14:03:12.400Z'
+                    last_attempt_at: '2026-08-29T14:04:10.000Z'
+                    succeeded_at: null
+                    dead_lettered_at: null
+                    created_at: '2026-08-28T14:03:12.360Z'
+                    expires_at: '2026-09-28T14:03:12.360Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/chats/{chat_id}/typing:
+    parameters:
+      - $ref: '#/components/parameters/ChatId'
+    post:
+      tags:
+        - Chats
+      operationId: startTyping
+      summary: Start or refresh the agent typing indicator.
+      description: State-idempotent ephemeral signal with a 90-second TTL. It is never a transcript message or chat_sequence entry.
+      responses:
+        '204':
+          description: Typing is active/refreshed; a typing.started event is emitted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags:
+        - Chats
+      operationId: stopTyping
+      summary: Stop the agent typing indicator.
+      description: State-idempotent. Clearing an absent/expired indicator succeeds and emits no duplicate state change.
+      responses:
+        '204':
+          description: Typing is inactive; typing.stopped is emitted only on a state change.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+webhooks:
+  eventDelivery:
+    post:
+      summary: Relay event delivery to a registered target URL.
+      description: Verify Standard Webhooks headers against exact raw body before parsing.
+      parameters:
+        - name: webhook-id
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: webhook-timestamp
+          in: header
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+        - name: webhook-signature
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^v1,[A-Za-z0-9+/=]+(?: v1,[A-Za-z0-9+/=]+)*$'
+        - name: webhook-delivery-id
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: relay-webhook-version
+          in: header
+          required: true
+          schema:
+            const: '2026-08-28'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/webhooks.schema'
+      responses:
+        '200':
+          description: Delivery durably accepted by consumer.
+        '204':
+          description: Delivery durably accepted by consumer with no response body.
+        '400':
+          description: Malformed or unsupported delivery; no automatic retry.
+        '401':
+          description: Signature or timestamp verification failed; no automatic retry.
+        '429':
+          description: Consumer requests a retry; Retry-After may be honored.
+        '500':
+          description: Consumer failed; Relay retries according to delivery policy.
+components:
+  securitySchemes:
+    AgentBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: Relay agent API key
+  parameters:
+    IdentityId:
+      name: identity_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ChatId:
+      name: chat_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    MessageId:
+      name: message_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AttachmentId:
+      name: attachment_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SubscriptionId:
+      name: subscription_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DeliveryId:
+      name: delivery_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque cursor from the preceding page; bound to normalized filters.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 2048
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    RequiredIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+        pattern: ^[A-Za-z0-9._:-]+$
+    OptionalIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+        pattern: ^[A-Za-z0-9._:-]+$
+    ContentLength:
+      name: Content-Length
+      in: header
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 104857600
+    OptionalContentSha256:
+      name: X-Content-SHA256
+      in: header
+      required: false
+      description: Lowercase hexadecimal SHA-256 of exact upload bytes.
+      schema:
+        type: string
+        pattern: ^[a-f0-9]{64}$
+    Range:
+      name: Range
+      in: header
+      required: false
+      description: One RFC 9110 bytes range; multipart ranges are unsupported.
+      schema:
+        type: string
+        pattern: ^bytes=(?:[0-9]+-[0-9]*|-[0-9]+)$
+  headers:
+    TraceId:
+      description: W3C-compatible 16-byte trace ID encoded as lowercase hex.
+      schema:
+        type: string
+        pattern: ^[a-f0-9]{32}$
+    IdempotencyReplayed:
+      description: Present and true when Relay replayed a completed command result.
+      schema:
+        type: boolean
+    RetryAfter:
+      description: Whole seconds before retry.
+      schema:
+        type: integer
+        minimum: 0
+    ETag:
+      description: Quoted SHA-256 representation validator.
+      schema:
+        type: string
+    AcceptRanges:
+      schema:
+        const: bytes
+    ResponseContentLength:
+      schema:
+        type: integer
+        minimum: 0
+    ContentRange:
+      schema:
+        type: string
+        pattern: ^bytes [0-9]+-[0-9]+/[0-9]+$
+  responses:
+    BadRequest:
+      description: Malformed request.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/TraceId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Authentication required or invalid.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/TraceId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Authenticated principal is not allowed to perform the operation.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/TraceId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource is absent or not visible.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/TraceId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Idempotency conflict, in-progress command, or invalid resource state.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/TraceId'
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Gone:
+      description: Upload allocation expired.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/TraceId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    PayloadTooLarge:
+      description: Request exceeds a documented size/count limit.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/TraceId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnsupportedMediaType:
+      description: Declared or sniffed media is unsupported.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/TraceId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RangeNotSatisfiable:
+      description: Byte range is outside the attachment representation.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/TraceId'
+        Content-Range:
+          description: Unsatisfied range form.
+          schema:
+            type: string
+            pattern: ^bytes \*/[0-9]+$
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnprocessableEntity:
+      description: Schema-valid framing with invalid fields or domain references.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/TraceId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RateLimited:
+      description: Rate or send budget exceeded.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/TraceId'
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: Unexpected server error.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/TraceId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ServiceUnavailable:
+      description: Temporary overload or dependency outage.
+      headers:
+        X-Trace-ID:
+          $ref: '#/components/headers/TraceId'
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  examples:
+    AgentIdentityExample:
+      value:
+        object: identity
+        object_version: '2026-08-28'
+        id: 0198f49d-e5c7-78ba-a74f-7ff8186fc242
+        kind: agent
+        username: concierge
+        display_name: Relay Concierge
+        avatar_url: null
+        created_at: '2026-08-28T13:00:00.000Z'
+  schemas:
+    ObjectVersion:
+      type: string
+      const: '2026-08-28'
+    HumanIdentity:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - id
+        - kind
+        - username
+        - phone_number
+        - display_name
+        - avatar_url
+        - created_at
+      properties:
+        object:
+          const: identity
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+        id:
+          type: string
+          format: uuid
+        kind:
+          const: human
+        username:
+          type:
+            - string
+            - 'null'
+          pattern: ^[a-z0-9_]{3,32}$
+        phone_number:
+          type:
+            - string
+            - 'null'
+          pattern: ^\+[1-9][0-9]{1,14}$
+          description: Present only on human identities and may be hidden by visibility policy.
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        avatar_url:
+          type:
+            - string
+            - 'null'
+          format: uri
+        created_at:
+          type: string
+          format: date-time
+    AgentIdentity:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - id
+        - kind
+        - username
+        - display_name
+        - avatar_url
+        - created_at
+      properties:
+        object:
+          const: identity
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+        id:
+          type: string
+          format: uuid
+        kind:
+          const: agent
+        username:
+          type:
+            - string
+            - 'null'
+          pattern: ^[a-z0-9_]{3,32}$
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        avatar_url:
+          type:
+            - string
+            - 'null'
+          format: uri
+        created_at:
+          type: string
+          format: date-time
+    Identity:
+      x-relay-object-version: '2026-08-28'
+      oneOf:
+        - $ref: '#/components/schemas/HumanIdentity'
+        - $ref: '#/components/schemas/AgentIdentity'
+      discriminator:
+        propertyName: kind
+        mapping:
+          human: '#/components/schemas/HumanIdentity'
+          agent: '#/components/schemas/AgentIdentity'
+    ChatParticipant:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - identity
+        - status
+        - joined_at
+        - left_at
+      properties:
+        identity:
+          $ref: '#/components/schemas/Identity'
+        status:
+          type: string
+          enum:
+            - active
+            - left
+            - removed
+        joined_at:
+          type: string
+          format: date-time
+        left_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        object:
+          const: chat_participant
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+    Chat:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - id
+        - type
+        - title
+        - avatar_url
+        - participants
+        - membership_version
+        - last_sequence
+        - created_at
+        - updated_at
+      properties:
+        object:
+          const: chat
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+            - direct
+            - group
+        title:
+          type:
+            - string
+            - 'null'
+          maxLength: 100
+        avatar_url:
+          type:
+            - string
+            - 'null'
+          format: uri
+        participants:
+          type: array
+          minItems: 2
+          maxItems: 32
+          items:
+            $ref: '#/components/schemas/ChatParticipant'
+        membership_version:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string.
+        last_sequence:
+          type: string
+          pattern: ^(0|[1-9][0-9]*)$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    PageCursor:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - next_cursor
+        - has_more
+      properties:
+        next_cursor:
+          type:
+            - string
+            - 'null'
+          maxLength: 2048
+        has_more:
+          type: boolean
+    ChatPage:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - data
+        - page
+      properties:
+        object:
+          const: list
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Chat'
+        page:
+          $ref: '#/components/schemas/PageCursor'
+    ReplyTargetInput:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - message_id
+      properties:
+        message_id:
+          type: string
+          format: uuid
+        part_index:
+          type: integer
+          minimum: 0
+          maximum: 99
+          description: Zero-based part index in the target message. Omit for whole-message scope. Relay resolves it to an immutable internal part ID.
+    ReplyTarget:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - message_id
+        - part_id
+        - part_index
+      properties:
+        message_id:
+          type: string
+          format: uuid
+        part_id:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        object:
+          const: reply_target
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+        part_index:
+          type:
+            - integer
+            - 'null'
+          minimum: 0
+          maximum: 99
+    TextPartInput:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - type
+        - text
+      properties:
+        type:
+          const: text
+        text:
+          type: string
+          minLength: 1
+          maxLength: 10000
+    ImagePartInput:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - type
+        - attachment_id
+      properties:
+        type:
+          const: image
+        attachment_id:
+          type: string
+          format: uuid
+        alt_text:
+          type: string
+          maxLength: 1000
+    FilePartInput:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - type
+        - attachment_id
+      properties:
+        type:
+          const: file
+        attachment_id:
+          type: string
+          format: uuid
+    AudioPartInput:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - type
+        - attachment_id
+        - presentation
+        - duration_ms
+      properties:
+        type:
+          const: audio
+        attachment_id:
+          type: string
+          format: uuid
+        presentation:
+          type: string
+          enum:
+            - file
+            - voice
+          default: file
+        duration_ms:
+          type: integer
+          minimum: 1
+        waveform:
+          type: array
+          maxItems: 200
+          items:
+            type: number
+            minimum: 0
+            maximum: 1
+    LinkPartInput:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - type
+        - url
+        - fallback_text
+      properties:
+        type:
+          const: link
+        url:
+          type: string
+          format: uri
+          pattern: ^https://
+          maxLength: 2048
+        fallback_text:
+          type: string
+          minLength: 1
+          maxLength: 1000
+    MessagePartInput:
+      x-relay-object-version: '2026-08-28'
+      oneOf:
+        - $ref: '#/components/schemas/TextPartInput'
+        - $ref: '#/components/schemas/ImagePartInput'
+        - $ref: '#/components/schemas/FilePartInput'
+        - $ref: '#/components/schemas/AudioPartInput'
+        - $ref: '#/components/schemas/LinkPartInput'
+      discriminator:
+        propertyName: type
+    MessageInput:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - parts
+      properties:
+        parts:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/MessagePartInput'
+        reply_to:
+          $ref: '#/components/schemas/ReplyTargetInput'
+    SendMessageRequest:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - message
+      properties:
+        message:
+          $ref: '#/components/schemas/MessageInput'
+    Attachment:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - id
+        - filename
+        - mime_type
+        - size_bytes
+        - status
+        - sha256
+        - width
+        - height
+        - duration_ms
+        - created_at
+        - available_at
+      properties:
+        object:
+          const: attachment
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+        id:
+          type: string
+          format: uuid
+        filename:
+          type: string
+          minLength: 1
+          maxLength: 255
+        mime_type:
+          type: string
+          pattern: ^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$
+        size_bytes:
+          type: integer
+          minimum: 1
+          maximum: 104857600
+        status:
+          type: string
+          enum:
+            - pending
+            - available
+            - failed
+            - rejected
+            - deleted
+        sha256:
+          type:
+            - string
+            - 'null'
+          pattern: ^[a-f0-9]{64}$
+        width:
+          type:
+            - integer
+            - 'null'
+          minimum: 1
+        height:
+          type:
+            - integer
+            - 'null'
+          minimum: 1
+        duration_ms:
+          type:
+            - integer
+            - 'null'
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+        available_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+    BasePartFields:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      required:
+        - id
+        - index
+        - type
+      properties:
+        id:
+          type: string
+          format: uuid
+        index:
+          type: integer
+          minimum: 0
+          maximum: 99
+        type:
+          type: string
+    TextPart:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - id
+        - index
+        - type
+        - text
+      properties:
+        id:
+          type: string
+          format: uuid
+        index:
+          type: integer
+          minimum: 0
+          maximum: 99
+        type:
+          const: text
+        text:
+          type: string
+          minLength: 1
+          maxLength: 10000
+        object:
+          const: message_part
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+    ImagePart:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - id
+        - index
+        - type
+        - attachment
+        - alt_text
+      properties:
+        id:
+          type: string
+          format: uuid
+        index:
+          type: integer
+          minimum: 0
+          maximum: 99
+        type:
+          const: image
+        attachment:
+          $ref: '#/components/schemas/Attachment'
+        alt_text:
+          type:
+            - string
+            - 'null'
+          maxLength: 1000
+        object:
+          const: message_part
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+    FilePart:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - id
+        - index
+        - type
+        - attachment
+      properties:
+        id:
+          type: string
+          format: uuid
+        index:
+          type: integer
+          minimum: 0
+          maximum: 99
+        type:
+          const: file
+        attachment:
+          $ref: '#/components/schemas/Attachment'
+        object:
+          const: message_part
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+    AudioPart:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - id
+        - index
+        - type
+        - attachment
+        - presentation
+        - waveform
+      properties:
+        id:
+          type: string
+          format: uuid
+        index:
+          type: integer
+          minimum: 0
+          maximum: 99
+        type:
+          const: audio
+        attachment:
+          $ref: '#/components/schemas/Attachment'
+        presentation:
+          type: string
+          enum:
+            - file
+            - voice
+        waveform:
+          type:
+            - array
+            - 'null'
+          maxItems: 200
+          items:
+            type: number
+            minimum: 0
+            maximum: 1
+        object:
+          const: message_part
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+    LinkPreview:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - status
+        - title
+        - description
+        - image_attachment_id
+      properties:
+        status:
+          type: string
+          enum:
+            - pending
+            - available
+            - failed
+        title:
+          type:
+            - string
+            - 'null'
+          maxLength: 500
+        description:
+          type:
+            - string
+            - 'null'
+          maxLength: 2000
+        image_attachment_id:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        object:
+          const: link_preview
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+    LinkPart:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - id
+        - index
+        - type
+        - url
+        - fallback_text
+        - preview
+      properties:
+        id:
+          type: string
+          format: uuid
+        index:
+          type: integer
+          minimum: 0
+          maximum: 99
+        type:
+          const: link
+        url:
+          type: string
+          format: uri
+          pattern: ^https://
+          maxLength: 2048
+        fallback_text:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        preview:
+          $ref: '#/components/schemas/LinkPreview'
+        object:
+          const: message_part
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+    MessagePart:
+      x-relay-object-version: '2026-08-28'
+      oneOf:
+        - $ref: '#/components/schemas/TextPart'
+        - $ref: '#/components/schemas/ImagePart'
+        - $ref: '#/components/schemas/FilePart'
+        - $ref: '#/components/schemas/AudioPart'
+        - $ref: '#/components/schemas/LinkPart'
+      discriminator:
+        propertyName: type
+    Failure:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - code
+        - message
+        - retryable
+        - details
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 100
+        message:
+          type: string
+          minLength: 1
+          maxLength: 500
+        retryable:
+          type: boolean
+        details:
+          type: object
+          additionalProperties: true
+        object:
+          const: failure
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+    MessageReceipt:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - recipient
+        - delivered_at
+        - read_at
+      properties:
+        recipient:
+          $ref: '#/components/schemas/Identity'
+        delivered_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        read_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        object:
+          const: message_receipt
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+    Message:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - id
+        - chat_id
+        - sequence
+        - direction
+        - sender
+        - parts
+        - reply_to
+        - status
+        - receipt_summary
+        - receipts
+        - failure
+        - created_at
+        - sent_at
+      properties:
+        object:
+          const: message
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+        id:
+          type: string
+          format: uuid
+        chat_id:
+          type: string
+          format: uuid
+        sequence:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        direction:
+          type: string
+          enum:
+            - inbound
+            - outbound
+          description: Relative to the authenticated agent.
+        sender:
+          $ref: '#/components/schemas/Identity'
+        parts:
+          type: array
+          minItems: 0
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/MessagePart'
+        reply_to:
+          oneOf:
+            - $ref: '#/components/schemas/ReplyTarget'
+            - type: 'null'
+        status:
+          type: string
+          enum:
+            - accepted
+            - sent
+            - failed
+        receipt_summary:
+          type: string
+          enum:
+            - none
+            - partial
+            - delivered
+            - read
+        receipts:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessageReceipt'
+        failure:
+          oneOf:
+            - $ref: '#/components/schemas/Failure'
+            - type: 'null'
+        created_at:
+          type: string
+          format: date-time
+        sent_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+    SendMessageResponse:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - message
+      properties:
+        object:
+          const: message.acceptance
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+        message:
+          $ref: '#/components/schemas/Message'
+    ReactionChangeRequest:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - operation
+      properties:
+        operation:
+          type: string
+          enum:
+            - set
+            - remove
+        emoji:
+          type: string
+          minLength: 1
+          maxLength: 32
+        part_index:
+          type: integer
+          minimum: 0
+          maximum: 99
+          description: Zero-based part index in the target message. Omit for whole-message scope. Relay resolves it to an immutable internal part ID.
+      allOf:
+        - if:
+            properties:
+              operation:
+                const: set
+            required:
+              - operation
+          then:
+            required:
+              - emoji
+        - if:
+            properties:
+              operation:
+                const: remove
+            required:
+              - operation
+          then:
+            not:
+              required:
+                - emoji
+    Reaction:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - message_id
+        - target_part_id
+        - actor
+        - emoji
+        - slot_version
+        - created_at
+        - part_index
+      properties:
+        object:
+          const: reaction
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+        message_id:
+          type: string
+          format: uuid
+        target_part_id:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        actor:
+          $ref: '#/components/schemas/Identity'
+        emoji:
+          type: string
+          minLength: 1
+          maxLength: 32
+        slot_version:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        created_at:
+          type: string
+          format: date-time
+        part_index:
+          type:
+            - integer
+            - 'null'
+          minimum: 0
+          maximum: 99
+    ReactionChangeResponse:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - changed
+        - slot_version
+        - reaction
+      properties:
+        object:
+          const: reaction.result
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+        changed:
+          type: boolean
+        slot_version:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        reaction:
+          oneOf:
+            - $ref: '#/components/schemas/Reaction'
+            - type: 'null'
+    MarkReadRequest:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - through_message_id
+      properties:
+        through_message_id:
+          type: string
+          format: uuid
+    ReadBoundary:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - chat_id
+        - reader
+        - through_sequence
+        - through_message_id
+        - read_at
+      properties:
+        object:
+          const: read_boundary
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+        chat_id:
+          type: string
+          format: uuid
+        reader:
+          $ref: '#/components/schemas/Identity'
+        through_sequence:
+          type: string
+          pattern: ^(0|[1-9][0-9]*)$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        through_message_id:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        read_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+    MarkReadResponse:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - changed
+        - boundary
+      properties:
+        object:
+          const: read.result
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+        changed:
+          type: boolean
+        boundary:
+          $ref: '#/components/schemas/ReadBoundary'
+    CreateAttachmentRequest:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - filename
+        - mime_type
+        - size_bytes
+      properties:
+        filename:
+          type: string
+          minLength: 1
+          maxLength: 255
+        mime_type:
+          type: string
+          pattern: ^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$
+        size_bytes:
+          type: integer
+          minimum: 1
+          maximum: 104857600
+        sha256:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+    AttachmentUploadTarget:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - method
+        - url
+        - expires_at
+        - required_headers
+      properties:
+        method:
+          const: PUT
+        url:
+          type: string
+          format: uri-reference
+        expires_at:
+          type: string
+          format: date-time
+        required_headers:
+          type: object
+          additionalProperties:
+            type: string
+    CreateAttachmentResponse:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - attachment
+        - upload
+      properties:
+        object:
+          const: attachment.upload
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+        attachment:
+          $ref: '#/components/schemas/Attachment'
+        upload:
+          $ref: '#/components/schemas/AttachmentUploadTarget'
+    WebhookEventType:
+      type: string
+      enum:
+        - message.received
+        - message.sent
+        - message.delivered
+        - message.read
+        - reaction.added
+        - reaction.removed
+        - chat.created
+        - chat.title.updated
+        - chat.avatar.updated
+        - participant.added
+        - participant.removed
+        - typing.started
+        - typing.stopped
+    WebhookEventDefinition:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - name
+        - webhook_version
+        - description
+      properties:
+        name:
+          $ref: '#/components/schemas/WebhookEventType'
+        webhook_version:
+          $ref: '#/components/schemas/ObjectVersion'
+        description:
+          type: string
+    WebhookEventCatalog:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - data
+      properties:
+        object:
+          const: webhook_event_catalog
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+        data:
+          type: array
+          minItems: 13
+          maxItems: 13
+          items:
+            $ref: '#/components/schemas/WebhookEventDefinition'
+    WebhookSubscriptionStatus:
+      type: string
+      enum:
+        - enabled
+        - disabled
+        - degraded
+    WebhookSubscription:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - id
+        - target_url
+        - event_types
+        - webhook_version
+        - status
+        - starts_after_sequence
+        - created_at
+        - updated_at
+      properties:
+        object:
+          const: webhook_subscription
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+        id:
+          type: string
+          format: uuid
+        target_url:
+          type: string
+          format: uri
+        event_types:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/WebhookEventType'
+        webhook_version:
+          type: string
+          const: '2026-08-28'
+        status:
+          $ref: '#/components/schemas/WebhookSubscriptionStatus'
+        starts_after_sequence:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    WebhookSubscriptionPage:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - data
+        - page
+      properties:
+        object:
+          const: list
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookSubscription'
+        page:
+          $ref: '#/components/schemas/PageCursor'
+    CreateWebhookSubscriptionRequest:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - target_url
+        - event_types
+        - webhook_version
+        - enabled
+      properties:
+        target_url:
+          type: string
+          format: uri
+        event_types:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/WebhookEventType'
+        webhook_version:
+          type: string
+          const: '2026-08-28'
+        enabled:
+          type: boolean
+          const: true
+    CreateWebhookSubscriptionResponse:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - subscription
+        - signing_secret
+      properties:
+        object:
+          const: webhook_subscription.creation
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+        subscription:
+          $ref: '#/components/schemas/WebhookSubscription'
+        signing_secret:
+          type: string
+          pattern: ^whsec_[A-Za-z0-9+/=]+$
+          writeOnly: true
+    UpdateWebhookSubscriptionRequest:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        target_url:
+          type: string
+          format: uri
+        event_types:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/WebhookEventType'
+        enabled:
+          type: boolean
+    RotateWebhookSecretRequest:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      properties:
+        overlap_seconds:
+          type: integer
+          minimum: 0
+          maximum: 604800
+          default: 86400
+    RotateWebhookSecretResponse:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - subscription_id
+        - signing_secret
+        - previous_secret_valid_until
+        - rotated_at
+      properties:
+        object:
+          const: webhook_secret.rotation
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+        subscription_id:
+          type: string
+          format: uuid
+        signing_secret:
+          type: string
+          pattern: ^whsec_[A-Za-z0-9+/=]+$
+          writeOnly: true
+        previous_secret_valid_until:
+          type: string
+          format: date-time
+        rotated_at:
+          type: string
+          format: date-time
+    WebhookDeliveryStatus:
+      type: string
+      enum:
+        - pending
+        - retrying
+        - succeeded
+        - dead_letter
+    WebhookAttempt:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - number
+        - started_at
+        - finished_at
+        - outcome
+        - http_status
+        - error_code
+      properties:
+        number:
+          type: integer
+          minimum: 1
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        outcome:
+          type: string
+          enum:
+            - in_progress
+            - succeeded
+            - retryable_failure
+            - permanent_failure
+        http_status:
+          type:
+            - integer
+            - 'null'
+          minimum: 100
+          maximum: 599
+        error_code:
+          type:
+            - string
+            - 'null'
+          maxLength: 100
+    WebhookDelivery:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - id
+        - subscription_id
+        - event_id
+        - event_type
+        - event_sequence
+        - status
+        - attempt_count
+        - attempts
+        - next_attempt_at
+        - first_attempt_at
+        - last_attempt_at
+        - succeeded_at
+        - dead_lettered_at
+        - created_at
+        - expires_at
+      properties:
+        object:
+          const: webhook_delivery
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+        id:
+          type: string
+          format: uuid
+        subscription_id:
+          type: string
+          format: uuid
+        event_id:
+          type: string
+          format: uuid
+        event_type:
+          $ref: '#/components/schemas/WebhookEventType'
+        event_sequence:
+          type: integer
+          minimum: 1
+        status:
+          $ref: '#/components/schemas/WebhookDeliveryStatus'
+        attempt_count:
+          type: integer
+          minimum: 0
+        attempts:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookAttempt'
+        next_attempt_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        first_attempt_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        last_attempt_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        succeeded_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        dead_lettered_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+    WebhookDeliveryPage:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - data
+        - page
+      properties:
+        object:
+          const: list
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookDelivery'
+        page:
+          $ref: '#/components/schemas/PageCursor'
+    FieldError:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - path
+        - code
+        - message
+      properties:
+        path:
+          type: string
+          minLength: 1
+          maxLength: 500
+        code:
+          type: string
+          minLength: 1
+          maxLength: 100
+        message:
+          type: string
+          minLength: 1
+          maxLength: 500
+    ErrorBody:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - code
+        - message
+        - retryable
+        - field_errors
+        - details
+      properties:
+        code:
+          type: string
+          enum:
+            - invalid_json
+            - invalid_request
+            - authentication_required
+            - invalid_token
+            - forbidden
+            - not_found
+            - request_timeout
+            - idempotency_conflict
+            - idempotency_in_progress
+            - idempotency_tombstoned
+            - invalid_state
+            - attachment_in_use
+            - upload_expired
+            - payload_too_large
+            - unsupported_media_type
+            - range_not_satisfiable
+            - validation_error
+            - reply_target_invalid
+            - part_target_mismatch
+            - attachment_not_available
+            - identity_kind_violation
+            - rate_limited
+            - internal_error
+            - delivery_dependency_failed
+            - service_unavailable
+            - part_index_out_of_range
+        message:
+          type: string
+          minLength: 1
+          maxLength: 500
+        retryable:
+          type: boolean
+        field_errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldError'
+        details:
+          type: object
+          additionalProperties: true
+    ErrorResponse:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - error
+        - trace_id
+      properties:
+        object:
+          const: error
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+        error:
+          $ref: '#/components/schemas/ErrorBody'
+        trace_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+    MessagePage:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: false
+      required:
+        - object
+        - object_version
+        - data
+        - page
+      properties:
+        object:
+          const: list
+        object_version:
+          $ref: '#/components/schemas/ObjectVersion'
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+        page:
+          $ref: '#/components/schemas/PageCursor'
+    HumanIdentity-2:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - id
+        - kind
+        - username
+        - phone_number
+        - display_name
+        - avatar_url
+        - created_at
+      properties:
+        object:
+          const: identity
+        object_version:
+          const: '2026-08-28'
+        id:
+          type: string
+          format: uuid
+        kind:
+          const: human
+        username:
+          type:
+            - string
+            - 'null'
+          pattern: ^[a-z0-9_]{3,32}$
+        phone_number:
+          type:
+            - string
+            - 'null'
+          pattern: ^\+[1-9][0-9]{1,14}$
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        avatar_url:
+          type:
+            - string
+            - 'null'
+          format: uri
+        created_at:
+          type: string
+          format: date-time
+    AgentIdentity-2:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - id
+        - kind
+        - username
+        - display_name
+        - avatar_url
+        - created_at
+      properties:
+        object:
+          const: identity
+        object_version:
+          const: '2026-08-28'
+        id:
+          type: string
+          format: uuid
+        kind:
+          const: agent
+        username:
+          type:
+            - string
+            - 'null'
+          pattern: ^[a-z0-9_]{3,32}$
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        avatar_url:
+          type:
+            - string
+            - 'null'
+          format: uri
+        created_at:
+          type: string
+          format: date-time
+    Identity-2:
+      x-relay-object-version: '2026-08-28'
+      oneOf:
+        - $ref: '#/components/schemas/HumanIdentity-2'
+        - $ref: '#/components/schemas/AgentIdentity-2'
+    ChatParticipant-2:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - identity
+        - status
+        - joined_at
+        - left_at
+      properties:
+        object:
+          const: chat_participant
+        object_version:
+          const: '2026-08-28'
+        identity:
+          $ref: '#/components/schemas/Identity-2'
+        status:
+          enum:
+            - active
+            - left
+            - removed
+        joined_at:
+          type: string
+          format: date-time
+        left_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+    Attachment-2:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - id
+        - filename
+        - mime_type
+        - size_bytes
+        - status
+        - sha256
+        - width
+        - height
+        - duration_ms
+        - created_at
+        - available_at
+      properties:
+        object:
+          const: attachment
+        object_version:
+          const: '2026-08-28'
+        id:
+          type: string
+          format: uuid
+        filename:
+          type: string
+          minLength: 1
+          maxLength: 255
+        mime_type:
+          type: string
+        size_bytes:
+          type: integer
+          minimum: 1
+          maximum: 104857600
+        status:
+          enum:
+            - pending
+            - available
+            - failed
+            - rejected
+            - deleted
+        sha256:
+          type:
+            - string
+            - 'null'
+          pattern: ^[a-f0-9]{64}$
+        width:
+          type:
+            - integer
+            - 'null'
+          minimum: 1
+        height:
+          type:
+            - integer
+            - 'null'
+          minimum: 1
+        duration_ms:
+          type:
+            - integer
+            - 'null'
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+        available_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+    LinkPreview-2:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - status
+        - title
+        - description
+        - image_attachment_id
+      properties:
+        object:
+          const: link_preview
+        object_version:
+          const: '2026-08-28'
+        status:
+          enum:
+            - pending
+            - available
+            - failed
+        title:
+          type:
+            - string
+            - 'null'
+          maxLength: 500
+        description:
+          type:
+            - string
+            - 'null'
+          maxLength: 2000
+        image_attachment_id:
+          type:
+            - string
+            - 'null'
+          format: uuid
+    TextPart-2:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - id
+        - index
+        - type
+        - text
+      properties:
+        object:
+          const: message_part
+        object_version:
+          const: '2026-08-28'
+        id:
+          type: string
+          format: uuid
+        index:
+          type: integer
+          minimum: 0
+          maximum: 99
+        type:
+          const: text
+        text:
+          type: string
+          minLength: 1
+          maxLength: 10000
+    ImagePart-2:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - id
+        - index
+        - type
+        - attachment
+        - alt_text
+      properties:
+        object:
+          const: message_part
+        object_version:
+          const: '2026-08-28'
+        id:
+          type: string
+          format: uuid
+        index:
+          type: integer
+          minimum: 0
+          maximum: 99
+        type:
+          const: image
+        attachment:
+          $ref: '#/components/schemas/Attachment-2'
+        alt_text:
+          type:
+            - string
+            - 'null'
+          maxLength: 1000
+    FilePart-2:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - id
+        - index
+        - type
+        - attachment
+      properties:
+        object:
+          const: message_part
+        object_version:
+          const: '2026-08-28'
+        id:
+          type: string
+          format: uuid
+        index:
+          type: integer
+          minimum: 0
+          maximum: 99
+        type:
+          const: file
+        attachment:
+          $ref: '#/components/schemas/Attachment-2'
+    AudioPart-2:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - id
+        - index
+        - type
+        - attachment
+        - presentation
+        - waveform
+      properties:
+        object:
+          const: message_part
+        object_version:
+          const: '2026-08-28'
+        id:
+          type: string
+          format: uuid
+        index:
+          type: integer
+          minimum: 0
+          maximum: 99
+        type:
+          const: audio
+        attachment:
+          $ref: '#/components/schemas/Attachment-2'
+        presentation:
+          enum:
+            - file
+            - voice
+        waveform:
+          oneOf:
+            - type: array
+              maxItems: 200
+              items:
+                type: number
+                minimum: 0
+                maximum: 1
+            - type: 'null'
+    LinkPart-2:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - id
+        - index
+        - type
+        - url
+        - fallback_text
+        - preview
+      properties:
+        object:
+          const: message_part
+        object_version:
+          const: '2026-08-28'
+        id:
+          type: string
+          format: uuid
+        index:
+          type: integer
+          minimum: 0
+          maximum: 99
+        type:
+          const: link
+        url:
+          type: string
+          format: uri
+          pattern: ^https://
+          maxLength: 2048
+        fallback_text:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        preview:
+          $ref: '#/components/schemas/LinkPreview-2'
+    MessagePart-2:
+      x-relay-object-version: '2026-08-28'
+      oneOf:
+        - $ref: '#/components/schemas/TextPart-2'
+        - $ref: '#/components/schemas/ImagePart-2'
+        - $ref: '#/components/schemas/FilePart-2'
+        - $ref: '#/components/schemas/AudioPart-2'
+        - $ref: '#/components/schemas/LinkPart-2'
+    ReplyTarget-2:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - message_id
+        - part_id
+        - part_index
+      properties:
+        object:
+          const: reply_target
+        object_version:
+          const: '2026-08-28'
+        message_id:
+          type: string
+          format: uuid
+        part_id:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        part_index:
+          type:
+            - integer
+            - 'null'
+          minimum: 0
+          maximum: 99
+    MessageReceipt-2:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - recipient
+        - delivered_at
+        - read_at
+      properties:
+        object:
+          const: message_receipt
+        object_version:
+          const: '2026-08-28'
+        recipient:
+          $ref: '#/components/schemas/Identity-2'
+        delivered_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        read_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+    Failure-2:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - code
+        - message
+        - retryable
+        - details
+      properties:
+        object:
+          const: failure
+        object_version:
+          const: '2026-08-28'
+        code:
+          type: string
+          minLength: 1
+          maxLength: 100
+        message:
+          type: string
+          minLength: 1
+          maxLength: 500
+        retryable:
+          type: boolean
+        details:
+          type: object
+          additionalProperties: true
+    Message-2:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - id
+        - chat_id
+        - sequence
+        - direction
+        - sender
+        - parts
+        - reply_to
+        - status
+        - receipt_summary
+        - receipts
+        - failure
+        - created_at
+        - sent_at
+      properties:
+        object:
+          const: message
+        object_version:
+          const: '2026-08-28'
+        id:
+          type: string
+          format: uuid
+        chat_id:
+          type: string
+          format: uuid
+        sequence:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        direction:
+          enum:
+            - inbound
+            - outbound
+        sender:
+          $ref: '#/components/schemas/Identity-2'
+        parts:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/MessagePart-2'
+        reply_to:
+          oneOf:
+            - $ref: '#/components/schemas/ReplyTarget-2'
+            - type: 'null'
+        status:
+          enum:
+            - accepted
+            - sent
+            - failed
+        receipt_summary:
+          enum:
+            - none
+            - partial
+            - delivered
+            - read
+        receipts:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessageReceipt-2'
+        failure:
+          oneOf:
+            - $ref: '#/components/schemas/Failure-2'
+            - type: 'null'
+        created_at:
+          type: string
+          format: date-time
+        sent_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+    Reaction-2:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - message_id
+        - target_part_id
+        - actor
+        - emoji
+        - slot_version
+        - created_at
+        - part_index
+      properties:
+        object:
+          const: reaction
+        object_version:
+          const: '2026-08-28'
+        message_id:
+          type: string
+          format: uuid
+        target_part_id:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        actor:
+          $ref: '#/components/schemas/Identity-2'
+        emoji:
+          type: string
+          minLength: 1
+          maxLength: 32
+        slot_version:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        created_at:
+          type: string
+          format: date-time
+        part_index:
+          type:
+            - integer
+            - 'null'
+          minimum: 0
+          maximum: 99
+    Chat-2:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - id
+        - type
+        - title
+        - avatar_url
+        - participants
+        - membership_version
+        - last_sequence
+        - created_at
+        - updated_at
+      properties:
+        object:
+          const: chat
+        object_version:
+          const: '2026-08-28'
+        id:
+          type: string
+          format: uuid
+        type:
+          enum:
+            - direct
+            - group
+        title:
+          type:
+            - string
+            - 'null'
+          maxLength: 100
+        avatar_url:
+          type:
+            - string
+            - 'null'
+          format: uri
+        participants:
+          type: array
+          minItems: 2
+          maxItems: 32
+          items:
+            $ref: '#/components/schemas/ChatParticipant-2'
+        membership_version:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string.
+        last_sequence:
+          type: string
+          pattern: ^(0|[1-9][0-9]*)$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    MessageEventData:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - message
+      properties:
+        object:
+          const: message_event_data
+        object_version:
+          const: '2026-08-28'
+        message:
+          $ref: '#/components/schemas/Message-2'
+    DeliveredData:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - message_id
+        - chat_id
+        - chat_sequence
+        - recipient
+        - delivered_at
+      properties:
+        object:
+          const: message_delivered_event_data
+        object_version:
+          const: '2026-08-28'
+        message_id:
+          type: string
+          format: uuid
+        chat_id:
+          type: string
+          format: uuid
+        chat_sequence:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        recipient:
+          $ref: '#/components/schemas/Identity-2'
+        delivered_at:
+          type: string
+          format: date-time
+    ReadData:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - chat_id
+        - reader
+        - through_sequence
+        - through_message_id
+        - read_at
+      properties:
+        object:
+          const: message_read_event_data
+        object_version:
+          const: '2026-08-28'
+        chat_id:
+          type: string
+          format: uuid
+        reader:
+          $ref: '#/components/schemas/Identity-2'
+        through_sequence:
+          type: string
+          pattern: ^(0|[1-9][0-9]*)$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        through_message_id:
+          type: string
+          format: uuid
+        read_at:
+          type: string
+          format: date-time
+    ReactionData:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - chat_id
+        - chat_sequence
+        - reaction
+      properties:
+        object:
+          const: reaction_event_data
+        object_version:
+          const: '2026-08-28'
+        chat_id:
+          type: string
+          format: uuid
+        chat_sequence:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        reaction:
+          $ref: '#/components/schemas/Reaction-2'
+    ChatCreatedData:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - chat
+        - actor
+      properties:
+        object:
+          const: chat_created_event_data
+        object_version:
+          const: '2026-08-28'
+        chat:
+          $ref: '#/components/schemas/Chat-2'
+        actor:
+          $ref: '#/components/schemas/HumanIdentity-2'
+    ChatTitleData:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - chat_id
+        - chat_sequence
+        - actor
+        - old_title
+        - new_title
+      properties:
+        object:
+          const: chat_title_event_data
+        object_version:
+          const: '2026-08-28'
+        chat_id:
+          type: string
+          format: uuid
+        chat_sequence:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        actor:
+          $ref: '#/components/schemas/HumanIdentity-2'
+        old_title:
+          type:
+            - string
+            - 'null'
+          maxLength: 100
+        new_title:
+          type:
+            - string
+            - 'null'
+          maxLength: 100
+    ChatAvatarData:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - chat_id
+        - chat_sequence
+        - actor
+        - old_avatar_url
+        - new_avatar_url
+      properties:
+        object:
+          const: chat_avatar_event_data
+        object_version:
+          const: '2026-08-28'
+        chat_id:
+          type: string
+          format: uuid
+        chat_sequence:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        actor:
+          $ref: '#/components/schemas/HumanIdentity-2'
+        old_avatar_url:
+          type:
+            - string
+            - 'null'
+          format: uri
+        new_avatar_url:
+          type:
+            - string
+            - 'null'
+          format: uri
+    ParticipantData:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - chat_id
+        - chat_sequence
+        - actor
+        - participant
+        - membership_version
+      properties:
+        object:
+          const: participant_event_data
+        object_version:
+          const: '2026-08-28'
+        chat_id:
+          type: string
+          format: uuid
+        chat_sequence:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        actor:
+          $ref: '#/components/schemas/HumanIdentity-2'
+        participant:
+          $ref: '#/components/schemas/ChatParticipant-2'
+        membership_version:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string.
+    TypingStartedData:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - chat_id
+        - actor
+        - typing_version
+        - ttl_seconds
+        - started_at
+        - expires_at
+      properties:
+        object:
+          const: typing_started_event_data
+        object_version:
+          const: '2026-08-28'
+        chat_id:
+          type: string
+          format: uuid
+        actor:
+          $ref: '#/components/schemas/Identity-2'
+        typing_version:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        ttl_seconds:
+          const: 90
+        started_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+    TypingStoppedData:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - object
+        - object_version
+        - chat_id
+        - actor
+        - typing_version
+        - ttl_seconds
+        - started_at
+        - stopped_at
+        - expires_at
+        - reason
+      properties:
+        object:
+          const: typing_stopped_event_data
+        object_version:
+          const: '2026-08-28'
+        chat_id:
+          type: string
+          format: uuid
+        actor:
+          $ref: '#/components/schemas/Identity-2'
+        typing_version:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        ttl_seconds:
+          const: 90
+        started_at:
+          type: string
+          format: date-time
+        stopped_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        reason:
+          enum:
+            - explicit
+            - expired
+            - message_sent
+            - membership_changed
+    MessageReceivedEvent:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - api_version
+        - webhook_version
+        - event_id
+        - event_type
+        - sequence
+        - created_at
+        - trace_id
+        - agent_id
+        - data
+      properties:
+        api_version:
+          const: v1
+        webhook_version:
+          const: '2026-08-28'
+        event_id:
+          type: string
+          format: uuid
+        event_type:
+          const: message.received
+        sequence:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        created_at:
+          type: string
+          format: date-time
+        trace_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        agent_id:
+          type: string
+          format: uuid
+        data:
+          $ref: '#/components/schemas/MessageEventData'
+    MessageSentEvent:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - api_version
+        - webhook_version
+        - event_id
+        - event_type
+        - sequence
+        - created_at
+        - trace_id
+        - agent_id
+        - data
+      properties:
+        api_version:
+          const: v1
+        webhook_version:
+          const: '2026-08-28'
+        event_id:
+          type: string
+          format: uuid
+        event_type:
+          const: message.sent
+        sequence:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        created_at:
+          type: string
+          format: date-time
+        trace_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        agent_id:
+          type: string
+          format: uuid
+        data:
+          $ref: '#/components/schemas/MessageEventData'
+    MessageDeliveredEvent:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - api_version
+        - webhook_version
+        - event_id
+        - event_type
+        - sequence
+        - created_at
+        - trace_id
+        - agent_id
+        - data
+      properties:
+        api_version:
+          const: v1
+        webhook_version:
+          const: '2026-08-28'
+        event_id:
+          type: string
+          format: uuid
+        event_type:
+          const: message.delivered
+        sequence:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        created_at:
+          type: string
+          format: date-time
+        trace_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        agent_id:
+          type: string
+          format: uuid
+        data:
+          $ref: '#/components/schemas/DeliveredData'
+    MessageReadEvent:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - api_version
+        - webhook_version
+        - event_id
+        - event_type
+        - sequence
+        - created_at
+        - trace_id
+        - agent_id
+        - data
+      properties:
+        api_version:
+          const: v1
+        webhook_version:
+          const: '2026-08-28'
+        event_id:
+          type: string
+          format: uuid
+        event_type:
+          const: message.read
+        sequence:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        created_at:
+          type: string
+          format: date-time
+        trace_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        agent_id:
+          type: string
+          format: uuid
+        data:
+          $ref: '#/components/schemas/ReadData'
+    ReactionAddedEvent:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - api_version
+        - webhook_version
+        - event_id
+        - event_type
+        - sequence
+        - created_at
+        - trace_id
+        - agent_id
+        - data
+      properties:
+        api_version:
+          const: v1
+        webhook_version:
+          const: '2026-08-28'
+        event_id:
+          type: string
+          format: uuid
+        event_type:
+          const: reaction.added
+        sequence:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        created_at:
+          type: string
+          format: date-time
+        trace_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        agent_id:
+          type: string
+          format: uuid
+        data:
+          $ref: '#/components/schemas/ReactionData'
+    ReactionRemovedEvent:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - api_version
+        - webhook_version
+        - event_id
+        - event_type
+        - sequence
+        - created_at
+        - trace_id
+        - agent_id
+        - data
+      properties:
+        api_version:
+          const: v1
+        webhook_version:
+          const: '2026-08-28'
+        event_id:
+          type: string
+          format: uuid
+        event_type:
+          const: reaction.removed
+        sequence:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        created_at:
+          type: string
+          format: date-time
+        trace_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        agent_id:
+          type: string
+          format: uuid
+        data:
+          $ref: '#/components/schemas/ReactionData'
+    ChatCreatedEvent:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - api_version
+        - webhook_version
+        - event_id
+        - event_type
+        - sequence
+        - created_at
+        - trace_id
+        - agent_id
+        - data
+      properties:
+        api_version:
+          const: v1
+        webhook_version:
+          const: '2026-08-28'
+        event_id:
+          type: string
+          format: uuid
+        event_type:
+          const: chat.created
+        sequence:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        created_at:
+          type: string
+          format: date-time
+        trace_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        agent_id:
+          type: string
+          format: uuid
+        data:
+          $ref: '#/components/schemas/ChatCreatedData'
+    ChatTitleUpdatedEvent:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - api_version
+        - webhook_version
+        - event_id
+        - event_type
+        - sequence
+        - created_at
+        - trace_id
+        - agent_id
+        - data
+      properties:
+        api_version:
+          const: v1
+        webhook_version:
+          const: '2026-08-28'
+        event_id:
+          type: string
+          format: uuid
+        event_type:
+          const: chat.title.updated
+        sequence:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        created_at:
+          type: string
+          format: date-time
+        trace_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        agent_id:
+          type: string
+          format: uuid
+        data:
+          $ref: '#/components/schemas/ChatTitleData'
+    ChatAvatarUpdatedEvent:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - api_version
+        - webhook_version
+        - event_id
+        - event_type
+        - sequence
+        - created_at
+        - trace_id
+        - agent_id
+        - data
+      properties:
+        api_version:
+          const: v1
+        webhook_version:
+          const: '2026-08-28'
+        event_id:
+          type: string
+          format: uuid
+        event_type:
+          const: chat.avatar.updated
+        sequence:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        created_at:
+          type: string
+          format: date-time
+        trace_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        agent_id:
+          type: string
+          format: uuid
+        data:
+          $ref: '#/components/schemas/ChatAvatarData'
+    ParticipantAddedEvent:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - api_version
+        - webhook_version
+        - event_id
+        - event_type
+        - sequence
+        - created_at
+        - trace_id
+        - agent_id
+        - data
+      properties:
+        api_version:
+          const: v1
+        webhook_version:
+          const: '2026-08-28'
+        event_id:
+          type: string
+          format: uuid
+        event_type:
+          const: participant.added
+        sequence:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        created_at:
+          type: string
+          format: date-time
+        trace_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        agent_id:
+          type: string
+          format: uuid
+        data:
+          $ref: '#/components/schemas/ParticipantData'
+    ParticipantRemovedEvent:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - api_version
+        - webhook_version
+        - event_id
+        - event_type
+        - sequence
+        - created_at
+        - trace_id
+        - agent_id
+        - data
+      properties:
+        api_version:
+          const: v1
+        webhook_version:
+          const: '2026-08-28'
+        event_id:
+          type: string
+          format: uuid
+        event_type:
+          const: participant.removed
+        sequence:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        created_at:
+          type: string
+          format: date-time
+        trace_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        agent_id:
+          type: string
+          format: uuid
+        data:
+          $ref: '#/components/schemas/ParticipantData'
+    TypingStartedEvent:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - api_version
+        - webhook_version
+        - event_id
+        - event_type
+        - sequence
+        - created_at
+        - trace_id
+        - agent_id
+        - data
+      properties:
+        api_version:
+          const: v1
+        webhook_version:
+          const: '2026-08-28'
+        event_id:
+          type: string
+          format: uuid
+        event_type:
+          const: typing.started
+        sequence:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        created_at:
+          type: string
+          format: date-time
+        trace_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        agent_id:
+          type: string
+          format: uuid
+        data:
+          $ref: '#/components/schemas/TypingStartedData'
+    TypingStoppedEvent:
+      type: object
+      x-relay-object-version: '2026-08-28'
+      additionalProperties: true
+      required:
+        - api_version
+        - webhook_version
+        - event_id
+        - event_type
+        - sequence
+        - created_at
+        - trace_id
+        - agent_id
+        - data
+      properties:
+        api_version:
+          const: v1
+        webhook_version:
+          const: '2026-08-28'
+        event_id:
+          type: string
+          format: uuid
+        event_type:
+          const: typing.stopped
+        sequence:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+        created_at:
+          type: string
+          format: date-time
+        trace_id:
+          type: string
+          pattern: ^[a-f0-9]{32}$
+        agent_id:
+          type: string
+          format: uuid
+        data:
+          $ref: '#/components/schemas/TypingStoppedData'
+    webhooks.schema:
+      $schema: https://json-schema.org/draft/2020-12/schema
+      $id: https://relay.local/schemas/webhooks/2026-08-28.json
+      title: Relay webhook event 2026-08-28
+      description: Complete webhook union for Relay Developer API v1. Delivery is signed, at least once, and unordered.
+      oneOf:
+        - $ref: '#/components/schemas/MessageReceivedEvent'
+        - $ref: '#/components/schemas/MessageSentEvent'
+        - $ref: '#/components/schemas/MessageDeliveredEvent'
+        - $ref: '#/components/schemas/MessageReadEvent'
+        - $ref: '#/components/schemas/ReactionAddedEvent'
+        - $ref: '#/components/schemas/ReactionRemovedEvent'
+        - $ref: '#/components/schemas/ChatCreatedEvent'
+        - $ref: '#/components/schemas/ChatTitleUpdatedEvent'
+        - $ref: '#/components/schemas/ChatAvatarUpdatedEvent'
+        - $ref: '#/components/schemas/ParticipantAddedEvent'
+        - $ref: '#/components/schemas/ParticipantRemovedEvent'
+        - $ref: '#/components/schemas/TypingStartedEvent'
+        - $ref: '#/components/schemas/TypingStoppedEvent'
+      $defs:
+        HumanIdentity:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - id
+            - kind
+            - username
+            - phone_number
+            - display_name
+            - avatar_url
+            - created_at
+          properties:
+            object:
+              const: identity
+            object_version:
+              const: '2026-08-28'
+            id:
+              type: string
+              format: uuid
+            kind:
+              const: human
+            username:
+              type:
+                - string
+                - 'null'
+              pattern: ^[a-z0-9_]{3,32}$
+            phone_number:
+              type:
+                - string
+                - 'null'
+              pattern: ^\+[1-9][0-9]{1,14}$
+            display_name:
+              type: string
+              minLength: 1
+              maxLength: 100
+            avatar_url:
+              type:
+                - string
+                - 'null'
+              format: uri
+            created_at:
+              type: string
+              format: date-time
+        AgentIdentity:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - id
+            - kind
+            - username
+            - display_name
+            - avatar_url
+            - created_at
+          properties:
+            object:
+              const: identity
+            object_version:
+              const: '2026-08-28'
+            id:
+              type: string
+              format: uuid
+            kind:
+              const: agent
+            username:
+              type:
+                - string
+                - 'null'
+              pattern: ^[a-z0-9_]{3,32}$
+            display_name:
+              type: string
+              minLength: 1
+              maxLength: 100
+            avatar_url:
+              type:
+                - string
+                - 'null'
+              format: uri
+            created_at:
+              type: string
+              format: date-time
+        Identity:
+          x-relay-object-version: '2026-08-28'
+          oneOf:
+            - $ref: '#/components/schemas/HumanIdentity-2'
+            - $ref: '#/components/schemas/AgentIdentity-2'
+        ChatParticipant:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - identity
+            - status
+            - joined_at
+            - left_at
+          properties:
+            object:
+              const: chat_participant
+            object_version:
+              const: '2026-08-28'
+            identity:
+              $ref: '#/components/schemas/Identity-2'
+            status:
+              enum:
+                - active
+                - left
+                - removed
+            joined_at:
+              type: string
+              format: date-time
+            left_at:
+              type:
+                - string
+                - 'null'
+              format: date-time
+        Chat:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - id
+            - type
+            - title
+            - avatar_url
+            - participants
+            - membership_version
+            - last_sequence
+            - created_at
+            - updated_at
+          properties:
+            object:
+              const: chat
+            object_version:
+              const: '2026-08-28'
+            id:
+              type: string
+              format: uuid
+            type:
+              enum:
+                - direct
+                - group
+            title:
+              type:
+                - string
+                - 'null'
+              maxLength: 100
+            avatar_url:
+              type:
+                - string
+                - 'null'
+              format: uri
+            participants:
+              type: array
+              minItems: 2
+              maxItems: 32
+              items:
+                $ref: '#/components/schemas/ChatParticipant-2'
+            membership_version:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string.
+            last_sequence:
+              type: string
+              pattern: ^(0|[1-9][0-9]*)$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+        Attachment:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - id
+            - filename
+            - mime_type
+            - size_bytes
+            - status
+            - sha256
+            - width
+            - height
+            - duration_ms
+            - created_at
+            - available_at
+          properties:
+            object:
+              const: attachment
+            object_version:
+              const: '2026-08-28'
+            id:
+              type: string
+              format: uuid
+            filename:
+              type: string
+              minLength: 1
+              maxLength: 255
+            mime_type:
+              type: string
+            size_bytes:
+              type: integer
+              minimum: 1
+              maximum: 104857600
+            status:
+              enum:
+                - pending
+                - available
+                - failed
+                - rejected
+                - deleted
+            sha256:
+              type:
+                - string
+                - 'null'
+              pattern: ^[a-f0-9]{64}$
+            width:
+              type:
+                - integer
+                - 'null'
+              minimum: 1
+            height:
+              type:
+                - integer
+                - 'null'
+              minimum: 1
+            duration_ms:
+              type:
+                - integer
+                - 'null'
+              minimum: 0
+            created_at:
+              type: string
+              format: date-time
+            available_at:
+              type:
+                - string
+                - 'null'
+              format: date-time
+        TextPart:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - id
+            - index
+            - type
+            - text
+          properties:
+            object:
+              const: message_part
+            object_version:
+              const: '2026-08-28'
+            id:
+              type: string
+              format: uuid
+            index:
+              type: integer
+              minimum: 0
+              maximum: 99
+            type:
+              const: text
+            text:
+              type: string
+              minLength: 1
+              maxLength: 10000
+        ImagePart:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - id
+            - index
+            - type
+            - attachment
+            - alt_text
+          properties:
+            object:
+              const: message_part
+            object_version:
+              const: '2026-08-28'
+            id:
+              type: string
+              format: uuid
+            index:
+              type: integer
+              minimum: 0
+              maximum: 99
+            type:
+              const: image
+            attachment:
+              $ref: '#/components/schemas/Attachment-2'
+            alt_text:
+              type:
+                - string
+                - 'null'
+              maxLength: 1000
+        FilePart:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - id
+            - index
+            - type
+            - attachment
+          properties:
+            object:
+              const: message_part
+            object_version:
+              const: '2026-08-28'
+            id:
+              type: string
+              format: uuid
+            index:
+              type: integer
+              minimum: 0
+              maximum: 99
+            type:
+              const: file
+            attachment:
+              $ref: '#/components/schemas/Attachment-2'
+        AudioPart:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - id
+            - index
+            - type
+            - attachment
+            - presentation
+            - waveform
+          properties:
+            object:
+              const: message_part
+            object_version:
+              const: '2026-08-28'
+            id:
+              type: string
+              format: uuid
+            index:
+              type: integer
+              minimum: 0
+              maximum: 99
+            type:
+              const: audio
+            attachment:
+              $ref: '#/components/schemas/Attachment-2'
+            presentation:
+              enum:
+                - file
+                - voice
+            waveform:
+              oneOf:
+                - type: array
+                  maxItems: 200
+                  items:
+                    type: number
+                    minimum: 0
+                    maximum: 1
+                - type: 'null'
+        LinkPreview:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - status
+            - title
+            - description
+            - image_attachment_id
+          properties:
+            object:
+              const: link_preview
+            object_version:
+              const: '2026-08-28'
+            status:
+              enum:
+                - pending
+                - available
+                - failed
+            title:
+              type:
+                - string
+                - 'null'
+              maxLength: 500
+            description:
+              type:
+                - string
+                - 'null'
+              maxLength: 2000
+            image_attachment_id:
+              type:
+                - string
+                - 'null'
+              format: uuid
+        LinkPart:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - id
+            - index
+            - type
+            - url
+            - fallback_text
+            - preview
+          properties:
+            object:
+              const: message_part
+            object_version:
+              const: '2026-08-28'
+            id:
+              type: string
+              format: uuid
+            index:
+              type: integer
+              minimum: 0
+              maximum: 99
+            type:
+              const: link
+            url:
+              type: string
+              format: uri
+              pattern: ^https://
+              maxLength: 2048
+            fallback_text:
+              type: string
+              minLength: 1
+              maxLength: 1000
+            preview:
+              $ref: '#/components/schemas/LinkPreview-2'
+        MessagePart:
+          x-relay-object-version: '2026-08-28'
+          oneOf:
+            - $ref: '#/components/schemas/TextPart-2'
+            - $ref: '#/components/schemas/ImagePart-2'
+            - $ref: '#/components/schemas/FilePart-2'
+            - $ref: '#/components/schemas/AudioPart-2'
+            - $ref: '#/components/schemas/LinkPart-2'
+        ReplyTarget:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - message_id
+            - part_id
+            - part_index
+          properties:
+            object:
+              const: reply_target
+            object_version:
+              const: '2026-08-28'
+            message_id:
+              type: string
+              format: uuid
+            part_id:
+              type:
+                - string
+                - 'null'
+              format: uuid
+            part_index:
+              type:
+                - integer
+                - 'null'
+              minimum: 0
+              maximum: 99
+        Failure:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - code
+            - message
+            - retryable
+            - details
+          properties:
+            object:
+              const: failure
+            object_version:
+              const: '2026-08-28'
+            code:
+              type: string
+              minLength: 1
+              maxLength: 100
+            message:
+              type: string
+              minLength: 1
+              maxLength: 500
+            retryable:
+              type: boolean
+            details:
+              type: object
+              additionalProperties: true
+        MessageReceipt:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - recipient
+            - delivered_at
+            - read_at
+          properties:
+            object:
+              const: message_receipt
+            object_version:
+              const: '2026-08-28'
+            recipient:
+              $ref: '#/components/schemas/Identity-2'
+            delivered_at:
+              type:
+                - string
+                - 'null'
+              format: date-time
+            read_at:
+              type:
+                - string
+                - 'null'
+              format: date-time
+        Message:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - id
+            - chat_id
+            - sequence
+            - direction
+            - sender
+            - parts
+            - reply_to
+            - status
+            - receipt_summary
+            - receipts
+            - failure
+            - created_at
+            - sent_at
+          properties:
+            object:
+              const: message
+            object_version:
+              const: '2026-08-28'
+            id:
+              type: string
+              format: uuid
+            chat_id:
+              type: string
+              format: uuid
+            sequence:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            direction:
+              enum:
+                - inbound
+                - outbound
+            sender:
+              $ref: '#/components/schemas/Identity-2'
+            parts:
+              type: array
+              maxItems: 100
+              items:
+                $ref: '#/components/schemas/MessagePart-2'
+            reply_to:
+              oneOf:
+                - $ref: '#/components/schemas/ReplyTarget-2'
+                - type: 'null'
+            status:
+              enum:
+                - accepted
+                - sent
+                - failed
+            receipt_summary:
+              enum:
+                - none
+                - partial
+                - delivered
+                - read
+            receipts:
+              type: array
+              items:
+                $ref: '#/components/schemas/MessageReceipt-2'
+            failure:
+              oneOf:
+                - $ref: '#/components/schemas/Failure-2'
+                - type: 'null'
+            created_at:
+              type: string
+              format: date-time
+            sent_at:
+              type:
+                - string
+                - 'null'
+              format: date-time
+        Reaction:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - message_id
+            - target_part_id
+            - actor
+            - emoji
+            - slot_version
+            - created_at
+            - part_index
+          properties:
+            object:
+              const: reaction
+            object_version:
+              const: '2026-08-28'
+            message_id:
+              type: string
+              format: uuid
+            target_part_id:
+              type:
+                - string
+                - 'null'
+              format: uuid
+            actor:
+              $ref: '#/components/schemas/Identity-2'
+            emoji:
+              type: string
+              minLength: 1
+              maxLength: 32
+            slot_version:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            created_at:
+              type: string
+              format: date-time
+            part_index:
+              type:
+                - integer
+                - 'null'
+              minimum: 0
+              maximum: 99
+        MessageEventData:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - message
+          properties:
+            object:
+              const: message_event_data
+            object_version:
+              const: '2026-08-28'
+            message:
+              $ref: '#/components/schemas/Message-2'
+        DeliveredData:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - message_id
+            - chat_id
+            - chat_sequence
+            - recipient
+            - delivered_at
+          properties:
+            object:
+              const: message_delivered_event_data
+            object_version:
+              const: '2026-08-28'
+            message_id:
+              type: string
+              format: uuid
+            chat_id:
+              type: string
+              format: uuid
+            chat_sequence:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            recipient:
+              $ref: '#/components/schemas/Identity-2'
+            delivered_at:
+              type: string
+              format: date-time
+        ReadData:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - chat_id
+            - reader
+            - through_sequence
+            - through_message_id
+            - read_at
+          properties:
+            object:
+              const: message_read_event_data
+            object_version:
+              const: '2026-08-28'
+            chat_id:
+              type: string
+              format: uuid
+            reader:
+              $ref: '#/components/schemas/Identity-2'
+            through_sequence:
+              type: string
+              pattern: ^(0|[1-9][0-9]*)$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            through_message_id:
+              type: string
+              format: uuid
+            read_at:
+              type: string
+              format: date-time
+        ReactionData:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - chat_id
+            - chat_sequence
+            - reaction
+          properties:
+            object:
+              const: reaction_event_data
+            object_version:
+              const: '2026-08-28'
+            chat_id:
+              type: string
+              format: uuid
+            chat_sequence:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            reaction:
+              $ref: '#/components/schemas/Reaction-2'
+        ChatCreatedData:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - chat
+            - actor
+          properties:
+            object:
+              const: chat_created_event_data
+            object_version:
+              const: '2026-08-28'
+            chat:
+              $ref: '#/components/schemas/Chat-2'
+            actor:
+              $ref: '#/components/schemas/HumanIdentity-2'
+        ChatTitleData:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - chat_id
+            - chat_sequence
+            - actor
+            - old_title
+            - new_title
+          properties:
+            object:
+              const: chat_title_event_data
+            object_version:
+              const: '2026-08-28'
+            chat_id:
+              type: string
+              format: uuid
+            chat_sequence:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            actor:
+              $ref: '#/components/schemas/HumanIdentity-2'
+            old_title:
+              type:
+                - string
+                - 'null'
+              maxLength: 100
+            new_title:
+              type:
+                - string
+                - 'null'
+              maxLength: 100
+        ChatAvatarData:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - chat_id
+            - chat_sequence
+            - actor
+            - old_avatar_url
+            - new_avatar_url
+          properties:
+            object:
+              const: chat_avatar_event_data
+            object_version:
+              const: '2026-08-28'
+            chat_id:
+              type: string
+              format: uuid
+            chat_sequence:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            actor:
+              $ref: '#/components/schemas/HumanIdentity-2'
+            old_avatar_url:
+              type:
+                - string
+                - 'null'
+              format: uri
+            new_avatar_url:
+              type:
+                - string
+                - 'null'
+              format: uri
+        ParticipantData:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - chat_id
+            - chat_sequence
+            - actor
+            - participant
+            - membership_version
+          properties:
+            object:
+              const: participant_event_data
+            object_version:
+              const: '2026-08-28'
+            chat_id:
+              type: string
+              format: uuid
+            chat_sequence:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            actor:
+              $ref: '#/components/schemas/HumanIdentity-2'
+            participant:
+              $ref: '#/components/schemas/ChatParticipant-2'
+            membership_version:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string.
+        MessageReceivedEvent:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - api_version
+            - webhook_version
+            - event_id
+            - event_type
+            - sequence
+            - created_at
+            - trace_id
+            - agent_id
+            - data
+          properties:
+            api_version:
+              const: v1
+            webhook_version:
+              const: '2026-08-28'
+            event_id:
+              type: string
+              format: uuid
+            event_type:
+              const: message.received
+            sequence:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            created_at:
+              type: string
+              format: date-time
+            trace_id:
+              type: string
+              pattern: ^[a-f0-9]{32}$
+            agent_id:
+              type: string
+              format: uuid
+            data:
+              $ref: '#/components/schemas/MessageEventData'
+        MessageSentEvent:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - api_version
+            - webhook_version
+            - event_id
+            - event_type
+            - sequence
+            - created_at
+            - trace_id
+            - agent_id
+            - data
+          properties:
+            api_version:
+              const: v1
+            webhook_version:
+              const: '2026-08-28'
+            event_id:
+              type: string
+              format: uuid
+            event_type:
+              const: message.sent
+            sequence:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            created_at:
+              type: string
+              format: date-time
+            trace_id:
+              type: string
+              pattern: ^[a-f0-9]{32}$
+            agent_id:
+              type: string
+              format: uuid
+            data:
+              $ref: '#/components/schemas/MessageEventData'
+        MessageDeliveredEvent:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - api_version
+            - webhook_version
+            - event_id
+            - event_type
+            - sequence
+            - created_at
+            - trace_id
+            - agent_id
+            - data
+          properties:
+            api_version:
+              const: v1
+            webhook_version:
+              const: '2026-08-28'
+            event_id:
+              type: string
+              format: uuid
+            event_type:
+              const: message.delivered
+            sequence:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            created_at:
+              type: string
+              format: date-time
+            trace_id:
+              type: string
+              pattern: ^[a-f0-9]{32}$
+            agent_id:
+              type: string
+              format: uuid
+            data:
+              $ref: '#/components/schemas/DeliveredData'
+        MessageReadEvent:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - api_version
+            - webhook_version
+            - event_id
+            - event_type
+            - sequence
+            - created_at
+            - trace_id
+            - agent_id
+            - data
+          properties:
+            api_version:
+              const: v1
+            webhook_version:
+              const: '2026-08-28'
+            event_id:
+              type: string
+              format: uuid
+            event_type:
+              const: message.read
+            sequence:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            created_at:
+              type: string
+              format: date-time
+            trace_id:
+              type: string
+              pattern: ^[a-f0-9]{32}$
+            agent_id:
+              type: string
+              format: uuid
+            data:
+              $ref: '#/components/schemas/ReadData'
+        ReactionAddedEvent:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - api_version
+            - webhook_version
+            - event_id
+            - event_type
+            - sequence
+            - created_at
+            - trace_id
+            - agent_id
+            - data
+          properties:
+            api_version:
+              const: v1
+            webhook_version:
+              const: '2026-08-28'
+            event_id:
+              type: string
+              format: uuid
+            event_type:
+              const: reaction.added
+            sequence:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            created_at:
+              type: string
+              format: date-time
+            trace_id:
+              type: string
+              pattern: ^[a-f0-9]{32}$
+            agent_id:
+              type: string
+              format: uuid
+            data:
+              $ref: '#/components/schemas/ReactionData'
+        ReactionRemovedEvent:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - api_version
+            - webhook_version
+            - event_id
+            - event_type
+            - sequence
+            - created_at
+            - trace_id
+            - agent_id
+            - data
+          properties:
+            api_version:
+              const: v1
+            webhook_version:
+              const: '2026-08-28'
+            event_id:
+              type: string
+              format: uuid
+            event_type:
+              const: reaction.removed
+            sequence:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            created_at:
+              type: string
+              format: date-time
+            trace_id:
+              type: string
+              pattern: ^[a-f0-9]{32}$
+            agent_id:
+              type: string
+              format: uuid
+            data:
+              $ref: '#/components/schemas/ReactionData'
+        ChatCreatedEvent:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - api_version
+            - webhook_version
+            - event_id
+            - event_type
+            - sequence
+            - created_at
+            - trace_id
+            - agent_id
+            - data
+          properties:
+            api_version:
+              const: v1
+            webhook_version:
+              const: '2026-08-28'
+            event_id:
+              type: string
+              format: uuid
+            event_type:
+              const: chat.created
+            sequence:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            created_at:
+              type: string
+              format: date-time
+            trace_id:
+              type: string
+              pattern: ^[a-f0-9]{32}$
+            agent_id:
+              type: string
+              format: uuid
+            data:
+              $ref: '#/components/schemas/ChatCreatedData'
+        ChatTitleUpdatedEvent:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - api_version
+            - webhook_version
+            - event_id
+            - event_type
+            - sequence
+            - created_at
+            - trace_id
+            - agent_id
+            - data
+          properties:
+            api_version:
+              const: v1
+            webhook_version:
+              const: '2026-08-28'
+            event_id:
+              type: string
+              format: uuid
+            event_type:
+              const: chat.title.updated
+            sequence:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            created_at:
+              type: string
+              format: date-time
+            trace_id:
+              type: string
+              pattern: ^[a-f0-9]{32}$
+            agent_id:
+              type: string
+              format: uuid
+            data:
+              $ref: '#/components/schemas/ChatTitleData'
+        ChatAvatarUpdatedEvent:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - api_version
+            - webhook_version
+            - event_id
+            - event_type
+            - sequence
+            - created_at
+            - trace_id
+            - agent_id
+            - data
+          properties:
+            api_version:
+              const: v1
+            webhook_version:
+              const: '2026-08-28'
+            event_id:
+              type: string
+              format: uuid
+            event_type:
+              const: chat.avatar.updated
+            sequence:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            created_at:
+              type: string
+              format: date-time
+            trace_id:
+              type: string
+              pattern: ^[a-f0-9]{32}$
+            agent_id:
+              type: string
+              format: uuid
+            data:
+              $ref: '#/components/schemas/ChatAvatarData'
+        ParticipantAddedEvent:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - api_version
+            - webhook_version
+            - event_id
+            - event_type
+            - sequence
+            - created_at
+            - trace_id
+            - agent_id
+            - data
+          properties:
+            api_version:
+              const: v1
+            webhook_version:
+              const: '2026-08-28'
+            event_id:
+              type: string
+              format: uuid
+            event_type:
+              const: participant.added
+            sequence:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            created_at:
+              type: string
+              format: date-time
+            trace_id:
+              type: string
+              pattern: ^[a-f0-9]{32}$
+            agent_id:
+              type: string
+              format: uuid
+            data:
+              $ref: '#/components/schemas/ParticipantData'
+        ParticipantRemovedEvent:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - api_version
+            - webhook_version
+            - event_id
+            - event_type
+            - sequence
+            - created_at
+            - trace_id
+            - agent_id
+            - data
+          properties:
+            api_version:
+              const: v1
+            webhook_version:
+              const: '2026-08-28'
+            event_id:
+              type: string
+              format: uuid
+            event_type:
+              const: participant.removed
+            sequence:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            created_at:
+              type: string
+              format: date-time
+            trace_id:
+              type: string
+              pattern: ^[a-f0-9]{32}$
+            agent_id:
+              type: string
+              format: uuid
+            data:
+              $ref: '#/components/schemas/ParticipantData'
+        TypingStartedData:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - chat_id
+            - actor
+            - typing_version
+            - ttl_seconds
+            - started_at
+            - expires_at
+          properties:
+            object:
+              const: typing_started_event_data
+            object_version:
+              const: '2026-08-28'
+            chat_id:
+              type: string
+              format: uuid
+            actor:
+              $ref: '#/components/schemas/Identity-2'
+            typing_version:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            ttl_seconds:
+              const: 90
+            started_at:
+              type: string
+              format: date-time
+            expires_at:
+              type: string
+              format: date-time
+        TypingStoppedData:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - object
+            - object_version
+            - chat_id
+            - actor
+            - typing_version
+            - ttl_seconds
+            - started_at
+            - stopped_at
+            - expires_at
+            - reason
+          properties:
+            object:
+              const: typing_stopped_event_data
+            object_version:
+              const: '2026-08-28'
+            chat_id:
+              type: string
+              format: uuid
+            actor:
+              $ref: '#/components/schemas/Identity-2'
+            typing_version:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            ttl_seconds:
+              const: 90
+            started_at:
+              type: string
+              format: date-time
+            stopped_at:
+              type: string
+              format: date-time
+            expires_at:
+              type: string
+              format: date-time
+            reason:
+              enum:
+                - explicit
+                - expired
+                - message_sent
+                - membership_changed
+        TypingStartedEvent:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - api_version
+            - webhook_version
+            - event_id
+            - event_type
+            - sequence
+            - created_at
+            - trace_id
+            - agent_id
+            - data
+          properties:
+            api_version:
+              const: v1
+            webhook_version:
+              const: '2026-08-28'
+            event_id:
+              type: string
+              format: uuid
+            event_type:
+              const: typing.started
+            sequence:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            created_at:
+              type: string
+              format: date-time
+            trace_id:
+              type: string
+              pattern: ^[a-f0-9]{32}$
+            agent_id:
+              type: string
+              format: uuid
+            data:
+              $ref: '#/components/schemas/TypingStartedData'
+        TypingStoppedEvent:
+          type: object
+          x-relay-object-version: '2026-08-28'
+          additionalProperties: true
+          required:
+            - api_version
+            - webhook_version
+            - event_id
+            - event_type
+            - sequence
+            - created_at
+            - trace_id
+            - agent_id
+            - data
+          properties:
+            api_version:
+              const: v1
+            webhook_version:
+              const: '2026-08-28'
+            event_id:
+              type: string
+              format: uuid
+            event_type:
+              const: typing.stopped
+            sequence:
+              type: string
+              pattern: ^[1-9][0-9]*$
+              description: Decimal string; parse as an arbitrary-precision nonnegative integer.
+            created_at:
+              type: string
+              format: date-time
+            trace_id:
+              type: string
+              pattern: ^[a-f0-9]{32}$
+            agent_id:
+              type: string
+              format: uuid
+            data:
+              $ref: '#/components/schemas/TypingStoppedData'

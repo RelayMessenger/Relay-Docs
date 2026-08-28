@@ -1,200 +1,61 @@
 ---
 title: "Read receipts"
-description: "Mark inbound messages consumed and track delivery and read state on your replies."
-keywords: ["read receipts", "responding", "delivered", "read", "watermark", "message.read"]
+description: "Understand Sent and Delivered, then explicitly advance Read."
+keywords: ["read receipts", "delivered", "read", "lifecycle"]
 ---
 
-Call `responding` when an inbound message starts a normal response:
+Advance Read after durable webhook acceptance.
+
+| State | Trigger |
+| --- | --- |
+| Sent | PostgreSQL acceptance |
+| Delivered | `message.received` webhook returns `2xx` |
+| Read | Agent calls `/read` |
+| Replied | Agent sends another message |
 
 ```bash
-curl -sS -X POST "https://api.relayapp.im/v1/chats/cnv_01JZC7K4RQ/responding" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message_id": "msg_01JZM3T8AH",
-    "label": "Thinking…"
-  }'
+curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/read"  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" -H "Content-Type: application/json"  -H "Idempotency-Key: read-$MESSAGE_ID" -d "{"through_message_id":"$MESSAGE_ID"}"
 ```
-
-Relay validates the target, commits Read, then sends `chat.typing_indicator.started`. A failed
-validation or receipt write sends no typing signal.
-
-Retries are safe. Read is idempotent. Typing refreshes its expiry.
-
-For groups, include the `invocation_id` from the matching
-`message.received` event:
 
 ```json
 {
-  "message_id": "msg_01JZM3T8AH",
-  "invocation_id": "ivk_01k1m4q9vn2r7t9b4c6qdh8xwy",
-  "label": "Checking the schedule…"
+  "object": "read.result",
+  "object_version": "2026-08-28",
+  "changed": true,
+  "boundary": {
+    "object": "read_boundary",
+    "object_version": "2026-08-28",
+    "chat_id": "0198f4a1-27ca-76d2-99ad-59b5d3bb13b2",
+    "reader": {
+      "object": "identity",
+      "object_version": "2026-08-28",
+      "id": "0198f49d-e5c7-78ba-a74f-7ff8186fc242",
+      "kind": "agent",
+      "username": "concierge",
+      "display_name": "Relay Concierge",
+      "avatar_url": null,
+      "created_at": "2026-08-28T13:00:00.000Z"
+    },
+    "through_sequence": "42",
+    "through_message_id": "0198f4b5-e293-7720-b503-5807baeea765",
+    "read_at": "2026-08-28T14:06:00.000Z"
+  }
 }
 ```
 
-## Four separate facts
-
-| State | Meaning |
+| Request | Result |
 | --- | --- |
-| Sent | Relay stored the message |
-| Delivered | The recipient runtime durably accepted the message |
-| Read | The recipient consumed or visibly viewed the message |
-| Typing | The recipient sent a temporary, independent signal |
+| Newer visible message | Advance through sequence |
+| Same or older message | `changed: false` |
+| Read before Delivered | Read also advances Delivered |
+| Outside membership | `404 not_found` |
 
-Read implies Delivered. Delivery never starts typing. Typing alone never marks
-a message Read.
+Correct order: accept webhook, mark Read, start typing, run model, send reply, stop typing.
 
-### Delivered and Read answer different questions
-
-The two rungs report two different things about your agent, and they are owned
-by two different parties.
-
-| Rung | Question it answers | Who records it |
-| --- | --- | --- |
-| Delivered | Is the agent alive and does it have the message | The transport, automatically |
-| Read | Is the agent engaged with the message | You, through `/read` or `/responding` |
-
-Delivered is not something you write code for. Relay takes it from the
-transport itself, so it arrives the moment your endpoint accepts the event and
-it cannot be faked, delayed, or switched off. An agent that is reachable is
-Delivered. An agent that is down is not.
-
-Read is the rung you control, and it means the agent has taken the message up.
-Nothing about either rung says the reply is finished.
-
-<Warning>
-Delivered is stamped from your webhook response, so anything your handler does
-before answering is time the sender spends watching a message with no receipt
-under it. A handler that runs a model call before its `2xx` turns a slow turn
-into a slow Delivered. Answer first, then work. See
-[Webhooks](/guides/webhooks).
-</Warning>
-
-`Delivered + typing` is valid during proactive activity. Ordinary response
-typing must identify the consumed message through `/responding`.
-
-## Consume without replying
-
-Use `/read` when your backend consumes a message without starting a response:
-
-```bash
-curl -sS -X POST "https://api.relayapp.im/v1/chats/cnv_01JZC7K4RQ/read" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{ "message_id": "msg_01JZM3T8AH" }'
-```
-
-`/read`, `/delivered`, and `/responding` all answer with the watermark after
-the call:
-
-```json
-{
-  "receipt": {
-    "message_id": "msg_01JZM3T8AH",
-    "chat_id": "cnv_01JZC7K4RQ",
-    "through_sequence": 12,
-    "recipient": { "kind": "agent", "id": "agt_01JZRELAY" },
-    "status": "read",
-    "delivered_at": "2026-07-13T20:02:09.000Z",
-    "read_at": "2026-07-13T20:02:11.000Z"
-  },
-  "advanced": true
-}
-```
-
-| Rule | Behavior |
-| --- | --- |
-| Marking one message Read | Covers every earlier message in the conversation |
-| Repeating or targeting an older message | Returns the current receipt with `advanced: false` |
-| Target | Must be an accessible message from another participant |
-| Group target | Must match this agent's invocation scope |
-| Past 240 receipts a minute | `429 rate_limited`, with `Retry-After` in seconds |
-
-`/responding` spends from the read-receipt budget and the typing budget in the
-same call. Watermarks make that cheap to live with: mark the newest message
-you consumed rather than every message behind it.
-
-## Record delivery
-
-Relay records Delivered on the transports it hands messages to. Which transport
-you use decides whether you also call `/delivered`.
-
-| Transport | Relay records Delivered |
-| --- | --- |
-| Webhook | After your endpoint answers `2xx` |
-| Long poll on `GET /v1/events` | When a later cursor acknowledges the page |
-| Polling [conversation history](/guides/conversation-history) | Never. Reading history changes no receipt |
-| `/delivered` | When you call it |
-
-Webhook and `GET /v1/events` consumers get Delivered from Relay and need no
-extra call. A backend that discovers messages by polling conversation history
-must call `/delivered` itself, once per new inbound message, or the sender stays
-on Sent until the Read receipt arrives.
-
-For a webhook, the receipt is stamped when your response returns, so **the
-speed of your handler is the speed of the sender's Delivered**. Acknowledge as
-soon as the event is verified and safely in hand, and do the work after:
-
-<Steps>
-  <Step title="Verify the signature">
-    Reject anything that fails, with `401`.
-  </Step>
-  <Step title="Skip a replay">
-    Delivery is at least once. An `event_id` you already accepted is answered
-    `200` and dropped.
-  </Step>
-  <Step title="Hand the event somewhere durable">
-    A queue, a job table, or a background runtime. This step is what makes the
-    next one honest.
-  </Step>
-  <Step title="Answer 2xx">
-    The sender sees Delivered from here.
-  </Step>
-  <Step title="Do the work">
-    Call `/responding`, run your model, send the reply.
-  </Step>
-</Steps>
-
-A `2xx` ends Relay's delivery, so it will not send the event again. Retries
-move from Relay to you, which is why step 3 comes before step 4. Derive your
-reply's idempotency key from the inbound `event_id` so your own retry replays
-the same send instead of posting twice.
-
-Call `/delivered` when your runtime accepts a message outside the two automatic
-transports, or when you want to stamp delivery at a point you control, such as
-after you durably enqueue the message:
-
-```bash
-curl -sS -X POST "https://api.relayapp.im/v1/chats/cnv_01JZC7K4RQ/delivered" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{ "message_id": "msg_01JZM3T8AH" }'
-```
-
-Send it on ingest, before `/read` or `/responding`. Recording Read advances the
-delivered watermark as well, so a `/delivered` call that arrives after a Read
-for the same message answers `advanced: false` and emits no delivery event.
-
-<Tip>
-Order matters more than frequency. One `/delivered` on ingest gives the sender
-Sent, Delivered, then Read. The same call after `/responding` changes nothing
-the sender can see.
-</Tip>
-
-## Track your replies
-
-Relay emits two events as your reply moves through the conversation.
-
-| Event | Emitted when |
-| --- | --- |
-| `message.delivered` | A user's runtime durably accepts the agent's message |
-| `message.read` | The user visibly reads through it |
-
-Both carry `through_sequence`. Conversation history projects each outbound
-message as `sent`, `delivered`, or `read`.
+Agent-authored messages receive `message.delivered` and `message.read` events when a human advances their boundary.
 
 ## Next steps
 
-- [Typing indicators](/guides/typing-indicators) for proactive starts and stops
-- [Event types](/reference/events) for receipt payloads
-- [Delivery model](/guides/delivery-model) for the full lifecycle
+- [Quickstart](/quickstart)
+- [Typing](/guides/typing-indicators)
+- [Receipt events](/reference/events)

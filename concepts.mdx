@@ -1,123 +1,62 @@
 ---
 title: "Core concepts"
-description: "Work with Relay's model: agents, conversations, messages, ordered parts, and delivery semantics."
-keywords: ["concepts", "data model", "agent", "conversation", "message", "parts", "part_id", "sequence", "text"]
+description: "Understand identities, chats, messages, parts, receipts, events, and idempotency."
+keywords: ["concepts", "identity", "chat", "message", "idempotency"]
 ---
 
-Relay uses five objects. Learn these once, then every endpoint follows the same
-model.
+Use one small object model across Relay.
 
-| Object | What it represents |
+## Objects
+
+| Object | Meaning |
 | --- | --- |
-| Agent | The identity people message |
-| User | A person using Relay |
-| Conversation | One direct or group thread |
-| Message | One stored send inside a conversation |
+| Identity | A human or agent participant |
+| Chat | A direct or group conversation with membership periods |
+| Message | One immutable send inside a chat |
 | Part | One ordered piece of a message |
+| Receipt | A monotonic Delivered or Read boundary |
+| Event | A signed notification sent to an agent webhook |
+| Attachment | Authenticated bytes allocated before use |
 
-## Agents and users
+Only humans can expose phone numbers. Humans and agents can both have usernames, display names, and avatars.
 
-An **agent** is the identity a user messages. Its external backend runs the
-model, tools, and memory.
+## Messages and targets
 
-See [Your agent](/guides/your-agent) for creation, identity, distribution, and installation.
+One send creates one message with 1 to 100 ordered parts. Relay assigns UUIDv7 IDs to messages and stable parts.
 
-## Conversations and participants
-
-A conversation has a stable `chat_id` and a set of participants. A
-direct conversation normally contains one user and one agent.
-
-The backend can send only while its agent remains installed and active in the
-conversation.
-
-Use the `chat_id` from `message.received` for replies and history reads.
-
-See [Conversation lifecycle](/guides/conversation-lifecycle) for how direct threads begin, remain authorized, and recover.
-
-## Messages and ordered parts
-
-One send is one message. A message carries 1 to 32 ordered parts, of six
-types, and text and media handed over together stay together inside it.
-
-| Part type | Carries |
+| Part | Input |
 | --- | --- |
-| `text` | Plain text, up to 8 KB per part |
-| `link` | A public HTTPS URL Relay renders as a preview |
-| `data` | Any JSON, up to 16 KB, rendered through fallback text |
-| `media` | An image, video, audio file, or file, by URL or `attachment_id` |
+| `text` | Plain text |
+| `image` | Attachment and optional alt text |
+| `file` | Attachment |
+| `audio` | Attachment, presentation, duration, optional waveform |
+| `link` | HTTPS URL and fallback text |
 
+Message `sequence` orders a chat. Part `index` is zero-based. Replies and reactions can use `part_index`; Relay returns the stable part ID.
 
-Every committed part is given a permanent `part_id`. A reply or a reaction
-names that id, so a target never depends on a position.
+## Idempotency
 
-Exact shapes and limits are in [Sending messages](/guides/sending-messages).
+| Key reuse | Result |
+| --- | --- |
+| Same key and exact request | Original result |
+| Same key and changed request | `409 idempotency_conflict` |
+| First command still running | `409 idempotency_in_progress` |
 
-Stored messages include:
+Resource IDs are server-assigned. `Idempotency-Key` names the logical command.
 
-```json
-{
-  "id": "msg_01JZM3T8AH",
-  "chat_id": "cnv_01JZC7K4RQ",
-  "sequence": 7,
-  "item_type": 0,
-  "sender_handle": { "kind": "agent", "id": "agt_01JZRELAY" },
-  "is_from_me": true,
-  "parts": [
-    {
-      "part_id": "prt_01k1m4q9vn2r7t9b4c6qdh8xwy",
-      "part_index": 0,
-      "position": 0,
-      "type": "link",
-      "url": "https://example.com"
-    }
-  ],
-  "reply_to": null,
-  "text": "https://example.com",
-  "status": "sent",
-  "created_at": "2026-07-12T01:21:08.000Z"
-}
-```
+## Lifecycle
 
-`text` is the plain-language representation used by notifications, search, and clients that cannot render a part. Relay derives it, in this order: the first text part, then the first link preview, then the first data part's `fallback`, then `Voice memo` or `[attachment]`. A sender-supplied `text` replaces the derived one.
+| State | Owner |
+| --- | --- |
+| Sent | Relay PostgreSQL transaction |
+| Delivered | Successful `message.received` webhook |
+| Read | Explicit `/read` request |
+| Reply | Separate message write |
 
-`is_from_me` states direction for the caller the payload was projected for. Relay resolves it on the server against the authenticated identity.
+Webhooks are the inbound transport. Resource history provides side-effect-free reconciliation.
 
-Read direction from that field alone. Comparing `sender_handle.id` against your own id is ambiguous before a client knows its own identity, and wrong for every other participant in a group.
+## See also
 
-`kind` separates the two things a conversation stores. A `message` is
-something someone sent. A `notice` is a group membership or metadata change,
-committed by the person who caused it, carrying a text part and a `data` part
-that names the mutation. Render a notice as a centered line, not as a bubble.
-
-## Messages do not change
-
-A committed message is immutable. There is no edit, no unsend, and no delete,
-so a message a client has stored never changes underneath it.
-
-Two things about a message do move. Its receipt stamps advance as the other
-party receives and reads it, and its `reactions` array changes as people react.
-Both are separate writes with their own events.
-
-This is why a reply is a pointer rather than a copy. `reply_to` names a
-`message_id` and optionally one `part_id`, and the client draws the quote from
-the target itself.
-
-## Delivery and recovery
-
-`message.sequence` orders messages inside one conversation. Deduplicate on
-`event_id`; order on `sequence`. Never use one for the other.
-
-See [Delivery model](/guides/delivery-model) for webhook acknowledgement,
-deduplication, receipt, and recovery rules.
-
-<Note>
-Socket mode and calls are specified for Relay and ship after the v0 developer
-API. See [API availability](/roadmap) for the full matrix.
-</Note>
-
-## Next steps
-
-- [Quickstart](/quickstart)
-- [Delivery model](/guides/delivery-model)
-- [Sending messages](/guides/sending-messages)
-- [Event types](/reference/events)
+- [Send messages](/guides/sending-messages)
+- [Receive webhooks](/guides/webhooks)
+- [Read history](/guides/conversation-history)

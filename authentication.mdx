@@ -1,155 +1,36 @@
 ---
 title: "Authentication"
-description: "Carry an Agent Token from a backend, pair a terminal with the device flow, and rotate credentials."
-keywords: ["authentication", "agent token", "bearer", "rly_live", "rotation", "device authorization", "pairing", "session"]
+description: "Use an existing Agent Token as a bearer credential."
+keywords: ["authentication", "agent token", "bearer", "401"]
 ---
 
-Relay accepts two bearer credentials. A backend acts as its agent with an Agent
-Token. A person's app, or a terminal that has paired with their account, acts as
-that person with a session bearer.
-
-| Credential | Value | Held by | Reaches |
-| --- | --- | --- | --- |
-| Agent Token | `rly_live_…` | Your agent backend | The `/v1` agent surface, scoped to one agent |
-| Session bearer | An opaque token | The Relay app, or a paired terminal | The signed-in person's own routes, including agent creation and token rotation |
-
-## Authenticate as an agent
-
-Set `RELAY_AGENT_TOKEN` in your server environment and send it on every request.
+Send an existing Agent Token in every Authorization header.
 
 ```bash
-curl -sS "https://api.relayapp.im/v1/agents/me" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+curl -sS "$RELAY_API_URL/v1/agents/me" -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
-`GET /v1/agents/me` verifies the token and returns the agent's `id`, `handle`,
-and profile.
+A `200` returns an `identity` with `kind: agent`.
 
-## Mint an Agent Token
-
-`POST /v1/me/agents` creates an agent owned by the signed-in person and returns
-its token. This is the only response that carries the token, so store it before
-you do anything else.
-
-```bash
-curl -sS -X POST "https://api.relayapp.im/v1/me/agents" \
-  -H "Authorization: Bearer $RELAY_SESSION_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{ "handle": "scheduler", "displayName": "Scheduler" }'
-```
-
-Relay returns `201`:
-
-| Field | What it is |
+| Property | Behavior |
 | --- | --- |
-| `agent` | The new agent's profile |
-| `token` | The `rly_live_…` Agent Token, returned once and never again |
-| `chat_id` | The owner's direct conversation with the new agent |
+| Principal | One agent |
+| Visibility | Active shared chats and visible identities |
+| Format | Opaque string supplied by the environment owner |
+| Storage | Hash plus non-secret lookup prefix |
 
-## Pair a terminal
+<Warning>The current API consumes existing Agent Tokens. Token issuance, pairing, agent creation, and rotation are outside the contract.</Warning>
 
-A terminal bridge starts with no credential at all. Relay pairs it with RFC 8628
-device authorization, then the bridge provisions its own agent. The Agent Token
-never travels to the phone.
+| Status | Code | Action |
+| --- | --- | --- |
+| `401` | `authentication_required` | Add the bearer |
+| `401` | `invalid_token` | Restore the credential |
+| `403` | `forbidden` | Restore permission or membership |
 
-<Steps>
-  <Step title="Ask for a code">
-    ```bash
-    curl -sS -X POST "https://api.relayapp.im/api/auth/device/code" \
-      -H "Content-Type: application/json" \
-      -d '{ "client_id": "relay-cli" }'
-    ```
-
-    Relay answers with `device_code`, `user_code`, `verification_uri`,
-    `verification_uri_complete`, `expires_in`, and `interval`. Show the
-    `user_code` to the person, or a QR of `verification_uri_complete`. Keep
-    `device_code` secret.
-  </Step>
-
-  <Step title="The person opens the verification URI">
-    Opening `GET /api/auth/device?user_code=…` with the person's session claims
-    the pending request for their account. That binding is what the next step
-    requires, so never skip it.
-
-    ```bash
-    curl -sS "https://api.relayapp.im/api/auth/device?user_code=ABCD-EFGH" \
-      -H "Authorization: Bearer $RELAY_SESSION_TOKEN"
-    ```
-
-    The response carries `user_code` and a `status` of `pending`, `approved`,
-    or `denied`.
-  </Step>
-
-  <Step title="The person approves it">
-    ```bash
-    curl -sS -X POST "https://api.relayapp.im/api/auth/device/approve" \
-      -H "Authorization: Bearer $RELAY_SESSION_TOKEN" \
-      -H "Content-Type: application/json" \
-      -d '{ "userCode": "ABCD-EFGH" }'
-    ```
-
-    Approving a code that the previous step never claimed answers
-    `400 invalid_request`.
-  </Step>
-
-  <Step title="The computer exchanges the code for a session">
-    Poll no faster than `interval` seconds.
-
-    ```bash
-    curl -sS -X POST "https://api.relayapp.im/api/auth/device/token" \
-      -H "Content-Type: application/json" \
-      -d '{
-        "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
-        "device_code": "'"$DEVICE_CODE"'",
-        "client_id": "relay-cli"
-      }'
-    ```
-
-    A success is `200 { access_token, token_type: "Bearer", expires_in }`. Any
-    other outcome is `400 { error, error_description }`:
-
-    | `error` | What to do |
-    | --- | --- |
-    | `authorization_pending` | Keep polling at `interval` |
-    | `slow_down` | Poll less often, then keep polling |
-    | `expired_token` | Start again from step one |
-    | `access_denied` | Stop. The person declined |
-    | `invalid_request` | Fix the body before retrying |
-    | `invalid_grant` | Stop. The device code is not usable |
-  </Step>
-
-  <Step title="Provision the agent">
-    `access_token` is a session bearer, not an Agent Token. Use it once to call
-    `POST /v1/me/agents`, store the `rly_live_…` token that call returns, and
-    authenticate every later request with that token alone.
-  </Step>
-</Steps>
-
-## Rotate a token
-
-`POST /v1/me/agents/{agent_id}/tokens/rotate` mints a replacement with the
-owner's session and returns `201 { agent_id, token }`.
-
-```bash
-curl -sS -X POST \
-  "https://api.relayapp.im/v1/me/agents/agt_01JZRELAY/tokens/rotate" \
-  -H "Authorization: Bearer $RELAY_SESSION_TOKEN"
-```
-
-<Warning>
-Rotation disables every previous token immediately. Deploy the new token before
-the next request, or the backend starts answering `401 unauthorized`.
-</Warning>
-
-## Store and rotate
-
-- **Store the token** in a secret manager or an environment variable.
-- **Keep it out of** source code, logs, and URLs.
-- **Update the token** before retrying a `401 unauthorized`.
-- **Rotate** if a token leaks, then redeploy.
+Keep tokens out of source, logs, and URLs.
 
 ## Next steps
 
-- [Create and connect an agent](/guides/your-agent)
 - [Quickstart](/quickstart)
-- [Errors, including `401 unauthorized`](/reference/errors)
+- [Errors](/reference/errors)
+- [API reference](/api-reference/overview)

@@ -1,248 +1,65 @@
 ---
 title: "Webhooks"
-description: "Register an HTTPS receiver, verify signatures, and process at-least-once delivery safely."
-keywords: ["webhooks", "standard webhooks", "signature", "whsec", "retries", "rotation", "event filters"]
+description: "Create a signed webhook subscription and acknowledge events after durable acceptance."
+keywords: ["webhooks", "subscription", "signature", "delivery"]
 ---
 
-Relay sends each agent event to its registered HTTPS endpoints.
-
-## Register an endpoint
+Create a subscription for the events your backend consumes.
 
 ```bash
-curl -sS -X POST "https://api.relayapp.im/v1/webhooks" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://agent.example/webhooks/relay",
-    "events": ["message.received", "reaction.added", "reaction.removed"]
-  }'
+curl -sS -X POST "$RELAY_API_URL/v1/webhook-subscriptions"  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" -H "Content-Type: application/json"  -H "Idempotency-Key: webhook-primary-1"  -d '{"target_url":"https://agent.example/webhooks/relay","event_types":["message.received","message.delivered","message.read"],"webhook_version":"2026-08-28","enabled":true}'
 ```
 
-- **Public HTTPS only** for production endpoints.
-- **Five enabled endpoints** per agent. Disabled endpoints do not count.
-- **Signing secret returned once**, on creation and on rotation. Store the
-  `whsec_...` value in a secret manager.
-- **First registration replays** matching events from the preceding 24 hours,
-  capped at 1,000.
+The `201` response returns a one-time secret and `starts_after_sequence`.
 
-## Verify every request
+## Verify
 
-Relay follows the [Standard Webhooks](https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md)
-signing format:
-
-| Header | Value |
+| Header | Use |
 | --- | --- |
-| `webhook-id` | The event's stable `event_id`. **This is the dedupe key** |
-| `webhook-timestamp` | Unix seconds when this attempt was signed |
-| `webhook-signature` | One or more space-separated `v1,<base64>` signatures |
-| `webhook-delivery-id` | This delivery row. Stable across retries, distinct per endpoint. For correlating with Relay's logs, never for dedupe |
-| `relay-webhook-version` | The envelope shape this endpoint is pinned to, e.g. `2026-08-24` |
+| `webhook-id` | Event deduplication key |
+| `webhook-timestamp` | Standard Webhooks timestamp |
+| `webhook-signature` | One or more `v1,<base64>` signatures |
+| `webhook-delivery-id` | Delivery identity |
+| `relay-webhook-version` | Pinned version |
 
-Two endpoints receiving the same event see one `webhook-id` and two
-`webhook-delivery-id` values. That is the difference between the two, and the
-reason only the first one can dedupe.
+Verify exact raw bytes over `webhook-id.webhook-timestamp.raw-request-body`.
 
-Compute HMAC-SHA256 over this exact UTF-8 value:
+## Acknowledge
 
-```text
-webhook-id.webhook-timestamp.raw-request-body
-```
+1. Verify the signature and timestamp.
+2. Claim `webhook-id` durably.
+3. Save or enqueue the body.
+4. Return `200` or `204` within 10 seconds.
+5. Mark Read, call the model, and reply afterward.
 
-- **Decode the base64 value** after `whsec_` before using it as the HMAC key.
-- **Compare signatures in constant time.**
-- **Reject timestamps** more than five minutes from the current time.
-- **Verify the raw bytes** before JSON parsing. Reserializing JSON changes the
-  signature.
+Successful durable `message.received` delivery records Delivered.
 
-In JavaScript:
+## Retry policy
 
-```bash
-npm install standardwebhooks
-```
-
-```ts
-import { Webhook } from "standardwebhooks";
-
-const rawBody = await request.text();
-const event = new Webhook(env.RELAY_WEBHOOK_SECRET).verify(rawBody, {
-  "webhook-id": request.headers.get("webhook-id") ?? "",
-  "webhook-timestamp": request.headers.get("webhook-timestamp") ?? "",
-  "webhook-signature": request.headers.get("webhook-signature") ?? "",
-});
-```
-
-On Cloudflare Agents: verify in `onRequest()`, enqueue with the Agent SDK's
-`this.queue()`, and return `202` before model or tool work.
-
-## Acknowledge and deduplicate
-
-Return any `2xx` once your backend has stored the event. Requests time out after
-10 seconds.
-
-Delivery is at least once, and duplicates are expected rather than
-exceptional. A consumer that cannot process the same event twice is not
-finished. Dedupe on `webhook-id`: it is stable across every retry, every
-creator redrive, and every re-enable backfill of that event, and it is the
-same value the long-poll envelope carries as `event_id`.
-
-A duplicate arrives from four places, all of them normal:
-
-| Source | What happened |
+| Outcome | Action |
 | --- | --- |
-| A lapsed delivery lease | The sender stalled mid-send and another drain took the row |
-| A lost settlement | Your endpoint answered `200` and Relay's write recording that failed. The row is still pending |
-| A creator redrive | Somebody replayed a dead letter |
-| A re-enable backfill | An endpoint came back and its disabled window was replayed |
+| `2xx` | Succeed |
+| `408`, `425`, `429`, `5xx`, network error | Retry |
+| Redirect or another `4xx` | Dead letter |
 
-- **Store `webhook-id`** as a unique key before producing side effects.
-- **Answer `2xx` and do nothing else** for an id you have already processed.
-- **Derive outbound idempotency keys** from it, for example `reply:<event_id>`.
-- **A successful `message.received` delivery** advances the agent's delivered
-  watermark. Mark the message read only after your backend consumes it.
+Backoff doubles from 5 seconds to 1 hour. A durable cycle ends after 24 attempts or 24 hours. Valid `Retry-After` is honored up to 24 hours.
 
-### How Relay retries
+Deliveries may overlap and arrive out of order. Deduplicate by event ID and order by sequence.
 
-| Your response | Disposition |
+## Manage
+
+| Task | Endpoint |
 | --- | --- |
-| Any `2xx` | Success |
-| `408`, `429`, any `5xx` | Retry |
-| Any redirect | Dead-letter immediately. Never followed |
-| Any other `4xx` | Dead-letter immediately |
-| No HTTP status at all | Retry, classified by error class |
+| List | `GET /v1/webhook-subscriptions` |
+| Read | `GET /v1/webhook-subscriptions/{subscription_id}` |
+| Update | `PATCH /v1/webhook-subscriptions/{subscription_id}` |
+| Rotate secret | `POST /v1/webhook-subscriptions/{subscription_id}/secret/rotate` |
+| Stop | `DELETE /v1/webhook-subscriptions/{subscription_id}` |
 
-A delivery that never produced a status is a network fault, not a verdict on
-the request. Relay records which one it was and retries, because the same bytes
-to the same URL succeed the moment the endpoint comes back:
-
-| Error class | Cause |
-| --- | --- |
-| `webhook_timeout` | The endpoint accepted the connection and did not answer in time |
-| `webhook_dns` | The name did not resolve |
-| `webhook_connection_refused` | Nothing was listening |
-| `webhook_connection_reset` | The connection dropped mid-request |
-| `webhook_tls` | The handshake or certificate failed |
-| `webhook_network` | Anything else with no status |
-
-Retries back off exponentially with jitter, capped at one hour between
-attempts, and dead-letter after 10 attempts.
-
-<Warning>
-Relay never follows a redirect. The body is signed for the URL you registered,
-so replaying identical bytes and a valid signature at whatever host a `3xx`
-names would hand a signed Relay event to an address nobody registered, and the
-signature would verify there. Fix the registered URL instead.
-</Warning>
-
-## Versioning and deprecation
-
-Envelope versions are dates, not integers, so nothing has to remember which
-release "v3" was. Your endpoint is pinned to the date it was created with, and
-that date arrives two ways: as the `relay-webhook-version` header, and as
-`schema_version` inside the signed body.
-
-**Additive changes never bump the version.** A new optional field, a new member
-of `data`, a new `event_type`, a new header: all of these ship on the current
-date. Ignore fields you do not know and event types you did not subscribe to.
-
-**A shape change bumps it.** Removing a field, renaming one, narrowing a type,
-or changing what an existing `event_type` carries. If a correct consumer
-written last month would break, it is a new date, and the old date keeps being
-served.
-
-When a version is retired, every endpoint still pinned to it gets
-`deprecated_after` set 90 days out and the creator is told at that moment
-rather than at the end. Until it passes, the old shape is served unchanged.
-After it passes, the endpoint is served the current version.
-
-| Field on the endpoint | Meaning |
-| --- | --- |
-| `schema_version` | The date this endpoint is pinned to |
-| `deprecated_after` | When that date stops being served. Null means current |
-| `disabled_at` | Start of the current disabled window. Re-enabling backfills from it |
-| `last_disabled_reason` | Why it was last switched off |
-
-Nothing migrates an existing endpoint silently. A consumer moves versions by
-asking to.
-
-### Answer before you work
-
-Your response is the sender's Delivered receipt. Relay stamps it when the
-request returns, so every second the handler spends before answering is a
-second the sender watches a message with no receipt under it. A handler that
-waits for a model call reports a five second turn as a five second Delivered.
-
-Acknowledge as soon as the event is verified, deduplicated, and handed to
-something that will outlive the request, then do the work. Delivered says your
-endpoint has the message; it never claims the reply is ready.
-
-<Warning>
-A `2xx` is Relay's cue to stop retrying, and it is not a promise that the event
-will never arrive again: a lost settlement, a redrive, or a re-enable backfill
-can all redeliver it. Treat a `2xx` as "I own this now" and make the handoff
-durable before you send it, because a crash afterwards is your loss to recover.
-Dedupe on `webhook-id` so the redeliveries that do happen are free.
-</Warning>
-
-## Manage endpoints
-
-<CodeGroup>
-
-```bash List
-# Signing secrets are never returned.
-curl -sS "https://api.relayapp.im/v1/webhooks" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-```
-
-```bash Update
-# Change URL, event filters, or enabled state.
-curl -sS -X PATCH "https://api.relayapp.im/v1/webhooks/wh_..." \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"enabled":false}'
-```
-
-```bash Rotate secret
-# The new signing secret is returned once. Relay signs with both the new and
-# previous secret for 24 hours.
-curl -sS -X POST "https://api.relayapp.im/v1/webhooks/wh_.../rotate-secret" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-```
-
-```bash Delete
-# Permanent.
-curl -sS -X DELETE "https://api.relayapp.im/v1/webhooks/wh_..." \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-```
-
-</CodeGroup>
-
-Subscribe to any of these filters today:
-
-| Event | Fires when |
-| --- | --- |
-| `message.received` | A user messages your agent, or invokes it in a group |
-| `message.edited` | A sender edited a visible message |
-| `message.unsent` | A sender unsent a message, leaving a tombstone |
-| `message.delivered` | A recipient's runtime accepted your message |
-| `message.read` | A recipient read through a sequence |
-| `reaction.added` / `reaction.removed` | A participant reacted to your message |
-| `participant.added` / `chat.group_name_updated` / `participant.removed` | Group membership or metadata changed |
-| `participant.removed` | A participant left a group of their own accord, which is a different fact from being removed |
-| `group.invite.joined` / `group.invite.declined` | One invited person answered a group invite |
-| `group.invite.completed` / `group.invite.expired` | A group invite reached its terminal state |
-
-Group invite consent runs through the invite endpoint. It reports each
-individual answer, then the terminal state.
-
-<Note>
-Ignore unknown event types, so a new one cannot break your consumer.
-</Note>
+Creation and re-enable begin after their returned boundary. They do not replay earlier events.
 
 ## Next steps
 
-- [Event types](/reference/events)
-- [Message model](/concepts/message-model) for what `message.edited` and `message.unsent` change
-- [Long polling](/guides/long-polling) if your backend has no public URL
-- [Delivery model](/guides/delivery-model) for cursors, watermarks, and recovery
-- [Embed Relay in your own runtime](/integrations/channel-plugin) if your runtime owns many agents
-- [Errors](/reference/errors)
+- [Deliveries and redrive](/guides/webhook-deliveries)
+- [Events](/reference/events)
+- [Read receipts](/guides/read-receipts)
