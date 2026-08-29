@@ -45,6 +45,8 @@ tags:
     description: Register signed webhook destinations.
   - name: Socket Mode
     description: Receive the same agent events over a durable acknowledged WebSocket.
+  - name: Contacts
+    description: Resolve and explicitly install agent Contacts.
 paths:
   /v1/chats:
     post:
@@ -1223,6 +1225,74 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
+  /v1/contacts/{handle}:
+    get:
+      operationId: resolveContact
+      summary: Resolve an agent Contact by Handle
+      tags:
+        - Contacts
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: handle
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Resolved agent Contact
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - agent
+                properties:
+                  agent:
+                    $ref: '#/components/schemas/AgentContact'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      description: Resolve an agent Contact by Handle. Uses Relay Handles and the retained Linq method and payload shape where it fits Relay.
+  /v1/me/contacts/{contactId}:
+    post:
+      operationId: installContact
+      summary: Install an agent Contact
+      tags:
+        - Contacts
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: contactId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InstallContactRequest'
+      responses:
+        '200':
+          description: Installed Contact and direct Chat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstallContactResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      description: Install an agent Contact. Uses Relay Handles and the retained Linq method and payload shape where it fits Relay.
 components:
   schemas:
     AddParticipantRequest:
@@ -1233,6 +1303,55 @@ components:
         handle:
           type: string
           description: Relay Handle.
+    AgentContact:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - handle
+        - displayName
+        - tagline
+        - avatarUrl
+        - accentColor
+        - capabilities
+        - installation
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        handle:
+          type: string
+        displayName:
+          type: string
+        tagline:
+          type: string
+        avatarUrl:
+          type:
+            - string
+            - 'null'
+          format: uri
+        accentColor:
+          type:
+            - string
+            - 'null'
+        capabilities:
+          type: array
+          items:
+            type: string
+        installation:
+          oneOf:
+            - $ref: '#/components/schemas/ContactInstallation'
+            - type: 'null'
+        status:
+          type: string
+          enum:
+            - active
+            - inactive
+        createdAt:
+          type: string
+          format: date-time
     Attachment:
       type: object
       required:
@@ -1584,6 +1703,32 @@ components:
         handle:
           type: string
           description: Relay Handle associated with this contact card.
+    ContactInstallation:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - state
+        - source
+        - conversationId
+        - canRemove
+      properties:
+        id:
+          type: string
+        state:
+          type: string
+          enum:
+            - active
+        source:
+          type: string
+          enum:
+            - exact_handle
+            - share_link
+        conversationId:
+          type: string
+          format: uuid
+        canRemove:
+          type: boolean
     CreateChatRequest:
       type: object
       required:
@@ -1750,6 +1895,29 @@ components:
             - string
             - 'null'
           description: Cursor for fetching the next page of results (null if no more results)
+    InstallContactRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - source
+      properties:
+        source:
+          type: string
+          enum:
+            - exact_handle
+            - share_link
+    InstallContactResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - agent
+        - conversation_id
+      properties:
+        agent:
+          $ref: '#/components/schemas/AgentContact'
+        conversation_id:
+          type: string
+          format: uuid
     LinkPart:
       type: object
       required:
@@ -3398,6 +3566,7 @@ x-tagGroups:
       - Chats
       - Messages
       - Attachments
+      - Contacts
       - Contact Card
       - Blocked Handles
   - name: Agent events

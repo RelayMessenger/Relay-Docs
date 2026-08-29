@@ -2,7 +2,7 @@
 import json,re
 from pathlib import Path
 r=Path(__file__).resolve().parents[1];c=json.loads((r/'docs.json').read_text())
-need={"index","quickstart","concepts","authentication","current-status","api-reference/overview","guides/sending-messages","guides/webhooks","guides/webhook-deliveries","guides/agent-events","guides/socket-mode","guides/blocked-handles","guides/attachments","guides/reactions","guides/read-receipts","guides/conversation-history","reference/events","reference/errors","reference/limits"}
+need={"index","quickstart","concepts","authentication","current-status","api-reference/overview","guides/sending-messages","guides/webhooks","guides/webhook-deliveries","guides/agent-events","guides/socket-mode","guides/install-agents","guides/blocked-handles","guides/attachments","guides/reactions","guides/read-receipts","guides/conversation-history","reference/events","reference/errors","reference/limits"}
 def w(x):
  if isinstance(x,dict):
   for k,v in x.items():
