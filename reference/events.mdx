@@ -1,37 +1,35 @@
 ---
 title: "Webhook events"
-description: "Reference the Relay v3 webhook envelope and retained event names."
+description: "Reference the current Relay v1 webhook envelope and 11 event types."
 keywords: ["events", "webhook envelope", "message.received", "reaction.added"]
 ---
 
-Read every webhook through the frozen `2026-02-03` envelope.
+Read every current webhook through the frozen `2026-02-03` envelope.
 
 ```json
 {
-  "api_version": "v3",
+  "api_version": "v1",
   "webhook_version": "2026-02-03",
   "event_type": "message.received",
-  "event_id": "550e8400-e29b-41d4-a716-446655440000",
+  "event_id": "01993d50-4133-7178-8e16-7c1455c91d43",
   "created_at": "2026-08-28T20:00:00.000Z",
   "trace_id": "b923d71e50be43ba9e0fe1e34a7676c2",
-  "partner_id": "relay-local",
+  "agent_id": "01993d50-d2a8-7fe2-8b76-9eaf04816377",
   "data": {
     "chat": {
-      "id": "1492fda2-7e62-4914-8c1b-08652ed8bd2a",
+      "id": "01993d50-d2a8-7fe2-8b76-9eaf04816377",
       "is_group": false
     },
-    "id": "69a37c7d-af4f-4b5e-af42-e28e98ce873a",
+    "id": "01993d50-b4ce-71e6-8e65-35d325d95ddb",
     "direction": "inbound",
     "sender_handle": {
       "handle": "alice",
-      "service": "Relay",
       "kind": "user"
     },
     "parts": [{"type":"text","value":"Hello"}],
     "sent_at": "2026-08-28T19:59:59.900Z",
     "delivered_at": null,
-    "read_at": null,
-    "service": "Relay"
+    "read_at": null
   }
 }
 ```
@@ -44,29 +42,41 @@ Read every webhook through the frozen `2026-02-03` envelope.
 | `event_type` | Selects the data shape |
 | `created_at` | Event creation time |
 | `trace_id` | Request correlation |
-| `partner_id` | Receiving partner |
 | `webhook_version` | Payload version |
+| `api_version` | Relay API envelope version; currently `v1` |
+| `agent_id` | Contact identifier of the receiving agent |
 
 ## Event names
 
 | Event | Fires when |
 | --- | --- |
-| `message.sent` | Agent message commits |
-| `message.received` | A message for the agent commits |
+| `message.sent` | Agent Message commits |
+| `message.received` | A Message for the agent commits |
 | `message.delivered` | Recipient delivery advances |
 | `message.read` | Recipient Read advances |
-| `message.failed` | Message send fails |
 | `reaction.added` | Reaction add commits |
 | `reaction.removed` | Reaction removal commits |
-| `participant.added` | A Handle joins a group chat |
-| `participant.removed` | A Handle leaves a group chat |
-| `chat.created` | A visible chat is created |
+| `participant.added` | A Handle joins a group Chat |
+| `participant.removed` | A Handle leaves a group Chat |
+| `chat.created` | A visible Chat is created |
 | `chat.group_name_updated` | Group name changes |
 | `chat.group_icon_updated` | Group image changes |
-| `chat.typing_indicator.started` | Typing starts |
-| `chat.typing_indicator.stopped` | Typing stops |
 
-The two `participant.*` strings are retained Linq wire names. Group membership is stored through Handles and `chat_handle_join`.
+The two `participant.*` values are Linq-compatible relationship event names.
+Relay stores timestamped Contact membership periods in `chat_contact_join`.
+There is no global Participant identity table.
+
+Typing and `message.failed` are unsupported. The current API has no typing route
+and emits no typing or failed-message event.
+
+## Transport
+
+The envelope is identical over signed webhooks and Socket Mode.
+
+| Mode | Outer transport |
+| --- | --- |
+| Webhook | The envelope is the signed HTTP request body |
+| Socket Mode | The envelope is the `event` field beside a durable `sequence` |
 
 ## Message event state
 
@@ -80,5 +90,6 @@ The two `participant.*` strings are retained Linq wire names. Group membership i
 ## See also
 
 - [Verify webhooks](/guides/webhooks)
+- [Use Socket Mode](/guides/socket-mode)
 - [Handle retries](/guides/webhook-deliveries)
-- [Read delivery rules](/guides/read-receipts)
+- [Review current status](/current-status)

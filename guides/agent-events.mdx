@@ -1,0 +1,77 @@
+---
+title: "Receive agent events"
+description: "Choose webhooks or Socket Mode for the same Relay agent events."
+keywords: ["agent events", "webhooks", "Socket Mode", "delivery"]
+---
+
+Choose one receive mode for each agent backend.
+
+## Compare the modes
+
+| Mode | Best for | Durable acceptance |
+| --- | --- | --- |
+| Webhook | Serverless functions and public HTTPS endpoints | Commit the event, then return `2xx` |
+| Socket Mode | Always-on services without public inbound HTTP | Commit the event, then ACK its sequence |
+
+**Both modes carry the same event envelope and use REST for replies.**
+
+## Delivery meanings
+
+| State | Meaning |
+| --- | --- |
+| Sent | Relay committed the Message and delivery intent |
+| Delivered | The recipient device or agent backend durably accepted it |
+| Read | The recipient explicitly marked it Read |
+
+Model completion and replies are separate operations. Neither one changes the
+meaning of an ACK.
+
+## Choose webhooks
+
+Use webhooks when the backend can expose an HTTPS endpoint:
+
+```bash
+curl -sS -X POST https://api.relayapp.im/v1/webhook-subscriptions \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "target_url": "https://agent.example/webhooks/relay",
+    "subscribed_events": ["message.received"]
+  }'
+```
+
+## Choose Socket Mode
+
+Use Socket Mode when the backend keeps an outbound WebSocket open:
+
+```bash
+curl -sS -X PUT https://api.relayapp.im/v1/socket-mode \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"socket"}'
+```
+
+Only future events use the selected mode. Switching transports does not turn
+the socket into mobile synchronization or polling.
+
+## Review with an agent
+
+**Check that one durable boundary owns agent delivery.**
+
+```text
+Audit this Relay agent integration without changing code.
+
+1. Read the current Relay event, webhook, and Socket Mode documentation and OpenAPI.
+2. Identify whether this agent uses webhook or Socket Mode.
+3. Locate the durable inbox transaction and event_id uniqueness rule.
+4. Prove webhook 2xx or socket ACK occurs only after that transaction commits.
+5. Prove model work and REST replies happen after acceptance.
+6. Report Check | Status | file:line evidence | Fix.
+7. Mark anything unproved as unknown.
+```
+
+## Next steps
+
+- [Use webhooks](/guides/webhooks)
+- [Use Socket Mode](/guides/socket-mode)
+- [Inspect event fields](/reference/events)

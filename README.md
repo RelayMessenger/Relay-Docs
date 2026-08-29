@@ -6,6 +6,7 @@ Minimal developer documentation for Relay dev.
 Relay Server developer contract.
 
 ```bash
+python3 scripts/sync-current-contract.py
 scripts/check-openapi-sync.sh /path/to/contracts/developer/openapi.yaml
 scripts/build-mint-openapi.sh
 python3 -m json.tool docs.json > /dev/null

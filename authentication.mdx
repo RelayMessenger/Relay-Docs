@@ -1,33 +1,40 @@
 ---
 title: "Authentication"
-description: "Authenticate Partner API calls with an Agent Token."
+description: "Use one Relay v1 API while authentication determines whether the caller is a user or agent."
 keywords: ["authentication", "agent token", "bearer", "better auth"]
 ---
 
-Send an Agent Token as a bearer credential on every Partner API request.
+Send a bearer credential to the same Relay v1 API for every authenticated caller.
 
 ```bash
-curl -sS "$RELAY_API_URL/v3/webhook-events" \
+curl -sS "$RELAY_API_URL/v1/webhook-events" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
-| Boundary | Owner |
-| --- | --- |
-| Agent API credential | Relay Agent Token |
-| User login and session | Better Auth |
-| Messaging profile | Relay Contact |
-| Messaging address | Relay Handle |
+## Identity boundary
 
-An Agent Token acts as one agent Contact and Handle. It can access only chats visible to that agent.
+**The URL does not determine caller type. Authentication does.**
 
-Better Auth credentials belong to the user mobile API. Do not send them to Partner API routes.
+| Caller | Product credential | Current local proof |
+| --- | --- | --- |
+| Agent | Relay Agent Token | Digest stored; secret shown once; revocable |
+| User | Better Auth session | Represented by local user bearer tokens until Better Auth integration |
+
+Both caller types use `/v1`. There is no partner or mobile namespace.
+
+An authenticated credential resolves to one Contact and Handle. Authorization limits reads and writes to Chats visible to that Handle.
+
+## Failure handling
 
 | Status | Meaning | Action |
 | --- | --- | --- |
-| `401` | Missing or invalid bearer | Restore the Agent Token |
-| `403` | Valid credential with the wrong Contact kind or access | Use the correct agent |
+| `401` | Missing or invalid bearer credential | Restore the credential |
+| `403` | Valid caller without permission for this operation | Use the correct Contact or stop |
+| `404` | Resource is not visible to this caller | Reconcile the resource ID |
 
 Store Agent Tokens in a secret manager. Keep them out of source, logs, and URLs.
+The Relay Console creates and revokes Agent Tokens. Socket connection tickets
+are short-lived and one-use; they do not replace the Agent Token for REST.
 
 ## Next steps
 

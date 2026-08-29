@@ -1,68 +1,70 @@
 ---
 title: "API overview"
-description: "Use the Relay Partner API v3 base URL and retained Linq routes."
-keywords: ["api reference", "v3", "routes", "openapi"]
+description: "Use the single Relay v1 API and inspect its current generated contract."
+keywords: ["api reference", "v1", "routes", "openapi"]
 ---
 
-Use the generated OpenAPI pages for request and response schemas.
+Use the generated OpenAPI pages for exact request and response schemas.
 
 | Property | Value |
 | --- | --- |
-| Production root | `https://api.relayapp.im/api/partner` |
-| Local root | `http://127.0.0.1:8790/api/partner` |
-| Authentication | Bearer Agent Token |
-| Service | `Relay` |
+| Production root | `https://api.relayapp.im` |
+| Local root | `http://127.0.0.1:8790` |
+| Version prefix | `/v1` |
+| Authentication | Bearer credential |
 | Webhook version | `2026-02-03` |
 | JSON | `application/json` |
 
-## Retained v3 routes
+## One API
+
+**Users and agents call the same `/v1` routes. Authentication determines identity and permissions.**
+
+There is no partner or mobile namespace. Agent-only Socket Mode uses ordinary
+`/v1` ticket routes and the `relay.v1.json` WebSocket subprotocol.
+
+## Current Relay v1 paths
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` | `/v3/chats` | Create a chat with its first message |
-| `GET` | `/v3/chats` | List chats |
-| `GET` | `/v3/chats/{chatId}` | Get one chat |
-| `PUT` | `/v3/chats/{chatId}` | Update group name or image |
-| `POST` | `/v3/chats/{chatId}/participants` | Add a Handle to a group |
-| `DELETE` | `/v3/chats/{chatId}/participants` | Remove a Handle from a group |
-| `POST` | `/v3/chats/{chatId}/leave` | Leave a group |
-| `POST` | `/v3/chats/{chatId}/typing` | Start typing |
-| `DELETE` | `/v3/chats/{chatId}/typing` | Stop typing |
-| `POST` | `/v3/chats/{chatId}/read` | Mark the chat Read |
-| `POST` | `/v3/messages` | Resolve or create a chat, then send |
-| `POST` | `/v3/chats/{chatId}/messages` | Send to a known chat |
-| `GET` | `/v3/chats/{chatId}/messages` | List messages |
-| `GET` | `/v3/messages/{messageId}/thread` | List a reply thread |
-| `POST` | `/v3/chats/{chatId}/voicememo` | Send a voice memo |
-| `GET` | `/v3/messages/{messageId}` | Get one message |
-| `POST` | `/v3/messages/{messageId}/reactions` | Add or remove a reaction |
-| `POST` | `/v3/attachments` | Allocate an upload |
-| `GET` | `/v3/attachments/{attachmentId}` | Get attachment metadata |
-| `DELETE` | `/v3/attachments/{attachmentId}` | Delete an attachment |
-| `GET` | `/v3/webhook-events` | List event names |
-| `POST` | `/v3/webhook-subscriptions` | Create a subscription |
-| `GET` | `/v3/webhook-subscriptions` | List subscriptions |
-| `GET` | `/v3/webhook-subscriptions/{subscriptionId}` | Get a subscription |
-| `PUT` | `/v3/webhook-subscriptions/{subscriptionId}` | Replace subscription settings |
-| `DELETE` | `/v3/webhook-subscriptions/{subscriptionId}` | Delete a subscription |
-| `GET` | `/v3/contact_card` | Get Contact Cards |
-| `POST` | `/v3/contact_card` | Set up a Contact Card |
-| `PATCH` | `/v3/contact_card` | Update a Contact Card |
+| `POST`, `GET` | `/v1/chats` | Create or list Chats |
+| `GET`, `PUT` | `/v1/chats/{chatId}` | Read or update one Chat |
+| `POST`, `DELETE` | `/v1/chats/{chatId}/participants` | Add or remove a Handle using the current wire route |
+| `POST` | `/v1/chats/{chatId}/leave` | Leave a group Chat |
+| `POST` | `/v1/chats/{chatId}/read` | Mark visible Messages Read |
+| `POST` | `/v1/messages` | Resolve or create a Chat, then send |
+| `POST`, `GET` | `/v1/chats/{chatId}/messages` | Send or list Messages |
+| `GET` | `/v1/messages/{messageId}/thread` | List a reply thread |
+| `POST` | `/v1/chats/{chatId}/voicememo` | Send a voice memo |
+| `GET` | `/v1/messages/{messageId}` | Read one Message |
+| `POST` | `/v1/messages/{messageId}/delivered` | User-only durable receipt acknowledgement |
+| `POST` | `/v1/messages/{messageId}/reactions` | Add or remove a reaction |
+| `POST` | `/v1/attachments` | Allocate an upload |
+| `GET`, `DELETE` | `/v1/attachments/{attachmentId}` | Read or delete an Attachment |
+| `GET`, `POST`, `DELETE` | `/v1/blocked_handles` | List, block, or unblock a Handle |
+| `GET` | `/v1/webhook-events` | List event names |
+| `POST`, `GET` | `/v1/webhook-subscriptions` | Create or list subscriptions |
+| `GET`, `PUT`, `DELETE` | `/v1/webhook-subscriptions/{subscriptionId}` | Read, replace, or delete a subscription |
+| `GET`, `POST`, `PATCH` | `/v1/contact_card` | Read, create, or update Contact Cards |
+| `GET`, `PUT` | `/v1/socket-mode` | Read or select the agent event transport |
+| `POST` | `/v1/socket-connections` | Create a one-use Socket Mode URL |
+
+The `participants` path is retained Linq relationship vocabulary. Relay stores
+Contact membership periods in `chat_contact_join`; it does not add a global
+Participant identity table.
 
 ## Transport boundary
 
-| Client | Live inbound transport | Durable recovery |
+| Caller | Inbound transport now | Durable recovery |
 | --- | --- | --- |
-| Agent backend | Signed webhook | Partner API reads |
-| User mobile | Hint-only WebSocket | Mobile HTTP reads |
+| Agent backend | Signed webhook or Socket Mode | Event replay plus Relay API reads |
+| Relay app | No live transport yet | Relay API reads |
 
-Agent backends do not use the user WebSocket. User mobile does not consume agent webhooks.
+Typing is not part of Relay v1. Socket Mode delivers agent events only; it is
+not a mobile realtime or typing API.
 
-## OpenAPI files
+## Source boundary
 
-`api-reference/openapi.yaml` is the byte-identical Server contract. Mintlify reads the generated `api-reference/openapi.mint.yaml` endpoint bundle.
-
-Webhook envelopes stay in the source contract. The Mintlify bundle uses the shorter [Webhook events](/reference/events) page instead of a second generated event tree.
+`api-reference/openapi.yaml` is the byte-identical Server contract. `api-reference/openapi.mint.yaml` is generated for Mintlify and removes only the top-level webhook rendering tree.
 
 ```bash
 scripts/check-openapi-sync.sh /path/to/contracts/developer/openapi.yaml
@@ -71,6 +73,7 @@ scripts/build-mint-openapi.sh
 
 ## Next steps
 
-- [Migrate a Linq integration](/guides/linq-migration)
+- [Send a Message](/guides/sending-messages)
 - [Read event shapes](/reference/events)
-- [Review errors](/reference/errors)
+- [Choose an agent event transport](/guides/agent-events)
+- [Review current evidence](/current-status)

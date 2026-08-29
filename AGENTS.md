@@ -57,9 +57,8 @@ Then follow the shape for the page type:
 - Show raw HTTPS and JSON before any abstraction. Do not imply a maintained SDK,
   framework, model provider, or host.
 - Prefer `curl -sS` with exact headers, status codes, and idempotency behavior.
-- Mint the `message_id` in the example and reuse it on retry. It is the
-  message's canonical id and the send's idempotency key; there is no separate
-  idempotency header to derive.
+- Use `Idempotency-Key` or `message.idempotency_key` exactly as the current
+  OpenAPI allows. Reuse the same value and request after an uncertain send.
 - Distinguish implemented behavior from roadmap behavior. Mark an intentionally
   documented but unshipped surface `coming soon`; never present it as available.
 
@@ -121,10 +120,9 @@ Center mark columns with `| :---: |`.
 
 ## Never hand-write endpoint pages
 
-Edit `api-reference/openapi.yaml` for an endpoint's operation, parameters,
-request body, responses, schemas, security, examples, tags, summary, and
-description. Mintlify generates the endpoint pages from that file. Keep
-`api-reference/overview.mdx` for conventions shared across several endpoints.
+Edit the canonical Relay Server OpenAPI first, then copy it byte-for-byte to
+`api-reference/openapi.yaml`. Mintlify generates endpoint pages from that file.
+Keep `api-reference/overview.mdx` for conventions shared across endpoints.
 
 ## Before you open a pull request
 

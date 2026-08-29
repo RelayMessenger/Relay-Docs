@@ -1,57 +1,96 @@
 ---
 title: "Core concepts"
-description: "Understand Relay contacts, handles, chats, messages, and delivery."
+description: "Understand Relay Contacts, Handles, Chats, Messages, parts, and delivery."
 keywords: ["contact", "handle", "chat", "message", "delivery"]
 ---
 
-Use Apple messaging vocabulary with one Relay profile record.
+Use one Contact for the public messaging profile and one Handle for its address.
 
 ## Contact and Handle
 
-`Contact` is a user or agent profile. `Handle` is the username used to address that Contact.
+**A Contact is the profile. A Handle is the username used to address it.**
 
 ```text
-Contact 1 ─── 1 Handle ─── * Chat
+Better Auth user account
+        │
+        ▼
+     Contact
+        │
+      Handle
+        │
+       Chat
 ```
 
 | Record | Owns |
 | --- | --- |
-| Contact | `kind`, first name, last name, image, active state |
-| Handle | Username, `service: "Relay"`, link to Contact |
-| Better Auth user | Login, session, phone verification, account security |
+| Contact | Handle, `kind`, first name, last name, image, active state |
+| Handle | The Contact's public messaging name |
+| Better Auth user | Login, session, verified phone, account security |
 
-`contact.kind` is constrained to `user` or `agent`:
+`contact.kind` has two allowed values:
 
 ```sql
 kind text NOT NULL CHECK (kind IN ('user', 'agent'))
 ```
 
-Better Auth remains the user account system. A Relay Contact is the messaging profile shown in chats.
+Relay has one native transport. Chat, Message, and Handle objects do not carry a `service` discriminator.
 
-## Chats and messages
+## IDs
+
+**Relay stores and returns opaque UUIDv7 resource IDs.**
+
+| Value | Meaning |
+| --- | --- |
+| `ChatHandle.id` | Contact GUID |
+| `ChatHandle.handle` | Public Handle |
+| Chat, Message, Attachment, Contact, event, and webhook IDs | Database-enforced UUIDv7 GUIDs |
+| Page cursor | Separate opaque pagination value, not a resource ID |
+
+The Server mints UUIDv7 values once and queries indexed GUID columns directly.
+It has no deterministic UUIDv5, hash-derived ID, or fallback mapping.
+
+Treat IDs as opaque. Do not infer ordering, creation time, resource kind, or
+authorization from UUID bits.
+
+## Chats and Messages
 
 | Object | Meaning |
 | --- | --- |
 | Chat | A direct or group conversation |
-| Handle | One Contact address in a chat |
+| Handle | One Contact name in a Chat |
 | Message | One immutable send |
 | Attachment | Image, video, audio, or file bytes |
 
-Apple stores chat membership with `chat_handle_join`. Relay retains that shape.
+Relay stores timestamped Contact membership periods in `chat_contact_join`.
+Messages and visible group-history events are returned only when their time
+falls inside one of the caller's membership periods.
+
+## Message direction
+
+**Relay stores the sender, then derives `is_from_me` for the authenticated caller.**
+
+The same Message can be outgoing for Alice and incoming for Echo:
+
+```text
+is_from_me = message sender Handle == authenticated Handle
+```
+
+Relay does not store one global `is_from_me` value in PostgreSQL.
 
 ## Parts
 
-The API returns ordered `parts`. These parts are decoded from Apple `message.attributedBody` when Relay reads a message.
+The API returns ordered `parts` projected from Apple `message.attributedBody`.
 
 | API part | Stored behavior |
 | --- | --- |
 | `text` | Text run, optionally carrying a mention |
 | `media` | Attachment run for image, video, audio, or file |
-| `link` | URL plus Apple URL balloon marker |
+| `link` | URL plus Apple URL-balloon marker |
 
-Parts do not have independent resource IDs. `part_index` is the zero-based position in the API projection.
+Parts do not have independent public resource IDs. `part_index` is the zero-based position in the API projection.
 
-Replies store the target message and Apple part marker. Reactions remain associated Apple message rows. Relay maps both to `part_index`.
+Replies store the target Message and part index. Reactions use one versioned
+current-state row per Message part and Contact.
 
 ## Delivery
 
@@ -59,16 +98,15 @@ A send snapshots its recipient Handles.
 
 | State | Rule |
 | --- | --- |
-| Sent | The message transaction committed |
+| Sent | The Message transaction committed |
 | Delivered | Every snapshotted recipient acknowledged durable receipt |
-| Read | Every snapshotted recipient marked the message Read |
+| Read | Every snapshotted recipient marked the Message Read |
 
-A user acknowledges Delivered after the mobile database commits the message. An agent acknowledges Delivered when its `message.received` webhook returns `2xx`.
-
-<Info>Linq uses `message.delivered` for recipient-device delivery. Relay uses webhook success for an agent recipient because a webhook is that agent's delivery transport.</Info>
+For an agent recipient, Delivered advances after its webhook receiver commits
+and returns `2xx`, or its Socket Mode consumer commits and ACKs the sequence.
 
 ## See also
 
-- [Linq v3 migration](/guides/linq-migration)
-- [Send messages](/guides/sending-messages)
-- [Read receipts](/guides/read-receipts)
+- [Send Messages](/guides/sending-messages)
+- [Delivery and Read](/guides/read-receipts)
+- [API overview](/api-reference/overview)

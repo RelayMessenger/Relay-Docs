@@ -6,10 +6,13 @@ keywords: ["webhooks", "standard webhooks", "signature", "message.received"]
 
 Create one subscription for the events your agent consumes.
 
+Use [Socket Mode](/guides/socket-mode) instead when the backend is always on
+and should not expose a public inbound endpoint.
+
 ## Create a subscription
 
 ```bash
-curl -sS -X POST "$RELAY_API_URL/v3/webhook-subscriptions" \
+curl -sS -X POST "$RELAY_API_URL/v1/webhook-subscriptions" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -28,11 +31,10 @@ The `201` response contains `signing_secret` once:
 
 ```json
 {
-  "id": "b2c3d4e5-f6a7-8901-bcde-f23456789012",
+  "id": "01993d50-34ca-7613-8df2-d3f8cc975d04",
   "target_url": "https://agent.example/webhooks/relay",
   "signing_secret": "whsec_<base64-key>",
   "subscribed_events": ["message.received"],
-  "phone_numbers": null,
   "is_active": true,
   "created_at": "2026-08-28T20:00:00.000Z",
   "updated_at": "2026-08-28T20:00:00.000Z"
@@ -46,8 +48,8 @@ The `201` response contains `signing_secret` once:
 | `webhook-id` | Event deduplication key |
 | `webhook-timestamp` | Unix seconds used in the signature |
 | `webhook-signature` | Standard Webhooks `v1,<base64>` signature |
-| `X-Webhook-Event` | Deprecated Linq-compatible event header |
-| `X-Webhook-Subscription-ID` | Deprecated Linq-compatible subscription header |
+| `X-Webhook-Event` | Deprecated compatibility event header |
+| `X-Webhook-Subscription-ID` | Deprecated compatibility subscription header |
 
 Verify the exact raw body with Standard Webhooks. The signed bytes are:
 
@@ -83,15 +85,34 @@ A successful `message.received` response records Delivered for the agent recipie
 
 | Task | Route |
 | --- | --- |
-| Discover event names | `GET /v3/webhook-events` |
-| Create | `POST /v3/webhook-subscriptions` |
-| List | `GET /v3/webhook-subscriptions` |
-| Read | `GET /v3/webhook-subscriptions/{subscriptionId}` |
-| Replace settings | `PUT /v3/webhook-subscriptions/{subscriptionId}` |
-| Delete | `DELETE /v3/webhook-subscriptions/{subscriptionId}` |
+| Discover event names | `GET /v1/webhook-events` |
+| Create | `POST /v1/webhook-subscriptions` |
+| List | `GET /v1/webhook-subscriptions` |
+| Read | `GET /v1/webhook-subscriptions/{subscriptionId}` |
+| Replace settings | `PUT /v1/webhook-subscriptions/{subscriptionId}` |
+| Delete | `DELETE /v1/webhook-subscriptions/{subscriptionId}` |
+
+## Review with an agent
+
+**Audit webhook safety against the current contract.** Copy this prompt into your coding agent.
+
+```text
+You are auditing a Relay webhook receiver.
+
+This is read-only. Do not change code unless I ask.
+
+1. Read the current Relay webhook guide and OpenAPI before inspecting code.
+2. Find where the exact raw request body is retained.
+3. Prove Standard Webhooks verification uses webhook-id, webhook-timestamp, and webhook-signature before JSON parsing.
+4. Prove event_id is stored durably with a uniqueness rule before the receiver returns 2xx.
+5. Prove duplicate delivery cannot repeat model, tool, or reply side effects.
+6. Report: Check | Status | file:line evidence | Fix.
+7. Mark anything you cannot prove as unknown.
+```
 
 ## Next steps
 
 - [Read retry behavior](/guides/webhook-deliveries)
+- [Compare event transports](/guides/agent-events)
 - [Inspect event shapes](/reference/events)
 - [Understand delivery](/guides/read-receipts)

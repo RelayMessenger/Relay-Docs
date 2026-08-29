@@ -1,31 +1,31 @@
 ---
 title: "Quickstart"
-description: "Receive one signed message and send one reply with Relay Partner API v3."
+description: "Receive one signed Message and send one reply with the Relay v1 API."
 keywords: ["quickstart", "message.received", "webhook", "reply"]
 ---
 
-Receive one user message and send one agent reply.
+Receive one user Message and send one agent reply.
 
 ## Prerequisites
 
 | Requirement | Purpose |
 | --- | --- |
-| Agent Token | Authenticates Partner API calls |
+| Agent Token | Authenticates Relay API calls |
 | HTTPS endpoint | Receives agent events |
 | Durable storage | Saves an event before acknowledgement |
 
 ```bash
-export RELAY_API_URL="https://api.relayapp.im/api/partner"
+export RELAY_API_URL="https://api.relayapp.im"
 export RELAY_AGENT_TOKEN="<agent-token>"
 
-curl -sS "$RELAY_API_URL/v3/webhook-events" \
+curl -sS "$RELAY_API_URL/v1/webhook-events" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
 ## Create a subscription
 
 ```bash
-curl -sS -X POST "$RELAY_API_URL/v3/webhook-subscriptions" \
+curl -sS -X POST "$RELAY_API_URL/v1/webhook-subscriptions" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -36,7 +36,7 @@ curl -sS -X POST "$RELAY_API_URL/v3/webhook-subscriptions" \
 
 Save `signing_secret` from the `201` response. Relay shows it once.
 
-## Accept a message
+## Accept a Message
 
 <Steps>
 <Step title="Read the raw body">
@@ -58,13 +58,10 @@ Read `data.chat.id` and `data.id` from the `message.received` envelope.
 ## Mark Read and reply
 
 ```bash
-curl -sS -X POST "$RELAY_API_URL/v3/chats/$CHAT_ID/read" \
+curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/read" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 
-curl -sS -X POST "$RELAY_API_URL/v3/chats/$CHAT_ID/typing" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-
-curl -sS -X POST "$RELAY_API_URL/v3/chats/$CHAT_ID/messages" \
+curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/messages" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: reply-$EVENT_ID" \
@@ -76,9 +73,6 @@ curl -sS -X POST "$RELAY_API_URL/v3/chats/$CHAT_ID/messages" \
   }
 }
 JSON
-
-curl -sS -X DELETE "$RELAY_API_URL/v3/chats/$CHAT_ID/typing" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
 ## Failure handling
@@ -90,8 +84,26 @@ curl -sS -X DELETE "$RELAY_API_URL/v3/chats/$CHAT_ID/typing" \
 | Model failure | Retry from your saved event |
 | Uncertain send response | Reuse the same idempotency key and request |
 
+## Review with an agent
+
+**Audit a Relay integration without changing it.** Copy this prompt into your coding agent.
+
+```text
+You are auditing a codebase that integrates with Relay.
+
+This is read-only. Do not change code unless I ask.
+
+1. Read the current Relay documentation and OpenAPI first.
+2. Locate bearer authentication, raw-body webhook verification, durable event deduplication, Read, and reply code.
+3. Confirm every URL uses https://api.relayapp.im/v1 with no partner or mobile namespace.
+4. Confirm the consumer saves event_id before returning 2xx and reuses one idempotency key after uncertain sends.
+5. Report: Check | Status | file:line evidence | Fix.
+6. Mark anything you cannot prove as unknown.
+```
+
 ## Next steps
 
 - [Verify webhooks](/guides/webhooks)
-- [Send every message type](/guides/sending-messages)
+- [Compare webhooks and Socket Mode](/guides/agent-events)
+- [Send every Message type](/guides/sending-messages)
 - [Understand delivery](/guides/read-receipts)

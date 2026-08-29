@@ -1,77 +1,81 @@
 ---
 title: "Conversation history"
-description: "List chats and messages for HTTP reconciliation."
-keywords: ["history", "reconciliation", "cursor", "websocket"]
+description: "List Chats and Messages for finite HTTP reconciliation."
+keywords: ["history", "reconciliation", "cursor", "http"]
 ---
 
-Read canonical chat state after startup, reconnect, or a sync hint.
+Read canonical Chat state after startup, foregrounding, or an explicit refresh.
 
-## List chats
+## List Chats
 
 ```bash
-curl -sS "$RELAY_API_URL/v3/chats?limit=20" \
+curl -sS "$RELAY_API_URL/v1/chats?limit=20" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
-```json
-{
-  "chats": [
-    {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "service": "Relay",
-      "handles": [
-        {"handle":"alice","service":"Relay","kind":"user"},
-        {"handle":"echo","service":"Relay","kind":"agent","is_me":true}
-      ],
-      "is_group": false
-    }
-  ],
-  "next_cursor": null
-}
-```
+A Chat contains its ID, current Handles, direct-or-group state, timestamps, and current profile fields. No Chat or Handle carries a transport discriminator.
 
-## List messages
+## List Messages
 
 ```bash
-curl -sS "$RELAY_API_URL/v3/chats/$CHAT_ID/messages?limit=50" \
+curl -sS "$RELAY_API_URL/v1/chats/$CHAT_ID/messages?limit=50" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
 Pass `next_cursor` unchanged when another page exists:
 
 ```bash
-curl -sS "$RELAY_API_URL/v3/chats/$CHAT_ID/messages?limit=50&cursor=$NEXT_CURSOR" \
+curl -sS "$RELAY_API_URL/v1/chats/$CHAT_ID/messages?limit=50&cursor=$NEXT_CURSOR" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
 | Field | Meaning |
 | --- | --- |
-| `messages` | Canonical message projections |
+| `messages` | Canonical Message projections |
 | `next_cursor` | Opaque page token, or `null` |
 | `parts` | Ordered projection from Apple `attributedBody` |
 | `delivery_status` | Current aggregate state |
+| `is_from_me` | Derived for the authenticated Handle |
+| `is_system_message` | `true` for visible ordered group history |
+| `system_event` | Actor, affected Contact, and group change data |
 
 The page cursor continues one list operation. It is not a durable sync checkpoint.
 
-## User mobile flow
+## Membership visibility
 
-The user app reconciles through HTTP at these points:
+**A Contact sees only Messages and group events from periods when it belonged
+to the Chat.**
+
+| Event | Visibility |
+| --- | --- |
+| Added to group | The added Contact sees this event and later activity |
+| Earlier history | Hidden from a newly added Contact |
+| Removed or left | The Contact sees this event |
+| Later activity | Hidden after the membership period closes |
+| Rejoined | A new membership period begins |
+
+## Relay app flow
+
+The current app reconciles through HTTP at finite lifecycle points:
 
 | Trigger | Action |
 | --- | --- |
-| App startup | Read chats and visible messages |
-| Foreground | Reconcile changed resources |
-| WebSocket reconnect | Reconcile through HTTP |
-| `sync.hint` frame | Reconcile the named chat |
+| App startup | Read Chats and visible Messages |
+| Foreground | Reconcile canonical resources |
+| Explicit refresh | Reconcile canonical resources |
+| Successful send | Perform one follow-up reconciliation |
 
-The WebSocket carries hints and typing only. The app does not run timer-based polling.
+There is no successful-state polling timer. Agent-only Socket Mode is not a
+mobile synchronization source.
 
 ## Agent flow
 
-Agents receive new inbound messages only through signed webhooks. Use history reads to recover known resources after a restart or uncertain request, not as a live event feed.
+Agents receive events through signed webhooks or Socket Mode. Use history reads
+after restart or an uncertain REST request, not as polling.
 
 ## Next steps
 
 - [Receive webhooks](/guides/webhooks)
+- [Use Socket Mode](/guides/socket-mode)
 - [Understand parts](/concepts#parts)
-- [Review retained routes](/api-reference/overview#retained-v3-routes)
+- [Review Relay v1 paths](/api-reference/overview#current-relay-v1-paths)
