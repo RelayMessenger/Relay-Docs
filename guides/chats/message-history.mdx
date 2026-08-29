@@ -1,0 +1,62 @@
+---
+title: "Message history"
+description: "Page through visible Messages and ordered group-history events."
+keywords: ["history", "pagination", "group events", "membership visibility"]
+---
+
+List the portion of a Chat visible to the authenticated Contact.
+
+```bash
+curl -sS \
+  "https://api.relayapp.im/v1/chats/$CHAT_ID/messages?limit=50" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+## Pagination
+
+The response contains `messages` and `next_cursor`. Pass the cursor unchanged:
+
+```bash
+curl -sS \
+  "https://api.relayapp.im/v1/chats/$CHAT_ID/messages?limit=50&cursor=$NEXT_CURSOR" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+A cursor belongs to the operation that returned it. It is not a resource ID or durable event checkpoint.
+
+## Group-history rows
+
+Relay returns group activity in the same ordered timeline:
+
+```json
+{
+  "is_system_message": true,
+  "parts": [{"type":"system","value":"Alice added you"}],
+  "system_event": {
+    "type":"participant_added",
+    "actor":{"handle":"alice","kind":"user"},
+    "subject":{"handle":"bob","kind":"user"}
+  }
+}
+```
+
+System rows cannot receive replies or reactions.
+
+## Membership visibility
+
+| Time | Visible |
+| --- | --- |
+| Before `joined_at` | No |
+| At and after `joined_at` | Yes |
+| Removal event at `left_at` | Yes |
+| After `left_at` | No |
+| New rejoin period | Yes from the new `joined_at` |
+
+## Agent recovery
+
+Use Chat and Message reads after restart or an uncertain REST response. Do not poll them as an event transport. New agent events arrive through webhooks or Socket Mode.
+
+## Related
+
+- [Message details](/guides/messaging/message-details)
+- [Group Chats](/guides/chats/group-chats)

@@ -1,0 +1,71 @@
+---
+title: "Key concepts"
+description: "Learn the shared Relay vocabulary used by every guide and endpoint."
+keywords: ["Contact", "Handle", "Chat", "Message", "Attachment"]
+---
+
+This page defines the vocabulary used throughout Relay.
+
+## Contacts and Handles
+
+A **Contact** is a user or agent profile. Every Contact owns one public **Handle**.
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Stable opaque UUIDv7 Contact ID |
+| `handle` | Public messaging name, such as `weather` |
+| `kind` | `user` or `agent` |
+| `display_name` | Current profile name |
+| `avatar_url` | Current profile image |
+
+Handles can change. Relationships such as membership, delivery, reactions, and blocks use stable Contact IDs internally.
+
+## Chats
+
+A **Chat** is a direct or group conversation.
+
+- A direct Chat has two active Contacts.
+- A group Chat has three or more active Contacts.
+- Group membership records when a Contact joined, left, or was removed.
+- A newly added Contact cannot read history from before it joined.
+
+## Messages and parts
+
+A **Message** belongs to one Chat and contains 1 to 100 ordered `parts`.
+
+| Part | Purpose |
+| --- | --- |
+| `text` | Plain text, optionally with one structured mention |
+| `media` | An image, video, audio file, or document |
+| `link` | One URL that renders as a rich preview |
+| `system` | Read-only group-history text returned by Relay |
+
+Parts are addressed by zero-based `part_index`. Replies and reactions can target an exact part.
+
+## Attachments
+
+An **Attachment** is an uploaded file up to 100 MB. Allocate it, upload the exact bytes, then reference its `attachment_id` from one or more Messages.
+
+## Delivery
+
+| State | Meaning |
+| --- | --- |
+| Sent | Relay committed the Message and delivery intent |
+| Delivered | Every snapshotted recipient durably accepted it |
+| Read | Every snapshotted recipient explicitly marked it Read |
+
+For an agent, durable acceptance is webhook `2xx` or a Socket Mode ACK after its inbox commit.
+
+## Events
+
+Agent backends receive the same event envelope through webhooks or Socket Mode. Every event has a stable `event_id` for deduplication.
+
+## Idempotency
+
+Message sends accept an idempotency key up to 255 characters. Repeating the same key and body returns the original Message. Reusing the key with different content returns `409`.
+
+## Related
+
+- [Messaging overview](/guides/messaging)
+- [Chats overview](/guides/chats)
+- [Webhook events](/guides/webhooks/events)

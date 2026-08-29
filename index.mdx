@@ -1,43 +1,72 @@
 ---
-title: "Relay developer API"
-description: "Connect an agent backend to the Relay v1 API with signed webhooks."
-keywords: ["relay", "api", "agent", "webhooks"]
+title: "Introduction"
+description: "Build agents that users message like contacts in Relay."
+keywords: ["Relay API", "agents", "messaging", "introduction"]
 ---
 
-Connect an agent backend with Relay v1 HTTP routes and signed webhooks.
+Relay is a messenger for conversations between users and agents.
 
-Relay owns messaging. Your backend owns the model, tools, memory, and agent behavior.
+> **New to Relay?** Follow the [Quickstart](/getting-started/quickstart) to connect an agent, or open the [API Reference](/api-reference/overview) for every endpoint and schema.
 
-## Core flow
+## What you can build
 
-| Step | What happens |
+- **Personal agents** that live beside a user's other conversations
+- **Support and operations agents** that reply with text, media, and files
+- **Group agents** that respond when mentioned in a shared Chat
+- **Always-on agents** that receive events through Socket Mode
+- **Serverless agents** that receive signed webhooks
+
+## Key capabilities
+
+| Capability | Description |
 | --- | --- |
-| Receive | Relay sends `message.received` to the agent webhook |
-| Accept | Your endpoint saves the event and returns `2xx` |
-| Read | Your backend calls `POST /v1/chats/{chatId}/read` |
-| Reply | Your backend calls `POST /v1/chats/{chatId}/messages` |
+| Multipart Messages | Send ordered text, media, and link parts |
+| Attachments | Upload images, video, audio, and files up to 100 MB |
+| Group Chats | Add and remove Contacts, rename groups, and set group photos |
+| Replies and reactions | Reply to an exact Message part and add standard or custom reactions |
+| Delivery state | Track Sent, Delivered, and Read per recipient |
+| Agent events | Choose signed webhooks or durable Socket Mode |
+| Explicit installation | Share an agent Handle without creating a Chat before user confirmation |
 
-## Message state
+## Authentication
 
-| State | Meaning |
-| --- | --- |
-| Sent | Relay committed the Message |
-| Delivered | Every snapshotted recipient acknowledged it |
-| Read | Every snapshotted recipient marked it Read |
+Every request uses a bearer credential:
 
-For an agent recipient, a successful `message.received` webhook is its Delivered acknowledgement. This is a Relay product decision.
+```http
+Authorization: Bearer $RELAY_AGENT_TOKEN
+```
 
-<Columns cols={2}>
-<Card title="Quickstart" icon="zap" href="/quickstart">Receive a Message and send a reply.</Card>
-<Card title="Core concepts" icon="boxes" href="/concepts">Understand Contact, Handle, Message, and part.</Card>
-<Card title="API reference" icon="square-terminal" href="/api-reference/overview">Read the current Relay v1 paths.</Card>
-<Card title="Current evidence" icon="badge-check" href="/current-status">Separate API, build, and UI proof.</Card>
-</Columns>
+Users and agents call the same `/v1` API. The credential determines the Contact and permissions.
 
-<Note>The current implementation is local. See [Current status](/current-status) for the exact boundary.</Note>
+## Quick example
+
+Send a Message to an existing Chat:
+
+```bash
+curl -sS -X POST https://api.relayapp.im/v1/chats/$CHAT_ID/messages \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: reply-$EVENT_ID" \
+  -d '{
+    "message": {
+      "parts": [{"type":"text","value":"I can help with that."}]
+    }
+  }'
+```
 
 ## Next steps
 
-- [Complete the quickstart](/quickstart)
-- [Understand Contact and Handle](/concepts#contact-and-handle)
-- [Receive webhooks](/guides/webhooks)
+<CardGroup cols={2}>
+  <Card title="Quickstart" href="/getting-started/quickstart">
+    Connect an agent and receive its first Message.
+  </Card>
+  <Card title="Key concepts" href="/getting-started/key-concepts">
+    Learn Contacts, Handles, Chats, Messages, and parts.
+  </Card>
+  <Card title="Messaging" href="/guides/messaging">
+    Send text, media, voice memos, replies, mentions, and reactions.
+  </Card>
+  <Card title="Agent events" href="/guides/webhooks/choose-transport">
+    Choose webhooks or Socket Mode.
+  </Card>
+</CardGroup>

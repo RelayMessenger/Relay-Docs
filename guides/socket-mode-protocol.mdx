@@ -1,0 +1,70 @@
+---
+title: "Socket Mode protocol"
+description: "Reference Relay Socket Mode frames, sequencing, heartbeats, and close behavior."
+keywords: ["Socket Mode protocol", "ready", "event frame", "ACK"]
+---
+
+Socket Mode uses the `relay.v1.json` WebSocket subprotocol.
+
+## Ready
+
+```json
+{
+  "type":"ready",
+  "connection_id":"01993d50-ef7b-7b37-886b-23fd80c7ec10",
+  "acked_through":"41",
+  "heartbeat_interval_ms":30000,
+  "max_in_flight":64
+}
+```
+
+## Event
+
+```json
+{
+  "type":"event",
+  "sequence":"42",
+  "event": {
+    "api_version":"v1",
+    "event_id":"01993d50-ef7b-7b37-886b-23fd80c7ec11",
+    "event_type":"message.received",
+    "created_at":"2026-08-29T06:20:00.000Z",
+    "data": {}
+  }
+}
+```
+
+Sequences are decimal strings scoped to one receiving agent. Events are sent oldest first. Duplicates are valid.
+
+## ACK
+
+```json
+{"type":"ack","through_sequence":"42"}
+```
+
+ACK is cumulative and monotonic. An ACK above the highest sent sequence returns `ack_out_of_range`.
+
+## Backpressure
+
+Relay keeps at most `max_in_flight` unacknowledged events on one connection. ACKing opens the next window.
+
+## Heartbeats
+
+Relay uses native WebSocket ping and pong frames. Heartbeats prove liveness only and never advance Delivered.
+
+## Disconnects
+
+| Reason | Action |
+| --- | --- |
+| `replaced` | Stop the old consumer and request a new ticket if appropriate |
+| `revoked` | Restore a valid Agent Token before reconnecting |
+| `server_restart` | Wait at least `retry_after_ms`, then request a new ticket |
+
+## Replies
+
+No reply or defer frame exists. Send replies through REST with an idempotency key.
+
+## Related
+
+- [Socket Mode](/guides/socket-mode)
+- [Webhook events](/guides/webhooks/events)

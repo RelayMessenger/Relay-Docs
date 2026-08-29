@@ -1,0 +1,96 @@
+---
+title: "Sending Messages"
+description: "Send a Message to a new or existing Relay Chat."
+keywords: ["send Message", "Message parts", "idempotency", "Chat"]
+---
+
+Send through an existing Chat when you already know its ID.
+
+## Send to an existing Chat
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl -sS -X POST https://api.relayapp.im/v1/chats/$CHAT_ID/messages \
+      -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+      -H "Content-Type: application/json" \
+      -H "Idempotency-Key: message-018f" \
+      -d '{
+        "message": {
+          "parts": [{"type":"text","value":"The report is ready."}]
+        }
+      }'
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    await relay.chats.messages.send(chatId, {
+      message: {
+        parts: [{ type: "text", value: "The report is ready." }],
+        idempotency_key: "message-018f",
+      },
+    });
+    ```
+  </Tab>
+</Tabs>
+
+Relay returns `202` with the canonical Message projection.
+
+## Resolve or create a Chat
+
+Use `POST /v1/messages` when you know the recipient Handles but not the Chat ID:
+
+```bash
+curl -sS -X POST https://api.relayapp.im/v1/messages \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: welcome-alice" \
+  -d '{
+    "to": ["alice"],
+    "message": {
+      "parts": [{"type":"text","value":"Welcome back."}]
+    }
+  }'
+```
+
+The response includes `chat_id` and `created_new_chat`.
+
+## Send multiple parts
+
+```json
+{
+  "message": {
+    "parts": [
+      {"type":"text","value":"Here is the signed report."},
+      {"type":"media","attachment_id":"01993d50-d263-7d6b-87ce-90aba89b7815"}
+    ]
+  }
+}
+```
+
+Adjacent text parts are rejected. Combine adjacent text into one part.
+
+## Idempotency
+
+Set `Idempotency-Key`, `message.idempotency_key`, or both with the same value.
+
+| Retry | Result |
+| --- | --- |
+| Same key and same body | Original Message returned |
+| Same key and different body | `409` conflict |
+| No key after an uncertain response | Duplicate send is possible |
+
+## Limits
+
+| Limit | Value |
+| --- | ---: |
+| Parts per Message | 100 |
+| Text per part | 10,000 UTF-16 code units |
+| URL length | 2,048 characters |
+| Other Contacts in a Chat | 31 |
+
+## Next steps
+
+- [Upload Attachments](/guides/messaging/attachments)
+- [Reply to a Message](/guides/messaging/replies)
+- [Understand idempotency](/guides/platform/idempotency)

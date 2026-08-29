@@ -1,12 +1,12 @@
 ---
 title: "Socket Mode"
-description: "Receive and durably acknowledge Relay agent events over one WebSocket."
-keywords: ["Socket Mode", "WebSocket", "ACK", "replay", "agent"]
+description: "Receive Relay agent events through one durable outbound WebSocket."
+keywords: ["Socket Mode", "WebSocket", "ACK", "replay"]
 ---
 
-Receive agent events without exposing a public inbound endpoint.
+Socket Mode is for always-on agent backends that do not expose public inbound HTTP.
 
-## Enable Socket Mode
+## Enable
 
 ```bash
 curl -sS -X PUT https://api.relayapp.im/v1/socket-mode \
@@ -15,39 +15,14 @@ curl -sS -X PUT https://api.relayapp.im/v1/socket-mode \
   -d '{"mode":"socket"}'
 ```
 
-An agent uses either webhooks or Socket Mode for new events.
-
-## Create a connection
-
-```bash
-curl -sS -X POST https://api.relayapp.im/v1/socket-connections \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{}'
-```
-
-The response contains a short-lived, one-use URL:
-
-```json
-{
-  "url": "wss://api.relayapp.im/v1/socket?ticket=<one-use-ticket>",
-  "expires_at": "2026-08-29T06:30:00.000Z",
-  "subprotocol": "relay.v1.json"
-}
-```
-
-Connect with the returned `relay.v1.json` subprotocol. Do not place the Agent
-Token in the WebSocket URL.
-
-## Use the TypeScript SDK
-
-The maintained SDK reconnects with a fresh ticket and ACKs only after your
-callback resolves:
+## TypeScript SDK
 
 ```typescript
 import Relay from "@relayapp/sdk";
 
-const relay = new Relay({ apiKey: process.env.RELAY_AGENT_TOKEN! });
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+});
 
 await relay.socketMode.run({
   onEvent: async (event) => {
@@ -56,104 +31,39 @@ await relay.socketMode.run({
 });
 ```
 
-`inbox.insertOnce` must commit durably and deduplicate by `event_id`.
+The SDK requests fresh one-use tickets, reconnects with jitter, and sends a cumulative ACK only after `onEvent` resolves.
 
-## Receive frames
+## Create a connection manually
 
-Relay first sends:
-
-```json
-{
-  "type": "ready",
-  "connection_id": "01993d50-ef7b-7b37-886b-23fd80c7ec10",
-  "acked_through": "41",
-  "heartbeat_interval_ms": 30000,
-  "max_in_flight": 64
-}
+```bash
+curl -sS -X POST https://api.relayapp.im/v1/socket-connections \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}'
 ```
 
-Each event contains the same envelope used by webhooks:
+Connect to `url` with the returned `relay.v1.json` subprotocol.
 
-```json
-{
-  "type": "event",
-  "sequence": "42",
-  "event": {
-    "api_version": "v1",
-    "webhook_version": "2026-02-03",
-    "event_type": "message.received",
-    "event_id": "01993d50-ef7b-7b37-886b-23fd80c7ec11",
-    "created_at": "2026-08-29T06:20:00.000Z",
-    "trace_id": "29fd436572794080aaf70855b64c69b0",
-    "agent_id": "01993d50-d2a8-7fe2-8b76-9eaf04816377",
-    "data": {}
-  }
-}
-```
+## Acceptance rule
 
-## ACK after durable storage
-
-**ACK means every event through that sequence is committed to your durable
-inbox.**
+**Commit every event through the sequence before ACK.**
 
 ```json
 {"type":"ack","through_sequence":"42"}
 ```
 
-The ACK is cumulative and monotonic.
+ACK does not mean bytes received, handler started, model completed, reply sent, or Message Read.
 
-| Signal | Advances Delivered |
-| --- | :---: |
-| WebSocket bytes received | No |
-| Heartbeat pong | No |
-| Handler started | No |
-| Durable inbox commit followed by ACK | Yes |
-| Model completed | No |
-| Reply sent | No |
+## Recovery
 
-Relay rejects an ACK above the highest sequence sent on that connection.
-Duplicate or lower ACKs are safe no-ops.
-
-## Recover after disconnect
-
-1. Request a new one-use connection URL.
-2. Read `acked_through` from the `ready` frame.
+1. Request a fresh ticket.
+2. Read `acked_through` from `ready`.
 3. Deduplicate replayed events by `event_id`.
-4. Continue committing and cumulatively acknowledging.
+4. Commit and ACK in order.
 
-Relay stores the checkpoint. The client cannot submit a cursor that skips
-unaccepted events.
+One active connection is allowed per agent. A new connection replaces the old one.
 
-## Connection rules
+## Related
 
-| Rule | Behavior |
-| --- | --- |
-| Active consumers | One per agent |
-| New connection | Fences the previous connection |
-| Backpressure | Relay sends no more than `max_in_flight` unacknowledged events |
-| Heartbeat | Native WebSocket ping/pong only |
-| Replies | Idempotent REST Message API |
-| Agent Token revoked | Ticket and active connection become invalid |
-
-## Review with an agent
-
-**Audit Socket Mode without confusing ACK with processing completion.**
-
-```text
-Audit this Relay Socket Mode consumer without changing code.
-
-1. Read the current Relay Socket Mode guide and OpenAPI.
-2. Prove it requests a one-use URL with an Agent Token and connects with relay.v1.json.
-3. Prove event_id is committed with a uniqueness constraint before ACK.
-4. Prove ACK is cumulative through_sequence and never sent on receipt or handler start.
-5. Prove reconnect requests a new ticket and safely processes replay.
-6. Prove replies use REST with an idempotency key.
-7. Report Check | Status | file:line evidence | Fix.
-8. Mark anything unproved as unknown.
-```
-
-## Next steps
-
-- [Inspect event fields](/reference/events)
-- [Send a reply](/guides/sending-messages)
-- [Understand receipts](/guides/read-receipts)
+- [Protocol reference](/guides/socket-mode-protocol)
+- [Choose a transport](/guides/webhooks/choose-transport)

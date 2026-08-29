@@ -1,0 +1,50 @@
+---
+title: "Webhook delivery"
+description: "Handle webhook retries, duplicates, timeouts, and terminal failures."
+keywords: ["webhook retries", "at least once", "timeout", "deduplication"]
+---
+
+Relay delivers webhooks at least once.
+
+## Delivery policy
+
+| Setting | Value |
+| --- | ---: |
+| Response timeout | 10 seconds |
+| Maximum attempts | 10 |
+| Backoff | Exponential with jitter, capped at 10 minutes |
+| Duplicate delivery | Possible |
+
+## Retried
+
+- HTTP `429`
+- HTTP `5xx`
+- Connection timeout
+- Connection failure
+
+Ordinary HTTP `4xx` responses are terminal.
+
+## Receiver pattern
+
+```text
+verify signature
+  → insert event_id if absent
+  → commit durable inbox
+  → return 2xx
+  → process asynchronously
+```
+
+If the backend commits but the response is lost, Relay retries. The duplicate must return success without repeating side effects.
+
+## Terminal state
+
+After the tenth failed attempt, Relay marks the delivery dead. The event ID and frozen request body do not change across attempts.
+
+## Delivered meaning
+
+For `message.received`, Relay marks the agent recipient Delivered only after a successful response. The backend contract requires that the event was committed durably before that response.
+
+## Related
+
+- [Best practices](/getting-started/best-practices)
+- [Idempotency](/guides/platform/idempotency)

@@ -45,7 +45,6 @@ Then follow the shape for the page type:
 | Task guide | Outcome sentence → prerequisites → first runnable `curl` → real response → failure and retry behavior → `Next steps` |
 | Concept | Definition and ownership boundary → smallest wire example → lifecycle and invariants → `See also` |
 | Reference | Canonical shape first → field, limit, and error tables → `See also` |
-| Status | Mark tables, not narrative |
 
 ## Write for an agent operator
 
@@ -54,8 +53,8 @@ Then follow the shape for the page type:
 - Relay is the messenger. The developer's external backend is the agent brain.
   Keep that boundary explicit.
 - Use `https://api.relayapp.im` and `$RELAY_AGENT_TOKEN` in examples.
-- Show raw HTTPS and JSON before any abstraction. Do not imply a maintained SDK,
-  framework, model provider, or host.
+- Show raw HTTPS and JSON before the maintained TypeScript SDK. Do not imply
+  an unsupported framework, model provider, or host.
 - Prefer `curl -sS` with exact headers, status codes, and idempotency behavior.
 - Use `Idempotency-Key` or `message.idempotency_key` exactly as the current
   OpenAPI allows. Reuse the same value and request after an uncertain send.
@@ -102,21 +101,6 @@ of them.
 | `<Tip>` | A recommendation or better path |
 | `<Check>` | Confirming a successful outcome |
 | `<Warning>` | Real breakage, security, or data-loss risk |
-
-## Status marks
-
-Availability and status tables use a mark in the first column, because Relay
-distinguishes five states and a mark reads faster than five words.
-
-| Mark | Means |
-| :---: | --- |
-| ✅ | Supported, or production-proved |
-| 🔵 | Available in developer preview: the route and schema exist |
-| ⚠️ | Conditional, limited, or proved locally but not shipped |
-| ⏳ | Specified, coming later |
-| ❌ | Not available |
-
-Center mark columns with `| :---: |`.
 
 ## Never hand-write endpoint pages
 

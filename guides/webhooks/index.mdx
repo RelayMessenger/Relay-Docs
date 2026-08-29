@@ -1,0 +1,78 @@
+---
+title: "Webhooks"
+description: "Receive signed Relay agent events at an HTTPS endpoint."
+keywords: ["webhooks", "Standard Webhooks", "signature", "events"]
+---
+
+Webhooks deliver agent events to an HTTPS endpoint you control.
+
+## Flow
+
+```text
+Relay event → signed HTTP POST → verify → durable insert → 2xx → process
+```
+
+## Create a subscription
+
+```bash
+curl -sS -X POST https://api.relayapp.im/v1/webhook-subscriptions \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "target_url":"https://agent.example/webhooks/relay",
+    "subscribed_events":[
+      "message.received",
+      "message.delivered",
+      "message.read",
+      "reaction.added",
+      "reaction.removed"
+    ]
+  }'
+```
+
+Save `signing_secret` from the `201` response. Relay returns it once.
+
+## Verify the signature
+
+Relay uses Standard Webhooks headers:
+
+| Header | Use |
+| --- | --- |
+| `webhook-id` | Stable event ID |
+| `webhook-timestamp` | Unix timestamp in seconds |
+| `webhook-signature` | `v1,<base64-signature>` |
+
+Verify the exact raw body before parsing JSON.
+
+<Tabs>
+  <Tab title="TypeScript SDK">
+    ```typescript
+    const event = relay.webhooks.unwrap(rawBody, {
+      headers: request.headers,
+    });
+    ```
+  </Tab>
+  <Tab title="Signing input">
+    ```text
+    webhook-id.webhook-timestamp.raw-body
+    ```
+  </Tab>
+</Tabs>
+
+## Acknowledge safely
+
+<Steps>
+  <Step title="Verify">Reject invalid signatures before parsing.</Step>
+  <Step title="Deduplicate">Insert `event_id` under a unique constraint.</Step>
+  <Step title="Commit">Save the exact event or a durable job.</Step>
+  <Step title="Respond">Return `200` or `204` within 10 seconds.</Step>
+  <Step title="Process">Run tools, model work, and replies after acknowledgement.</Step>
+</Steps>
+
+A successful `message.received` response marks that agent recipient Delivered.
+
+## Related
+
+- [Subscriptions](/guides/webhooks/subscriptions)
+- [Webhook events](/guides/webhooks/events)
+- [Delivery and retries](/guides/webhooks/delivery)

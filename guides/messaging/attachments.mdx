@@ -1,0 +1,75 @@
+---
+title: "Attachments"
+description: "Allocate, upload, send, download, and delete Relay Attachments."
+keywords: ["Attachment", "upload", "media", "100 MB"]
+---
+
+Pre-upload files when you need trusted ownership, metadata, reuse, or files larger than 10 MB.
+
+## 1. Create an upload
+
+```bash
+curl -sS -X POST https://api.relayapp.im/v1/attachments \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filename":"report.pdf",
+    "content_type":"application/pdf",
+    "size_bytes":48291
+  }'
+```
+
+The response contains an `attachment_id`, signed upload URL, HTTP method, exact required headers, and expiration time.
+
+## 2. Upload the raw bytes
+
+```bash
+curl -sS -X PUT "$UPLOAD_URL" \
+  -H "Content-Type: application/pdf" \
+  -H "Content-Length: 48291" \
+  --data-binary @report.pdf
+```
+
+Do not use multipart form data. The body length and Content-Type must match the allocation.
+
+## 3. Send the Attachment
+
+```json
+{
+  "message": {
+    "parts": [{
+      "type": "media",
+      "attachment_id": "01993d50-d263-7d6b-87ce-90aba89b7815"
+    }]
+  }
+}
+```
+
+## Media metadata
+
+| Field | Applies to |
+| --- | --- |
+| `duration_ms` | Audio and video |
+| `width`, `height` | Image and video |
+| `filename` | Every Attachment |
+| `content_type` | Every Attachment |
+| `size_bytes` | Every Attachment |
+
+Width and height must be supplied together.
+
+## Limits
+
+| Boundary | Value |
+| --- | ---: |
+| Allocation size | 1 byte to 100 MB |
+| Public HTTPS URL import | Up to 10 MB |
+| Media parts per Message | 40 |
+
+## Ownership
+
+Only the Contact that allocated an Attachment can read, delete, or send it before it becomes part of a Message. Signed transfer URLs are capabilities; keep them out of logs.
+
+## Related
+
+- [Voice memos](/guides/messaging/voice-memos)
+- [Sending Messages](/guides/messaging/sending-messages)

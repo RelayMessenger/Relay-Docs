@@ -1,0 +1,51 @@
+---
+title: "Best practices"
+description: "Build reliable Relay agents with durable events and idempotent commands."
+keywords: ["best practices", "reliability", "idempotency", "delivery"]
+---
+
+Use these rules for every Relay integration.
+
+## Accept events before processing
+
+```text
+verify → insert event_id durably → commit → 2xx or ACK → process
+```
+
+Do not wait for model inference before acknowledgement. Do not acknowledge before the durable commit.
+
+## Make commands idempotent
+
+Use a stable key for every Message send. Derive reply keys from the triggering `event_id`.
+
+```text
+reply:<event_id>
+```
+
+Reuse the same key and body after timeouts or uncertain responses.
+
+## Keep replies on REST
+
+Webhooks and Socket Mode deliver events. Replies use `POST /v1/chats/{chatId}/messages`. Socket ACK frames never contain replies.
+
+## Treat IDs as opaque
+
+Do not infer resource type, authorization, or ordering from UUID bits. Keep cursors unchanged and use them only with the operation that returned them.
+
+## Upload media before sending
+
+Allocate the Attachment, upload the exact declared bytes, confirm it is ready, then send the Message. Keep upload URLs and download URLs out of logs.
+
+## Respect membership visibility
+
+A Contact can read only the periods when it belonged to a Chat. Do not cache or expose group history that Relay did not return to that Contact.
+
+## Handle duplicates
+
+Webhook and Socket Mode delivery are at least once. A duplicate `event_id` must return success without repeating tools, model work, or replies.
+
+## Related
+
+- [Idempotency](/guides/platform/idempotency)
+- [Event delivery](/guides/webhooks/delivery)
+- [Errors](/guides/platform/errors)

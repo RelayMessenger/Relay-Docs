@@ -1,0 +1,135 @@
+---
+title: "Quickstart"
+description: "Connect an agent, receive one Message, and send one reply."
+keywords: ["quickstart", "Agent Token", "webhook", "Socket Mode"]
+---
+
+Connect an agent backend and reply to one user Message.
+
+## Prerequisites
+
+- An agent created in [Relay Console](https://console.relayapp.im)
+- The Agent Token shown when you create it
+- A durable database or queue for incoming events
+- Either a public HTTPS endpoint or an always-on process
+
+## 1. Set your credentials
+
+```bash
+export RELAY_API_URL="https://api.relayapp.im"
+export RELAY_AGENT_TOKEN="<agent-token>"
+```
+
+Confirm the token:
+
+```bash
+curl -sS "$RELAY_API_URL/v1/contact_card" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+## 2. Install an SDK (optional)
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```bash
+    npm install @relayapp/sdk
+    ```
+  </Tab>
+  <Tab title="cURL">
+    No installation is required.
+  </Tab>
+</Tabs>
+
+## 3. Choose how events arrive
+
+<Tabs>
+  <Tab title="Webhook">
+    ```bash
+    curl -sS -X POST "$RELAY_API_URL/v1/webhook-subscriptions" \
+      -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "target_url": "https://agent.example/webhooks/relay",
+        "subscribed_events": ["message.received"]
+      }'
+    ```
+
+    Save `signing_secret` from the response. Relay returns it once.
+  </Tab>
+  <Tab title="Socket Mode">
+    ```bash
+    curl -sS -X PUT "$RELAY_API_URL/v1/socket-mode" \
+      -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{"mode":"socket"}'
+    ```
+
+    Then run the [Socket Mode consumer](/guides/socket-mode).
+  </Tab>
+</Tabs>
+
+## 4. Accept the Message durably
+
+<Steps>
+  <Step title="Authenticate the event">
+    Verify the webhook signature, or connect with a one-use Socket Mode ticket.
+  </Step>
+  <Step title="Deduplicate">
+    Insert `event_id` under a unique constraint.
+  </Step>
+  <Step title="Commit">
+    Save the event to a durable inbox before acknowledging it.
+  </Step>
+  <Step title="Acknowledge">
+    Return `2xx` for a webhook, or ACK `through_sequence` in Socket Mode.
+  </Step>
+  <Step title="Process">
+    Run the model after acknowledgement, then send the reply through REST.
+  </Step>
+</Steps>
+
+**Acknowledgement means durable acceptance, not model completion.**
+
+## 5. Mark Read and reply
+
+```bash
+curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/read" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+
+curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: reply-$EVENT_ID" \
+  --data-binary @- <<JSON
+{
+  "message": {
+    "parts": [{"type":"text","value":"Tomorrow at 2:00 PM works."}],
+    "reply_to": {"message_id":"$MESSAGE_ID","part_index":0}
+  }
+}
+JSON
+```
+
+## 6. Review your integration with an agent
+
+**Copy this prompt into your coding agent for a read-only audit.**
+
+<CodeGroup>
+```text Audit Relay integration
+Audit this Relay integration without changing code.
+
+1. Read https://docs.relayapp.im/llms.txt and the current Relay OpenAPI first.
+2. Locate Agent Token authentication and the webhook or Socket Mode receiver.
+3. Prove event_id is committed under a uniqueness rule before 2xx or ACK.
+4. Prove model work happens after acknowledgement.
+5. Prove replies use POST /v1/chats/{chatId}/messages with a stable idempotency key.
+6. Report Check | Status | file:line evidence | Fix.
+7. Mark anything you cannot prove as unknown.
+```
+</CodeGroup>
+
+## Next steps
+
+- [Authentication](/getting-started/authentication)
+- [Sending Messages](/guides/messaging/sending-messages)
+- [Webhooks or Socket Mode](/guides/webhooks/choose-transport)

@@ -1,19 +1,34 @@
-# Relay docs
+# Relay Docs
 
-Minimal developer documentation for Relay dev.
+Public developer documentation for Relay.
 
-`api-reference/openapi.yaml` must be a byte-identical copy of the canonical
-Relay Server developer contract.
+The site follows one information architecture:
+
+```text
+Getting started
+Messaging
+Chats
+Webhooks and Socket Mode
+Platform
+Resources
+API Reference
+```
+
+`api-reference/openapi.yaml` is byte-identical to the Relay Server contract.
+
+## Validate
 
 ```bash
 python3 scripts/sync-current-contract.py
-scripts/check-openapi-sync.sh /path/to/contracts/developer/openapi.yaml
+scripts/check-openapi-sync.sh ../_worktrees/Relay-Server-local/contracts/developer/openapi.yaml
 scripts/build-mint-openapi.sh
-python3 -m json.tool docs.json > /dev/null
 python3 scripts/validate-docs.py
-npx --yes @redocly/cli@latest lint api-reference/openapi.yaml
-npx --yes mint@4.2.831 broken-links
-npx --yes mint@4.2.831 validate
+npx --yes mint@latest broken-links
+npx --yes mint@latest validate
 ```
 
-Preview with `npx --yes mint@4.2.831 dev` at `http://localhost:3000`. Mintlify publishes from `main`; `dev` remains local until separately merged.
+## Preview
+
+```bash
+npx --yes mint@latest dev
+```
