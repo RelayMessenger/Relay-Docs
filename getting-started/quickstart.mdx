@@ -20,29 +20,38 @@ export RELAY_API_URL="https://api.relayapp.im"
 export RELAY_AGENT_TOKEN="<agent-token>"
 ```
 
-Confirm the token:
-
-```bash
-curl -sS "$RELAY_API_URL/v1/contact_card" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-```
-
-## 2. Add the SDK (optional)
+## 2. Choose the SDK or HTTPS
 
 <Tabs>
-  <Tab title="TypeScript">
+  <Tab title="TypeScript SDK">
     ```bash
     npm install @relayapp/sdk
     ```
+
+    ```typescript
+    import Relay from "@relayapp/sdk";
+
+    const relay = new Relay({
+      apiKey: process.env.RELAY_AGENT_TOKEN!,
+    });
+    ```
   </Tab>
   <Tab title="cURL">
-    Continue with the HTTPS examples below.
+    Use `$RELAY_API_URL` and `$RELAY_AGENT_TOKEN` from step 1.
   </Tab>
 </Tabs>
 
 ## 3. Create a webhook subscription
 
-```bash
+<CodeGroup>
+```typescript TypeScript SDK
+const subscription = await relay.webhookSubscriptions.create({
+  target_url: "https://agent.example/webhooks/relay",
+  subscribed_events: ["message.received"],
+});
+```
+
+```bash cURL
 curl -sS -X POST "$RELAY_API_URL/v1/webhook-subscriptions" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
@@ -51,6 +60,7 @@ curl -sS -X POST "$RELAY_API_URL/v1/webhook-subscriptions" \
     "subscribed_events":["message.received"]
   }'
 ```
+</CodeGroup>
 
 Save `signing_secret` from the response. Relay returns it once.
 
@@ -91,9 +101,38 @@ Save `signing_secret` from the response. Relay returns it once.
 Relay retries `429`, `5xx`, timeouts, and connection failures. Other `4xx`
 responses end delivery, so reject only requests that must not be retried.
 
+The SDK verifies and unwraps the unmodified body:
+
+```typescript
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+  webhookSecret: process.env.RELAY_WEBHOOK_SECRET!,
+});
+
+const event = relay.webhooks.unwrap(rawBody, {
+  headers: request.headers,
+});
+
+await inbox.insertOnce(event.event_id, event);
+return new Response(null, { status: 204 });
+```
+
 ## 5. Mark Read and reply
 
-```bash
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.chats.markAsRead(chatId);
+
+await relay.chats.messages.send(chatId, {
+  message: {
+    parts: [{ type: "text", value: "Tomorrow at 2:00 PM works." }],
+    reply_to: { message_id: messageId, part_index: 0 },
+    idempotency_key: `reply-${eventId}`,
+  },
+});
+```
+
+```bash cURL
 curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/read" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 
@@ -110,6 +149,7 @@ curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/messages" \
 }
 JSON
 ```
+</CodeGroup>
 
 ## Review with an agent
 
@@ -133,6 +173,7 @@ Audit this Relay integration without changing code.
 ## Next steps
 
 - [Authentication](/getting-started/authentication)
+- [Client SDKs](/getting-started/sdks)
 - [Sending Messages](/guides/messaging/sending-messages)
 - [Webhooks](/guides/webhooks)
 - [WebSocket](/guides/websocket)

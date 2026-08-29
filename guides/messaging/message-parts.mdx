@@ -1,0 +1,87 @@
+---
+title: "Message Parts"
+description: "Build ordered text, media, and link parts for a Relay Message."
+keywords: ["Message parts", "text part", "media part", "link part"]
+---
+
+Every outbound Message contains 1 to 100 ordered `parts`.
+
+## Part types
+
+| Type | Required content | Use |
+| --- | --- | --- |
+| `text` | `value` | Plain text and one optional structured mention |
+| `media` | `attachment_id` or HTTPS `url` | Image, video, audio, or document |
+| `link` | `value` | One URL rendered as a rich preview |
+
+### Text
+
+```json
+{
+  "type": "text",
+  "value": "Relay accepted the request."
+}
+```
+
+Text must contain 1 to 10,000 UTF-16 code units. A mention adds `mention` and
+`mention_range`; read [Mentions](/guides/messaging/mentions) before calculating
+that range.
+
+### Media
+
+Reference one completed Relay Attachment:
+
+```json
+{
+  "type": "media",
+  "attachment_id": "01993d50-d263-7d6b-87ce-90aba89b7815"
+}
+```
+
+For public files up to 10 MB, use one HTTPS URL instead:
+
+```json
+{
+  "type": "media",
+  "url": "https://cdn.example.com/photo.webp"
+}
+```
+
+Use exactly one of `attachment_id` or `url`.
+
+### Link
+
+```json
+{
+  "type": "link",
+  "value": "https://relayapp.im"
+}
+```
+
+**A link must be the only part in its Message.** Put a URL inside a text part
+when it should remain ordinary text.
+
+## Ordering and composition
+
+`part_index` is the zero-based position in the array. Replies and reactions
+use it to target one exact part.
+
+Text and media may be mixed in order. Consecutive text parts are rejected;
+combine adjacent text into one part. A link must remain the only part in its
+Message.
+
+## Response-only parts
+
+Relay can return `type: "system"` for visible Chat history such as membership
+or group metadata changes. A developer cannot send a system part.
+
+Response parts can also contain current `reactions`. Media responses add the
+Attachment ID, opaque download URL, filename, MIME type, size, and available
+dimensions or duration.
+
+## Related
+
+- [Sending Messages](/guides/messaging/sending-messages)
+- [Message Details](/guides/messaging/message-details)
+- [Attachments](/guides/messaging/attachments)
+- [Rich Link Previews](/guides/messaging/rich-link-previews)

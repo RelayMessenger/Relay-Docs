@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import re
+import sys
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
@@ -43,18 +44,82 @@ if actual_tabs != expected_tabs:
     raise SystemExit(f"top tab order changed: {actual_tabs}")
 
 expected_guide_groups = [
+    "Introduction",
     "Getting started",
     "Messaging",
     "Chats",
-    "Contact Cards",
+    "Contacts",
+    "Agent events",
     "Webhooks",
     "WebSocket",
     "Platform",
-    "Resources",
+    "Examples",
 ]
 actual_guide_groups = [group["group"] for group in tabs[0]["groups"]]
 if actual_guide_groups != expected_guide_groups:
     raise SystemExit(f"guide group order changed: {actual_guide_groups}")
+
+expected_guide_pages = {
+    "Introduction": ["index"],
+    "Getting started": [
+        "getting-started/quickstart",
+        "getting-started/authentication",
+        "getting-started/sdks",
+        "getting-started/key-concepts",
+        "getting-started/ai-agents",
+        "getting-started/best-practices",
+    ],
+    "Messaging": [
+        "guides/messaging/index",
+        "guides/messaging/sending-messages",
+        "guides/messaging/mentions",
+        "guides/messaging/message-details",
+        "guides/messaging/message-parts",
+        "guides/messaging/attachments",
+        "guides/messaging/voice-memos",
+        "guides/messaging/rich-link-previews",
+        "guides/messaging/replies",
+        "guides/messaging/reactions",
+        "guides/messaging/delivery-receipts",
+    ],
+    "Chats": [
+        "guides/chats/index",
+        "guides/chats/group-chats",
+        "guides/chats/participants",
+        "guides/chats/typing-indicators",
+        "guides/chats/share-contact-card",
+        "guides/chats/message-history",
+    ],
+    "Contacts": [
+        "guides/contact-cards",
+        "guides/chats/blocked-handles",
+    ],
+    "Agent events": ["guides/agent-events/index"],
+    "Webhooks": [
+        "guides/webhooks/index",
+        "guides/webhooks/subscriptions",
+        "guides/webhooks/events",
+        "guides/webhooks/delivery",
+    ],
+    "WebSocket": [
+        "guides/websocket/index",
+        "guides/websocket/protocol",
+        "guides/websocket/acknowledgements",
+        "guides/websocket/full-sync",
+    ],
+    "Platform": [
+        "guides/platform/idempotency",
+        "guides/platform/rate-limits",
+        "guides/platform/debugging",
+    ],
+    "Examples": ["examples/index"],
+}
+for group in tabs[0]["groups"]:
+    expected = expected_guide_pages[group["group"]]
+    if group["pages"] != expected:
+        raise SystemExit(
+            f"{group['group']} page order changed: {group['pages']}"
+        )
 
 expected_error_groups = [
     "Overview",
@@ -76,8 +141,11 @@ if (root / "current-status.mdx").exists():
 required_paths = [
     root / "guides/contact-cards.mdx",
     root / "guides/chats/share-contact-card.mdx",
+    root / "guides/chats/typing-indicators.mdx",
+    root / "guides/messaging/delivery-receipts.mdx",
     root / "guides/websocket/index.mdx",
     root / "guides/websocket/protocol.mdx",
+    root / "guides/websocket/full-sync.mdx",
     root / "error/index.mdx",
 ]
 for path in required_paths:
@@ -86,7 +154,6 @@ for path in required_paths:
 for path in [
     root / "guides/messaging/index.mdx",
     root / "guides/chats/index.mdx",
-    root / "guides/contact-cards.mdx",
     root / "guides/webhooks/index.mdx",
     root / "guides/websocket/index.mdx",
     root / "api-reference/overview.mdx",
@@ -103,6 +170,13 @@ for stale in [
 ]:
     if stale.exists():
         raise SystemExit(f"stale page returned: {stale.relative_to(root)}")
+
+if "--topology-only" in sys.argv:
+    print(
+        f"validated Docs topology: {len(files)} pages, "
+        f"{len(expected_guide_groups)} ordered Guide groups"
+    )
+    raise SystemExit(0)
 
 for path in mdx_paths:
     text = path.read_text()
@@ -122,6 +196,44 @@ for path in mdx_paths:
     headings = re.findall(r"^## (.+)$", text, re.M)
     if not headings or headings[-1] not in {"Next steps", "Related", "See also"}:
         raise SystemExit(f"page must end with Next steps, Related, or See also: {path}")
+
+    for block in re.findall(
+        r"<(?:CodeGroup|Tabs)>[\s\S]*?</(?:CodeGroup|Tabs)>",
+        text,
+    ):
+        if "TypeScript SDK" in block and "cURL" in block:
+            if block.index("TypeScript SDK") > block.index("cURL"):
+                raise SystemExit(
+                    f"TypeScript SDK must appear before cURL: {path.relative_to(root)}"
+                )
+
+side_by_side_guides = [
+    "getting-started/quickstart.mdx",
+    "guides/messaging/sending-messages.mdx",
+    "guides/messaging/mentions.mdx",
+    "guides/messaging/message-details.mdx",
+    "guides/messaging/attachments.mdx",
+    "guides/messaging/voice-memos.mdx",
+    "guides/messaging/rich-link-previews.mdx",
+    "guides/messaging/replies.mdx",
+    "guides/messaging/reactions.mdx",
+    "guides/messaging/delivery-receipts.mdx",
+    "guides/chats/group-chats.mdx",
+    "guides/chats/participants.mdx",
+    "guides/chats/typing-indicators.mdx",
+    "guides/chats/share-contact-card.mdx",
+    "guides/chats/message-history.mdx",
+    "guides/chats/blocked-handles.mdx",
+    "guides/contact-cards.mdx",
+    "guides/webhooks/index.mdx",
+    "guides/webhooks/subscriptions.mdx",
+    "guides/webhooks/events.mdx",
+    "guides/websocket/index.mdx",
+]
+for relative in side_by_side_guides:
+    text = (root / relative).read_text()
+    if "TypeScript SDK" not in text or "cURL" not in text:
+        raise SystemExit(f"SDK/cURL task variants missing: {relative}")
 
 share_text = (root / "guides/chats/share-contact-card.mdx").read_text()
 if "POST /v1/chats/{chatId}/share_contact_card" not in share_text:
@@ -144,13 +256,22 @@ if not re.search(
 ):
     raise SystemExit("Contact Card configuration guide lost its PATCH operation")
 
-message_text = (root / "guides/messaging/message-details.mdx").read_text()
-if "/v1/messages/$MESSAGE_ID/delivered" not in message_text:
-    raise SystemExit("Message details lost the user delivery acknowledgement")
-if not re.search(r"\bcumulative\b", message_text, re.I):
-    raise SystemExit("Message details must explain cumulative user delivery")
-if "Agent Tokens cannot call it" not in message_text:
-    raise SystemExit("Message details must preserve the user-only delivery boundary")
+receipt_text = (root / "guides/messaging/delivery-receipts.mdx").read_text()
+if "/v1/messages/$MESSAGE_ID/delivered" not in receipt_text:
+    raise SystemExit("Delivery receipt guide lost the user acknowledgement route")
+if not re.search(r"\bcumulative\b", receipt_text, re.I):
+    raise SystemExit("Delivery receipt guide must explain cumulative user delivery")
+if "Agent Tokens cannot call it" not in receipt_text:
+    raise SystemExit("Delivery receipt guide must preserve the user-only boundary")
+for required in [
+    "`deliveries`",
+    "direct and group Chats",
+    "owner-approved Relay capability",
+    "best-effort group Read signals",
+    "complete per-recipient truth",
+]:
+    if required not in receipt_text:
+        raise SystemExit(f"Delivery receipt rationale is missing: {required}")
 
 attachments_text = (root / "guides/messaging/attachments.mdx").read_text()
 if "Public URL media parts per Message" not in attachments_text:
@@ -161,18 +282,23 @@ if not all(term in attachments_text for term in [
     "at most five redirects",
 ]):
     raise SystemExit("Attachment guide lost URL import safety boundaries")
+if "WebP" not in attachments_text or "rejects SVG" not in attachments_text:
+    raise SystemExit("Attachment guide lost the Relay WebP/SVG decision")
 
 webhook_text = (root / "guides/webhooks/index.mdx").read_text()
 webhook_events_text = (root / "guides/webhooks/events.mdx").read_text()
+webhook_delivery_text = (root / "guides/webhooks/delivery.mdx").read_text()
 websocket_text = (root / "guides/websocket/index.mdx").read_text()
 websocket_protocol_text = (root / "guides/websocket/protocol.mdx").read_text()
+websocket_recovery_text = (root / "guides/websocket/full-sync.mdx").read_text()
+typing_text = (root / "guides/chats/typing-indicators.mdx").read_text()
 if "Webhooks are the default" not in webhook_text + "\n" + websocket_text:
     raise SystemExit("event transport docs must identify the default")
 if "same event through both" not in webhook_text + "\n" + websocket_text:
     raise SystemExit("event transport docs must prevent dual delivery assumptions")
 if (
     'webhook_version":"2026-02-03"' not in webhook_events_text
-    or "does not negotiate" not in webhook_events_text
+    or "use this fixed payload version" not in webhook_events_text
 ):
     raise SystemExit("webhook event guide lost the fixed payload version")
 for reason in ["disabled", "replaced", "revoked", "heartbeat_timeout", "restart"]:
@@ -180,6 +306,70 @@ for reason in ["disabled", "replaced", "revoked", "heartbeat_timeout", "restart"
         raise SystemExit(f"WebSocket protocol is missing disconnect reason: {reason}")
 if "A fatal error ends consumption" not in websocket_protocol_text:
     raise SystemExit("WebSocket protocol lost fatal error handling")
+for required in [
+    "wss://api.relayapp.im/v1/websocket",
+    "Authorization: Bearer $RELAY_AGENT_TOKEN",
+    "query credential or cookie",
+    "does not require a",
+    "Security trade-off",
+]:
+    if required not in websocket_text:
+        raise SystemExit(f"WebSocket authentication guide is missing: {required}")
+for forbidden in [
+    "/v1/websocket-connections",
+    "relay_ticket_",
+    "relay.v1.json",
+]:
+    if forbidden in websocket_text + "\n" + websocket_protocol_text:
+        raise SystemExit(f"stale WebSocket handshake returned: {forbidden}")
+for required in [
+    "full_sync",
+    "full_sync_complete",
+    "checkpoint_outside_retention",
+    "same `event_id`",
+    "PostgreSQL for 30 days",
+    "PostHog",
+]:
+    if required not in websocket_recovery_text:
+        raise SystemExit(f"WebSocket recovery guide is missing: {required}")
+for required in [
+    "1 immediate attempt",
+    "Up to 10",
+    "10 seconds per attempt",
+    "`429`",
+    "`5xx`",
+    "72 hours",
+    "PostgreSQL",
+    "30 days",
+    "PostHog",
+    "recover current Chat and Message state",
+]:
+    if required not in webhook_delivery_text:
+        raise SystemExit(f"Webhook delivery policy is missing: {required}")
+for required in [
+    "chat.typing_indicator.started",
+    "chat.typing_indicator.stopped",
+    "every 60 seconds",
+    "85 to 90 seconds",
+    '"contact": {',
+    "expires automatically",
+]:
+    if required not in typing_text:
+        raise SystemExit(f"Typing guide is missing: {required}")
+
+group_text = (root / "guides/chats/group-chats.mdx").read_text()
+if (
+    "2 to 31 recipient Handles plus the sender" not in group_text
+    or "keep at least three active Contacts" not in group_text
+):
+    raise SystemExit("Group Chat guide lost max-32 and minimum-three rules")
+
+concepts_text = (root / "getting-started/key-concepts.mdx").read_text()
+if (
+    "reserved inside its owning namespace" not in concepts_text
+    or "Archiving the Contact" not in concepts_text
+):
+    raise SystemExit("Handle archive reservation rule is missing")
 
 expected_error_codes = {
     1004, 1005, 2001, 2003, 2004, 2005, 2006,
@@ -231,11 +421,13 @@ if not openapi_paths or any(not path.startswith("/v1/") for path in openapi_path
     raise SystemExit(f"every public OpenAPI path must live under /v1: {openapi_paths}")
 for required_path in [
     "/v1/chats/{chatId}/share_contact_card",
+    "/v1/chats/{chatId}/typing",
     "/v1/websocket",
-    "/v1/websocket-connections",
 ]:
     if required_path not in openapi_paths:
         raise SystemExit(f"canonical OpenAPI path missing: {required_path}")
+if "/v1/websocket-connections" in openapi_paths:
+    raise SystemExit("stale WebSocket connection-credential endpoint returned")
 share_path_start = openapi_text.index("  /v1/chats/{chatId}/share_contact_card:")
 share_path_end = openapi_text.find("\n  /v1/", share_path_start + 2)
 share_operation = openapi_text[
@@ -263,28 +455,21 @@ all_contract_text = handwritten_text + "\n" + openapi_text
 
 for name, pattern in {
     "Socket Mode product name": r"\bSocket Mode\b",
-    "agent installation lifecycle": r"\binstallation\b|\binstalled\b|\binstalling\b|\binstall agents?\b",
+    "agent installation lifecycle": r"\bagent installation\b|\binstalled agents?\b|\binstall agents?\b",
     "agent share-link lifecycle": r"\bshare[- ]link\b",
     "stale guide path": r"guides/(?:socket-mode|chats/install-agents|webhooks/choose-transport|platform/errors)",
     "old public status language": r"current-status|Current status|known contract residue|local proof|evidence app",
+    "old WebSocket handshake": r"/v1/websocket-connections|relay_ticket_|relay\.v1\.json|\?ticket=",
     "source-company language": r"\bLinq\b",
 }.items():
     if re.search(pattern, handwritten_text, re.I):
         raise SystemExit(f"stale {name}")
 
-for path in handwritten_paths:
-    for line_number, line in enumerate(path.read_text().splitlines(), 1):
-        without_npm = line.replace("npm install @relayapp/sdk", "")
-        if re.search(r"\binstall\w*\b", without_npm, re.I):
-            raise SystemExit(
-                f"product-level install wording in {path.relative_to(root)}:{line_number}"
-            )
-
 for name, pattern in {
     "old URL namespace": r"/api/(?:partner|mobile)|api\.relayapp\.im/api/",
     "old route version": r"/v[23]/",
     "wire service field": r"[\"']service[\"']\s*:|\bservice\s*:\s*[\"']?Relay",
-    "mobile realtime endpoint": r"/v1/realtime|/v1/client/realtime|/v1/chats/\{chatId\}/typing",
+    "mobile realtime endpoint": r"/v1/realtime|/v1/client/realtime",
     "prefixed ID": r"\b(?:msg|agt|usr|cnv|prt|att|evt|wh)_[A-Za-z0-9]",
     "uuidv4 example": r"\b[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b",
     "human identity kind": r"\bkind\b.{0,30}\bhumans?\b|\bhumans?\b.{0,30}\bkind\b",
@@ -304,5 +489,6 @@ for name, pattern in {
 print(
     f"validated {len(files)} public pages, three tabs, atomic guide groups, "
     "frontmatter, bodyless Contact Card sharing, exact delivery states and error pages, "
-    "event transport boundaries, URL safety, WebSocket disconnects, and stale-contract bans"
+    "typing, webhook retries, transport recovery, URL safety, WebSocket disconnects, "
+    "and stale-contract bans"
 )

@@ -1,0 +1,108 @@
+---
+title: "Delivery receipts"
+description: "Read aggregate and per-recipient Delivered and Read state for direct and group Chats."
+keywords: ["delivery receipts", "Delivered", "Read", "message deliveries"]
+---
+
+Every Message response includes aggregate state and one receipt row for each
+recipient.
+
+## Response fields
+
+| Field | Meaning |
+| --- | --- |
+| `delivery_status` | Aggregate `sent`, `delivered`, or `read` state |
+| `delivered_at` | Time every recipient reached Delivered, or `null` |
+| `read_at` | Time every recipient reached Read, or `null` |
+| `deliveries` | Independent Delivered and Read times for each recipient |
+
+```json
+{
+  "delivery_status": "delivered",
+  "delivered_at": "2026-08-29T06:20:04.000Z",
+  "read_at": null,
+  "deliveries": [
+    {
+      "contact": {
+        "id": "01993d50-ef7b-7b37-886b-23fd80c7ec10",
+        "handle": "alice",
+        "kind": "user",
+        "joined_at": "2026-08-29T06:19:00.000Z"
+      },
+      "delivered_at": "2026-08-29T06:20:04.000Z",
+      "read_at": null
+    }
+  ]
+}
+```
+
+**The aggregate state advances only after every recipient in the original
+audience reaches that state.** Read implies Delivered.
+
+## Delivered boundaries
+
+| Recipient | Delivered means |
+| --- | --- |
+| User | The device durably applied the Message and acknowledged its sync |
+| Webhook agent | The backend durably accepted the event and returned `2xx` |
+| WebSocket agent | The backend durably accepted the event and cumulatively ACKed its sequence |
+
+Delivery does not mean that an agent finished model work, sent a reply, or
+marked the Chat Read.
+
+## Acknowledge user delivery
+
+A user client acknowledges after it durably applies an incoming Message.
+
+<CodeGroup>
+```typescript TypeScript SDK
+const userRelay = new Relay({ apiKey: relayUserSession });
+await userRelay.messages.acknowledgeDelivered(messageId);
+```
+
+```bash cURL
+curl -sS -X POST \
+  "https://api.relayapp.im/v1/messages/$MESSAGE_ID/delivered" \
+  -H "Authorization: Bearer $RELAY_USER_SESSION"
+```
+</CodeGroup>
+
+**The acknowledgement is cumulative through `MESSAGE_ID` for that user and
+Chat.** It covers earlier incoming Messages in the same Chat, but not later
+Messages or another Chat.
+
+The route returns `204` and is safe to repeat. Agent Tokens cannot call it.
+Agent delivery advances through the selected webhook or WebSocket transport.
+
+## Mark Read
+
+<CodeGroup>
+```typescript TypeScript SDK
+await userRelay.chats.markAsRead(chatId);
+```
+
+```bash cURL
+curl -sS -X POST \
+  "https://api.relayapp.im/v1/chats/$CHAT_ID/read" \
+  -H "Authorization: Bearer $RELAY_USER_SESSION"
+```
+</CodeGroup>
+
+## Direct and group presentation
+
+The Relay iOS app shows Delivered and Read labels only in direct Chats. It
+does not show successful receipt labels in groups. Developers can still read
+every group recipient's state from the Message API.
+
+<Info>
+  This is an owner-approved Relay capability. Apple-backed systems can surface
+  best-effort group Read signals without reliable recipient attribution. Relay
+  controls each user device and agent delivery endpoint, so it can provide
+  complete per-recipient truth for direct and group Chats.
+</Info>
+
+## Related
+
+- [Message details](/guides/messaging/message-details)
+- [Webhook delivery](/guides/webhooks/delivery)
+- [WebSocket protocol](/guides/websocket/protocol)

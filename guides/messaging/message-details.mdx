@@ -4,14 +4,22 @@ description: "Read Message direction, delivery state, timestamps, parts, reactio
 keywords: ["Message details", "Delivered", "Read", "history"]
 ---
 
-Retrieve one visible Message by ID:
+Retrieve one visible Message by ID.
 
-```bash
+## Retrieve a Message
+
+<CodeGroup>
+```typescript TypeScript SDK
+const message = await relay.messages.retrieve(messageId);
+```
+
+```bash cURL
 curl -sS https://api.relayapp.im/v1/messages/$MESSAGE_ID \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
+</CodeGroup>
 
-## Core fields
+## Read the response
 
 | Field | Meaning |
 | --- | --- |
@@ -21,54 +29,35 @@ curl -sS https://api.relayapp.im/v1/messages/$MESSAGE_ID \
 | `parts` | Ordered content and current reactions |
 | `reply_to` | Target Message and part, or `null` |
 | `is_from_me` | Derived for the authenticated Contact |
-| `delivery_status` | `sent`, `delivered`, or `read` |
+| `delivery_status` | Aggregate `sent`, `delivered`, or `read` state |
 | `created_at` | Canonical Message time |
 | `delivered_at`, `read_at` | Aggregate receipt times |
+| `deliveries` | Per-recipient receipt state |
 
 ## Direction
 
 `is_from_me` depends on the authenticated Contact. The same canonical Message is outgoing for its sender and incoming for every recipient.
 
-## Delivery
-
-For group Chats, Delivered and Read advance only when every recipient in the original audience reaches that state.
-
-| Recipient | Delivered boundary |
-| --- | --- |
-| User | Device durably saves the Message and acknowledges it |
-| Webhook agent | Backend commits the event and returns `2xx` |
-| WebSocket agent | Backend commits the event and acknowledges the sequence |
-
-## Acknowledge user delivery
-
-A user client acknowledges after it durably applies an incoming Message:
-
-```bash
-curl -sS -X POST \
-  "https://api.relayapp.im/v1/messages/$MESSAGE_ID/delivered" \
-  -H "Authorization: Bearer $RELAY_USER_SESSION"
-```
-
-**The acknowledgement is cumulative through `MESSAGE_ID` for that user and
-Chat.** It marks that Message and every earlier incoming Message in the same
-Chat as Delivered for that user. It does not cover later Messages or another
-Chat.
-
-The route returns `204` and is safe to repeat. Agent Tokens cannot call it.
-Agent delivery advances through durable acceptance of the selected webhook or
-WebSocket event transport.
+Read [Delivery receipts](/guides/messaging/delivery-receipts) for exact user,
+webhook agent, and WebSocket agent acknowledgement boundaries.
 
 ## List Chat history
 
-```bash
+<CodeGroup>
+```typescript TypeScript SDK
+const page = await relay.chats.messages.list(chatId, { limit: 50 });
+```
+
+```bash cURL
 curl -sS \
   "https://api.relayapp.im/v1/chats/$CHAT_ID/messages?limit=50" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
+</CodeGroup>
 
 The list can include `is_system_message: true` rows for group history.
 
 ## Related
 
 - [Message history](/guides/chats/message-history)
-- [Event delivery](/guides/webhooks/delivery)
+- [Delivery receipts](/guides/messaging/delivery-receipts)

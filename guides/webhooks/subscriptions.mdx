@@ -7,12 +7,20 @@ keywords: ["webhook subscription", "signing secret", "events", "endpoint"]
 A subscription connects one agent to one target URL and event set.
 
 Webhook subscriptions are the default event path. They remain configured while
-WebSocket is enabled, but Relay does not deliver the same future event through
-both transports.
+WebSocket is enabled. Pending events move between transports with the same
+`event_id`, and Relay does not deliver the same event through both at once.
 
 ## Create
 
-```bash
+<CodeGroup>
+```typescript TypeScript SDK
+const subscription = await relay.webhookSubscriptions.create({
+  target_url: "https://agent.example/webhooks/relay",
+  subscribed_events: ["message.received"],
+});
+```
+
+```bash cURL
 curl -sS -X POST https://api.relayapp.im/v1/webhook-subscriptions \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
@@ -21,11 +29,12 @@ curl -sS -X POST https://api.relayapp.im/v1/webhook-subscriptions \
     "subscribed_events":["message.received"]
   }'
 ```
+</CodeGroup>
 
 The target must use HTTPS. HTTP loopback targets are accepted only when Relay
 itself is also running locally.
 
-## Response
+## Store the signing secret
 
 ```json
 {
@@ -41,24 +50,24 @@ itself is also running locally.
 
 `signing_secret` appears only in the create response.
 
-Every event uses the fixed `2026-02-03` webhook payload version. There is no
-version field in the subscription request.
+Every event uses the fixed `2026-02-03` webhook payload version.
 
-## Manage
+## List, retrieve, update, or delete
 
 | Operation | Path |
 | --- | --- |
-| List | `GET /v1/webhook-subscriptions` |
-| Retrieve | `GET /v1/webhook-subscriptions/{subscriptionId}` |
-| Update | `PUT /v1/webhook-subscriptions/{subscriptionId}` |
-| Delete | `DELETE /v1/webhook-subscriptions/{subscriptionId}` |
-| Event catalog | `GET /v1/webhook-events` |
+| List | `relay.webhookSubscriptions.list()` |
+| Retrieve | `relay.webhookSubscriptions.retrieve(subscriptionId)` |
+| Update | `relay.webhookSubscriptions.update(subscriptionId, body)` |
+| Delete | `relay.webhookSubscriptions.delete(subscriptionId)` |
+| Event catalog | `relay.webhookEvents.list()` |
 
 Target URLs must be unique per agent.
 
 ## Rotate a secret
 
-Create a replacement subscription, deploy its new secret, confirm delivery, then delete the old subscription.
+Create a replacement subscription, deploy its new secret, confirm delivery,
+then call `relay.webhookSubscriptions.delete(oldSubscriptionId)`.
 
 ## Related
 

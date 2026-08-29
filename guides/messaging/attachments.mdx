@@ -8,7 +8,16 @@ Pre-upload files when you need trusted ownership, metadata, reuse, or files larg
 
 ## 1. Create an upload
 
-```bash
+<CodeGroup>
+```typescript TypeScript SDK
+const allocation = await relay.attachments.create({
+  filename: "report.pdf",
+  content_type: "application/pdf",
+  size_bytes: bytes.byteLength,
+});
+```
+
+```bash cURL
 curl -sS -X POST https://api.relayapp.im/v1/attachments \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
@@ -18,6 +27,7 @@ curl -sS -X POST https://api.relayapp.im/v1/attachments \
     "size_bytes":48291
   }'
 ```
+</CodeGroup>
 
 The response contains an `attachment_id`, signed upload URL, HTTP method, exact required headers, and expiration time.
 
@@ -37,43 +47,81 @@ The response contains an `attachment_id`, signed upload URL, HTTP method, exact 
 
 ## 2. Upload the raw bytes
 
-```bash
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.attachments.upload(allocation, bytes);
+```
+
+```bash cURL
 curl -sS -X PUT "$UPLOAD_URL" \
   -H "Content-Type: application/pdf" \
   -H "Content-Length: 48291" \
   --data-binary @report.pdf
 ```
+</CodeGroup>
 
 Do not use multipart form data. The body length and Content-Type must match the allocation.
 
 ## 3. Send the Attachment
 
-```json
-{
-  "message": {
-    "parts": [{
-      "type": "media",
-      "attachment_id": "01993d50-d263-7d6b-87ce-90aba89b7815"
-    }]
-  }
-}
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.chats.messages.send(chatId, {
+  message: {
+    parts: [{
+      type: "media",
+      attachment_id: allocation.attachment_id,
+    }],
+  },
+});
 ```
+
+```bash cURL
+curl -sS -X POST "https://api.relayapp.im/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message":{
+      "parts":[{
+        "type":"media",
+        "attachment_id":"01993d50-d263-7d6b-87ce-90aba89b7815"
+      }]
+    }
+  }'
+```
+</CodeGroup>
 
 ## Import a public media URL
 
 For files up to 10 MB, a `media` part can use a public HTTPS URL instead of a
 pre-uploaded Attachment:
 
-```json
-{
-  "message": {
-    "parts": [{
-      "type": "media",
-      "url": "https://cdn.yourdomain.com/report.pdf"
-    }]
-  }
-}
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.chats.messages.send(chatId, {
+  message: {
+    parts: [{
+      type: "media",
+      url: "https://cdn.yourdomain.com/report.pdf",
+    }],
+  },
+});
 ```
+
+```bash cURL
+curl -sS -X POST "https://api.relayapp.im/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message":{
+      "parts":[{
+        "type":"media",
+        "url":"https://cdn.yourdomain.com/report.pdf"
+      }]
+    }
+  }'
+```
+</CodeGroup>
 
 Relay imports the bytes into an owned Attachment before committing the
 Message.
@@ -101,6 +149,17 @@ these checks.
 | `size_bytes` | Every Attachment |
 
 Width and height must be supplied together.
+
+## Image formats
+
+Relay accepts raster image formats including JPEG, PNG, GIF, HEIC, TIFF, BMP,
+and WebP. Relay rejects SVG.
+
+<Info>
+  This is a Relay content-safety decision. Reference material disagreed about
+  SVG support, so Relay chose one explicit rule: accept WebP raster bytes and
+  avoid SVG's additional active-content and renderer surface.
+</Info>
 
 ## Limits
 

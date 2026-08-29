@@ -1,0 +1,86 @@
+---
+title: "Agent Events"
+sidebarTitle: "Overview"
+description: "Choose one durable transport for incoming Relay agent events."
+keywords: ["agent events", "webhooks", "WebSocket", "event_id"]
+---
+
+Agent events notify an agent backend about Messages, receipts, reactions,
+membership, Chat metadata, and typing.
+
+## Choose a transport
+
+| Transport | Best for | Acceptance |
+| --- | --- | --- |
+| Webhooks | Serverless or request-driven backends | Durable commit, then HTTP `2xx` |
+| WebSocket | Always-on backends | Durable commit, then cumulative ACK |
+
+Webhooks are the default. WebSocket is optional and agent-only.
+
+**Relay sends each event through one selected transport, not both.** Pending
+events move to the newly selected transport with the same `event_id`.
+
+## Shared envelope
+
+Both transports carry the same event envelope:
+
+```json
+{
+  "api_version": "v1",
+  "webhook_version": "2026-02-03",
+  "event_type": "message.received",
+  "event_id": "01993d50-4133-7178-8e16-7c1455c91d43",
+  "created_at": "2026-08-29T06:20:00.000Z",
+  "trace_id": "b923d71e50be43ba9e0fe1e34a7676c2",
+  "agent_id": "01993d50-d2a8-7fe2-8b76-9eaf04816377",
+  "data": {}
+}
+```
+
+Store `event_id` under a unique constraint before acceptance. At-least-once
+delivery means a replay can contain the same ID and frozen body.
+
+## Switch transports
+
+Use `PUT /v1/websocket`:
+
+| Body | Selected transport |
+| --- | --- |
+| `{"enabled":true}` | WebSocket |
+| `{"enabled":false}` | Active webhook subscriptions |
+
+Enabling WebSocket waits for an in-flight webhook request to finish. Returning
+to webhooks requires an active subscription for every pending event type.
+Either condition can return `409`.
+
+## Recovery
+
+Use ordinary Chat and Message reads for authoritative state after a gap.
+Webhook operators can redrive a dead delivery from Relay Console for 72 hours.
+A stale WebSocket checkpoint uses the documented FULL sync flow.
+
+## Review with an agent
+
+**Audit one event transport and its durable acceptance boundary.** Copy this
+prompt into your coding agent.
+
+```text
+You are auditing a codebase that receives Relay agent events.
+
+This is read-only. Do not change code unless I ask.
+
+1. Read https://docs.relayapp.im/llms.txt, Agent Events, and the current Relay OpenAPI.
+2. Identify whether the agent selects webhooks or WebSocket.
+3. Locate event_id deduplication, the durable inbox commit, 2xx or cumulative ACK, and reply idempotency.
+4. Prove transport switching preserves event_id and cannot run both consumers.
+5. Prove recovery uses Relay REST reads or the documented FULL sync flow, never an invented polling endpoint.
+6. Report Check | Status | file:line evidence | Fix.
+7. Mark anything you cannot prove as unknown.
+```
+
+## Related
+
+- [Webhooks](/guides/webhooks)
+- [WebSocket](/guides/websocket)
+- [Webhook Event Types](/guides/webhooks/events)
+- [Idempotency](/guides/platform/idempotency)

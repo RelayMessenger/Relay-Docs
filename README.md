@@ -26,13 +26,11 @@ API Reference
 python3 scripts/sync-current-contract.py
 scripts/check-openapi-sync.sh ../_worktrees/Relay-Server-local/contracts/developer/openapi.yaml
 scripts/build-mint-openapi.sh
-python3 scripts/validate-docs.py
-npx --yes mint@4.2.831 broken-links
-npx --yes mint@4.2.831 validate
+npm run validate
 ```
 
 ## Preview
 
 ```bash
-npx --yes mint@4.2.831 dev
+npm run dev
 ```

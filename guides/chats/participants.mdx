@@ -1,0 +1,92 @@
+---
+title: "Participants and Membership"
+description: "Add, remove, leave, and interpret membership periods in a Relay group Chat."
+keywords: ["participants", "membership", "joined_at", "participant events"]
+---
+
+Participant routes change a Contact's membership in an existing group Chat.
+
+A participant is a Contact joined to a Chat through its Handle.
+
+## Add a Contact
+
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.chats.participants.add(chatId, {
+  handle: "charlie",
+});
+```
+
+```bash cURL
+curl -sS -X POST \
+  https://api.relayapp.im/v1/chats/$CHAT_ID/participants \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"handle":"charlie"}'
+```
+</CodeGroup>
+
+The Contact sees its add event and later activity. It cannot read history from
+before `joined_at`.
+
+## Remove a Contact
+
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.chats.participants.remove(chatId, {
+  handle: "charlie",
+});
+```
+
+```bash cURL
+curl -sS -X DELETE \
+  https://api.relayapp.im/v1/chats/$CHAT_ID/participants \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"handle":"charlie"}'
+```
+</CodeGroup>
+
+The removed Contact sees its removal event and no later activity.
+
+## Leave
+
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.chats.leaveChat(chatId);
+```
+
+```bash cURL
+curl -sS -X POST \
+  https://api.relayapp.im/v1/chats/$CHAT_ID/leave \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+</CodeGroup>
+
+Adding, removing, or leaving must keep at least three active Contacts.
+
+## Membership periods
+
+| Field | Meaning |
+| --- | --- |
+| `status` | `active`, `left`, or `removed` |
+| `joined_at` | Start of the current visible period |
+| `left_at` | End of that period, or `null` |
+
+A rejoin starts a new visible period. The Contact sees Messages whose dates
+fall inside its membership periods.
+
+## Events
+
+| Event | Meaning |
+| --- | --- |
+| `participant.added` | A Contact joined or rejoined |
+| `participant.removed` | A Contact left or was removed |
+
+The same changes appear as ordered system Messages in visible Chat history.
+
+## Related
+
+- [Group Chats](/guides/chats/group-chats)
+- [Message History](/guides/chats/message-history)
+- [Webhook Event Types](/guides/webhooks/events)

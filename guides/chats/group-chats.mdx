@@ -1,86 +1,99 @@
 ---
 title: "Group Chats"
-description: "Create groups, manage Contacts, and update group names and photos."
-keywords: ["group Chat", "participants", "group photo", "membership"]
+description: "Create a Relay group Chat and update its name or photo."
+keywords: ["group Chat", "group name", "group photo", "32 Contacts"]
 ---
 
 A group Chat has at least three and at most 32 active Contacts.
 
 ## Create a group
 
-```json
-{
-  "from": "echo.acme",
-  "to": ["alice", "bob"],
-  "message": {
-    "parts": [{"type":"text","value":"Group created."}]
-  }
-}
+`POST /v1/chats` accepts 2 to 31 recipient Handles plus the sender.
+
+<CodeGroup>
+```typescript TypeScript SDK
+const group = await relay.chats.create({
+  from: "echo.acme",
+  to: ["alice", "bob"],
+  message: {
+    parts: [{ type: "text", value: "Group created." }],
+    idempotency_key: crypto.randomUUID(),
+  },
+});
 ```
 
-Send this body to `POST /v1/chats`.
-
-## Add a Contact
-
-```bash
-curl -sS -X POST \
-  https://api.relayapp.im/v1/chats/$CHAT_ID/participants \
+```bash cURL
+curl -sS -X POST https://api.relayapp.im/v1/chats \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"handle":"charlie"}'
+  -H "Idempotency-Key: $IDEMPOTENCY_KEY" \
+  -d '{
+    "from":"echo.acme",
+    "to":["alice","bob"],
+    "message":{
+      "parts":[{"type":"text","value":"Group created."}]
+    }
+  }'
 ```
+</CodeGroup>
 
-The Contact sees the add event and later activity, not earlier history.
+## Limits
 
-## Remove a Contact
-
-```bash
-curl -sS -X DELETE \
-  https://api.relayapp.im/v1/chats/$CHAT_ID/participants \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"handle":"charlie"}'
-```
-
-The removed Contact sees its removal event and no later activity.
-
-## Leave a group
-
-```bash
-curl -sS -X POST \
-  https://api.relayapp.im/v1/chats/$CHAT_ID/leave \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-```
+- A group starts with the sender plus 2 to 31 recipient Contacts.
+- A group has at most 32 active Contacts.
+- Removing or leaving must keep at least three active Contacts.
 
 ## Rename the group
 
-```bash
-curl -sS -X PUT https://api.relayapp.im/v1/chats/$CHAT_ID \
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.chats.update(chatId, {
+  display_name: "Weekend plans",
+});
+```
+
+```bash cURL
+curl -sS -X PUT "https://api.relayapp.im/v1/chats/$CHAT_ID" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"display_name":"Weekend plans"}'
 ```
+</CodeGroup>
 
 ## Set a group photo
 
 Upload an image Attachment, then pass its ID:
 
-```json
-{"group_chat_icon":"01993d50-d263-7d6b-87ce-90aba89b7815"}
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.chats.update(chatId, {
+  group_chat_icon: attachmentId,
+});
 ```
 
-Relay accepts only a completed image Attachment owned by the acting Contact. The Chat response returns a signed URL, not the Attachment ID.
+```bash cURL
+curl -sS -X PUT "https://api.relayapp.im/v1/chats/$CHAT_ID" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"group_chat_icon":"01993d50-d263-7d6b-87ce-90aba89b7815"}'
+```
+</CodeGroup>
 
-## Events
+Relay accepts only a completed image Attachment owned by the acting Contact.
+The Chat response returns a signed URL, not the Attachment ID.
+
+## Group metadata events
 
 | Event | Meaning |
 | --- | --- |
-| `participant.added` | Contact joined or rejoined |
-| `participant.removed` | Contact left or was removed |
 | `chat.group_name_updated` | Group name changed |
 | `chat.group_icon_updated` | Group photo changed |
 
+Membership changes have their own routes, visibility rules, and events.
+
 ## Related
 
+- [Participants and Membership](/guides/chats/participants)
+- [Typing Indicators](/guides/chats/typing-indicators)
 - [Mentions](/guides/messaging/mentions)
-- [Message history](/guides/chats/message-history)
+- [Delivery Receipts](/guides/messaging/delivery-receipts)
