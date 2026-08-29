@@ -1,0 +1,125 @@
+---
+title: "WebSocket protocol"
+description: "Reference Relay WebSocket frames, sequences, acknowledgements, heartbeats, and disconnects."
+keywords: ["WebSocket protocol", "ready frame", "event frame", "ACK"]
+---
+
+Relay WebSocket connections use the `relay.v1.json` subprotocol.
+
+## Ready frame
+
+Relay sends `ready` after the connection opens:
+
+```json
+{
+  "type":"ready",
+  "connection_id":"01993d50-ef7b-7b37-886b-23fd80c7ec10",
+  "acked_through":"41",
+  "heartbeat_interval_ms":30000,
+  "max_in_flight":64
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `connection_id` | ID for this connection |
+| `acked_through` | Highest sequence Relay has durably accepted |
+| `heartbeat_interval_ms` | Expected ping and pong interval |
+| `max_in_flight` | Maximum unacknowledged events on this connection |
+
+## Event frame
+
+```json
+{
+  "type":"event",
+  "sequence":"42",
+  "event": {
+    "api_version":"v1",
+    "webhook_version":"2026-02-03",
+    "event_id":"01993d50-ef7b-7b37-886b-23fd80c7ec11",
+    "event_type":"message.received",
+    "created_at":"2026-08-29T06:20:00.000Z",
+    "trace_id":"b923d71e50be43ba9e0fe1e34a7676c2",
+    "agent_id":"01993d50-d2a8-7fe2-8b76-9eaf04816377",
+    "data": {}
+  }
+}
+```
+
+Sequences are decimal strings scoped to one receiving agent. Relay sends events oldest first, and a replay can repeat an `event_id`.
+
+## Acknowledgement frame
+
+```json
+{"type":"ack","through_sequence":"42"}
+```
+
+**ACK is cumulative and monotonic.** Before acknowledging sequence `42`, commit every event through `42`.
+
+An ACK above the highest sequence Relay sent returns `ack_out_of_range`.
+
+## Error frame
+
+```json
+{
+  "type":"error",
+  "code":"stale_connection",
+  "message":"This connection was replaced.",
+  "fatal":true,
+  "retryable":false
+}
+```
+
+| Field | Action |
+| --- | --- |
+| `code` | Stable machine-readable error name |
+| `message` | Diagnostic explanation |
+| `fatal` | Stop using the current connection when `true` |
+| `retryable` | Whether the same condition can use a fresh ticket |
+
+**A fatal error ends consumption on that connection.** Inspect `code` before
+requesting another ticket. Correct an authentication, configuration, or
+competing-consumer problem first, and use backoff after a Relay server failure.
+
+| Code | Retry |
+| --- | --- |
+| `invalid_frame` | Correct the client frame; do not retry it unchanged |
+| `ack_out_of_range` | Correct the ACK; do not retry it unchanged |
+| `stale_connection` | Stop the replaced or invalid connection |
+| `ack_failed` | Request a fresh ticket and resume with backoff |
+| `delivery_failed` | Request a fresh ticket and resume with backoff |
+
+`ack_failed` and `delivery_failed` are fatal for the current connection but
+carry `retryable: true`. The other protocol errors carry `retryable: false`.
+
+## Backpressure
+
+Relay pauses delivery when the connection reaches `ready.max_in_flight` unacknowledged events. A cumulative ACK opens the next window.
+
+## Heartbeats
+
+Relay uses native WebSocket ping and pong frames. Heartbeats prove connection liveness and do not acknowledge events.
+
+## Disconnects
+
+| Reason | Action |
+| --- | --- |
+| `disabled` | Stop and reconnect only after WebSocket delivery is enabled |
+| `replaced` | Stop the previous consumer and do not reconnect it |
+| `revoked` | Stop, restore a valid Agent Token, then request a new ticket |
+| `heartbeat_timeout` | Request a fresh ticket and reconnect with backoff |
+| `restart` | Request a fresh ticket and reconnect with backoff |
+
+Close code `1011` is a transient Relay delivery-state failure, and `1012` is a
+Relay restart. Request a fresh ticket and reconnect with exponential backoff
+and jitter. Codes `4401`, `4408`, and `4409` mean invalid or disabled
+credentials, heartbeat timeout, and replacement respectively.
+
+## Replies
+
+Send replies through `POST /v1/chats/{chatId}/messages` with an idempotency key. ACK frames contain no reply payload.
+
+## Related
+
+- [WebSocket](/guides/websocket)
+- [Best practices](/getting-started/best-practices)

@@ -1,0 +1,114 @@
+---
+title: "WebSocket"
+sidebarTitle: "Overview"
+description: "Receive Relay agent events over one durable WebSocket connection."
+keywords: ["WebSocket", "agent events", "ACK", "replay"]
+---
+
+Use WebSocket as the alternate event delivery path for an always-on agent
+backend that maintains an outbound connection.
+
+Webhooks are the default. Enabling WebSocket routes future agent events to the
+WebSocket and bypasses webhook subscriptions, so Relay does not deliver the
+same event through both transports.
+
+## Select WebSocket delivery
+
+```bash
+curl -sS -X PUT https://api.relayapp.im/v1/websocket \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled":true}'
+```
+
+This selection applies to future agent events. Set `enabled` to `false` to
+return future delivery to active webhook subscriptions.
+
+**Relay rejects disable with `409` while WebSocket events remain
+unacknowledged.** Reconnect, durably accept the backlog, ACK it, and then
+disable. This prevents a transport change from stranding accepted events.
+
+## Request a connection ticket
+
+```bash
+curl -sS -X POST https://api.relayapp.im/v1/websocket-connections \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+The response contains a short-lived, one-use `url`. Open that URL with the `relay.v1.json` WebSocket subprotocol.
+
+```json
+{
+  "url":"wss://api.relayapp.im/v1/websocket?ticket=relay_ticket_<secret>",
+  "expires_at":"2026-08-29T06:21:00.000Z",
+  "subprotocol":"relay.v1.json"
+}
+```
+
+**Keep the Agent Token in the HTTPS request. Do not place it in the WebSocket URL.**
+
+## Accept an event
+
+<Steps>
+  <Step title="Read the event">
+    Read the `event` frame and its decimal `sequence`.
+  </Step>
+  <Step title="Deduplicate">
+    Insert `event.event_id` under a unique constraint.
+  </Step>
+  <Step title="Commit">
+    Save the event or durable job before acknowledging it.
+  </Step>
+  <Step title="Acknowledge">
+    Send one cumulative ACK through the highest committed sequence.
+  </Step>
+  <Step title="Process">
+    Run model work and send replies through REST after the ACK.
+  </Step>
+</Steps>
+
+```json
+{"type":"ack","through_sequence":"42"}
+```
+
+**An ACK means durable acceptance.** It does not mean the handler started, the model finished, a reply was sent, or the Chat was marked Read.
+
+## Reconnect safely
+
+1. Request a fresh one-use ticket.
+2. Read `acked_through` from the new `ready` frame.
+3. Deduplicate replayed events by `event_id`.
+4. Commit and acknowledge events in sequence order.
+
+Relay permits one active WebSocket connection per agent. A new connection replaces the previous connection.
+
+Stop the old consumer when it receives `disconnect` with `reason:
+"replaced"`. Do not let it reconnect and compete with the replacement.
+
+## Review with an agent
+
+**Audit a WebSocket consumer for replay-safe acknowledgements.** Copy this
+prompt into your coding agent.
+
+```text
+You are auditing a codebase that consumes Relay WebSocket events.
+
+This is read-only. Do not change code unless I ask.
+
+1. Read https://docs.relayapp.im/llms.txt, the WebSocket guides, and the current Relay OpenAPI.
+2. Locate ticket creation, subprotocol selection, event persistence, deduplication, cumulative ACK, reconnect, and reply code.
+3. Prove the Agent Token is sent only to HTTPS and the one-use ticket URL is treated as a secret.
+4. Prove every event at or below through_sequence is durably committed before the ACK.
+5. Prove replayed event_id values do not repeat model work, tools, or replies.
+6. Prove disabled, replaced, revoked, heartbeat_timeout, restart, and server close codes each have an explicit stop or reconnect path.
+7. Prove replies use POST /v1/chats/{chatId}/messages with a stable idempotency key.
+8. Report Check | Status | file:line evidence | Fix.
+9. Mark anything you cannot prove as unknown.
+```
+
+## Related
+
+- [WebSocket protocol](/guides/websocket/protocol)
+- [Idempotency](/guides/platform/idempotency)

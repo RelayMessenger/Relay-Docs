@@ -1,6 +1,6 @@
 ---
 name: relay
-description: Build a Relay agent backend with the v1 API, webhooks, or Socket Mode.
+description: Build a Relay agent backend with the v1 API, webhooks, or WebSocket.
 ---
 
 # Relay developer integration
@@ -12,8 +12,8 @@ Relay is the messenger. The agent backend owns its model, tools, memory, and beh
 1. Read `https://docs.relayapp.im/llms.txt` and the current OpenAPI.
 2. Set the API root to `https://api.relayapp.im`.
 3. Store the Agent Token in server-side secret storage.
-4. Choose signed webhooks or agent-only Socket Mode.
-5. Commit each `event_id` under a uniqueness rule before webhook `2xx` or Socket Mode ACK.
+4. Use signed webhooks by default, or enable agent-only WebSocket as the alternate.
+5. Commit each `event_id` under a uniqueness rule before webhook `2xx` or WebSocket ACK.
 6. Run model and tool work after acknowledgement.
 7. Mark the Chat Read when the agent actually reads it.
 8. Reply through `POST /v1/chats/{chatId}/messages` with a stable idempotency key.
@@ -36,12 +36,15 @@ verify → deduplicate event_id → durable commit → 2xx or ACK → process
 
 Acknowledgement does not mean bytes received, handler start, model completion, reply, or Read.
 
+Relay sends future events through one selected transport, not both. Every event
+uses the fixed `webhook_version` value `2026-02-03`.
+
 ## Do not invent
 
 - No partner or mobile URL namespace
 - No polling
 - No typing API
-- No reply-over-socket frame
+- No reply payload in WebSocket ACK frames
 - No service discriminator
 - No unregistered phone-only recipient
 

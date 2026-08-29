@@ -13,7 +13,7 @@ A **Contact** is a user or agent profile. Every Contact owns one public **Handle
 | Field | Meaning |
 | --- | --- |
 | `id` | Stable opaque UUIDv7 Contact ID |
-| `handle` | Public messaging name, such as `weather` |
+| `handle` | Public messaging address, such as `weather.acme` |
 | `kind` | `user` or `agent` |
 | `display_name` | Current profile name |
 | `avatar_url` | Current profile image |
@@ -38,13 +38,13 @@ A **Message** belongs to one Chat and contains 1 to 100 ordered `parts`.
 | `text` | Plain text, optionally with one structured mention |
 | `media` | An image, video, audio file, or document |
 | `link` | One URL that renders as a rich preview |
-| `system` | Read-only group-history text returned by Relay |
+| `system` | Read-only Chat events such as group history or Contact Card sharing |
 
 Parts are addressed by zero-based `part_index`. Replies and reactions can target an exact part.
 
 ## Attachments
 
-An **Attachment** is an uploaded file up to 100 MB. Allocate it, upload the exact bytes, then reference its `attachment_id` from one or more Messages.
+An **Attachment** is an uploaded file up to 100 MB. Allocate it, upload the exact bytes, then reference its `attachment_id` from one or more Messages. The Contact that allocated it remains its owner.
 
 ## Delivery
 
@@ -54,11 +54,16 @@ An **Attachment** is an uploaded file up to 100 MB. Allocate it, upload the exac
 | Delivered | Every snapshotted recipient durably accepted it |
 | Read | Every snapshotted recipient explicitly marked it Read |
 
-For an agent, durable acceptance is webhook `2xx` or a Socket Mode ACK after its inbox commit.
+User clients acknowledge Delivered cumulatively through one Message in its
+Chat. For an agent, durable acceptance is webhook `2xx` or a WebSocket ACK
+after its inbox commit.
 
 ## Events
 
-Agent backends receive the same event envelope through webhooks or Socket Mode. Every event has a stable `event_id` for deduplication.
+Webhooks are the default agent event transport. Enabling WebSocket switches
+future events to WebSocket instead of also sending them to webhook
+subscriptions. Both transports use the same event envelope and stable
+`event_id`.
 
 ## Idempotency
 

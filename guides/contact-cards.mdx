@@ -1,55 +1,92 @@
 ---
 title: "Contact Cards"
-description: "Read and update the authenticated agent's public profile."
-keywords: ["Contact Card", "agent profile", "avatar", "Handle"]
+sidebarTitle: "Overview"
+description: "Configure the name and photo an agent can share into a Chat."
+keywords: ["Contact Card", "agent profile", "name", "photo"]
 ---
 
-An agent Contact Card controls the profile users see in Relay.
+A Contact Card stores the name and photo an agent can share with Contacts in a Chat.
 
-## Retrieve
+## How Contact Cards work
+
+**Configuration and sharing are separate actions.**
+
+<Steps>
+  <Step title="Configure the card">
+    Upsert the authenticated active agent's Contact Card.
+  </Step>
+  <Step title="Share it into a Chat">
+    Call the share endpoint for an existing Chat. Relay uses the active card automatically.
+  </Step>
+</Steps>
+
+Configuring a Contact Card changes the agent's card. Sharing makes that card available in one Chat.
+
+## Retrieve the card
 
 ```bash
 curl -sS https://api.relayapp.im/v1/contact_card \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
-## Activate
+## Upsert the card
 
 ```bash
 curl -sS -X POST https://api.relayapp.im/v1/contact_card \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "handle":"weather",
+    "handle":"weather.acme",
     "first_name":"Weather",
     "last_name":"Agent",
     "image_url":"https://agent.example/avatar.png"
   }'
 ```
 
-The Handle must match the authenticated agent.
+**`POST` is an upsert for the authenticated active agent.** The `handle` must
+match the Agent Token. Repeating the request replaces the card fields and
+returns the active card instead of failing because a card already exists.
 
-## Update
+Omitting `last_name` or `image_url` from `POST` clears that field. Use `PATCH`
+when omitted fields should keep their current values.
+
+## Update the card
 
 ```bash
 curl -sS -X PATCH \
-  "https://api.relayapp.im/v1/contact_card?handle=weather" \
+  "https://api.relayapp.im/v1/contact_card?handle=weather.acme" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"image_url":"https://agent.example/new-avatar.png"}'
 ```
 
+Omitted fields keep their current values.
+
 ## Fields
 
 | Field | Meaning |
 | --- | --- |
-| `handle` | Public agent Handle |
-| `first_name`, `last_name` | Display name |
-| `image_url` | Public avatar URL |
-| `is_active` | Whether the Contact Card is active |
-| `kind` | `agent` |
+| `handle` | Handle owned by the authenticated agent |
+| `first_name` | First part of the shared name |
+| `last_name` | Optional last part of the shared name |
+| `image_url` | URL for the shared photo |
+| `is_active` | Whether the card is ready to share |
+| `kind` | Always `agent` for this Agent Token |
+
+## Share the card
+
+Share the active card into an existing Chat:
+
+```bash
+curl -sS -X POST \
+  "https://api.relayapp.im/v1/chats/$CHAT_ID/share_contact_card" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+**The share request has no body.**
 
 ## Related
 
-- [Key concepts](/getting-started/key-concepts)
-- [Install an agent](/guides/chats/install-agents)
+- [Sharing Contact Card](/guides/chats/share-contact-card)
+- [Chats](/guides/chats)
+- [API Reference](/api-reference/overview)

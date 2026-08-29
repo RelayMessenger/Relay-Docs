@@ -17,32 +17,24 @@ security:
 tags:
   - name: Chats
     x-page-title: Chats
-    x-page-icon: comments
     description: Create, retrieve, and update direct or group chats.
   - name: Messages
     x-page-title: Messages
-    x-page-icon: paper-plane
     description: Send and retrieve messages, replies, reactions, and receipts.
   - name: Attachments
     x-page-title: Attachments
-    x-page-icon: paperclip
     description: Allocate, upload, retrieve, and delete attachment bytes.
   - name: Blocked Handles
     x-page-title: Blocked Handles
-    x-page-icon: ban
     description: Block or unblock registered Relay Handles.
   - name: Contact Card
     x-page-title: Contact Card
-    x-page-icon: address-card
     description: Manage the authenticated agent's Relay contact card.
   - name: Webhooks
     x-page-title: Webhooks
-    x-page-icon: bell
     description: Register signed webhook destinations.
-  - name: Socket Mode
-    description: Receive the same agent events over a durable acknowledged WebSocket.
-  - name: Contacts
-    description: Resolve and explicitly install agent Contacts.
+  - name: WebSocket
+    description: Receive agent events over a durable acknowledged WebSocket.
 paths:
   /v1/chats:
     post:
@@ -367,10 +359,40 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
+  /v1/chats/{chatId}/share_contact_card:
+    post:
+      operationId: shareContactWithChat
+      summary: Share your contact card with a chat
+      description: Share the authenticated agent's Contact Card into an existing Chat. The agent must have sent at least one Message in the Chat. Repeated calls within 24 hours succeed without adding another prompt.
+      tags:
+        - Chats
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: chatId
+          in: path
+          required: true
+          description: Unique identifier of the chat
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Contact shared successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
   /v1/messages:
     post:
       operationId: sendMessage
-      summary: Send a message (auto-selected from-number)
+      summary: Resolve a Chat and send a Message
       tags:
         - Messages
       security:
@@ -406,7 +428,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '409':
-          description: No eligible sending line available, or a mention target is no longer in the chat
+          description: The request conflicts with current Chat, membership, or idempotency state.
           content:
             application/json:
               schema:
@@ -1119,7 +1141,7 @@ paths:
     post:
       operationId: acknowledgeMessageDelivered
       summary: Acknowledge message delivery
-      description: A user client calls this after it durably applies an incoming message. Relay advances the sender-visible Delivered state only after every recipient has acknowledged. Agent delivery uses successful durable webhook acceptance instead; Agent Tokens cannot call this route.
+      description: A user client calls this after it durably applies this incoming Message and every earlier Message it received in the same Chat. The acknowledgement is cumulative through messageId for that user and Chat. Relay advances the sender-visible Delivered state only after every recipient has acknowledged. Agent delivery uses successful durable webhook acceptance instead; Agent Tokens cannot call this route.
       tags:
         - Messages
       security:
@@ -1143,31 +1165,31 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
-  /v1/socket-mode:
+  /v1/websocket:
     get:
-      operationId: getSocketMode
-      summary: Get agent receive mode
+      operationId: getWebSocketSettings
+      summary: Get WebSocket settings
       tags:
-        - Socket Mode
+        - WebSocket
       security:
         - BearerAuth: []
       responses:
         '200':
-          description: Current receive mode and durable ACK checkpoint
+          description: Current WebSocket setting and durable ACK checkpoint
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SocketMode'
+                $ref: '#/components/schemas/WebSocketSettings'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-      description: Read the authenticated agent's event receive mode.
+      description: Read the authenticated agent's WebSocket setting and ACK checkpoint.
     put:
-      operationId: setSocketMode
-      summary: Set agent receive mode
+      operationId: updateWebSocketSettings
+      summary: Update WebSocket settings
       tags:
-        - Socket Mode
+        - WebSocket
       security:
         - BearerAuth: []
       requestBody:
@@ -1175,28 +1197,30 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SocketModeUpdate'
+              $ref: '#/components/schemas/WebSocketSettingsUpdate'
       responses:
         '200':
           description: Updated receive mode
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SocketMode'
+                $ref: '#/components/schemas/WebSocketSettings'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-      description: Choose webhook or Socket Mode for future agent events.
-  /v1/socket-connections:
+        '409':
+          $ref: '#/components/responses/Conflict'
+      description: Enable or disable WebSocket event delivery. Relay rejects disable while unacknowledged WebSocket events remain, so changing transport cannot strand accepted events.
+  /v1/websocket-connections:
     post:
-      operationId: createSocketConnection
-      summary: Create a Socket Mode connection ticket
+      operationId: createWebSocketConnection
+      summary: Create a WebSocket connection ticket
       description: Returns a short-lived, one-use WebSocket URL. Connect with the relay.v1.json subprotocol. Commit each event to a durable inbox before cumulatively acknowledging its sequence.
       tags:
-        - Socket Mode
+        - WebSocket
       security:
         - BearerAuth: []
       requestBody:
@@ -1212,7 +1236,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SocketConnection'
+                $ref: '#/components/schemas/WebSocketConnection'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1221,74 +1245,6 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
-  /v1/contacts/{handle}:
-    get:
-      operationId: resolveContact
-      summary: Resolve an agent Contact by Handle
-      tags:
-        - Contacts
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: handle
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Resolved agent Contact
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - agent
-                properties:
-                  agent:
-                    $ref: '#/components/schemas/AgentContact'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-      description: Resolve a registered agent by exact Handle.
-  /v1/me/contacts/{contactId}:
-    post:
-      operationId: installContact
-      summary: Install an agent Contact
-      tags:
-        - Contacts
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: contactId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/InstallContactRequest'
-      responses:
-        '200':
-          description: Installed Contact and direct Chat
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InstallContactResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-      description: Install an agent and idempotently create its direct Chat.
 components:
   schemas:
     AddParticipantRequest:
@@ -1299,55 +1255,6 @@ components:
         handle:
           type: string
           description: Relay Handle.
-    AgentContact:
-      type: object
-      additionalProperties: false
-      required:
-        - id
-        - handle
-        - displayName
-        - tagline
-        - avatarUrl
-        - accentColor
-        - capabilities
-        - installation
-        - status
-        - createdAt
-      properties:
-        id:
-          type: string
-          format: uuid
-        handle:
-          type: string
-        displayName:
-          type: string
-        tagline:
-          type: string
-        avatarUrl:
-          type:
-            - string
-            - 'null'
-          format: uri
-        accentColor:
-          type:
-            - string
-            - 'null'
-        capabilities:
-          type: array
-          items:
-            type: string
-        installation:
-          oneOf:
-            - $ref: '#/components/schemas/ContactInstallation'
-            - type: 'null'
-        status:
-          type: string
-          enum:
-            - active
-            - inactive
-        createdAt:
-          type: string
-          format: date-time
     Attachment:
       type: object
       required:
@@ -1372,9 +1279,7 @@ components:
           description: Size of the attachment in bytes
         status:
           type: string
-          description: '**DEPRECATED:** This field is deprecated and will be removed in a future API version.'
-          deprecated: true
-          x-stainless-deprecation-message: status is no longer a useful signal
+          description: Current upload state.
           enum:
             - pending
             - complete
@@ -1553,8 +1458,7 @@ components:
         changed_by_handle:
           description: The handle who made the change.
           oneOf:
-            - allOf:
-                - $ref: '#/components/schemas/ChatHandle'
+            - $ref: '#/components/schemas/ChatHandle'
             - type: 'null'
         updated_at:
           type: string
@@ -1591,8 +1495,7 @@ components:
         changed_by_handle:
           description: The handle who made the change.
           oneOf:
-            - allOf:
-                - $ref: '#/components/schemas/ChatHandle'
+            - $ref: '#/components/schemas/ChatHandle'
             - type: 'null'
         updated_at:
           type: string
@@ -1687,44 +1590,32 @@ components:
         - handle
         - first_name
         - is_active
+        - kind
+        - last_name
+        - image_url
       properties:
         first_name:
           type: string
         last_name:
-          type: string
+          type:
+            - string
+            - 'null'
         image_url:
-          type: string
+          type:
+            - string
+            - 'null'
+          format: uri
         is_active:
           type: boolean
         handle:
           type: string
           description: Relay Handle associated with this contact card.
-    ContactInstallation:
-      type: object
-      additionalProperties: false
-      required:
-        - id
-        - state
-        - source
-        - conversationId
-        - canRemove
-      properties:
-        id:
-          type: string
-        state:
+        kind:
           type: string
           enum:
-            - active
-        source:
-          type: string
-          enum:
-            - exact_handle
-            - share_link
-        conversationId:
-          type: string
-          format: uuid
-        canRemove:
-          type: boolean
+            - user
+            - agent
+          description: Whether the Contact is a user or an agent.
     CreateChatRequest:
       type: object
       required:
@@ -1735,7 +1626,6 @@ components:
         from:
           type: string
           description: Authenticated sender's Relay Handle.
-          pattern: ^\+[1-9][0-9]{1,14}$
         to:
           type: array
           minItems: 1
@@ -1743,8 +1633,6 @@ components:
           items:
             type: string
         message:
-          allOf:
-            - $ref: '#/components/schemas/MessageContent'
           description: |
             Initial message for the new chat.
 
@@ -1752,6 +1640,7 @@ components:
             request is rejected with `400` (error code `1005`) if it includes a `link`
             part or any `text` part containing a URL. Follow-up messages via
             `POST /v1/chats/{chatId}/messages` may contain links.
+          $ref: '#/components/schemas/MessageContent'
     CreateChatResult:
       type: object
       description: Response for creating a new chat with an initial message
@@ -1807,7 +1696,6 @@ components:
       enum:
         - sent
         - delivered
-        - received
         - read
     ErrorCode:
       type: integer
@@ -1891,29 +1779,6 @@ components:
             - string
             - 'null'
           description: Cursor for fetching the next page of results (null if no more results)
-    InstallContactRequest:
-      type: object
-      additionalProperties: false
-      required:
-        - source
-      properties:
-        source:
-          type: string
-          enum:
-            - exact_handle
-            - share_link
-    InstallContactResponse:
-      type: object
-      additionalProperties: false
-      required:
-        - agent
-        - conversation_id
-      properties:
-        agent:
-          $ref: '#/components/schemas/AgentContact'
-        conversation_id:
-          type: string
-          format: uuid
     LinkPart:
       type: object
       required:
@@ -2010,17 +1875,12 @@ components:
         url:
           type: string
           format: uri
-          description: Public HTTPS media URL. Relay validates the response status, declared and actual size, redirect protocol, and supported Content-Type.
+          description: Public HTTPS media URL. Relay blocks non-public networks and validates every redirect, response status, declared and actual size, and supported Content-Type.
           pattern: ^https://
         attachment_id:
           type: string
           format: uuid
-          description: |
-            Reference to a file pre-uploaded via `POST /v1/attachments` (optional).
-            The file is already stored, so sends using this ID skip the download step —
-            useful when sending the same file to many recipients.
-
-            Either `url` or `attachment_id` must be provided, but not both.
+          description: Reference an Attachment allocated through POST /v1/attachments. Use either url or attachment_id, not both.
     MediaPartResponse:
       type: object
       description: A media attachment part
@@ -2045,8 +1905,7 @@ components:
         url:
           type: string
           format: uri
-          description: |
-            Presigned URL for downloading the attachment (expires in 1 hour).
+          description: Opaque Relay download URL for the Attachment.
         filename:
           type: string
           description: Original filename
@@ -2087,8 +1946,6 @@ components:
         - id
         - chat_id
         - is_from_me
-        - is_delivered
-        - is_read
         - delivery_status
         - created_at
         - updated_at
@@ -2110,8 +1967,7 @@ components:
         from_handle:
           description: The sender of this message as a full handle object
           oneOf:
-            - allOf:
-                - $ref: '#/components/schemas/ChatHandle'
+            - $ref: '#/components/schemas/ChatHandle'
             - type: 'null'
         parts:
           type:
@@ -2126,20 +1982,11 @@ components:
               - $ref: '#/components/schemas/SystemPartResponse'
         reply_to:
           oneOf:
-            - allOf:
-                - $ref: '#/components/schemas/ReplyTo'
+            - $ref: '#/components/schemas/ReplyTo'
             - type: 'null'
         is_from_me:
           type: boolean
           description: Whether this message was sent by the authenticated user
-        is_delivered:
-          type: boolean
-          deprecated: true
-          description: 'DEPRECATED: Use `delivery_status` instead (true when `delivery_status` is `delivered` or `read`). Whether the message has been delivered.'
-        is_read:
-          type: boolean
-          deprecated: true
-          description: 'DEPRECATED: Use `delivery_status == "read"` instead. Whether the message has been read.'
         delivery_status:
           $ref: '#/components/schemas/DeliveryStatus'
         created_at:
@@ -2170,7 +2017,7 @@ components:
           description: When the message was read
         is_system_message:
           type: boolean
-          description: Whether this timeline item is a visible group-history event.
+          description: Whether this timeline item is a visible Chat event.
         system_event:
           oneOf:
             - $ref: '#/components/schemas/SystemEvent'
@@ -2178,9 +2025,6 @@ components:
     MessageContent:
       type: object
       description: One message containing 1–100 ordered text, media, or link parts. A link must be the only part.
-      oneOf:
-        - required:
-            - parts
       properties:
         parts:
           x-go-type-skip-optional-pointer: true
@@ -2194,12 +2038,10 @@ components:
           description: Reply to another message to create a threaded conversation
         idempotency_key:
           type: string
-          description: |
-            Optional idempotency key for this message.
-            Use this to prevent duplicate sends of the same message. Reusing a key
-            whose message was deleted — or was an ephemeral message that has since
-            expired — returns 404; the message is never resent.
+          description: Optional key for a safe retry. The same authenticated sender, key, and Message body return the original Message. Reusing the key with a different body returns a conflict.
           maxLength: 255
+      required:
+        - parts
     MessageDeliveredWebhook:
       description: Complete webhook payload for message.delivered events (2026-02-03 format)
       allOf:
@@ -2235,8 +2077,7 @@ components:
               description: Whether this is a group chat
             owner_handle:
               oneOf:
-                - allOf:
-                    - $ref: '#/components/schemas/ChatHandle'
+                - $ref: '#/components/schemas/ChatHandle'
                 - type: 'null'
         id:
           type: string
@@ -2254,9 +2095,8 @@ components:
             - inbound
             - outbound
         sender_handle:
-          allOf:
-            - $ref: '#/components/schemas/ChatHandle'
           description: The handle that sent this message
+          $ref: '#/components/schemas/ChatHandle'
         parts:
           type: array
           description: Message parts (text and/or media)
@@ -2346,18 +2186,16 @@ components:
       type: object
       description: Payload for participant.added webhook events
       required:
-        - handle
+        - chat_id
+        - participant
+        - added_at
       properties:
         chat_id:
           type: string
           description: Chat identifier (UUID) of the group chat
-        handle:
-          type: string
-          deprecated: true
         participant:
-          allOf:
-            - $ref: '#/components/schemas/ChatHandle'
           description: The added participant as a full handle object
+          $ref: '#/components/schemas/ChatHandle'
         added_at:
           type: string
           format: date-time
@@ -2374,18 +2212,16 @@ components:
       type: object
       description: Payload for participant.removed webhook events
       required:
-        - handle
+        - chat_id
+        - participant
+        - removed_at
       properties:
         chat_id:
           type: string
           description: Chat identifier (UUID) of the group chat
-        handle:
-          type: string
-          deprecated: true
         participant:
-          allOf:
-            - $ref: '#/components/schemas/ChatHandle'
           description: The removed participant as a full handle object
+          $ref: '#/components/schemas/ChatHandle'
         removed_at:
           type: string
           format: date-time
@@ -2419,8 +2255,7 @@ components:
           description: Custom emoji if type is "custom", null otherwise
     ReactionAddedEvent:
       description: Payload for reaction.added webhook events
-      allOf:
-        - $ref: '#/components/schemas/ReactionEventBase'
+      $ref: '#/components/schemas/ReactionEventBase'
     ReactionAddedWebhook:
       description: Complete webhook payload for reaction.added events
       allOf:
@@ -2432,19 +2267,20 @@ components:
     ReactionEventBase:
       type: object
       required:
+        - chat_id
+        - from_handle
+        - message_id
+        - part_index
         - reaction_type
         - is_from_me
+        - reacted_at
       properties:
         chat_id:
           type: string
           description: Chat identifier (UUID)
-        from:
-          type: string
-          deprecated: true
         from_handle:
-          allOf:
-            - $ref: '#/components/schemas/ChatHandle'
           description: The person who added/removed the reaction as a full handle object
+          $ref: '#/components/schemas/ChatHandle'
         message_id:
           type: string
           description: Message identifier (UUID) that the reaction was added to or removed from
@@ -2468,8 +2304,7 @@ components:
           description: When the reaction was added or removed
     ReactionRemovedEvent:
       description: Payload for reaction.removed webhook events
-      allOf:
-        - $ref: '#/components/schemas/ReactionEventBase'
+      $ref: '#/components/schemas/ReactionEventBase'
     ReactionRemovedWebhook:
       description: Complete webhook payload for reaction.removed events
       allOf:
@@ -2570,17 +2405,11 @@ components:
         upload_url:
           type: string
           format: uri
-          description: |
-            Presigned URL for uploading the file. PUT the raw binary file content to this URL
-            with the `required_headers`. Do not JSON-encode or multipart-wrap the body.
-            Expires after 15 minutes. Treat the URL as opaque — the hostname depends on
-            Relay account configuration and is the same across sandbox and production.
+          description: Opaque Relay upload URL. PUT the raw bytes with the exact required_headers before expires_at.
         download_url:
           type: string
           format: uri
-          description: |
-            Permanent CDN URL for the file. Does not expire. Use the `attachment_id`
-            to reference this file in media parts when sending messages.
+          description: Opaque Relay download URL for the Attachment.
         http_method:
           type: string
           description: HTTP method to use for upload (always PUT)
@@ -2592,16 +2421,12 @@ components:
           description: When the upload URL expires (15 minutes from now)
         required_headers:
           type: object
-          description: |
-            HTTP headers that must be set on the upload request. The presigned URL is signed
-            with these exact values — S3 will reject the upload if they don't match.
+          description: Exact HTTP headers required by the upload URL.
           additionalProperties:
             type: string
     SendMessageRequest:
       type: object
-      description: |
-        Send a message with an auto-selected from-number. The recipient set (`to`)
-        is the chat identity; the platform resolves the line and target chat.
+      description: Resolve or reuse the Chat for the recipient Handles, then send a Message as the authenticated Contact.
       required:
         - to
         - message
@@ -2613,15 +2438,8 @@ components:
           items:
             type: string
         message:
-          allOf:
-            - $ref: '#/components/schemas/MessageContent'
-          description: |
-            The message to send. Text, media, and attachment parts are all
-            supported. **Unlike `POST /v1/chats`, a link is allowed even as the
-            first message of a newly created chat** — but a link as the very first
-            message on a freshly selected line can elevate that line's flagging
-            risk. Voice memos are not supported here; use
-            `POST /v1/chats/{chatId}/voicememo`.
+          description: The Message to send. Text, link, and media parts are supported. Voice memos use POST /v1/chats/{chatId}/voicememo.
+          $ref: '#/components/schemas/MessageContent'
     SendMessageResponse:
       type: object
       description: Response for sending a message to a chat
@@ -2637,10 +2455,7 @@ components:
           $ref: '#/components/schemas/SentMessage'
     SendMessageResult:
       type: object
-      description: |
-        Result of an auto-from send. Self-describing: which line was used, which
-        chat the message landed in, whether a new chat was created, and the
-        resulting message id(s).
+      description: The resolved Chat and resulting Message.
       required:
         - chat_id
         - created_new_chat
@@ -2652,24 +2467,23 @@ components:
         chat_id:
           type: string
           format: uuid
-          description: The resolved chat (reused or newly created) the message landed in.
+          description: The reused or newly created Chat.
         created_new_chat:
           type: boolean
         from:
           type: string
-          description: The line (E.164) the message was actually sent from.
+          description: Handle of the authenticated sending Contact.
         is_group:
           type: boolean
           description: Whether the resolved chat is a group chat.
         handles:
           type: array
-          description: Participants of the resolved chat.
+          description: Contacts in the resolved Chat.
           items:
             $ref: '#/components/schemas/ChatHandle'
         message:
-          allOf:
-            - $ref: '#/components/schemas/SentMessage'
           description: The primary message that was sent.
+          $ref: '#/components/schemas/SentMessage'
     SendMessageToChatRequest:
       type: object
       required:
@@ -2707,6 +2521,8 @@ components:
       then:
         required:
           - custom_emoji
+        properties:
+          custom_emoji: {}
     SendVoiceMemoToChatRequest:
       type: object
       description: |
@@ -2731,14 +2547,14 @@ components:
       oneOf:
         - required:
             - voice_memo_url
-          not:
-            required:
-              - attachment_id
+          properties:
+            voice_memo_url: {}
+            attachment_id: false
         - required:
             - attachment_id
-          not:
-            required:
-              - voice_memo_url
+          properties:
+            voice_memo_url: false
+            attachment_id: {}
     SendVoiceMemoToChatResult:
       type: object
       description: Response for sending a voice memo to a chat
@@ -2786,7 +2602,6 @@ components:
         - created_at
         - sent_at
         - delivery_status
-        - is_read
       properties:
         id:
           type: string
@@ -2818,20 +2633,14 @@ components:
           description: When the message was delivered
         delivery_status:
           $ref: '#/components/schemas/DeliveryStatus'
-        is_read:
-          type: boolean
-          deprecated: true
-          description: 'DEPRECATED: Use `delivery_status == "read"` instead. Whether the message has been read.'
         from_handle:
           description: The sender of this message as a full handle object
           oneOf:
-            - allOf:
-                - $ref: '#/components/schemas/ChatHandle'
+            - $ref: '#/components/schemas/ChatHandle'
             - type: 'null'
         reply_to:
           oneOf:
-            - allOf:
-                - $ref: '#/components/schemas/ReplyTo'
+            - $ref: '#/components/schemas/ReplyTo'
             - type: 'null'
     SetContactCardRequest:
       type: object
@@ -2857,149 +2666,37 @@ components:
         - handle
         - first_name
         - is_active
+        - kind
+        - last_name
+        - image_url
       properties:
         first_name:
           type: string
           description: First name on the contact card
         last_name:
-          type: string
-          description: Last name on the contact card
+          type:
+            - string
+            - 'null'
         image_url:
-          type: string
-          description: Image URL on the contact card
+          type:
+            - string
+            - 'null'
+          format: uri
         is_active:
           type: boolean
           description: Whether the contact card was successfully applied to the device
         handle:
           type: string
           description: Relay Handle associated with this contact card.
-    SocketAckFrame:
-      type: object
-      additionalProperties: false
-      required:
-        - type
-        - through_sequence
-      properties:
-        type:
+        kind:
           type: string
           enum:
-            - ack
-        through_sequence:
-          type: string
-          pattern: ^(0|[1-9][0-9]*)$
-    SocketConnection:
-      type: object
-      additionalProperties: false
-      required:
-        - url
-        - expires_at
-        - subprotocol
-      properties:
-        url:
-          type: string
-          format: uri
-        expires_at:
-          type: string
-          format: date-time
-        subprotocol:
-          type: string
-          enum:
-            - relay.v1.json
-    SocketEventFrame:
-      type: object
-      additionalProperties: false
-      required:
-        - type
-        - sequence
-        - event
-      properties:
-        type:
-          type: string
-          enum:
-            - event
-        sequence:
-          type: string
-          pattern: ^(0|[1-9][0-9]*)$
-        event:
-          $ref: '#/components/schemas/WebhookEnvelopeBase'
-    SocketMode:
-      type: object
-      additionalProperties: false
-      required:
-        - mode
-        - acked_through
-      properties:
-        mode:
-          type: string
-          enum:
-            - webhook
-            - socket
-        acked_through:
-          type: string
-          pattern: ^(0|[1-9][0-9]*)$
-          description: Highest contiguous Socket Mode sequence durably accepted by the agent backend.
-    SocketModeUpdate:
-      type: object
-      additionalProperties: false
-      required:
-        - mode
-      properties:
-        mode:
-          type: string
-          enum:
-            - webhook
-            - socket
-    SocketReadyFrame:
-      type: object
-      additionalProperties: false
-      required:
-        - type
-        - connection_id
-        - acked_through
-        - heartbeat_interval_ms
-        - max_in_flight
-      properties:
-        type:
-          type: string
-          enum:
-            - ready
-        connection_id:
-          type: string
-          format: uuid
-        acked_through:
-          type: string
-          pattern: ^(0|[1-9][0-9]*)$
-        heartbeat_interval_ms:
-          type: integer
-          minimum: 1
-        max_in_flight:
-          type: integer
-          minimum: 1
+            - user
+            - agent
+          description: Whether the Contact is a user or an agent.
     SupportedContentType:
       type: string
-      description: |
-        Supported MIME types for file attachments and media URLs.
-
-        **Images:** image/jpeg, image/png, image/gif, image/heic, image/heif, image/tiff, image/bmp, image/svg+xml, image/webp, image/x-icon
-
-        **Videos:** video/mp4, video/quicktime, video/mpeg, video/mpeg2, video/x-msvideo, video/3gpp
-
-        **Audio:** audio/mpeg, audio/x-m4a, audio/x-caf, audio/x-wav, audio/x-aiff, audio/aac, audio/midi, audio/amr
-
-        **Wallet passes:** application/vnd.apple.pkpass
-
-        **Documents:** application/pdf, text/plain, text/markdown, text/vcard, text/rtf, text/csv, text/html, text/calendar, text/xml, application/json, application/msword, application/vnd.openxmlformats-officedocument.wordprocessingml.document, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-powerpoint, application/vnd.openxmlformats-officedocument.presentationml.presentation, application/x-iwork-pages-sffpages, application/x-iwork-numbers-sffnumbers, application/x-iwork-keynote-sffkey, application/epub+zip, application/zip, application/x-gzip
-
-        **Transcoded on delivery:**
-        - `audio/x-caf` — CAF files are transcoded to `audio/mp4` for delivery.
-
-        **Deprecated (accepted but transcoded):**
-        - `audio/mp3` — Deprecated. Use `audio/mpeg` instead. Files sent as audio/mp3 will be delivered as audio/mpeg.
-        - `audio/mp4` — Deprecated. Use `audio/x-m4a` instead. Files sent as audio/mp4 will be delivered as audio/x-m4a.
-        - `audio/aiff` — Deprecated. Use `audio/x-aiff` instead. Files sent as audio/aiff will be delivered as audio/x-aiff.
-        - `image/tiff` — Accepted, but TIFF images are transcoded to JPEG for delivery.
-
-        **Unsupported:** FLAC, OGG, and executable files are explicitly rejected.
+      description: Supported declared MIME types for uploaded Attachments and media URLs. Relay stores and returns the original bytes unchanged.
       enum:
         - image/jpeg
         - image/png
@@ -3061,6 +2758,7 @@ components:
         - subject
         - value
         - icon_attachment_id
+        - contact_card
       properties:
         type:
           type: string
@@ -3070,6 +2768,7 @@ components:
             - participant_removed
             - group_name_updated
             - group_icon_updated
+            - contact_card_shared
         actor:
           $ref: '#/components/schemas/SystemEventParty'
         subject:
@@ -3085,6 +2784,10 @@ components:
             - string
             - 'null'
           format: uuid
+        contact_card:
+          oneOf:
+            - $ref: '#/components/schemas/ContactCardItem'
+            - type: 'null'
     SystemEventParty:
       type: object
       additionalProperties: false
@@ -3219,11 +2922,16 @@ components:
           type: string
           description: Updated first name. If omitted, the existing value is kept.
         last_name:
-          type: string
+          type:
+            - string
+            - 'null'
           description: Updated last name. If omitted, the existing value is kept.
         image_url:
-          type: string
+          type:
+            - string
+            - 'null'
           description: Updated profile image URL. If omitted, the existing image is kept.
+          format: uri
     UpdateWebhookSubscriptionRequest:
       type: object
       properties:
@@ -3256,7 +2964,7 @@ components:
         url:
           type: string
           format: uri
-          description: CDN URL for downloading the voice memo
+          description: Opaque Relay download URL for the voice memo Attachment.
         filename:
           type: string
           description: Original filename
@@ -3284,6 +2992,150 @@ components:
             - 'null'
           minimum: 1
           description: Pixel height when known. Width and height are supplied together.
+    WebSocketAckFrame:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - through_sequence
+      properties:
+        type:
+          type: string
+          enum:
+            - ack
+        through_sequence:
+          type: string
+          pattern: ^(0|[1-9][0-9]*)$
+    WebSocketConnection:
+      type: object
+      additionalProperties: false
+      required:
+        - url
+        - expires_at
+        - subprotocol
+      properties:
+        url:
+          type: string
+          format: uri
+        expires_at:
+          type: string
+          format: date-time
+        subprotocol:
+          type: string
+          enum:
+            - relay.v1.json
+    WebSocketDisconnectFrame:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - reason
+      properties:
+        type:
+          type: string
+          enum:
+            - disconnect
+        reason:
+          type: string
+          enum:
+            - disabled
+            - replaced
+            - revoked
+            - heartbeat_timeout
+            - restart
+    WebSocketErrorFrame:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - code
+        - message
+        - fatal
+        - retryable
+      properties:
+        type:
+          type: string
+          enum:
+            - error
+        code:
+          type: string
+          enum:
+            - invalid_frame
+            - ack_out_of_range
+            - stale_connection
+            - ack_failed
+            - delivery_failed
+        message:
+          type: string
+        fatal:
+          type: boolean
+        retryable:
+          type: boolean
+    WebSocketEventFrame:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - sequence
+        - event
+      properties:
+        type:
+          type: string
+          enum:
+            - event
+        sequence:
+          type: string
+          pattern: ^(0|[1-9][0-9]*)$
+        event:
+          $ref: '#/components/schemas/WebhookEnvelopeBase'
+    WebSocketReadyFrame:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - connection_id
+        - acked_through
+        - heartbeat_interval_ms
+        - max_in_flight
+      properties:
+        type:
+          type: string
+          enum:
+            - ready
+        connection_id:
+          type: string
+          format: uuid
+        acked_through:
+          type: string
+          pattern: ^(0|[1-9][0-9]*)$
+        heartbeat_interval_ms:
+          type: integer
+          minimum: 1
+        max_in_flight:
+          type: integer
+          minimum: 1
+    WebSocketSettings:
+      type: object
+      additionalProperties: false
+      required:
+        - enabled
+        - acked_through
+      properties:
+        enabled:
+          type: boolean
+          description: Whether agent events use the WebSocket instead of webhook subscriptions.
+        acked_through:
+          type: string
+          pattern: ^(0|[1-9][0-9]*)$
+          description: Highest contiguous WebSocket sequence durably accepted by the agent backend.
+    WebSocketSettingsUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
     WebhookEnvelopeBase:
       type: object
       required:
@@ -3292,6 +3144,7 @@ components:
         - event_type
         - event_id
         - created_at
+        - data
         - trace_id
         - agent_id
       properties:
@@ -3302,10 +3155,7 @@ components:
           description: Relay API version for this webhook envelope.
         webhook_version:
           type: string
-          description: |
-            Date-based webhook payload version.
-            Determined by the `?version=` query parameter in your webhook subscription URL.
-            If no version parameter is specified, defaults based on subscription creation date.
+          description: Fixed Relay webhook payload version.
         event_type:
           $ref: '#/components/schemas/WebhookEventType'
         event_id:
@@ -3323,6 +3173,10 @@ components:
           type: string
           format: uuid
           description: Contact identifier of the receiving agent.
+        data:
+          type: object
+          description: Event payload. Its shape is selected by event_type.
+          additionalProperties: true
     WebhookEventType:
       type: string
       enum:
@@ -3462,8 +3316,7 @@ components:
         url:
           type: string
           format: uri
-          description: |
-            Presigned URL for downloading the attachment (expires in 1 hour).
+          description: Opaque Relay download URL for the Attachment.
         filename:
           type: string
           description: Original filename
@@ -3564,14 +3417,13 @@ x-tagGroups:
       - Attachments
   - name: Contacts
     tags:
-      - Contacts
       - Contact Card
       - Blocked Handles
   - name: Agent events
     tags:
       - Webhooks
-      - Socket Mode
-x-relay-socket-frames:
+      - WebSocket
+x-relay-websocket-frames:
   ready:
     type: object
     additionalProperties: false
@@ -3629,6 +3481,59 @@ x-relay-socket-frames:
       through_sequence:
         type: string
         pattern: ^(0|[1-9][0-9]*)$
+  error:
+    type: object
+    additionalProperties: false
+    required:
+      - type
+      - code
+      - message
+      - fatal
+      - retryable
+    properties:
+      type:
+        type: string
+        enum:
+          - error
+      code:
+        type: string
+        enum:
+          - invalid_frame
+          - ack_out_of_range
+          - stale_connection
+          - ack_failed
+          - delivery_failed
+      message:
+        type: string
+      fatal:
+        type: boolean
+      retryable:
+        type: boolean
+  disconnect:
+    type: object
+    additionalProperties: false
+    required:
+      - type
+      - reason
+    properties:
+      type:
+        type: string
+        enum:
+          - disconnect
+      reason:
+        type: string
+        enum:
+          - disabled
+          - replaced
+          - revoked
+          - heartbeat_timeout
+          - restart
+x-relay-websocket-close-codes:
+  '1011': Relay could not load or commit delivery state; reconnect and resume.
+  '1012': Relay is restarting; reconnect and resume.
+  '4401': The ticket or Agent Token is invalid, revoked, or disabled.
+  '4408': The heartbeat timed out.
+  '4409': A newer connection replaced this one.
 x-relay-webhooks:
   message.sent.v2026-02-03:
     post:

@@ -21,6 +21,20 @@ curl -sS -X POST https://api.relayapp.im/v1/attachments \
 
 The response contains an `attachment_id`, signed upload URL, HTTP method, exact required headers, and expiration time.
 
+```json
+{
+  "attachment_id":"01993d50-d263-7d6b-87ce-90aba89b7815",
+  "upload_url":"https://api.relayapp.im/attachment-transfers/<token>",
+  "download_url":"https://api.relayapp.im/attachment-transfers/<token>",
+  "http_method":"PUT",
+  "expires_at":"2026-08-29T06:35:00.000Z",
+  "required_headers":{
+    "Content-Type":"application/pdf",
+    "Content-Length":"48291"
+  }
+}
+```
+
 ## 2. Upload the raw bytes
 
 ```bash
@@ -45,6 +59,37 @@ Do not use multipart form data. The body length and Content-Type must match the 
 }
 ```
 
+## Import a public media URL
+
+For files up to 10 MB, a `media` part can use a public HTTPS URL instead of a
+pre-uploaded Attachment:
+
+```json
+{
+  "message": {
+    "parts": [{
+      "type": "media",
+      "url": "https://cdn.yourdomain.com/report.pdf"
+    }]
+  }
+}
+```
+
+Relay imports the bytes into an owned Attachment before committing the
+Message.
+
+| Check | Rule |
+| --- | --- |
+| Network | Every DNS answer must be on the public network |
+| Redirects | Every hop is revalidated, with at most five redirects |
+| Response | Final response must succeed |
+| Size | Declared and actual body must each be 1 byte to 10 MB |
+| Content type | Response Content-Type must be supported |
+
+**Relay rejects credentials in the URL and blocks loopback, private,
+link-local, reserved, and internal destinations.** A redirect cannot bypass
+these checks.
+
 ## Media metadata
 
 | Field | Applies to |
@@ -63,11 +108,15 @@ Width and height must be supplied together.
 | --- | ---: |
 | Allocation size | 1 byte to 100 MB |
 | Public HTTPS URL import | Up to 10 MB |
-| Media parts per Message | 40 |
+| Public URL media parts per Message | 40 |
+| Total parts per Message | 100 |
 
 ## Ownership
 
-Only the Contact that allocated an Attachment can read, delete, or send it before it becomes part of a Message. Signed transfer URLs are capabilities; keep them out of logs.
+Only the Contact that allocated an Attachment can retrieve or send it. An
+Attachment can be reused across Messages, but it cannot be deleted after a
+Message or group photo references it. Signed transfer URLs are capabilities;
+keep them out of logs.
 
 ## Related
 
