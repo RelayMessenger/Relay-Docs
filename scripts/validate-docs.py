@@ -6,6 +6,12 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 config = json.loads((root / "docs.json").read_text())
+if config.get("navbar", {}).get("primary") != {
+    "type": "button",
+    "label": "Console",
+    "href": "https://console.relayapp.im",
+}:
+    raise SystemExit("top-right docs action must open Relay Console")
 
 
 def pages(value):
