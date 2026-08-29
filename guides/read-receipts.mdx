@@ -1,65 +1,53 @@
 ---
-title: "Read receipts"
-description: "Understand Sent and Delivered, then explicitly advance Read."
-keywords: ["read receipts", "delivered", "read", "lifecycle"]
+title: "Delivery and Read"
+description: "Understand Sent, Delivered, and Read for users and agents."
+keywords: ["sent", "delivered", "read", "webhook acknowledgement"]
 ---
 
-Advance Read after durable webhook acceptance.
+Advance Read after the agent has accepted a message.
 
-| State | Trigger |
+## State rules
+
+| State | Rule |
 | --- | --- |
-| Sent | PostgreSQL acceptance |
-| Delivered | `message.received` webhook returns `2xx` |
-| Read | Agent calls `/read` |
-| Replied | Agent sends another message |
+| Sent | Relay committed the message and recipient snapshot |
+| Delivered | Every snapshotted recipient acknowledged durable receipt |
+| Read | Every snapshotted recipient marked Read |
+
+Each recipient advances independently. The message-level state advances only when all snapshotted recipients meet the rule.
+
+## Agent delivery
+
+The agent's only inbound delivery transport is its webhook.
+
+Relay records the agent recipient as Delivered after a `message.received` request returns `2xx`. A timeout or failed response leaves that recipient unacknowledged and enters webhook retry.
+
+This rule is a Relay decision. Linq does not define webhook success as message delivery.
+
+## User delivery
+
+The mobile client first commits the message to its local database. It then acknowledges Delivered through the user mobile API.
+
+The WebSocket cannot acknowledge a message. It only tells the app to reconcile through HTTP.
+
+## Mark a chat Read
 
 ```bash
-curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/read" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: read-$MESSAGE_ID" \
-  -d "{\"through_message_id\":\"$MESSAGE_ID\"}"
+curl -sS -X POST "$RELAY_API_URL/v3/chats/$CHAT_ID/read" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
-```json
-{
-  "object": "read.result",
-  "object_version": "2026-08-28",
-  "changed": true,
-  "boundary": {
-    "object": "read_boundary",
-    "object_version": "2026-08-28",
-    "chat_id": "0198f4a1-27ca-76d2-99ad-59b5d3bb13b2",
-    "reader": {
-      "object": "identity",
-      "object_version": "2026-08-28",
-      "id": "0198f49d-e5c7-78ba-a74f-7ff8186fc242",
-      "kind": "agent",
-      "username": "concierge",
-      "display_name": "Relay Concierge",
-      "avatar_url": null,
-      "created_at": "2026-08-28T13:00:00.000Z"
-    },
-    "through_sequence": "42",
-    "through_message_id": "0198f4b5-e293-7720-b503-5807baeea765",
-    "read_at": "2026-08-28T14:06:00.000Z"
-  }
-}
-```
+The route returns `204`. It marks visible messages in the chat Read for that agent. Read also satisfies Delivered for the same recipient.
 
-| Request | Result |
+| Situation | Result |
 | --- | --- |
-| Newer visible message | Advance through sequence |
-| Same or older message | `changed: false` |
-| Read before Delivered | Read also advances Delivered |
-| Outside membership | `404 not_found` |
-
-Correct order: accept webhook, mark Read, start typing, run model, send reply, stop typing.
-
-Agent-authored messages receive `message.delivered` and `message.read` events when a human advances their boundary.
+| Agent webhook returns `2xx` | Agent recipient becomes Delivered |
+| Agent calls chat Read | Agent recipient becomes Delivered and Read |
+| One group recipient remains unacknowledged | Message stays below aggregate Delivered or Read |
+| Repeated acknowledgement | State stays monotonic |
 
 ## Next steps
 
-- [Quickstart](/quickstart)
-- [Typing](/guides/typing-indicators)
-- [Receipt events](/reference/events)
+- [Accept webhooks](/guides/webhooks)
+- [Read conversation history](/guides/conversation-history)
+- [Send a reply](/guides/sending-messages)

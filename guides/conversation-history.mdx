@@ -1,151 +1,77 @@
 ---
 title: "Conversation history"
-description: "Read newest-first message history with an opaque cursor."
-keywords: ["history", "cursor", "reconciliation", "chat"]
+description: "List chats and messages for HTTP reconciliation."
+keywords: ["history", "reconciliation", "cursor", "websocket"]
 ---
 
-Read canonical history after a restart or uncertain response.
+Read canonical chat state after startup, reconnect, or a sync hint.
+
+## List chats
 
 ```bash
-curl -sS "$RELAY_API_URL/v1/chats/$CHAT_ID/messages?limit=50" \
+curl -sS "$RELAY_API_URL/v3/chats?limit=20" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
-<Expandable title="History page">
-
 ```json
 {
-  "object": "list",
-  "object_version": "2026-08-28",
-  "data": [
+  "chats": [
     {
-      "object": "message",
-      "object_version": "2026-08-28",
-      "id": "0198f4b5-e293-7720-b503-5807baeea765",
-      "chat_id": "0198f4a1-27ca-76d2-99ad-59b5d3bb13b2",
-      "sequence": "42",
-      "direction": "inbound",
-      "sender": {
-        "object": "identity",
-        "object_version": "2026-08-28",
-        "id": "0198f49e-1718-7559-a251-649968bf7a22",
-        "kind": "human",
-        "username": "advait",
-        "phone_number": "+13135550142",
-        "display_name": "Advait",
-        "avatar_url": null,
-        "created_at": "2026-08-28T12:00:00.000Z"
-      },
-      "parts": [
-        {
-          "object": "message_part",
-          "object_version": "2026-08-28",
-          "id": "0198f4b5-e3cb-7617-a68a-b1db4ebd2bcc",
-          "index": 0,
-          "type": "text",
-          "text": "The package is by the front door."
-        },
-        {
-          "object": "message_part",
-          "object_version": "2026-08-28",
-          "id": "0198f4b5-e3cb-7617-a68a-b1db4ebd2bcd",
-          "index": 1,
-          "type": "image",
-          "attachment": {
-            "object": "attachment",
-            "object_version": "2026-08-28",
-            "id": "0198f4af-9fd2-77f7-a8c9-7d6c4049d564",
-            "filename": "front-door.jpg",
-            "mime_type": "image/jpeg",
-            "size_bytes": 482193,
-            "status": "available",
-            "sha256": "7b15f91357232d9198d16a4bd29f6a2d8100f0c5dc24f568951c87901fe7d338",
-            "width": 1600,
-            "height": 1200,
-            "duration_ms": null,
-            "created_at": "2026-08-28T14:00:00.000Z",
-            "available_at": "2026-08-28T14:00:04.000Z"
-          },
-          "alt_text": "Package beside the front door"
-        },
-        {
-          "object": "message_part",
-          "object_version": "2026-08-28",
-          "id": "0198f4b5-e3cb-7617-a68a-b1db4ebd2bce",
-          "index": 2,
-          "type": "link",
-          "url": "https://example.com/delivery/42",
-          "fallback_text": "Delivery details",
-          "preview": {
-            "object": "link_preview",
-            "object_version": "2026-08-28",
-            "status": "available",
-            "title": "Delivery 42",
-            "description": "Delivered at 2:00 PM",
-            "image_attachment_id": null
-          }
-        }
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "service": "Relay",
+      "handles": [
+        {"handle":"alice","service":"Relay","kind":"user"},
+        {"handle":"echo","service":"Relay","kind":"agent","is_me":true}
       ],
-      "reply_to": {
-        "object": "reply_target",
-        "object_version": "2026-08-28",
-        "message_id": "0198f493-f7db-7fc8-b26e-4a8503a7e6c1",
-        "part_id": "0198f493-f859-7ba1-bde3-65463ec246e1",
-        "part_index": 0
-      },
-      "status": "sent",
-      "receipt_summary": "none",
-      "receipts": [
-        {
-          "object": "message_receipt",
-          "object_version": "2026-08-28",
-          "recipient": {
-            "object": "identity",
-            "object_version": "2026-08-28",
-            "id": "0198f49d-e5c7-78ba-a74f-7ff8186fc242",
-            "kind": "agent",
-            "username": "concierge",
-            "display_name": "Relay Concierge",
-            "avatar_url": null,
-            "created_at": "2026-08-28T13:00:00.000Z"
-          },
-          "delivered_at": null,
-          "read_at": null
-        }
-      ],
-      "failure": null,
-      "created_at": "2026-08-28T14:03:12.300Z",
-      "sent_at": "2026-08-28T14:03:12.340Z"
+      "is_group": false
     }
   ],
-  "page": {
-    "next_cursor": "aGlzdG9yeTpjaGF0OjAxOThmNGExOjQy",
-    "has_more": true
-  }
+  "next_cursor": null
 }
 ```
 
-</Expandable>
-
-Pass `page.next_cursor` unchanged:
+## List messages
 
 ```bash
-curl -sS "$RELAY_API_URL/v1/chats/$CHAT_ID/messages?limit=50&cursor=$NEXT_CURSOR" \
+curl -sS "$RELAY_API_URL/v3/chats/$CHAT_ID/messages?limit=50" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+Pass `next_cursor` unchanged when another page exists:
+
+```bash
+curl -sS "$RELAY_API_URL/v3/chats/$CHAT_ID/messages?limit=50&cursor=$NEXT_CURSOR" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
 | Field | Meaning |
 | --- | --- |
-| `data` | Newest-first messages |
-| `next_cursor` | Next older page or `null` |
-| `has_more` | Whether older data remains |
+| `messages` | Canonical message projections |
+| `next_cursor` | Opaque page token, or `null` |
+| `parts` | Ordered projection from Apple `attributedBody` |
+| `delivery_status` | Current aggregate state |
 
-History does not mark Delivered or Read and does not wait for activity. Use chat listing for discovery and message detail for one known ID. Membership periods bound visibility.
+The page cursor continues one list operation. It is not a durable sync checkpoint.
 
-Webhooks remain the inbound transport. Use history for reconciliation, not event polling.
+## User mobile flow
+
+The user app reconciles through HTTP at these points:
+
+| Trigger | Action |
+| --- | --- |
+| App startup | Read chats and visible messages |
+| Foreground | Reconcile changed resources |
+| WebSocket reconnect | Reconcile through HTTP |
+| `sync.hint` frame | Reconcile the named chat |
+
+The WebSocket carries hints and typing only. The app does not run timer-based polling.
+
+## Agent flow
+
+Agents receive new inbound messages only through signed webhooks. Use history reads to recover known resources after a restart or uncertain request, not as a live event feed.
 
 ## Next steps
 
-- [Webhooks](/guides/webhooks)
-- [Concepts](/concepts)
-- [API reference](/api-reference/overview)
+- [Receive webhooks](/guides/webhooks)
+- [Understand parts](/concepts#parts)
+- [Review retained routes](/api-reference/overview#retained-v3-routes)

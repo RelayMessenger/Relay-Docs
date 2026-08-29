@@ -1,83 +1,97 @@
 ---
 title: "Quickstart"
-description: "Receive one signed message, mark it Read, and send one idempotent reply."
-keywords: ["quickstart", "message.received", "webhook", "read", "reply"]
+description: "Receive one signed message and send one reply with Relay Partner API v3."
+keywords: ["quickstart", "message.received", "webhook", "reply"]
 ---
 
-Receive one signed message, mark it Read, and send one reply.
+Receive one user message and send one agent reply.
 
 ## Prerequisites
 
 | Requirement | Purpose |
 | --- | --- |
-| Existing Agent Token | Authenticates API requests |
-| Reachable HTTP or HTTPS endpoint | Receives webhooks |
-| Durable queue or database | Owns an event before `2xx` |
+| Agent Token | Authenticates Partner API calls |
+| HTTPS endpoint | Receives agent events |
+| Durable storage | Saves an event before acknowledgement |
 
 ```bash
-export RELAY_API_URL="${RELAY_API_URL:-http://127.0.0.1:8788}"
-export RELAY_AGENT_TOKEN="<existing-agent-token>"
-curl -sS "$RELAY_API_URL/v1/agents/me" \
+export RELAY_API_URL="https://api.relayapp.im/api/partner"
+export RELAY_AGENT_TOKEN="<agent-token>"
+
+curl -sS "$RELAY_API_URL/v3/webhook-events" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
 ## Create a subscription
 
 ```bash
-curl -sS -X POST "$RELAY_API_URL/v1/webhook-subscriptions" \
+curl -sS -X POST "$RELAY_API_URL/v3/webhook-subscriptions" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
-  -H "Idempotency-Key: quickstart-webhook-1" \
-  -d '{"target_url":"https://agent.example/webhooks/relay","event_types":["message.received","message.delivered","message.read"],"webhook_version":"2026-08-28","enabled":true}'
+  -d '{
+    "target_url": "https://agent.example/webhooks/relay",
+    "subscribed_events": ["message.received"]
+  }'
 ```
 
-Save the one-time `signing_secret` from the `201` response. The subscription begins after `starts_after_sequence`.
+Save `signing_secret` from the `201` response. Relay shows it once.
 
-## Accept the message
+## Accept a message
 
-1. Read the exact raw body.
-2. Verify the Standard Webhooks headers.
-3. Claim `event_id` in durable storage.
-4. Store or enqueue the event.
-5. Return `200` or `204`.
+<Steps>
+<Step title="Read the raw body">
+Keep the exact request bytes for signature verification.
+</Step>
+<Step title="Verify the signature">
+Verify `webhook-id`, `webhook-timestamp`, and `webhook-signature`.
+</Step>
+<Step title="Save the event">
+Deduplicate with `event_id`, then commit the event or enqueue it durably.
+</Step>
+<Step title="Return success">
+Return `200` or `204` within 10 seconds. This records Delivered for the agent recipient.
+</Step>
+</Steps>
 
-That response records Delivered. Read `data.message.chat_id` and `data.message.id` for later calls.
+Read `data.chat.id` and `data.id` from the `message.received` envelope.
 
 ## Mark Read and reply
 
 ```bash
-curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/read" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: read-$EVENT_ID" \
-  -d "{\"through_message_id\":\"$MESSAGE_ID\"}"
-
-curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/typing" \
+curl -sS -X POST "$RELAY_API_URL/v3/chats/$CHAT_ID/read" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 
-curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/messages" \
+curl -sS -X POST "$RELAY_API_URL/v3/chats/$CHAT_ID/typing" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+
+curl -sS -X POST "$RELAY_API_URL/v3/chats/$CHAT_ID/messages" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: reply-$EVENT_ID" \
-  -d "{\"message\":{\"parts\":[{\"type\":\"text\",\"text\":\"Tomorrow at 2:00 PM works.\"}],\"reply_to\":{\"message_id\":\"$MESSAGE_ID\"}}}"
+  --data-binary @- <<JSON
+{
+  "message": {
+    "parts": [{"type":"text","value":"Tomorrow at 2:00 PM works."}],
+    "reply_to": {"message_id":"$MESSAGE_ID","part_index":0}
+  }
+}
+JSON
 
-curl -sS -X DELETE "$RELAY_API_URL/v1/chats/$CHAT_ID/typing" \
+curl -sS -X DELETE "$RELAY_API_URL/v3/chats/$CHAT_ID/typing" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
-Run the model after Read and before the reply. Stop typing after success, failure, or cancellation.
-
-## Retry behavior
+## Failure handling
 
 | Failure | Action |
 | --- | --- |
-| Invalid signature | Return `401`; do not process |
-| Duplicate `event_id` | Return `2xx`; skip side effects |
-| API error has `retryable: true` | Retry the same key and exact request |
-| Model fails after acceptance | Retry from durable storage |
+| Invalid signature | Return `401` and stop |
+| Duplicate `event_id` | Return `2xx` without repeating side effects |
+| Model failure | Retry from your saved event |
+| Uncertain send response | Reuse the same idempotency key and request |
 
 ## Next steps
 
-- [Operate webhooks](/guides/webhooks)
-- [Send multipart messages](/guides/sending-messages)
-- [Understand receipts](/guides/read-receipts)
+- [Verify webhooks](/guides/webhooks)
+- [Send every message type](/guides/sending-messages)
+- [Understand delivery](/guides/read-receipts)

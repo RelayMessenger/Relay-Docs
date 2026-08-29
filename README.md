@@ -2,10 +2,11 @@
 
 Minimal developer documentation for Relay dev.
 
-`api-reference/openapi.yaml` must equal `../Relay-Server/contracts/developer/openapi.yaml`.
+`api-reference/openapi.yaml` must be a byte-identical copy of the canonical
+Relay Server developer contract.
 
 ```bash
-scripts/check-openapi-sync.sh
+scripts/check-openapi-sync.sh /path/to/contracts/developer/openapi.yaml
 scripts/build-mint-openapi.sh
 python3 -m json.tool docs.json > /dev/null
 python3 scripts/validate-docs.py

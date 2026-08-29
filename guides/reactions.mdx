@@ -1,67 +1,61 @@
 ---
 title: "Reactions"
-description: "Set, replace, or remove an agent reaction on a message or exact part."
-keywords: ["reactions", "emoji", "part index"]
+description: "Add or remove a reaction on one projected message part."
+keywords: ["reactions", "tapback", "emoji", "part_index"]
 ---
 
-Set one reaction slot.
+Add a reaction to one message part.
 
 ```bash
-curl -sS -X POST "$RELAY_API_URL/v1/messages/$MESSAGE_ID/reactions" \
+curl -sS -X POST "$RELAY_API_URL/v3/messages/$MESSAGE_ID/reactions" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
-  -H "Idempotency-Key: reaction-$MESSAGE_ID-part-1" \
-  -d '{"operation":"set","emoji":"👍","part_index":1}'
-```
-
-```json
-{
-  "object": "reaction.result",
-  "object_version": "2026-08-28",
-  "changed": true,
-  "slot_version": "7",
-  "reaction": {
-    "object": "reaction",
-    "object_version": "2026-08-28",
-    "message_id": "0198f4b5-e293-7720-b503-5807baeea765",
-    "target_part_id": "0198f4b5-e3cb-7617-a68a-b1db4ebd2bcd",
-    "actor": {
-      "object": "identity",
-      "object_version": "2026-08-28",
-      "id": "0198f49d-e5c7-78ba-a74f-7ff8186fc242",
-      "kind": "agent",
-      "username": "concierge",
-      "display_name": "Relay Concierge",
-      "avatar_url": null,
-      "created_at": "2026-08-28T13:00:00.000Z"
-    },
-    "emoji": "👍",
-    "slot_version": "7",
-    "created_at": "2026-08-28T14:05:00.000Z",
+  -d '{
+    "operation": "add",
+    "type": "like",
     "part_index": 1
-  }
-}
+  }'
 ```
 
-| Request | Slot |
-| --- | --- |
-| Omit `part_index` | Whole message |
-| Include 0 through 99 | Exact part |
+The route returns `202` after the reaction is accepted.
 
-Relay resolves the index to stable `target_part_id`. One actor has one reaction per slot. Setting another emoji replaces it and advances `slot_version`.
+| `type` | Meaning |
+| --- | --- |
+| `love` | Heart |
+| `like` | Thumbs up |
+| `dislike` | Thumbs down |
+| `laugh` | Laugh |
+| `emphasize` | Double exclamation |
+| `question` | Question mark |
+| `custom` | Emoji from `custom_emoji` |
+
+Use `part_index` from the message's ordered `parts` projection. The default is `0`.
+
+Relay stores an add or remove as an Apple associated message row. Reads fold those rows into the target part's `reactions` array.
+
+## Remove a reaction
 
 ```bash
-curl -sS -X POST "$RELAY_API_URL/v1/messages/$MESSAGE_ID/reactions" \
+curl -sS -X POST "$RELAY_API_URL/v3/messages/$MESSAGE_ID/reactions" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
-  -H "Idempotency-Key: reaction-remove-$MESSAGE_ID-part-1" \
-  -d '{"operation":"remove","part_index":1}'
+  -d '{
+    "operation": "remove",
+    "type": "like",
+    "part_index": 1
+  }'
 ```
 
-A removed slot returns `reaction: null`. A no-op has `changed: false` and emits no event.
+For a custom emoji, send the same `custom_emoji` value with `operation: "remove"`.
+
+| Failure | Meaning |
+| --- | --- |
+| `404` | Message is not visible to this agent |
+| `422` | `part_index` does not exist |
+| `400` | Reaction shape is invalid |
 
 ## Next steps
 
-- [Events](/reference/events)
-- [Messages](/guides/sending-messages)
-- [Errors](/reference/errors)
+- [Send messages](/guides/sending-messages)
+- [Read webhook events](/reference/events)
+- [Handle errors](/reference/errors)

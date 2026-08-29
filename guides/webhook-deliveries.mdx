@@ -1,80 +1,68 @@
 ---
-title: "Webhook deliveries and redrive"
-description: "Inspect attempts, diagnose dead letters, and redrive one delivery."
-keywords: ["webhook delivery", "dead letter", "redrive", "attempts"]
+title: "Webhook delivery"
+description: "Handle at-least-once delivery, retries, and terminal failures."
+keywords: ["webhook delivery", "retry", "at least once", "timeout"]
 ---
 
-Inspect delivery metadata without exposing the signed event body.
+Return `2xx` only after your system owns the event.
 
-```bash
-curl -sS "$RELAY_API_URL/v1/webhook-subscriptions/$SUBSCRIPTION_ID/deliveries?status=dead_letter&limit=50" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-```
+## Outcomes
 
-<Expandable title="Dead-letter example">
-
-```json
-{
-  "object": "webhook_delivery",
-  "object_version": "2026-08-28",
-  "id": "0198f4c8-c73c-720f-9ac8-1d9bbc5b93fe",
-  "subscription_id": "0198f4aa-af70-7707-8935-d636d9464832",
-  "event_id": "0198f4b5-e4fe-7d3a-9b86-c9f97cb0e201",
-  "event_type": "message.received",
-  "event_sequence": 481,
-  "status": "dead_letter",
-  "attempt_count": 24,
-  "attempts": [
-    {
-      "number": 24,
-      "started_at": "2026-08-29T14:04:00.000Z",
-      "finished_at": "2026-08-29T14:04:10.000Z",
-      "outcome": "retryable_failure",
-      "http_status": 503,
-      "error_code": "http_503"
-    }
-  ],
-  "next_attempt_at": null,
-  "first_attempt_at": "2026-08-28T14:03:12.400Z",
-  "last_attempt_at": "2026-08-29T14:04:10.000Z",
-  "succeeded_at": null,
-  "dead_lettered_at": "2026-08-29T14:04:10.000Z",
-  "created_at": "2026-08-28T14:03:12.360Z",
-  "expires_at": "2026-09-28T14:03:12.360Z"
-}
-```
-
-</Expandable>
-
-| Status | Meaning |
+| Endpoint result | Relay action |
 | --- | --- |
-| `pending` | No completed attempt |
-| `retrying` | Another attempt is scheduled |
-| `succeeded` | Consumer returned `2xx` |
-| `dead_letter` | Durable cycle ended |
+| `2xx` | Mark delivery successful |
+| `429` | Retry |
+| `5xx` | Retry |
+| Network error or timeout | Retry |
+| Other `4xx` | Stop |
+| Redirect | Stop |
 
-Durable audit metadata lasts 30 days locally.
+Relay waits up to 10 seconds for one response.
 
-## Redrive
+## Retry schedule
 
-```bash
-curl -sS -X POST "$RELAY_API_URL/v1/webhook-subscriptions/$SUBSCRIPTION_ID/deliveries/$DELIVERY_ID/redrive" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Idempotency-Key: redrive-$DELIVERY_ID-1"
+Relay makes at most 10 attempts. The body and `webhook-id` remain unchanged across attempts.
+
+| Retry after attempt | Centered delay |
+| ---: | ---: |
+| 1 | 3.5 seconds |
+| 2 | 7 seconds |
+| 3 | 14 seconds |
+| 4 | 28 seconds |
+| 5 | 56 seconds |
+| 6 | 112 seconds |
+| 7 | 224 seconds |
+| 8 | 448 seconds |
+| 9 | 600 seconds |
+
+Each delay has up to 10 percent jitter. The centered retry window is 24 minutes 52.5 seconds.
+
+## Duplicate handling
+
+At-least-once delivery permits duplicates. Use `event_id` as the durable deduplication key.
+
+```text
+begin transaction
+  insert event_id if absent
+  save raw event or enqueue work
+commit
+return 204
 ```
 
-`202` starts a new cycle. Delivery ID, event ID, and body remain unchanged. Attempt numbers continue. A non-dead delivery returns `409`.
+If the insert finds an existing event, return `2xx` and skip repeated side effects.
 
-| Field | Use |
+## Crash behavior
+
+| Crash point | Safe result |
 | --- | --- |
-| `outcome` | Attempt result |
-| `http_status` | Consumer response |
-| `error_code` | HTTP, network, or timeout cause |
-| `next_attempt_at` | Scheduled retry |
-| `dead_lettered_at` | Automatic stop time |
+| Before your commit | Return failure or disconnect, then accept a retry |
+| After your commit and before `2xx` | Retry arrives, deduplication suppresses repeated work |
+| After `2xx` | Process from your durable queue |
+
+For `message.received`, Relay commits the webhook success and agent Delivered acknowledgement together. A failed local finalization causes another delivery.
 
 ## Next steps
 
-- [Webhook rules](/guides/webhooks)
-- [Errors](/reference/errors)
-- [Generated endpoints](/api-reference/overview)
+- [Verify webhooks](/guides/webhooks)
+- [Read event fields](/reference/events)
+- [Review errors](/reference/errors)

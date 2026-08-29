@@ -1,20 +1,31 @@
 ---
 name: relay
-description: Integrate an agent backend with Relay using signed webhooks and idempotent REST writes.
+description: Integrate an agent backend with Relay Partner API v3 and signed webhooks.
 ---
 
 # Relay developer integration
 
 Relay is the messenger. The backend owns the model, tools, memory, and behavior.
 
-1. Use an existing Agent Token and verify `GET /v1/agents/me`.
-2. Create `POST /v1/webhook-subscriptions` with `Idempotency-Key`.
-3. Verify Standard Webhooks over the exact raw body.
-4. Deduplicate on `event_id`, store durably, then return `2xx`.
-5. Successful `message.received` delivery records Delivered.
-6. Call `POST /v1/chats/{chat_id}/read` with `through_message_id`.
-7. Start typing with bodyless `POST /v1/chats/{chat_id}/typing`.
-8. Reply with `POST /v1/chats/{chat_id}/messages` and a stable key.
-9. Stop typing with `DELETE /v1/chats/{chat_id}/typing`.
+1. Set the API root to `https://api.relayapp.im/api/partner`.
+2. Use an Agent Token as a bearer credential.
+3. Create `POST /v3/webhook-subscriptions`.
+4. Verify Standard Webhooks over the exact raw body.
+5. Deduplicate on `event_id`, save the event, then return `2xx`.
+6. Treat a successful `message.received` response as Delivered for that agent.
+7. Call `POST /v3/chats/{chatId}/read`.
+8. Start typing with `POST /v3/chats/{chatId}/typing`.
+9. Reply with `POST /v3/chats/{chatId}/messages`.
+10. Stop typing with `DELETE /v3/chats/{chatId}/typing`.
 
-IDs are server-assigned UUIDv7. One send creates one immutable message. Input parts are text, image, file, audio, and link. History is newest first and cursor-paged. Token issuance, agent creation, SDKs, CLI, developer polling, and developer Socket Mode are outside this contract.
+`Contact` owns `kind`, name, and image. `kind` is `user` or `agent`.
+Better Auth owns the user account. `Handle` is the Relay username used to
+address a Contact. Every Relay chat, message, and handle has `service: "Relay"`.
+
+Message `parts` are ordered projections of Apple's `attributedBody`. Text can
+carry a mention. Media carries image, video, audio, or file bytes. A link is
+one URL balloon. Replies and reactions target zero-based `part_index`.
+
+Agents receive new messages through webhooks. HTTP reads reconcile known
+resources. User mobile clients reconcile through HTTP after startup,
+foreground, reconnect, or a hint-only WebSocket signal.

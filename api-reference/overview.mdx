@@ -1,42 +1,76 @@
 ---
 title: "API overview"
-description: "Use shared conventions and the generated endpoint reference."
-keywords: ["api reference", "rest", "openapi", "trace id"]
+description: "Use the Relay Partner API v3 base URL and retained Linq routes."
+keywords: ["api reference", "v3", "routes", "openapi"]
 ---
 
-Use generated OpenAPI pages for every endpoint and schema. The canonical file remains byte-identical to Relay-Server.
+Use the generated OpenAPI pages for request and response schemas.
 
 | Property | Value |
 | --- | --- |
-| Local server | `http://127.0.0.1:8788` |
+| Production root | `https://api.relayapp.im/api/partner` |
+| Local root | `http://127.0.0.1:8790/api/partner` |
 | Authentication | Bearer Agent Token |
+| Service | `Relay` |
+| Webhook version | `2026-02-03` |
 | JSON | `application/json` |
-| Binary upload | `application/octet-stream` |
-| IDs | UUIDv7 without type prefixes |
-| Object version | `2026-08-28` |
-| Trace | `X-Trace-ID` |
-| Mutations | `Idempotency-Key` where declared |
 
-| Resource | Operations |
-| --- | --- |
-| Identity | Verify agent and resolve visible identities |
-| Chat | List and read membership |
-| Message | Send, list, fetch |
-| Attachment | Allocate, upload, download, delete unused |
-| Webhook | Events, subscriptions, deliveries, secrets, redrive |
-| Receipt and typing | Read boundary and ephemeral typing |
+## Retained v3 routes
 
-Signed webhooks are the inbound transport. Resource reads do not wait, acknowledge, or stamp receipts.
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/v3/chats` | Create a chat with its first message |
+| `GET` | `/v3/chats` | List chats |
+| `GET` | `/v3/chats/{chatId}` | Get one chat |
+| `PUT` | `/v3/chats/{chatId}` | Update group name or image |
+| `POST` | `/v3/chats/{chatId}/participants` | Add a Handle to a group |
+| `DELETE` | `/v3/chats/{chatId}/participants` | Remove a Handle from a group |
+| `POST` | `/v3/chats/{chatId}/leave` | Leave a group |
+| `POST` | `/v3/chats/{chatId}/typing` | Start typing |
+| `DELETE` | `/v3/chats/{chatId}/typing` | Stop typing |
+| `POST` | `/v3/chats/{chatId}/read` | Mark the chat Read |
+| `POST` | `/v3/messages` | Resolve or create a chat, then send |
+| `POST` | `/v3/chats/{chatId}/messages` | Send to a known chat |
+| `GET` | `/v3/chats/{chatId}/messages` | List messages |
+| `GET` | `/v3/messages/{messageId}/thread` | List a reply thread |
+| `POST` | `/v3/chats/{chatId}/voicememo` | Send a voice memo |
+| `GET` | `/v3/messages/{messageId}` | Get one message |
+| `POST` | `/v3/messages/{messageId}/reactions` | Add or remove a reaction |
+| `POST` | `/v3/attachments` | Allocate an upload |
+| `GET` | `/v3/attachments/{attachmentId}` | Get attachment metadata |
+| `DELETE` | `/v3/attachments/{attachmentId}` | Delete an attachment |
+| `GET` | `/v3/webhook-events` | List event names |
+| `POST` | `/v3/webhook-subscriptions` | Create a subscription |
+| `GET` | `/v3/webhook-subscriptions` | List subscriptions |
+| `GET` | `/v3/webhook-subscriptions/{subscriptionId}` | Get a subscription |
+| `PUT` | `/v3/webhook-subscriptions/{subscriptionId}` | Replace subscription settings |
+| `DELETE` | `/v3/webhook-subscriptions/{subscriptionId}` | Delete a subscription |
+| `GET` | `/v3/contact_card` | Get Contact Cards |
+| `POST` | `/v3/contact_card` | Set up a Contact Card |
+| `PATCH` | `/v3/contact_card` | Update a Contact Card |
 
-Mintlify reads `api-reference/openapi.mint.yaml`, a derived bundle with the external webhook schema resolved. Rebuild it without editing the canonical copy:
+## Transport boundary
+
+| Client | Live inbound transport | Durable recovery |
+| --- | --- | --- |
+| Agent backend | Signed webhook | Partner API reads |
+| User mobile | Hint-only WebSocket | Mobile HTTP reads |
+
+Agent backends do not use the user WebSocket. User mobile does not consume agent webhooks.
+
+## OpenAPI files
+
+`api-reference/openapi.yaml` is the byte-identical Server contract. Mintlify reads the generated `api-reference/openapi.mint.yaml` endpoint bundle.
+
+Webhook envelopes stay in the source contract. The Mintlify bundle uses the shorter [Webhook events](/reference/events) page instead of a second generated event tree.
 
 ```bash
-scripts/check-openapi-sync.sh
+scripts/check-openapi-sync.sh /path/to/contracts/developer/openapi.yaml
 scripts/build-mint-openapi.sh
 ```
 
 ## Next steps
 
-- [Quickstart](/quickstart)
-- [Events](/reference/events)
-- [Errors](/reference/errors)
+- [Migrate a Linq integration](/guides/linq-migration)
+- [Read event shapes](/reference/events)
+- [Review errors](/reference/errors)

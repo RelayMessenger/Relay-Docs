@@ -1,53 +1,52 @@
 ---
 title: "Errors"
-description: "Read error envelopes and retry only commands marked retryable."
-keywords: ["errors", "retryable", "trace id", "validation"]
+description: "Read Relay error envelopes and decide whether to retry."
+keywords: ["errors", "status", "error code", "trace id"]
 ---
 
-Branch on the stable code and explicit retry flag.
+Branch on HTTP status and the numeric error code.
 
 ```json
 {
-  "object": "error",
-  "object_version": "2026-08-28",
   "error": {
-    "code": "part_index_out_of_range",
-    "message": "The requested part index does not exist on the target message.",
-    "retryable": false,
-    "field_errors": [
-      {
-        "path": "message.reply_to.part_index",
-        "code": "part_index_out_of_range",
-        "message": "part_index must identify an existing part in the target message."
-      }
-    ],
-    "details": {}
+    "status": 422,
+    "code": 2006,
+    "message": "part_index does not exist.",
+    "doc_url": "https://docs.relayapp.im/error/codes/2xxx/2006/"
   },
-  "trace_id": "9f4d3b65f2e54a98a4558f8877ef9a10"
+  "success": false,
+  "trace_id": "b923d71e50be43ba9e0fe1e34a7676c2"
 }
 ```
 
 | Field | Use |
 | --- | --- |
-| `code` | Program branch |
-| `message` | Human diagnosis |
-| `retryable` | Whether exact command may retry |
-| `field_errors` | Invalid paths |
-| `details` | Structured context |
-| `trace_id` | Correlation |
+| `status` | HTTP status repeated in the body |
+| `code` | Stable numeric branch |
+| `message` | Short diagnosis |
+| `doc_url` | Error reference |
+| `retry_after` | Delay in seconds when present |
+| `trace_id` | Support correlation |
+
+## Common status handling
 
 | Status | Action |
 | --- | --- |
-| `400`, `401`, `403`, `404` | Fix request, credential, access, or identity |
-| `408`, `409` | Inspect code and `retryable` |
-| `410`, `413`, `415`, `416`, `422` | Fix upload, size, media, range, or fields |
-| `429` | Wait for `Retry-After` |
-| `500`, `502`, `503` | Retry only when allowed |
+| `400` | Correct the JSON or request fields |
+| `401` | Restore the bearer token |
+| `403` | Use the correct agent or visible resource |
+| `404` | Stop or reconcile the resource ID |
+| `409` | Resolve a state or idempotency conflict |
+| `413` | Reduce attachment size |
+| `415` | Use a supported content type |
+| `422` | Correct media, mention, reply, or reaction data |
+| `429` | Wait for `retry_after` or `Retry-After` |
+| `500`, `503` | Retry an idempotent request with the same key |
 
-Keep the same method, path, body, and idempotency key when retrying.
+For an uncertain message send, keep the same sender, body, and idempotency key.
 
 ## See also
 
-- [Idempotency](/concepts#idempotency)
-- [Webhook retries](/guides/webhooks#retry-policy)
-- [Limits](/reference/limits)
+- [Send messages](/guides/sending-messages)
+- [Attachment validation](/guides/attachments)
+- [Webhook retries](/guides/webhook-deliveries)

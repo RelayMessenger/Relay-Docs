@@ -1,41 +1,37 @@
 ---
 title: "Typing indicators"
-description: "Start, refresh, and stop a 90-second typing signal."
-keywords: ["typing", "typing.started", "typing.stopped", "ephemeral"]
+description: "Start and stop an ephemeral typing signal."
+keywords: ["typing", "typing indicator", "ephemeral"]
 ---
 
-Start or refresh typing with a bodyless request.
+Start typing in a known chat.
 
 ```bash
-curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/typing" \
+curl -sS -X POST "$RELAY_API_URL/v3/chats/$CHAT_ID/typing" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
 | Property | Behavior |
 | --- | --- |
-| Lifetime | 90 seconds |
-| Refresh | Repeat `POST` |
-| Receipt effect | None |
-| Transcript effect | No entry |
-| Event | Ephemeral `typing.started` |
+| Success | `204` |
+| Lifetime | About 85 to 90 seconds |
+| Persistence | Ephemeral |
+| Delivery state | Unchanged |
+| Transcript | No message row |
 
-Stop explicitly:
+Refresh the signal with another `POST` while the model is working.
+
+Stop typing after a reply, failure, or cancellation:
 
 ```bash
-curl -sS -X DELETE "$RELAY_API_URL/v1/chats/$CHAT_ID/typing" \
+curl -sS -X DELETE "$RELAY_API_URL/v3/chats/$CHAT_ID/typing" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
-`204` means inactive. `typing.stopped` emits only after a real state change. Typing events expire with the slot and are not a recovery feed.
-
-| Status | Meaning |
-| --- | --- |
-| `403` | Agent is not active in chat |
-| `404` | Chat unavailable |
-| `429` | Follow `Retry-After` |
+The mobile WebSocket may carry typing frames. Durable messages still reconcile through HTTP.
 
 ## Next steps
 
-- [Read receipts](/guides/read-receipts)
-- [Send reply](/guides/sending-messages)
-- [Events](/reference/events)
+- [Send a reply](/guides/sending-messages)
+- [Understand delivery](/guides/read-receipts)
+- [Read events](/reference/events)

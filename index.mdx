@@ -1,41 +1,43 @@
 ---
 title: "Relay developer API"
-description: "Connect an agent backend with signed webhooks and idempotent REST writes."
-keywords: ["relay", "agent api", "webhooks", "messaging"]
+description: "Connect an agent backend to Relay Partner API v3."
+keywords: ["relay", "partner api", "agent", "webhooks"]
 ---
 
-Connect an agent backend to Relay with one bearer token, signed webhooks, and REST.
+Connect an agent backend with Linq-shaped HTTP routes and signed webhooks.
 
-Relay owns the messenger and canonical conversation state. Your backend owns the model, tools, memory, and behavior.
+Relay owns messaging. Your backend owns the model, tools, memory, and agent behavior.
 
-## Message lifecycle
+## Core flow
 
-| State | What happened |
+| Step | What happens |
 | --- | --- |
-| Sent | Relay accepted the message into PostgreSQL |
-| Delivered | Your `message.received` webhook durably accepted the event and returned `2xx` |
-| Read | Your backend called `POST /v1/chats/{chat_id}/read` |
-| Replied | Your backend created a separate message with an idempotent REST call |
+| Receive | Relay sends `message.received` to the agent webhook |
+| Accept | Your endpoint saves the event and returns `2xx` |
+| Read | Your backend calls `POST /v3/chats/{chatId}/read` |
+| Reply | Your backend calls `POST /v3/chats/{chatId}/messages` |
 
-## Verify your token
+## Message state
 
-```bash
-export RELAY_API_URL="${RELAY_API_URL:-http://127.0.0.1:8788}"
-curl -sS "$RELAY_API_URL/v1/agents/me" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-```
+| State | Meaning |
+| --- | --- |
+| Sent | Relay committed the message |
+| Delivered | Every snapshotted recipient acknowledged it |
+| Read | Every snapshotted recipient marked it Read |
+
+For an agent recipient, a successful `message.received` webhook is its Delivered acknowledgement. This is a Relay product decision.
 
 <Columns cols={2}>
-<Card title="Quickstart" icon="zap" href="/quickstart">Receive one message and send one reply.</Card>
-<Card title="Concepts" icon="boxes" href="/concepts">Learn the Relay object model.</Card>
-<Card title="Webhooks" icon="webhook" href="/guides/webhooks">Register and verify delivery.</Card>
-<Card title="API reference" icon="square-terminal" href="/api-reference/overview">Read endpoints and schemas.</Card>
+<Card title="Quickstart" icon="zap" href="/quickstart">Receive a message and send a reply.</Card>
+<Card title="Core concepts" icon="boxes" href="/concepts">Understand Contact, Handle, messages, and parts.</Card>
+<Card title="Linq migration" icon="arrow-right-left" href="/guides/linq-migration">Apply the three required contract changes.</Card>
+<Card title="API reference" icon="square-terminal" href="/api-reference/overview">Read the retained v3 routes.</Card>
 </Columns>
 
-<Note>The current contract is proved locally. Check [Current status](/current-status) before choosing an environment.</Note>
+<Note>The current implementation is local. See [Current status](/current-status) for the exact boundary.</Note>
 
 ## Next steps
 
 - [Complete the quickstart](/quickstart)
-- [Send messages](/guides/sending-messages)
-- [Read current status](/current-status)
+- [Understand Contact and Handle](/concepts#contact-and-handle)
+- [Receive webhooks](/guides/webhooks)

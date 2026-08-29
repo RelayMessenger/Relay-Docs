@@ -1,72 +1,84 @@
 ---
 title: "Webhook events"
-description: "Reference the signed event envelope and supported event types."
-keywords: ["events", "message.received", "message.sent", "typing"]
+description: "Reference the Relay v3 webhook envelope and retained event names."
+keywords: ["events", "webhook envelope", "message.received", "reaction.added"]
 ---
 
-Handle all events through one signed envelope.
+Read every webhook through the frozen `2026-02-03` envelope.
 
 ```json
 {
-  "api_version": "v1",
-  "webhook_version": "2026-08-28",
-  "event_id": "0198f4bc-19a2-7342-b03b-319bcc083563",
-  "event_type": "message.delivered",
-  "sequence": "484",
-  "created_at": "2026-08-28T14:05:00.100Z",
-  "trace_id": "9f4d3b65f2e54a98a4558f8877ef9a10",
-  "agent_id": "0198f49d-e5c7-78ba-a74f-7ff8186fc242",
+  "api_version": "v3",
+  "webhook_version": "2026-02-03",
+  "event_type": "message.received",
+  "event_id": "550e8400-e29b-41d4-a716-446655440000",
+  "created_at": "2026-08-28T20:00:00.000Z",
+  "trace_id": "b923d71e50be43ba9e0fe1e34a7676c2",
+  "partner_id": "relay-local",
   "data": {
-    "object": "message_delivered_event_data",
-    "object_version": "2026-08-28",
-    "message_id": "0198f4ba-3c8e-7e73-9fe9-3d272d9d427e",
-    "chat_id": "0198f4a1-27ca-76d2-99ad-59b5d3bb13b2",
-    "chat_sequence": "49",
-    "recipient": {
-      "object": "identity",
-      "object_version": "2026-08-28",
-      "id": "0198f49e-1718-7559-a251-649968bf7a22",
-      "kind": "human",
-      "username": "advait",
-      "phone_number": "+13135550142",
-      "display_name": "Advait",
-      "avatar_url": null,
-      "created_at": "2026-08-28T12:00:00.000Z"
+    "chat": {
+      "id": "1492fda2-7e62-4914-8c1b-08652ed8bd2a",
+      "is_group": false
     },
-    "delivered_at": "2026-08-28T14:05:20.000Z"
+    "id": "69a37c7d-af4f-4b5e-af42-e28e98ce873a",
+    "direction": "inbound",
+    "sender_handle": {
+      "handle": "alice",
+      "service": "Relay",
+      "kind": "user"
+    },
+    "parts": [{"type":"text","value":"Hello"}],
+    "sent_at": "2026-08-28T19:59:59.900Z",
+    "delivered_at": null,
+    "read_at": null,
+    "service": "Relay"
   }
 }
 ```
 
+## Envelope fields
+
 | Field | Use |
 | --- | --- |
-| `event_id` | UUIDv7 deduplication key |
-| `event_type` | Selects `data` shape |
-| `sequence` | Orders durable agent events |
-| `agent_id` | Recipient agent |
-| `trace_id` | Correlation |
-| `webhook_version` | Pinned contract |
+| `event_id` | Durable deduplication key |
+| `event_type` | Selects the data shape |
+| `created_at` | Event creation time |
+| `trace_id` | Request correlation |
+| `partner_id` | Receiving partner |
+| `webhook_version` | Payload version |
+
+## Event names
 
 | Event | Fires when |
 | --- | --- |
-| `message.received` | Another participant message is accepted |
-| `message.sent` | Agent message is accepted |
-| `message.delivered` | Recipient Delivered advances |
+| `message.sent` | Agent message commits |
+| `message.received` | A message for the agent commits |
+| `message.delivered` | Recipient delivery advances |
 | `message.read` | Recipient Read advances |
-| `reaction.added` | Reaction becomes present |
-| `reaction.removed` | Reaction becomes absent |
-| `chat.created` | Visible chat is created |
-| `chat.title.updated` | Group title changes |
-| `chat.avatar.updated` | Group avatar changes |
-| `participant.added` | Participant joins |
-| `participant.removed` | Participant leaves or is removed |
-| `typing.started` | Typing starts or refreshes |
-| `typing.stopped` | Typing stops |
+| `message.failed` | Message send fails |
+| `reaction.added` | Reaction add commits |
+| `reaction.removed` | Reaction removal commits |
+| `participant.added` | A Handle joins a group chat |
+| `participant.removed` | A Handle leaves a group chat |
+| `chat.created` | A visible chat is created |
+| `chat.group_name_updated` | Group name changes |
+| `chat.group_icon_updated` | Group image changes |
+| `chat.typing_indicator.started` | Typing starts |
+| `chat.typing_indicator.stopped` | Typing stops |
 
-All except typing are durable. Typing is ephemeral. Successful `message.received` delivery records Delivered; Read remains explicit.
+The two `participant.*` strings are retained Linq wire names. Group membership is stored through Handles and `chat_handle_join`.
+
+## Message event state
+
+| Event | `sent_at` | `delivered_at` | `read_at` |
+| --- | --- | --- | --- |
+| `message.sent` | Set | `null` | `null` |
+| `message.received` | Set | `null` | `null` |
+| `message.delivered` | Set | Set | `null` |
+| `message.read` | Set | Set | Set |
 
 ## See also
 
-- [Webhooks](/guides/webhooks)
-- [Deliveries](/guides/webhook-deliveries)
-- [API schemas](/api-reference/overview)
+- [Verify webhooks](/guides/webhooks)
+- [Handle retries](/guides/webhook-deliveries)
+- [Read delivery rules](/guides/read-receipts)

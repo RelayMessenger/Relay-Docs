@@ -1,18 +1,47 @@
 ---
 title: "Sending messages"
-description: "Create one immutable message with ordered text, image, file, audio, or link parts."
-keywords: ["send message", "parts", "reply", "idempotency"]
+description: "Send text, media, links, mentions, replies, and voice memos."
+keywords: ["send message", "parts", "mention", "reply", "voice memo"]
 ---
 
-Create one message inside a known chat.
+Send one immutable message to an existing chat.
+
+## Send text and media
 
 ```bash
-curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/messages" \
+curl -sS -X POST "$RELAY_API_URL/v3/chats/$CHAT_ID/messages" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: reply-$EVENT_ID" \
-  -d @send-message.json
+  -d '{
+    "message": {
+      "parts": [
+        {"type":"text","value":"Here is the recording."},
+        {"type":"media","attachment_id":"550e8400-e29b-41d4-a716-446655440000"}
+      ]
+    }
+  }'
 ```
+
+`202` means Relay committed the message. It does not mean every recipient has acknowledged it.
+
+## Part shapes
+
+| Content | Request shape | Result |
+| --- | --- | --- |
+| Text | `{"type":"text","value":"Hello"}` | Text run |
+| Mention | Text plus `mention` and `mention_range` | Mention attribute in the text run |
+| Image | `media` with image bytes | Image attachment |
+| Video | `media` with video bytes | Video attachment |
+| Audio | `media` with audio bytes | Regular audio attachment |
+| File | `media` with document bytes | File attachment |
+| Link | `{"type":"link","value":"https://example.com"}` | URL balloon |
+
+The `parts` array is an API projection from Apple `attributedBody`. Each array position becomes a zero-based `part_index`.
+
+Use one `link` part by itself. Use a text part when the URL should remain plain text.
+
+## Mention a Contact
 
 ```json
 {
@@ -20,159 +49,58 @@ curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/messages" \
     "parts": [
       {
         "type": "text",
-        "text": "The package is by the front door."
-      },
-      {
-        "type": "image",
-        "attachment_id": "0198f4af-9fd2-77f7-a8c9-7d6c4049d564",
-        "alt_text": "Package beside the front door"
-      },
-      {
-        "type": "link",
-        "url": "https://example.com/delivery/42",
-        "fallback_text": "Delivery details"
+        "value": "Echo, can you check this?",
+        "mention": "echo",
+        "mention_range": [0, 4]
       }
-    ],
+    ]
+  }
+}
+```
+
+`mention` is the Contact's Handle. The range is `[start, end)` inside `value`.
+
+## Reply to one part
+
+```json
+{
+  "message": {
+    "parts": [{"type":"text","value":"That image looks right."}],
     "reply_to": {
-      "message_id": "0198f493-f7db-7fc8-b26e-4a8503a7e6c1",
-      "part_index": 0
+      "message_id": "69a37c7d-af4f-4b5e-af42-e28e98ce873a",
+      "part_index": 1
     }
   }
 }
 ```
 
-`202 Accepted` confirms PostgreSQL acceptance, not delivery or read.
+Omit `part_index` to use the first part. Relay rejects an index outside the target projection.
 
-<Expandable title="Canonical response">
+## Send a voice memo
 
-```json
-{
-  "object": "message.acceptance",
-  "object_version": "2026-08-28",
-  "message": {
-    "object": "message",
-    "object_version": "2026-08-28",
-    "id": "0198f4ba-3c8e-7e73-9fe9-3d272d9d427e",
-    "chat_id": "0198f4a1-27ca-76d2-99ad-59b5d3bb13b2",
-    "sequence": "49",
-    "direction": "outbound",
-    "sender": {
-      "object": "identity",
-      "object_version": "2026-08-28",
-      "id": "0198f49d-e5c7-78ba-a74f-7ff8186fc242",
-      "kind": "agent",
-      "username": "concierge",
-      "display_name": "Relay Concierge",
-      "avatar_url": null,
-      "created_at": "2026-08-28T13:00:00.000Z"
-    },
-    "parts": [
-      {
-        "object": "message_part",
-        "object_version": "2026-08-28",
-        "id": "0198f4b5-e3cb-7617-a68a-b1db4ebd2bcc",
-        "index": 0,
-        "type": "text",
-        "text": "The package is by the front door."
-      },
-      {
-        "object": "message_part",
-        "object_version": "2026-08-28",
-        "id": "0198f4b5-e3cb-7617-a68a-b1db4ebd2bcd",
-        "index": 1,
-        "type": "image",
-        "attachment": {
-          "object": "attachment",
-          "object_version": "2026-08-28",
-          "id": "0198f4af-9fd2-77f7-a8c9-7d6c4049d564",
-          "filename": "front-door.jpg",
-          "mime_type": "image/jpeg",
-          "size_bytes": 482193,
-          "status": "available",
-          "sha256": "7b15f91357232d9198d16a4bd29f6a2d8100f0c5dc24f568951c87901fe7d338",
-          "width": 1600,
-          "height": 1200,
-          "duration_ms": null,
-          "created_at": "2026-08-28T14:00:00.000Z",
-          "available_at": "2026-08-28T14:00:04.000Z"
-        },
-        "alt_text": "Package beside the front door"
-      },
-      {
-        "object": "message_part",
-        "object_version": "2026-08-28",
-        "id": "0198f4b5-e3cb-7617-a68a-b1db4ebd2bce",
-        "index": 2,
-        "type": "link",
-        "url": "https://example.com/delivery/42",
-        "fallback_text": "Delivery details",
-        "preview": {
-          "object": "link_preview",
-          "object_version": "2026-08-28",
-          "status": "available",
-          "title": "Delivery 42",
-          "description": "Delivered at 2:00 PM",
-          "image_attachment_id": null
-        }
-      }
-    ],
-    "reply_to": {
-      "object": "reply_target",
-      "object_version": "2026-08-28",
-      "message_id": "0198f493-f7db-7fc8-b26e-4a8503a7e6c1",
-      "part_id": "0198f493-f859-7ba1-bde3-65463ec246e1",
-      "part_index": 0
-    },
-    "status": "accepted",
-    "receipt_summary": "none",
-    "receipts": [
-      {
-        "object": "message_receipt",
-        "object_version": "2026-08-28",
-        "recipient": {
-          "object": "identity",
-          "object_version": "2026-08-28",
-          "id": "0198f49e-1718-7559-a251-649968bf7a22",
-          "kind": "human",
-          "username": "advait",
-          "phone_number": "+13135550142",
-          "display_name": "Advait",
-          "avatar_url": null,
-          "created_at": "2026-08-28T12:00:00.000Z"
-        },
-        "delivered_at": null,
-        "read_at": null
-      }
-    ],
-    "failure": null,
-    "created_at": "2026-08-28T14:03:12.300Z",
-    "sent_at": null
-  }
-}
+Use the dedicated route to create voice-memo behavior instead of a regular audio attachment:
+
+```bash
+curl -sS -X POST "$RELAY_API_URL/v3/chats/$CHAT_ID/voicememo" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"attachment_id":"550e8400-e29b-41d4-a716-446655440000"}'
 ```
 
-</Expandable>
+You may send one HTTPS `voice_memo_url` instead. Relay stores the result as an attachment-backed message with the audio-message flag.
 
-## Parts
+## Retry a send
 
-| Type | Required | Limit |
-| --- | --- | --- |
-| `text` | `text` | 1 to 10,000 characters |
-| `image` | `attachment_id` | Alt text up to 1,000 characters |
-| `file` | `attachment_id` | Available attachment |
-| `audio` | ID, presentation, duration | Up to 200 waveform values |
-| `link` | URL and fallback text | HTTPS URL up to 2,048 characters |
+| Retry | Result |
+| --- | --- |
+| Same sender and idempotency key | Returns the original message |
+| Same key after an uncertain response | Prevents a duplicate message |
+| New key | Creates another message |
 
-Relay preserves order and assigns stable UUIDv7 part IDs.
-
-## Replies and retries
-
-`reply_to.message_id` targets a message. Add zero-based `part_index` for one exact part.
-
-Each send requires `Idempotency-Key`. Exact retries replay the response. Changed requests under one key return `409 idempotency_conflict`.
+Keep the same request body when reusing a key.
 
 ## Next steps
 
-- [Attachments](/guides/attachments)
-- [Reactions](/guides/reactions)
-- [Receipts](/guides/read-receipts)
+- [Upload attachments](/guides/attachments)
+- [Add reactions](/guides/reactions)
+- [Read delivery state](/guides/read-receipts)

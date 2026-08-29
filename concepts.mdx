@@ -1,62 +1,74 @@
 ---
 title: "Core concepts"
-description: "Understand identities, chats, messages, parts, receipts, events, and idempotency."
-keywords: ["concepts", "identity", "chat", "message", "idempotency"]
+description: "Understand Relay contacts, handles, chats, messages, and delivery."
+keywords: ["contact", "handle", "chat", "message", "delivery"]
 ---
 
-Use one small object model across Relay.
+Use Apple messaging vocabulary with one Relay profile record.
 
-## Objects
+## Contact and Handle
+
+`Contact` is a user or agent profile. `Handle` is the username used to address that Contact.
+
+```text
+Contact 1 ─── 1 Handle ─── * Chat
+```
+
+| Record | Owns |
+| --- | --- |
+| Contact | `kind`, first name, last name, image, active state |
+| Handle | Username, `service: "Relay"`, link to Contact |
+| Better Auth user | Login, session, phone verification, account security |
+
+`contact.kind` is constrained to `user` or `agent`:
+
+```sql
+kind text NOT NULL CHECK (kind IN ('user', 'agent'))
+```
+
+Better Auth remains the user account system. A Relay Contact is the messaging profile shown in chats.
+
+## Chats and messages
 
 | Object | Meaning |
 | --- | --- |
-| Identity | A human or agent participant |
-| Chat | A direct or group conversation with membership periods |
-| Message | One immutable send inside a chat |
-| Part | One ordered piece of a message |
-| Receipt | A monotonic Delivered or Read boundary |
-| Event | A signed notification sent to an agent webhook |
-| Attachment | Authenticated bytes allocated before use |
+| Chat | A direct or group conversation |
+| Handle | One Contact address in a chat |
+| Message | One immutable send |
+| Attachment | Image, video, audio, or file bytes |
 
-Only humans can expose phone numbers. Humans and agents can both have usernames, display names, and avatars.
+Apple stores chat membership with `chat_handle_join`. Relay retains that shape.
 
-## Messages and targets
+## Parts
 
-One send creates one message with 1 to 100 ordered parts. Relay assigns UUIDv7 IDs to messages and stable parts.
+The API returns ordered `parts`. These parts are decoded from Apple `message.attributedBody` when Relay reads a message.
 
-| Part | Input |
+| API part | Stored behavior |
 | --- | --- |
-| `text` | Plain text |
-| `image` | Attachment and optional alt text |
-| `file` | Attachment |
-| `audio` | Attachment, presentation, duration, optional waveform |
-| `link` | HTTPS URL and fallback text |
+| `text` | Text run, optionally carrying a mention |
+| `media` | Attachment run for image, video, audio, or file |
+| `link` | URL plus Apple URL balloon marker |
 
-Message `sequence` orders a chat. Part `index` is zero-based. Replies and reactions can use `part_index`; Relay returns the stable part ID.
+Parts do not have independent resource IDs. `part_index` is the zero-based position in the API projection.
 
-## Idempotency
+Replies store the target message and Apple part marker. Reactions remain associated Apple message rows. Relay maps both to `part_index`.
 
-| Key reuse | Result |
+## Delivery
+
+A send snapshots its recipient Handles.
+
+| State | Rule |
 | --- | --- |
-| Same key and exact request | Original result |
-| Same key and changed request | `409 idempotency_conflict` |
-| First command still running | `409 idempotency_in_progress` |
+| Sent | The message transaction committed |
+| Delivered | Every snapshotted recipient acknowledged durable receipt |
+| Read | Every snapshotted recipient marked the message Read |
 
-Resource IDs are server-assigned. `Idempotency-Key` names the logical command.
+A user acknowledges Delivered after the mobile database commits the message. An agent acknowledges Delivered when its `message.received` webhook returns `2xx`.
 
-## Lifecycle
-
-| State | Owner |
-| --- | --- |
-| Sent | Relay PostgreSQL transaction |
-| Delivered | Successful `message.received` webhook |
-| Read | Explicit `/read` request |
-| Reply | Separate message write |
-
-Webhooks are the inbound transport. Resource history provides side-effect-free reconciliation.
+<Info>Linq uses `message.delivered` for recipient-device delivery. Relay uses webhook success for an agent recipient because a webhook is that agent's delivery transport.</Info>
 
 ## See also
 
+- [Linq v3 migration](/guides/linq-migration)
 - [Send messages](/guides/sending-messages)
-- [Receive webhooks](/guides/webhooks)
-- [Read history](/guides/conversation-history)
+- [Read receipts](/guides/read-receipts)
