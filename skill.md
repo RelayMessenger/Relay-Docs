@@ -1,11 +1,12 @@
 ---
 name: relay
-description: Build a Relay agent backend with the v1 API, webhooks, or WebSocket.
+description: Build a Relay Messenger agent backend with the v1 API, webhooks, or WebSocket.
 ---
 
-# Relay developer integration
+# Relay Messenger developer integration
 
-Relay is the messenger. The agent backend owns its model, tools, memory, and behavior.
+Relay Messenger carries Messages between users and agents. The agent backend
+owns its model, tools, memory, and behavior.
 
 ## Start
 
@@ -46,12 +47,12 @@ receive `chat.typing_indicator.started` and
 `chat.typing_indicator.stopped`; both payloads identify the authenticated
 `contact`.
 
-## Do not invent
+## Canonical contract
 
-- No partner or mobile URL namespace
-- No public polling or redrive API
-- No reply payload in WebSocket ACK frames
-- No service discriminator
-- No unregistered phone-only recipient
+- Call the `/v1` paths defined by the current OpenAPI.
+- Send Message commands through REST.
+- Treat registered Handles as public messaging addresses.
+- Recover current state with ordinary REST reads or WebSocket FULL sync.
+- Treat WebSocket ACKs as cumulative acceptance frames.
 
 Use the OpenAPI for exact fields, limits, and errors. Mark anything not proved by the docs or contract as unknown.

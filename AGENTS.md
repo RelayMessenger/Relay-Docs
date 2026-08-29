@@ -1,4 +1,4 @@
-# Authoring Relay docs
+# Authoring Relay Messenger docs
 
 Conventions this site follows. They apply to people and to coding agents.
 
@@ -52,9 +52,16 @@ Then follow the shape for the page type:
   inspect history.
 - Relay is the messenger. The developer's external backend is the agent brain.
   Keep that boundary explicit.
+- Use **Relay Messenger** for the product or company identity. Use **Relay
+  API** for the developer API and **Relay Console** for the Console.
+- Keep the navbar limited to the **Agent prompt** deep link and the primary
+  **Console** action. The logo owns the `https://relayapp.im` website link.
+- Keep Mintlify's native **Copy page** label honest. The Agent prompt link
+  opens the full prompt code block, whose native code control performs the copy.
 - Use `https://api.relayapp.im` and `$RELAY_AGENT_TOKEN` in examples.
-- Show raw HTTPS and JSON before the maintained TypeScript SDK. Do not imply
-  an unsupported framework, model provider, or host.
+- Show the maintained TypeScript SDK and equivalent raw HTTPS side by side,
+  with the SDK first. Do not imply an unsupported framework, model provider,
+  or host.
 - Prefer `curl -sS` with exact headers, status codes, and idempotency behavior.
 - Use `Idempotency-Key` or `message.idempotency_key` exactly as the current
   OpenAPI allows. Reuse the same value and request after an uncertain send.

@@ -1,9 +1,9 @@
 ---
 name: relay-docs-authoring
-description: Write, simplify, review, and reorganize Relay’s Mintlify documentation. Use for any Relay docs page, navigation, quickstart, concept, integration, status, OpenAPI, or machine-readable docs change. Combines the strongest Linq, Photon, OpenClaw, Hermes, Stripe, Twilio, Vercel AI SDK, and Telegram patterns while preserving Relay’s real contract.
+description: Write, simplify, review, and reorganize Relay Messenger's Mintlify documentation while preserving the current Relay API contract.
 ---
 
-# Relay docs authoring
+# Relay Messenger docs authoring
 
 Write for a developer who wants one agent reply working now.
 
@@ -19,16 +19,18 @@ External docs teach structure. They never prove Relay behavior.
 
 ## Site hierarchy
 
-Use this reader path:
+Keep the three top-level tabs in this order:
 
-1. Start: home, quickstart, core concepts, agent creation, authentication.
-2. Build: messages, media, groups, streams.
-3. Receive: webhooks, delivery, history, receipts.
-4. Connect: runtime integrations.
-5. Reference: API, events, errors, limits, data, status.
-6. About: product explanation and comparisons.
+1. Guides
+2. Error Codes
+3. API Reference
 
-Keep pages at three navigation levels or fewer.
+Within Guides, use the current `docs.json` order: Introduction, Getting
+started, Messaging, Chats, Contacts, Agent events, Webhooks, WebSocket,
+Platform, and Examples.
+
+Keep pages at three navigation levels or fewer. Add a category only when a
+current, source-backed page requires it.
 
 ## Page templates
 
@@ -74,7 +76,8 @@ Code, JSON, tables, and exact error text do not count toward prose limits.
 - Lead with the action or fact.
 - Prefer common verbs: send, receive, save, retry, stop, open.
 - Define a Relay noun once, then use it consistently.
-- Show raw HTTPS and JSON before integrations.
+- Show the TypeScript SDK and equivalent raw HTTPS side by side, with the SDK
+  first.
 - State what success proves.
 - State what a retry can duplicate and how the key prevents it.
 - Keep Relay as the messenger and the external backend as the agent brain.

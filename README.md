@@ -1,19 +1,21 @@
-# Relay Docs
+# Relay Messenger Docs
 
-Public developer documentation for Relay.
+Public developer documentation for Relay Messenger.
 
 The site has three top-level tabs:
 
 ```text
 Guides
+  Introduction
   Getting started
   Messaging
   Chats
-  Contact Cards
+  Contacts
+  Agent events
   Webhooks
   WebSocket
   Platform
-  Resources
+  Examples
 Error Codes
 API Reference
 ```

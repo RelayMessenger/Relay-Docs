@@ -6,12 +6,30 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 config = json.loads((root / "docs.json").read_text())
+if config.get("name") != "Relay Messenger":
+    raise SystemExit("site identity must be Relay Messenger")
+if config.get("description") != "Relay Messenger API v1 documentation.":
+    raise SystemExit("site description must use the Relay Messenger identity")
 if config.get("navbar", {}).get("primary") != {
     "type": "button",
     "label": "Console",
     "href": "https://console.relayapp.im",
 }:
     raise SystemExit("top-right docs action must open Relay Console")
+if config.get("navbar", {}).get("links") != [
+    {
+        "label": "Agent prompt",
+        "href": "/getting-started/ai-agents#relay-agent-prompt",
+        "icon": "copy",
+    }
+]:
+    raise SystemExit("Agent prompt must be the only secondary navbar action")
+if config.get("logo") != {
+    "light": "/logo/light.png",
+    "dark": "/logo/dark.png",
+    "href": "https://relayapp.im",
+}:
+    raise SystemExit("Relay logo must link to https://relayapp.im")
 
 
 def pages(value):
@@ -31,6 +49,16 @@ def has_key(value, forbidden):
     if isinstance(value, list):
         return any(has_key(item, forbidden) for item in value)
     return False
+
+
+def h2_headings(text):
+    prose = re.sub(
+        r"^(`{3,})[^\n]*\n.*?^\1\s*$",
+        "",
+        text,
+        flags=re.M | re.S,
+    )
+    return re.findall(r"^## (.+)$", prose, re.M)
 
 
 mdx_paths = sorted(root.rglob("*.mdx"))
@@ -141,6 +169,8 @@ if has_key(config.get("navigation", {}), "icon") or has_key(config.get("navigati
     raise SystemExit("decorative navigation icons returned")
 if config.get("contextual") != {"options": ["copy", "view"], "display": "header"}:
     raise SystemExit("header Copy page/Markdown actions changed")
+if "getting-started/quickstart" not in navigated:
+    raise SystemExit("Quickstart must remain a sidebar guide")
 if (root / "current-status.mdx").exists():
     raise SystemExit("Current status belongs in the evidence site, not public docs")
 
@@ -199,7 +229,7 @@ for path in mdx_paths:
         raise SystemExit(f"missing {sorted(missing)} in {path}")
     if "—" in text:
         raise SystemExit(f"em dash in {path}")
-    headings = re.findall(r"^## (.+)$", text, re.M)
+    headings = h2_headings(text)
     if not headings or headings[-1] not in {"Next steps", "Related", "See also"}:
         raise SystemExit(f"page must end with Next steps, Related, or See also: {path}")
 
@@ -212,6 +242,46 @@ for path in mdx_paths:
                 raise SystemExit(
                     f"TypeScript SDK must appear before cURL: {path.relative_to(root)}"
                 )
+
+architecture_text = (root / "INFORMATION-ARCHITECTURE.md").read_text()
+heading_inventory = architecture_text.split(
+    "## 16. Exact heading skeletons", 1
+)[1].split("## 17. Current page map", 1)[0]
+documented_heading_rows = {
+    page.strip().lower(): re.findall(r"`([^`]+)`", order)
+    for page, order in re.findall(r"^\| ([^|]+) \| (.+) \|$", heading_inventory, re.M)
+    if "`" in order
+}
+heading_aliases = {
+    "participants and membership": "participants",
+    "websocket acknowledgements": "acknowledgements",
+    "websocket full sync": "full sync",
+    "limits": "rate limits",
+    "error codes": "error overview",
+    "api reference": "api reference overview",
+}
+for path in mdx_paths:
+    text = path.read_text()
+    frontmatter = text.split("---", 2)[1]
+    title_match = re.search(r'^title:\s*"([^"]+)"', frontmatter, re.M)
+    if not title_match:
+        raise SystemExit(f"quoted title missing from frontmatter: {path}")
+    title = title_match.group(1).lower()
+    if "error/codes/" in str(path.relative_to(root)):
+        inventory_key = "one error code"
+    else:
+        inventory_key = heading_aliases.get(title, title)
+    expected_headings = documented_heading_rows.get(inventory_key)
+    if expected_headings is None:
+        raise SystemExit(
+            f"heading inventory missing for {path.relative_to(root)}: {inventory_key}"
+        )
+    actual_headings = h2_headings(text)
+    if actual_headings != expected_headings:
+        raise SystemExit(
+            f"heading inventory drifted for {path.relative_to(root)}: "
+            f"{actual_headings} != {expected_headings}"
+        )
 
 side_by_side_guides = [
     "getting-started/quickstart.mdx",
@@ -434,6 +504,29 @@ for required_path in [
         raise SystemExit(f"canonical OpenAPI path missing: {required_path}")
 if "/v1/websocket-connections" in openapi_paths:
     raise SystemExit("stale WebSocket connection-credential endpoint returned")
+event_type_block = re.search(
+    r"^    WebhookEventType:\n.*?^      enum:\n"
+    r"((?:^        - [^\n]+\n)+)",
+    openapi_text,
+    re.M | re.S,
+)
+if not event_type_block:
+    raise SystemExit("WebhookEventType enum missing from OpenAPI")
+contract_events = {
+    value.strip()
+    for value in re.findall(r"^        - (.+)$", event_type_block.group(1), re.M)
+}
+documented_events = set(
+    re.findall(
+        r"`((?:message|reaction|participant|chat)\.[a-z_.]+)`",
+        webhook_events_text,
+    )
+)
+if documented_events != contract_events:
+    raise SystemExit(
+        "Webhook Event Types page drifted from OpenAPI: "
+        f"{sorted(documented_events ^ contract_events)}"
+    )
 share_path_start = openapi_text.index("  /v1/chats/{chatId}/share_contact_card:")
 share_path_end = openapi_text.find("\n  /v1/", share_path_start + 2)
 share_operation = openapi_text[
@@ -458,6 +551,37 @@ if disconnect_reasons != [
 handwritten_paths = [*mdx_paths, root / "skill.md", root / "README.md"]
 handwritten_text = "\n".join(path.read_text() for path in handwritten_paths)
 all_contract_text = handwritten_text + "\n" + openapi_text
+
+if "Relay Messenger" not in (root / "index.mdx").read_text():
+    raise SystemExit("Introduction must identify the product as Relay Messenger")
+if (root / "skill.md").read_bytes() != (
+    root / ".mintlify/skills/relay/SKILL.md"
+).read_bytes():
+    raise SystemExit("published Relay skill drifted from skill.md")
+skill_body = (root / "skill.md").read_text().split("---\n", 2)[2].strip()
+agent_prompt_page = (root / "getting-started/ai-agents.mdx").read_text()
+prompt_match = re.search(
+    r"^## Relay agent prompt\n.*?^````text Relay agent prompt\n"
+    r"(.*?)\n````$",
+    agent_prompt_page,
+    re.M | re.S,
+)
+if not prompt_match or prompt_match.group(1).strip() != skill_body:
+    raise SystemExit("visible Relay agent prompt drifted from skill.md")
+if "@relaymessenger/sdk" not in handwritten_text:
+    raise SystemExit("public docs must name the @relaymessenger/sdk package")
+if "@relayapp/sdk" in handwritten_text:
+    raise SystemExit("deprecated SDK package name returned")
+
+for name, pattern in {
+    "deprecated product name": r"\bRelay App\b",
+    "Business API name": r"\bBusiness API\b",
+    "Partner API name": r"\bPartner API\b",
+    "mobile product namespace": r"\bmobile(?: API| namespace| endpoint| boundary)?\b",
+    "realtime product name": r"\breal[ -]?time\b",
+}.items():
+    if re.search(pattern, handwritten_text, re.I):
+        raise SystemExit(f"stale {name}")
 
 for name, pattern in {
     "Socket Mode product name": r"\bSocket Mode\b",
@@ -493,8 +617,11 @@ for name, pattern in {
         raise SystemExit(f"stale {name}")
 
 print(
-    f"validated {len(files)} public pages, three tabs, atomic guide groups, "
+    f"validated {len(files)} Relay Messenger public pages, three tabs, "
+    "Console CTA, Agent prompt deep link, logo destination, Quickstart sidebar placement, "
+    "atomic guide groups, "
+    "exact heading inventory, "
     "frontmatter, bodyless Contact Card sharing, exact delivery states and error pages, "
-    "typing, webhook retries, transport recovery, URL safety, WebSocket disconnects, "
-    "and stale-contract bans"
+    "typing, exact OpenAPI event inventory, webhook retries, transport recovery, URL safety, "
+    "WebSocket disconnects, package identity, and stale-contract bans"
 )

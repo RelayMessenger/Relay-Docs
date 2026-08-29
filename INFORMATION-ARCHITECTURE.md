@@ -1,13 +1,27 @@
-# Relay documentation information architecture
+# Relay Messenger documentation information architecture
 
 Status: working source of truth for the Docs rebuild  
 Method: outer shell first, then page structure, then examples and prose  
 Source priority: Relay contract → Linq presentation → Photon presentation
 
-This document defines how Relay documentation is organized and taught. It is
-deliberately one document: navigation, page topology, typography, code
-presentation, and content boundaries must be decided together before individual
-pages are polished.
+This document defines how Relay Messenger documentation is organized and
+taught. It is deliberately one document: navigation, page topology,
+typography, code presentation, and content boundaries must be decided together
+before individual pages are polished.
+
+## Product identity
+
+| Surface | Approved name |
+| --- | --- |
+| Product and company | Relay Messenger |
+| Developer interface | Relay API |
+| Developer dashboard | Relay Console |
+| TypeScript package | `@relaymessenger/sdk` |
+| Public API origin | `https://api.relayapp.im` |
+| Console origin | `https://console.relayapp.im` |
+
+The `relayapp.im` hostnames are current domains. They do not change the
+product name.
 
 ## 1. Source boundary
 
@@ -359,17 +373,15 @@ Combine material when:
   distinction explicit;
 - TypeScript SDK and cURL for the same task in one guide.
 
-## 6. Relay outer topology
+## 6. Relay Messenger outer topology
 
-Relay has three top-level tabs.
+Relay Messenger has three top-level tabs.
 
 ```text
 Guides
 Error Codes
 API Reference
 ```
-
-Relay has no legacy tab until a second public API version exists.
 
 ### Guides
 
@@ -432,32 +444,16 @@ Platform
   Rate Limits
   Debugging
 
-Integrations
-  Only source-backed, runnable integrations that pass their tests
-
 Examples
   Examples
 ```
-
-### Conditional Integrations group
-
-Do not add a group from aspiration. Show Integrations only when at least one
-integration has:
-
-1. runnable code;
-2. a current Server/SDK contract;
-3. automated validation;
-4. a named maintainer boundary.
-
-Linq and Photon integration inventory is the discovery source. Missing
-Railway, Render, Python, or another platform is not automatically a Relay gap.
 
 ### Error Codes
 
 ```text
 Overview
 1xxx request errors
-2xxx resource and authorization errors
+2xxx resource errors
 3xxx server errors
 ```
 
@@ -473,7 +469,7 @@ Each code page must state:
 
 ```text
 Overview
-Generated endpoint groups from Relay OpenAPI
+Generated endpoint groups from the Relay API OpenAPI
 ```
 
 Do not hand-maintain endpoint fields in narrative pages. OpenAPI is the field
@@ -485,7 +481,7 @@ authority.
 | --- | --- | --- |
 | Quickstart | first successful send and receive setup | highest-frequency onboarding path |
 | Authentication | protect and send an Agent Token | security boundary |
-| Client SDKs | install and operate `@relayapp/sdk` | maintained client surface |
+| Client SDKs | install and operate `@relaymessenger/sdk` | maintained client surface |
 | Key Concepts | define Contact, Handle, Chat, Message, part, event | vocabulary once |
 | Sending Messages | choose new/existing Chat and send | primary write |
 | Mentions | encode group mention and UTF-16 range | distinct validation failures |
@@ -619,7 +615,7 @@ the page’s job and main constraints.
 
 ### Rule
 
-Every executable developer task supported by `@relayapp/sdk` uses one
+Every executable developer task supported by `@relaymessenger/sdk` uses one
 Mintlify tab group:
 
 ```text
@@ -703,6 +699,16 @@ Keep Mintlify header actions:
 }
 ```
 
+Header navigation has two actions:
+
+- **Agent prompt** is a secondary link with Mintlify's `copy` icon. It opens
+  the exact `Relay agent prompt` section, where the full prompt is one visible
+  text code block with Mintlify's native copy control.
+- **Console** is the primary action and opens Relay Console.
+
+The Relay logo opens `https://relayapp.im`. Mintlify's native **Copy page**
+action keeps its original name because it copies the current page Markdown.
+
 Use a Review with an agent block only when a concrete audit is valuable:
 
 - authentication;
@@ -741,100 +747,92 @@ Therefore:
 
 ## 16. Exact heading skeletons
 
-These outlines are frozen before prose normalization. A page may omit one
-optional section when it has nothing truthful to say, but it may not invent a
-new responsibility that belongs to another page.
+These outlines match the current public pages. A heading change must preserve
+the page's single job and update this inventory in the same commit.
 
 ### Introduction and Getting started
 
 | Page | H2 order |
 | --- | --- |
-| Introduction | `What you can build` → `Core capabilities` → `Authentication` → `Quick example` → `Next steps` |
-| Quickstart | `Prerequisites` → `Install or use HTTP` → `Send a Message` → `Receive agent events` → `Next steps` |
-| Authentication | `Use an Agent Token` → `Protect the token` → `WebSocket authentication` → `Authentication errors` → `Related` |
-| Client SDKs | `Install` → `Create a client` → `Resources` → `Retries and idempotency` → `Errors` → `Webhook verification` → `WebSocket` → `Runtime support` → `Related` |
-| Key Concepts | `Contacts and Handles` → `Chats` → `Messages and parts` → `Receipts` → `Agent events` → `Idempotency` → `Related` |
-| AI coding agents | `Install Relay context` → `Give an agent the contract` → `Review with an agent` → `Related` |
-| Best Practices | `Store credentials safely` → `Make writes idempotent` → `Acknowledge after durable commit` → `Recover from gaps` → `Respect limits` → `Review with an agent` → `Related` |
+| Introduction | `Prerequisites` → `What you can build` → `Key capabilities` → `Authentication` → `Quick example` → `Next steps` |
+| Quickstart | `Prerequisites` → `1. Set your credentials` → `2. Choose the SDK or HTTPS` → `3. Create a webhook subscription` → `4. Accept the event durably` → `5. Mark Read and reply` → `Review with an agent` → `Next steps` |
+| Authentication | `Credentials` → `Agent Tokens` → `WebSocket authentication` → `Errors` → `Related` |
+| Client SDKs | `Install` → `Create a client` → `Send a Message` → `Resources` → `Pagination` → `Retries and idempotency` → `Errors` → `Webhook verification` → `WebSocket` → `Browser limitation` → `Runnable examples` → `Related` |
+| Key Concepts | `Contacts and Handles` → `Chats` → `Messages and parts` → `Attachments` → `Delivery` → `Events` → `Idempotency` → `Related` |
+| AI coding agents | `Documentation files` → `Relay agent prompt` → `Build prompt` → `Audit prompt` → `Related` |
+| Best Practices | `Accept events before processing` → `Make commands idempotent` → `Keep replies on REST` → `Treat IDs as opaque` → `Upload media before sending` → `Respect membership visibility` → `Handle duplicates` → `Related` |
 
 ### Messaging
 
 | Page | H2 order |
 | --- | --- |
-| Messaging | `Message model` → `Part types` → `Send and receive lifecycle` → `Related` |
+| Messaging | `Part types` → `Send paths` → `Message lifecycle` → `Next steps` |
 | Sending Messages | `Send to an existing Chat` → `Resolve or create a Chat` → `Send multiple parts` → `Idempotency` → `Limits` → `Next steps` |
 | Mentions | `Mention a Contact` → `Choose the range` → `Validation rules` → `Related` |
 | Message Details | `Retrieve a Message` → `Read the response` → `Direction` → `List Chat history` → `Related` |
-| Message Parts | `Part types` → `Ordering` → `Composition rules` → `Part targets` → `Related` |
-| Attachments | `Create an upload` → `Upload raw bytes` → `Send the Attachment` → `Import a public URL` → `Media metadata` → `Formats and limits` → `Ownership` → `Related` |
-| Voice Memos | `Upload audio` → `Send a Voice Memo` → `Read the response` → `Rules` → `Related` |
-| Rich Link Previews | `Send a link part` → `Composition rule` → `Plain-text URLs` → `Related` |
-| Replies | `Reply to a Message` → `Target a part` → `Retrieve a thread` → `Related` |
-| Reactions | `Add a reaction` → `Replace or remove a reaction` → `Target a part` → `Reaction events` → `Related` |
-| Delivery Receipts | `Receipt truth` → `Delivered boundaries` → `Acknowledge user delivery` → `Mark Read` → `Group behavior` → `Related` |
+| Message Parts | `Part types` → `Ordering and composition` → `Response-only parts` → `Related` |
+| Attachments | `1. Create an upload` → `2. Upload the raw bytes` → `3. Send the Attachment` → `Import a public media URL` → `Media metadata` → `Image formats` → `Limits` → `Ownership` → `Related` |
+| Voice Memos | `Upload audio` → `Send the voice memo` → `Read the response` → `Related` |
+| Rich Link Previews | `Send a link part` → `Composition rules` → `Start a Chat with a link` → `Related` |
+| Replies | `Reply to a Message` → `Target a part` → `List a reply thread` → `Related` |
+| Reactions | `Add a reaction` → `Reaction types` → `Remove a reaction` → `Events` → `Related` |
+| Delivery Receipts | `Response fields` → `Delivered boundaries` → `Acknowledge user delivery` → `Mark Read` → `Direct and group presentation` → `Related` |
 
 ### Chats and Contacts
 
 | Page | H2 order |
 | --- | --- |
-| Chats | `Chat types` → `Membership and visibility` → `Chat metadata` → `Related` |
-| Group Chats | `Create a group` → `Limits` → `Name and photo` → `History` → `Related` |
-| Participants | `Add a Contact` → `Remove a Contact` → `Leave a Chat` → `History visibility` → `Related` |
-| Typing Indicators | `Start typing` → `Refresh and auto-clear` → `Stop typing` → `Receive typing events` → `Current mobile boundary` → `Related` |
-| Sharing Contact Card | `Share inside a Chat` → `What the recipient sees` → `Rules` → `Related` |
-| Message History | `List a page` → `Continue with a cursor` → `Membership windows` → `Recover current state` → `Related` |
-| Contact Cards | `Create a Contact Card` → `Retrieve it` → `Update it` → `Share it` → `Related` |
-| Blocked Handles | `Block a Handle` → `List blocked Handles` → `Unblock a Handle` → `Traffic rules` → `Related` |
+| Chats | `Chat types` → `Create a Chat` → `Chat fields` → `Next steps` |
+| Group Chats | `Create a group` → `Limits` → `Rename the group` → `Set a group photo` → `Group metadata events` → `Related` |
+| Participants | `Add a Contact` → `Remove a Contact` → `Leave` → `Membership periods` → `Events` → `Related` |
+| Typing Indicators | `Start or refresh` → `Refresh and auto-clear` → `Stop` → `Receive events` → `API reference` → `Related` |
+| Sharing Contact Card | `Before sharing` → `Share the card` → `Keep configuration separate` → `Related` |
+| Message History | `Pagination` → `Group-history rows` → `Membership visibility` → `Agent recovery` → `Related` |
+| Contact Cards | `How Contact Cards work` → `Retrieve the card` → `Upsert the card` → `Update the card` → `Fields` → `Sharing is separate` → `Related` |
+| Blocked Handles | `Block` → `Behavior` → `List` → `Unblock` → `Related` |
 
 ### Agent events, Webhooks, and WebSocket
 
 | Page | H2 order |
 | --- | --- |
-| Agent Events | `Choose a transport` → `Shared envelope` → `Switch transports` → `Recovery` → `Related` |
-| Webhooks | `Flow` → `Create a subscription` → `Verify a request` → `Acknowledge delivery` → `Related` |
-| Webhook Subscriptions | `Create` → `Store the signing secret` → `List and retrieve` → `Update` → `Delete` → `Related` |
-| Webhook Event Types | `Envelope` → `Message events` → `Reaction events` → `Chat and participant events` → `Typing events` → `Related` |
+| Agent Events | `Choose a transport` → `Shared envelope` → `Switch transports` → `Recovery` → `Review with an agent` → `Related` |
+| Webhooks | `Flow` → `Create a subscription` → `Verify the signature` → `Acknowledge safely` → `Review with an agent` → `Related` |
+| Webhook Subscriptions | `Create` → `Store the signing secret` → `List, retrieve, update, or delete` → `Rotate a secret` → `Related` |
+| Webhook Event Types | `List supported events` → `Envelope` → `Message events` → `Payload version` → `Reaction events` → `Chat events` → `Related` |
 | Webhook Delivery | `Delivery policy` → `Retry classes` → `Receiver pattern` → `Delivered meaning` → `Terminal state and redrive` → `Review with an agent` → `Related` |
-| WebSocket | `Select WebSocket` → `Connect` → `Accept an event` → `Reconnect` → `Switch back to Webhooks` → `Security trade-off` → `Related` |
-| WebSocket Protocol | `Ready` → `Events` → `Client frames` → `Server errors` → `Disconnects and close codes` → `Ordering` → `Related` |
-| Acknowledgements | `What ACK means` → `Commit before ACK` → `Cumulative sequences` → `Replay` → `Failure handling` → `Review with an agent` → `Related` |
-| FULL sync | `When Relay requires it` → `Fetch authoritative state` → `Commit the snapshot` → `Complete FULL sync` → `Events during sync` → `Failure handling` → `Related` |
+| WebSocket | `Select WebSocket delivery` → `Connect with the SDK` → `Security trade-off` → `Review with an agent` → `Related` |
+| WebSocket Protocol | `Ready frame` → `Event frame` → `Error frame` → `Backpressure` → `Heartbeats` → `Disconnects` → `Related` |
+| Acknowledgements | `Frame` → `Safe order` → `Delivery meaning` → `Replay` → `Errors` → `Review with an agent` → `Related` |
+| FULL sync | `Normal reconnect` → `When Relay requires FULL sync` → `Commit the snapshot` → `Events during sync` → `Retention` → `Failure handling` → `Related` |
 
 ### Platform, Examples, errors, and reference
 
 | Page | H2 order |
 | --- | --- |
-| Idempotency | `Use a stable key` → `Replay outcomes` → `Generate and store keys` → `Related` |
-| Rate Limits | `Read a limit response` → `Retry correctly` → `Current limits` → `Related` |
-| Debugging | `Capture trace IDs` → `Correlate events` → `Inspect delivery` → `Do not log secrets` → `Related` |
-| Examples | `Official examples` → `What each proves` → `Run locally` → `Related` |
-| Error overview | `Error body` → `Code ranges` → `Retry rules` → `Find a code` |
-| One error code | `Why it happened` → `Fix` → `Retry` → `Related` |
-| API Reference overview | `Base URL` → `Authentication` → `Generated resources` → `Guides versus reference` |
+| Idempotency | `Supply a key` → `Retry behavior` → `Derive reply keys from events` → `Event idempotency` → `Related` |
+| Rate Limits | `Messages` → `Chats` → `Attachments` → `Agent events` → `Related` |
+| Debugging | `IDs to record` → `Error response` → `Safe logs` → `Event debugging` → `Related` |
+| Examples | `Agent backends` → `Messaging` → `Reliability` → `Related` |
+| Error overview | `Envelope fields` → `Error code ranges` → `1xxx request errors` → `2xxx resource errors` → `3xxx server errors` → `Related` |
+| One error code | `Response` → `Fix` → `Retry` → `Related` |
+| API Reference overview | `Conventions` → `Resources` → `Errors` → `Related` |
 
-## 17. Current-file migration map
+## 17. Current page map
 
-| Current path | Final placement | Action |
+| Current path | Placement | Status |
 | --- | --- | --- |
-| `index.mdx` | Introduction | keep, simplify |
-| `getting-started/quickstart.mdx` | Getting started / Quickstart | normalize tabs |
-| `getting-started/authentication.mdx` | Getting started / Authentication | keep |
-| `getting-started/sdks.mdx` | Getting started / Client SDKs | make first-class |
-| `getting-started/key-concepts.mdx` | Getting started / Key Concepts | keep vocabulary only |
-| `getting-started/ai-agents.mdx` | Getting started / AI coding agents | source-backed tools only |
-| `getting-started/best-practices.mdx` | Getting started / Best Practices | reliability checklist |
-| `guides/messaging/*` | Messaging | reorder and normalize |
-| `guides/chats/share-contact-card.mdx` | Chats / Sharing Contact Card | move in nav, keep file |
-| `guides/contact-cards.mdx` | Contacts / Contact Cards | keep |
-| `guides/chats/blocked-handles.mdx` | Contacts / Blocked Handles | keep |
-| `guides/webhooks/*` | Webhooks | own sidebar group |
-| `guides/websocket/*` | WebSocket | own sidebar group |
-| `guides/agent-events/index.mdx` | none unless it adds a real decision | remove if duplicative |
-| `guides/platform/*` | Platform | keep focused pages |
-| `examples/index.mdx` | Examples | keep only runnable examples |
-| `resources/faq.mdx` | none for v1 launch | delete unless verified questions justify it |
-| `api-reference/*` | API Reference | generated |
-| `error/*` | Error Codes | retain one-code pages |
+| `index.mdx` | Introduction | integrated |
+| `getting-started/*` | Getting started | integrated |
+| `guides/messaging/*` | Messaging | integrated |
+| `guides/chats/index.mdx`, `group-chats.mdx`, `participants.mdx`, `typing-indicators.mdx`, `share-contact-card.mdx`, `message-history.mdx` | Chats | integrated |
+| `guides/contact-cards.mdx`, `guides/chats/blocked-handles.mdx` | Contacts | integrated |
+| `guides/agent-events/index.mdx` | Agent events | integrated comparison hub |
+| `guides/webhooks/*` | Webhooks | integrated |
+| `guides/websocket/*` | WebSocket | integrated |
+| `guides/platform/*` | Platform | integrated |
+| `examples/index.mdx` | Examples | integrated |
+| `api-reference/*` | API Reference | generated from the current OpenAPI |
+| `error/*` | Error Codes | integrated one-code pages |
 
 ## 18. Validation gates
 
