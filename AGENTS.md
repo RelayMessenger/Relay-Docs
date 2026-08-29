@@ -54,10 +54,11 @@ Then follow the shape for the page type:
   Keep that boundary explicit.
 - Use **Relay Messenger** for the product or company identity. Use **Relay
   API** for the developer API and **Relay Console** for the Console.
-- Keep the navbar limited to the **Agent prompt** deep link and the primary
-  **Console** action. The logo owns the `https://relayapp.im` website link.
-- Keep Mintlify's native **Copy page** label honest. The Agent prompt link
-  opens the full prompt code block, whose native code control performs the copy.
+- Keep the navbar limited to **Copy agent prompt** and the primary **Console**
+  action. The logo owns the `https://relayapp.im` website link.
+- `agent-prompt.js` copies `skill.md` exactly. Its link falls back to the full
+  prompt code block when JavaScript or clipboard access is unavailable.
+- Keep Mintlify's native **Copy page** label honest.
 - Use `https://api.relayapp.im` and `$RELAY_AGENT_TOKEN` in examples.
 - Show the maintained TypeScript SDK and equivalent raw HTTPS side by side,
   with the SDK first. Do not imply an unsupported framework, model provider,

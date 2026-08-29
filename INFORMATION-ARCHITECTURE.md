@@ -701,9 +701,11 @@ Keep Mintlify header actions:
 
 Header navigation has two actions:
 
-- **Agent prompt** is a secondary link with Mintlify's `copy` icon. It opens
-  the exact `Relay agent prompt` section, where the full prompt is one visible
-  text code block with Mintlify's native copy control.
+- **Copy agent prompt** is a secondary link with Mintlify's `copy` icon. The
+  root custom script copies `skill.md` exactly and shows transient **Copied**
+  feedback without replacing the icon. Its normal `href` opens the exact
+  `Relay agent prompt` section when JavaScript or clipboard access is
+  unavailable.
 - **Console** is the primary action and opens Relay Console.
 
 The Relay logo opens `https://relayapp.im`. Mintlify's native **Copy page**

@@ -18,12 +18,12 @@ if config.get("navbar", {}).get("primary") != {
     raise SystemExit("top-right docs action must open Relay Console")
 if config.get("navbar", {}).get("links") != [
     {
-        "label": "Agent prompt",
+        "label": "Copy agent prompt",
         "href": "/getting-started/ai-agents#relay-agent-prompt",
         "icon": "copy",
     }
 ]:
-    raise SystemExit("Agent prompt must be the only secondary navbar action")
+    raise SystemExit("Copy agent prompt must be the only secondary navbar action")
 if config.get("logo") != {
     "light": "/logo/light.png",
     "dark": "/logo/dark.png",
@@ -558,7 +558,7 @@ if (root / "skill.md").read_bytes() != (
     root / ".mintlify/skills/relay/SKILL.md"
 ).read_bytes():
     raise SystemExit("published Relay skill drifted from skill.md")
-skill_body = (root / "skill.md").read_text().split("---\n", 2)[2].strip()
+skill_text = (root / "skill.md").read_text()
 agent_prompt_page = (root / "getting-started/ai-agents.mdx").read_text()
 prompt_match = re.search(
     r"^## Relay agent prompt\n.*?^````text Relay agent prompt\n"
@@ -566,8 +566,24 @@ prompt_match = re.search(
     agent_prompt_page,
     re.M | re.S,
 )
-if not prompt_match or prompt_match.group(1).strip() != skill_body:
+if not prompt_match or prompt_match.group(1) + "\n" != skill_text:
     raise SystemExit("visible Relay agent prompt drifted from skill.md")
+agent_prompt_script = (root / "agent-prompt.js").read_text()
+prompt_assignment = re.search(
+    r"const RELAY_AGENT_PROMPT = (.+);$",
+    agent_prompt_script,
+    re.M,
+)
+if (
+    not prompt_assignment
+    or json.loads(prompt_assignment.group(1)) != skill_text
+):
+    raise SystemExit("agent-prompt.js payload drifted from skill.md")
+if (
+    'const FALLBACK_PATH = "/getting-started/ai-agents#relay-agent-prompt";'
+    not in agent_prompt_script
+):
+    raise SystemExit("agent-prompt.js lost its safe fallback destination")
 if "@relaymessenger/sdk" not in handwritten_text:
     raise SystemExit("public docs must name the @relaymessenger/sdk package")
 if "@relayapp/sdk" in handwritten_text:
@@ -618,7 +634,7 @@ for name, pattern in {
 
 print(
     f"validated {len(files)} Relay Messenger public pages, three tabs, "
-    "Console CTA, Agent prompt deep link, logo destination, Quickstart sidebar placement, "
+    "Console CTA, Copy agent prompt action, logo destination, Quickstart sidebar placement, "
     "atomic guide groups, "
     "exact heading inventory, "
     "frontmatter, bodyless Contact Card sharing, exact delivery states and error pages, "
