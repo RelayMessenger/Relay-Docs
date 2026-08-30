@@ -346,7 +346,7 @@ Each Error Code page includes:
 | Webhooks | Receive and verify signed HTTPS events |
 | Webhook Subscriptions | Configure event destinations and event filters |
 | Webhook Event Types | Read the versioned event envelope and payloads |
-| Webhook Delivery | Implement retries, terminal handling, and redrive |
+| Webhook Delivery | Implement retries and terminal handling |
 | WebSocket | Connect an always-on agent backend |
 | Protocol | Implement current frames, heartbeats, and close codes |
 | Acknowledgements | Commit and cumulatively acknowledge events |
@@ -400,13 +400,13 @@ the page's single job and update this inventory in the same commit.
 | Rich Link Previews | `Send a link part` → `Composition rules` → `Start a Chat with a link` → `Related` |
 | Replies | `Reply to a Message` → `Target a part` → `List a reply thread` → `Related` |
 | Reactions | `Add a reaction` → `Reaction types` → `Remove a reaction` → `Events` → `Related` |
-| Delivery Receipts | `Response fields` → `Delivered boundaries` → `Acknowledge user delivery` → `Mark Read` → `Direct and group presentation` → `Related` |
+| Delivery Receipts | `Response fields` → `Delivered boundaries` → `Mark Read` → `Direct and group presentation` → `Related` |
 
 ### Chats and Contacts
 
 | Page | H2 order |
 | --- | --- |
-| Chats | `Chat types` → `Create a Chat` → `Chat fields` → `Clear for one user` → `Next steps` |
+| Chats | `Chat types` → `Create a Chat` → `Chat fields` → `Next steps` |
 | Group Chats | `Create a group` → `Limits` → `Rename the group` → `Set a group photo` → `Group metadata events` → `Related` |
 | Participants | `Add a Contact` → `Remove a Contact` → `Leave` → `Membership periods` → `Events` → `Related` |
 | Typing Indicators | `Start` → `Keep typing active` → `Stop` → `Receive events` → `API reference` → `Related` |
@@ -424,7 +424,7 @@ the page's single job and update this inventory in the same commit.
 | Webhooks | `Flow` → `Create a subscription` → `Verify the signature` → `Acknowledge safely` → `Review with an agent` → `Related` |
 | Webhook Subscriptions | `Create` → `Store the signing secret` → `List, retrieve, update, or delete` → `Related` |
 | Webhook Event Types | `List supported events` → `Envelope` → `Message events` → `Payload version` → `Reaction events` → `Chat events` → `Related` |
-| Webhook Delivery | `Delivery policy` → `Retry classes` → `Receiver pattern` → `Delivered meaning` → `Terminal state and redrive` → `Review with an agent` → `Related` |
+| Webhook Delivery | `Delivery policy` → `Retry classes` → `Receiver pattern` → `Delivered meaning` → `Terminal delivery` → `Review with an agent` → `Related` |
 | WebSocket | `Select WebSocket delivery` → `Connect` → `Review with an agent` → `Related` |
 | WebSocket Protocol | `Ready frame` → `Event frame` → `Error frame` → `Backpressure` → `Heartbeats` → `Disconnects` → `Related` |
 | Acknowledgements | `Frame` → `Safe order` → `Delivery meaning` → `Replay` → `Errors` → `Review with an agent` → `Related` |
