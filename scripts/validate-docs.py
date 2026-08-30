@@ -797,6 +797,23 @@ if "@relaymessenger/sdk" not in handwritten_text:
     raise SystemExit("public docs must name the @relaymessenger/sdk package")
 if "@relayapp/sdk" in handwritten_text:
     raise SystemExit("deprecated SDK package name returned")
+sdk_install_commands = [
+    line.strip()
+    for line in handwritten_text.splitlines()
+    if re.match(r"^(?:npm (?:install|i)|pnpm add|yarn add|bun add)\b", line.strip())
+    and "@relaymessenger/sdk" in line
+]
+if not sdk_install_commands:
+    raise SystemExit("public docs must include an SDK installation command")
+for command in sdk_install_commands:
+    package_tokens = [
+        token for token in command.split() if token.startswith("@relaymessenger/sdk")
+    ]
+    if package_tokens != ["@relaymessenger/sdk@staging"]:
+        raise SystemExit(
+            "staging SDK install commands must use @relaymessenger/sdk@staging: "
+            f"{command}"
+        )
 
 for name, pattern in {
     "deprecated product name": r"\bRelay App\b",
