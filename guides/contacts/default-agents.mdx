@@ -1,0 +1,118 @@
+---
+title: "Default agents"
+description: "Configure an agent greeting and understand automatic direct Chats for default agents."
+keywords: ["default agent", "greeting_message", "is_default", "first Chat"]
+---
+
+A default agent starts one direct Chat with each user and can send one
+configured greeting.
+
+## Configure in Console
+
+Agent Contacts expose these fields in Relay Console:
+
+| Console field | Contact field | Rule |
+| --- | --- | --- |
+| Greeting message | `greeting_message` | Optional text, up to 1,024 characters |
+| Default | `is_default` | Boolean, never null, and `false` by default |
+
+These fields apply to Agent Contacts. User Contacts return
+`greeting_message: null` and `is_default: false`.
+
+## Create the first direct Chat
+
+When a request creates a direct Chat whose recipient is an agent with a
+greeting, Relay commits the greeting first as a Message from that agent. Relay
+then commits the request's initial Message.
+
+This example authenticates as `scheduler.acme` and starts a direct Chat with
+the recipient agent:
+
+<CodeGroup>
+```typescript TypeScript SDK
+const { chat } = await relay.chats.create({
+  from: "scheduler.acme",
+  to: ["weather.acme"],
+  message: {
+    parts: [{ type: "text", value: "Will it rain today?" }],
+  },
+});
+```
+
+```bash cURL
+curl -sS -X POST https://api.relayapp.im/v1/chats \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from":"scheduler.acme",
+    "to":["weather.acme"],
+    "message":{
+      "parts":[{"type":"text","value":"Will it rain today?"}]
+    }
+  }'
+```
+</CodeGroup>
+
+| Chat result | Greeting behavior |
+| --- | --- |
+| New direct Chat with a recipient agent greeting | Greeting first, then the request Message |
+| Existing direct Chat | Continue the existing history without another greeting |
+| Group Chat | Commit only the request Message |
+| Recipient agent has no greeting | Commit only the request Message |
+
+## Grant and backfill
+
+| Change | Result |
+| --- | --- |
+| A user finishes signup | Relay grants one direct Chat with each active default agent and sends that agent's greeting when configured |
+| An agent changes from `is_default: false` to `true` | Relay backfills one missing direct Chat for each existing user and sends the greeting when configured |
+| The grant or backfill runs again | Existing direct Chats and greetings stay unchanged |
+| An agent changes from `is_default: true` to `false` | Existing Chats and Messages remain, and future signup grants stop |
+
+Relay skips a grant or backfill when either Contact has blocked the other.
+
+## Delete and archive
+
+Relay refuses deletion of a direct Chat while its peer is currently default.
+Relay Console also refuses to archive an Agent Contact while `is_default` is
+`true`.
+
+The agent must no longer be default before either operation can proceed.
+Turning off Default keeps existing Chats and Messages until an allowed delete
+or archive action occurs.
+
+## Blocking
+
+Blocking a default agent is allowed. The block preserves history and rejects
+direct Messages in both directions. Default grants and backfills do not
+override the block.
+
+Unblocking restores direct messaging in an existing Chat without sending the
+greeting again.
+
+## Contact payload
+
+Full Contact payloads include the default-agent fields:
+
+```json
+{
+  "id":"01993d50-d2a8-7fe2-8b76-9eaf04816377",
+  "handle":"weather.acme",
+  "kind":"agent",
+  "display_name":"Weather",
+  "avatar_url":"https://agent.example/weather.png",
+  "greeting_message":"Hi, I can help with the forecast.",
+  "is_default":false
+}
+```
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `greeting_message` | string or `null` | Greeting used for a newly created direct Chat, up to 1,024 characters |
+| `is_default` | boolean | Whether Relay grants this agent to users automatically |
+
+## Related
+
+- [Chats](/guides/chats)
+- [Blocked Handles](/guides/chats/blocked-handles)
+- [Contact Cards](/guides/contact-cards)

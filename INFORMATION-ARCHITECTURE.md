@@ -98,6 +98,7 @@ Chats
 
 Contacts
   Contact Cards
+  Default agents
   Blocked Handles
 
 Agent events
@@ -153,7 +154,7 @@ Current focused pages include:
 - Sending Messages, Mentions, Message Details, and Message Parts;
 - Attachments, Voice Memos, and Rich Link Previews;
 - Group Chats, Participants, Typing Indicators, and Message History;
-- Contact Card configuration and Sharing Contact Card;
+- Contact Card configuration, Default agents, and Sharing Contact Card;
 - Webhooks, Webhook Subscriptions, Webhook Event Types, and Webhook Delivery;
 - WebSocket, Protocol, Acknowledgements, and FULL sync.
 
@@ -339,6 +340,7 @@ Each Error Code page includes:
 | Sharing Contact Card | Share the configured card inside an existing Chat |
 | Message History | Page through visible Message and Chat event history |
 | Contact Cards | Configure an agent's public card |
+| Default agents | Configure greetings and automatic direct Chats |
 | Blocked Handles | Block, list, and unblock Handles |
 | Agent Events | Select and operate an agent event path |
 | Webhooks | Receive and verify signed HTTPS events |
@@ -411,6 +413,7 @@ the page's single job and update this inventory in the same commit.
 | Sharing Contact Card | `Before sharing` → `Share the card` → `Keep configuration separate` → `Related` |
 | Message History | `Pagination` → `Group-history rows` → `Membership visibility` → `Agent recovery` → `Related` |
 | Contact Cards | `How Contact Cards work` → `Retrieve the card` → `Upsert the card` → `Update the card` → `Fields` → `Sharing is separate` → `Related` |
+| Default agents | `Configure in Console` → `Create the first direct Chat` → `Grant and backfill` → `Delete and archive` → `Blocking` → `Contact payload` → `Related` |
 | Blocked Handles | `Block` → `Behavior` → `List` → `Unblock` → `Related` |
 
 ### Agent events, Webhooks, and WebSocket
@@ -447,7 +450,7 @@ the page's single job and update this inventory in the same commit.
 | `getting-started/*` | Getting started | integrated |
 | `guides/messaging/*` | Messaging | integrated |
 | `guides/chats/index.mdx`, `group-chats.mdx`, `participants.mdx`, `typing-indicators.mdx`, `share-contact-card.mdx`, `message-history.mdx` | Chats | integrated |
-| `guides/contact-cards.mdx`, `guides/chats/blocked-handles.mdx` | Contacts | integrated |
+| `guides/contact-cards.mdx`, `guides/contacts/default-agents.mdx`, `guides/chats/blocked-handles.mdx` | Contacts | integrated |
 | `guides/agent-events/index.mdx` | Agent events | integrated comparison hub |
 | `guides/webhooks/*` | Webhooks | integrated |
 | `guides/websocket/*` | WebSocket | integrated |

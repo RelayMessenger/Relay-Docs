@@ -126,6 +126,7 @@ expected_guide_pages = {
     ],
     "Contacts": [
         "guides/contact-cards",
+        "guides/contacts/default-agents",
         "guides/chats/blocked-handles",
     ],
     "Agent events": ["guides/agent-events/index"],
@@ -179,6 +180,7 @@ required_paths = [
     root / "guides/chats/share-contact-card.mdx",
     root / "guides/chats/typing-indicators.mdx",
     root / "guides/messaging/delivery-receipts.mdx",
+    root / "guides/contacts/default-agents.mdx",
     root / "guides/websocket/index.mdx",
     root / "guides/websocket/protocol.mdx",
     root / "guides/websocket/full-sync.mdx",
@@ -302,6 +304,7 @@ side_by_side_guides = [
     "guides/chats/message-history.mdx",
     "guides/chats/blocked-handles.mdx",
     "guides/contact-cards.mdx",
+    "guides/contacts/default-agents.mdx",
     "guides/webhooks/index.mdx",
     "guides/webhooks/subscriptions.mdx",
     "guides/webhooks/events.mdx",
@@ -332,6 +335,23 @@ if not re.search(
     contact_text,
 ):
     raise SystemExit("Contact Card configuration guide lost its PATCH operation")
+
+default_agents_text = (root / "guides/contacts/default-agents.mdx").read_text()
+for required in [
+    "`greeting_message`",
+    "`is_default`",
+    "1,024 characters",
+    "false` to `true",
+    "existing direct Chats and greetings stay unchanged",
+    "future signup grants stop",
+    "refuses deletion of a direct Chat",
+    "refuses to archive an Agent Contact",
+    "Blocking a default agent is allowed",
+    "Default grants and backfills do not",
+    "Contact payload",
+]:
+    if required.lower() not in default_agents_text.lower():
+        raise SystemExit(f"Default-agent contract guide is missing: {required}")
 
 receipt_text = (root / "guides/messaging/delivery-receipts.mdx").read_text()
 if "/v1/messages/$MESSAGE_ID/delivered" not in receipt_text:
@@ -561,6 +581,40 @@ if delivery_values != ["sent", "delivered", "read"]:
     raise SystemExit(f"DeliveryStatus drifted: {delivery_values}")
 if re.search(r"^\s+deprecated:\s*true\s*$", openapi_text, re.M):
     raise SystemExit("deprecated compatibility surface returned to OpenAPI")
+chat_handle = re.search(
+    r"^    ChatHandle:\n(.*?)(?=^    [A-Za-z0-9_-]+:\n)",
+    openapi_text,
+    re.M | re.S,
+)
+if not chat_handle:
+    raise SystemExit("ChatHandle schema missing from OpenAPI")
+chat_handle_text = chat_handle.group(1)
+for required in [
+    "        - greeting_message",
+    "        - is_default",
+    "        greeting_message:",
+    "          maxLength: 1024",
+    "        is_default:",
+    "          default: false",
+    "                const: user",
+    '                type: "null"',
+    "                const: false",
+]:
+    if required not in chat_handle_text:
+        raise SystemExit(f"Contact default-agent field contract is missing: {required}")
+for required in [
+    "x-relay-default-agents:",
+    "greeting_order: before_request_message",
+    "grant_each_active_default_agent_once: true",
+    "trigger: is_default_false_to_true",
+    "blocked_pairs: skipped",
+    "preserve_existing_chats_and_messages: true",
+    "refuse_direct_chat_deletion_while_peer_is_default: true",
+    "refuse_agent_archive_while_is_default: true",
+    "allowed_for_default_agents: true",
+]:
+    if required not in openapi_text:
+        raise SystemExit(f"Default-agent lifecycle contract is missing: {required}")
 openapi_paths = re.findall(r"^  (/[^:]+):$", openapi_text, re.M)
 if not openapi_paths or any(not path.startswith("/v1/") for path in openapi_paths):
     raise SystemExit(f"every public OpenAPI path must live under /v1: {openapi_paths}")
@@ -708,5 +762,6 @@ print(
     "exact heading inventory, "
     "frontmatter, bodyless Contact Card sharing, exact delivery states and error pages, "
     "typing, exact OpenAPI event inventory, webhook retries, transport recovery, URL safety, "
-    "final automatic event paths, WebSocket disconnects, package identity, and stale-contract bans"
+    "default-agent lifecycle, final automatic event paths, WebSocket disconnects, "
+    "package identity, and stale-contract bans"
 )

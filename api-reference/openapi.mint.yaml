@@ -80,7 +80,14 @@ paths:
             type: string
             minLength: 1
             maxLength: 255
-      description: Create a direct or group Chat with its first Message.
+      description: |-
+        Create a direct or group Chat with its first Message.
+
+        When this creates a direct Chat whose recipient is an agent with a
+        greeting_message, Relay commits that greeting as the recipient
+        agent's first Message before the request's Message. Reusing an
+        existing direct Chat does not send the greeting again. Group Chats do
+        not receive automatic greetings.
     get:
       operationId: listChats
       summary: List all chats
@@ -505,7 +512,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-      description: Resolve or create a Chat, then send a Message.
+      description: |-
+        Resolve or create a Chat, then send a Message.
+
+        When this creates a direct Chat whose recipient is an agent with a
+        greeting_message, Relay commits that greeting as the recipient
+        agent's first Message before the request's Message. Reusing an
+        existing direct Chat does not send the greeting again. Group Chats do
+        not receive automatic greetings.
   /v1/chats/{chatId}/messages:
     post:
       operationId: sendMessageToChat
@@ -908,7 +922,13 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalServerError'
-      description: Block direct traffic with a registered Handle.
+      description: |-
+        Block direct traffic with a registered Handle.
+
+        Blocking is allowed when the Handle belongs to a default agent. The
+        block preserves existing Chat history, stops direct traffic in both
+        directions, and takes precedence over automatic default-agent grants
+        and backfills.
     delete:
       operationId: unblockHandle
       summary: Unblock a handle
@@ -1510,10 +1530,14 @@ components:
               $ref: '#/components/schemas/ChatGroupNameUpdatedEvent'
     ChatHandle:
       type: object
+      description: A Contact projection with Chat membership state.
       required:
         - id
         - handle
         - joined_at
+        - kind
+        - greeting_message
+        - is_default
       properties:
         id:
           type: string
@@ -1564,6 +1588,30 @@ components:
             - 'null'
           format: uri
           description: Current Contact avatar URL.
+        greeting_message:
+          type:
+            - string
+            - 'null'
+          maxLength: 1024
+          default: null
+          description: The greeting Relay commits from this agent when it is the recipient in a newly created direct Chat or is granted as a default agent. User Contacts return null.
+        is_default:
+          type: boolean
+          default: false
+          description: Whether Relay grants this agent to new users and backfills existing users. User Contacts return false.
+      allOf:
+        - if:
+            properties:
+              kind:
+                const: user
+            required:
+              - kind
+          then:
+            properties:
+              greeting_message:
+                type: 'null'
+              is_default:
+                const: false
     ChatInfo:
       type: object
       required:
@@ -1676,7 +1724,10 @@ components:
           items:
             type: string
         message:
-          description: Initial message for the new Chat.
+          description: |-
+            Initial Message from the authenticated sender. For a newly
+            created direct Chat, a recipient agent's configured greeting is
+            committed immediately before this Message.
           $ref: '#/components/schemas/MessageContent'
     CreateChatResult:
       type: object
@@ -3538,6 +3589,43 @@ x-tagGroups:
     tags:
       - Webhooks
       - WebSocket
+x-relay-default-agents:
+  contact_fields:
+    greeting_message:
+      applies_to: agent
+      nullable: true
+      max_length: 1024
+    is_default:
+      applies_to: agent
+      nullable: false
+      default: false
+  direct_chat_creation:
+    greeting_sender: recipient_agent
+    greeting_when_configured: true
+    greeting_order: before_request_message
+    new_direct_chats_only: true
+    group_chats: false
+  signup:
+    grant_each_active_default_agent_once: true
+    greeting_sender: default_agent
+    greeting_when_configured: true
+  backfill:
+    trigger: is_default_false_to_true
+    existing_users: true
+    missing_direct_chats_only: true
+    greeting_when_configured: true
+    blocked_pairs: skipped
+  un_default:
+    preserve_existing_chats_and_messages: true
+    stop_future_signup_grants: true
+  lifecycle:
+    refuse_direct_chat_deletion_while_peer_is_default: true
+    refuse_agent_archive_while_is_default: true
+  blocking:
+    allowed_for_default_agents: true
+    preserve_history: true
+    reject_direct_traffic_both_directions: true
+    default_grants_do_not_override_blocks: true
 x-relay-websocket-frames:
   ready:
     type: object
