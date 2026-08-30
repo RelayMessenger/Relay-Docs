@@ -36,7 +36,28 @@ with a 30-day exact replay window.
 
 ## Connect
 
-Upgrade `wss://api.relayapp.im/v1/websocket` with:
+The TypeScript SDK keeps the connection alive, answers heartbeats, reconnects
+with backoff, and sends a cumulative ACK after `onEvent` returns:
+
+```typescript
+await relay.websocket.run({
+  async onEvent(event) {
+    await durableInbox.insertOnce(event.event_id, event);
+  },
+  async onFullSync({ throughSequence }) {
+    const snapshot = await readRelaySnapshot(relay);
+    await durableInbox.replaceSnapshot(throughSequence, snapshot);
+  },
+  onError(error) {
+    console.error(error);
+  },
+});
+```
+
+`durableInbox` and `readRelaySnapshot` represent your database and complete
+REST recovery. Both callbacks must return only after their writes commit.
+
+For a raw client, upgrade `wss://api.relayapp.im/v1/websocket` with:
 
 ```http
 Authorization: Bearer $RELAY_AGENT_TOKEN
