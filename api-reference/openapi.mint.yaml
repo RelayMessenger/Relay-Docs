@@ -927,8 +927,8 @@ paths:
 
         Blocking is allowed when the Handle belongs to a default agent. The
         block preserves existing Chat history, stops direct traffic in both
-        directions, and takes precedence over automatic default-agent grants
-        and backfills.
+        directions, and stops greeting delivery. Relay still grants and
+        retains the default direct Chat.
     delete:
       operationId: unblockHandle
       summary: Unblock a handle
@@ -1244,6 +1244,39 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
+  /v1/me/conversations/{chatId}:
+    delete:
+      operationId: deleteConversation
+      summary: Delete a conversation for the current user
+      description: |-
+        Archive-delete a conversation for the authenticated user session.
+        Relay returns 409 while the Chat is direct and its active peer is
+        currently a default agent.
+      tags:
+        - Chats
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: chatId
+          in: path
+          required: true
+          description: Chat identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Conversation archived for the authenticated user; no body.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: The active direct peer is currently a default agent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /v1/websocket:
     get:
       operationId: connectAgentWebSocket
@@ -3614,7 +3647,9 @@ x-relay-default-agents:
     existing_users: true
     missing_direct_chats_only: true
     greeting_when_configured: true
-    blocked_pairs: skipped
+    blocked_pairs:
+      grant_default_chat: true
+      deliver_greeting: false
   un_default:
     preserve_existing_chats_and_messages: true
     stop_future_signup_grants: true
@@ -3624,8 +3659,9 @@ x-relay-default-agents:
   blocking:
     allowed_for_default_agents: true
     preserve_history: true
+    grant_and_retain_default_chat: true
+    block_greeting_delivery: true
     reject_direct_traffic_both_directions: true
-    default_grants_do_not_override_blocks: true
 x-relay-websocket-frames:
   ready:
     type: object

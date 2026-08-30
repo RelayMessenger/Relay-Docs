@@ -406,7 +406,7 @@ the page's single job and update this inventory in the same commit.
 
 | Page | H2 order |
 | --- | --- |
-| Chats | `Chat types` → `Create a Chat` → `Chat fields` → `Next steps` |
+| Chats | `Chat types` → `Create a Chat` → `Chat fields` → `Delete for a user` → `Next steps` |
 | Group Chats | `Create a group` → `Limits` → `Rename the group` → `Set a group photo` → `Group metadata events` → `Related` |
 | Participants | `Add a Contact` → `Remove a Contact` → `Leave` → `Membership periods` → `Events` → `Related` |
 | Typing Indicators | `Start` → `Keep typing active` → `Stop` → `Receive events` → `API reference` → `Related` |

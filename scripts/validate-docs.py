@@ -337,6 +337,7 @@ if not re.search(
     raise SystemExit("Contact Card configuration guide lost its PATCH operation")
 
 default_agents_text = (root / "guides/contacts/default-agents.mdx").read_text()
+blocked_handles_text = (root / "guides/chats/blocked-handles.mdx").read_text()
 for required in [
     "`greeting_message`",
     "`is_default`",
@@ -347,11 +348,20 @@ for required in [
     "refuses deletion of a direct Chat",
     "refuses to archive an Agent Contact",
     "Blocking a default agent is allowed",
-    "Default grants and backfills do not",
+    "still grants and retains the default",
+    "does not deliver the greeting",
     "Contact payload",
 ]:
     if required.lower() not in default_agents_text.lower():
         raise SystemExit(f"Default-agent contract guide is missing: {required}")
+for forbidden in [
+    "skips a grant or backfill",
+    "grant or backfill | skipped",
+]:
+    if forbidden.lower() in (
+        default_agents_text + "\n" + blocked_handles_text
+    ).lower():
+        raise SystemExit(f"Stale blocked-default behavior returned: {forbidden}")
 
 receipt_text = (root / "guides/messaging/delivery-receipts.mdx").read_text()
 if "/v1/messages/$MESSAGE_ID/delivered" not in receipt_text:
@@ -607,26 +617,103 @@ for required in [
     "greeting_order: before_request_message",
     "grant_each_active_default_agent_once: true",
     "trigger: is_default_false_to_true",
-    "blocked_pairs: skipped",
+    "blocked_pairs:",
+    "grant_default_chat: true",
+    "deliver_greeting: false",
     "preserve_existing_chats_and_messages: true",
     "refuse_direct_chat_deletion_while_peer_is_default: true",
     "refuse_agent_archive_while_is_default: true",
     "allowed_for_default_agents: true",
+    "grant_and_retain_default_chat: true",
+    "block_greeting_delivery: true",
 ]:
     if required not in openapi_text:
         raise SystemExit(f"Default-agent lifecycle contract is missing: {required}")
+for forbidden in [
+    "blocked_pairs: skipped",
+    "default_grants_do_not_override_blocks: true",
+]:
+    if forbidden in openapi_text:
+        raise SystemExit(f"Stale blocked-default contract returned: {forbidden}")
 openapi_paths = re.findall(r"^  (/[^:]+):$", openapi_text, re.M)
 if not openapi_paths or any(not path.startswith("/v1/") for path in openapi_paths):
     raise SystemExit(f"every public OpenAPI path must live under /v1: {openapi_paths}")
 for required_path in [
     "/v1/chats/{chatId}/share_contact_card",
     "/v1/chats/{chatId}/typing",
+    "/v1/me/conversations/{chatId}",
     "/v1/websocket",
 ]:
     if required_path not in openapi_paths:
         raise SystemExit(f"canonical OpenAPI path missing: {required_path}")
 if "/v1/websocket-connections" in openapi_paths:
     raise SystemExit("stale WebSocket connection-credential endpoint returned")
+paths_text = openapi_text.split("\ncomponents:", 1)[0]
+operation_ids = re.findall(r"^      operationId: ([A-Za-z0-9]+)$", paths_text, re.M)
+expected_operation_ids = {
+    "acknowledgeMessageDelivered",
+    "addParticipant",
+    "blockHandle",
+    "connectAgentWebSocket",
+    "createChat",
+    "createWebhookSubscription",
+    "deleteAttachment",
+    "deleteConversation",
+    "deleteWebhookSubscription",
+    "getAttachment",
+    "getChat",
+    "getContactCard",
+    "getMessage",
+    "getMessages",
+    "getMessageThread",
+    "getWebhookSubscription",
+    "leaveChat",
+    "listBlockedHandles",
+    "listChats",
+    "listWebhookEvents",
+    "listWebhookSubscriptions",
+    "markChatAsRead",
+    "removeParticipant",
+    "requestUpload",
+    "sendMessage",
+    "sendMessageToChat",
+    "sendReaction",
+    "sendVoiceMemoToChat",
+    "setupContactCard",
+    "shareContactWithChat",
+    "startTyping",
+    "stopTyping",
+    "unblockHandle",
+    "updateChat",
+    "updateContactCard",
+    "updateWebhookSubscription",
+}
+if len(operation_ids) != len(expected_operation_ids) or set(operation_ids) != expected_operation_ids:
+    raise SystemExit(
+        "OpenAPI operation inventory drifted: "
+        f"{sorted(set(operation_ids) ^ expected_operation_ids)}"
+    )
+delete_conversation_start = openapi_text.index(
+    "  /v1/me/conversations/{chatId}:"
+)
+delete_conversation_end = openapi_text.find(
+    "\n  /v1/",
+    delete_conversation_start + 2,
+)
+delete_conversation = openapi_text[
+    delete_conversation_start:
+    delete_conversation_end if delete_conversation_end >= 0 else len(openapi_text)
+]
+for required in [
+    "    delete:",
+    "operationId: deleteConversation",
+    "authenticated user session",
+    '        "204":',
+    '        "409":',
+    "        - BearerAuth: []",
+]:
+    if required not in delete_conversation:
+        raise SystemExit(f"User conversation delete contract is missing: {required}")
 event_type_block = re.search(
     r"^    WebhookEventType:\n.*?^      enum:\n"
     r"((?:^        - [^\n]+\n)+)",
