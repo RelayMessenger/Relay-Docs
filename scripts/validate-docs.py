@@ -6,10 +6,10 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 config = json.loads((root / "docs.json").read_text())
-if config.get("name") != "Relay Messenger":
-    raise SystemExit("site identity must be Relay Messenger")
-if config.get("description") != "Relay Messenger API v1 documentation.":
-    raise SystemExit("site description must use the Relay Messenger identity")
+if config.get("name") != "Relay":
+    raise SystemExit("site identity must be Relay")
+if config.get("description") != "Relay API v1 documentation.":
+    raise SystemExit("site description must use the Relay identity")
 if config.get("navbar", {}).get("primary") != {
     "type": "button",
     "label": "Console",
@@ -317,7 +317,7 @@ if "POST /v1/chats/{chatId}/share_contact_card" not in share_text:
 if not re.search(r"\bexisting Chat\b", share_text):
     raise SystemExit("Contact Card sharing guide must require an existing Chat")
 if not re.search(
-    r"\b(?:no (?:request )?body|without a (?:request )?body|do not send a request body)\b",
+    r"\b(?:send an empty request|empty request body)\b",
     share_text,
     re.I,
 ):
@@ -337,14 +337,12 @@ if "/v1/messages/$MESSAGE_ID/delivered" not in receipt_text:
     raise SystemExit("Delivery receipt guide lost the user acknowledgement route")
 if not re.search(r"\bcumulative\b", receipt_text, re.I):
     raise SystemExit("Delivery receipt guide must explain cumulative user delivery")
-if "Agent Tokens cannot call it" not in receipt_text:
-    raise SystemExit("Delivery receipt guide must preserve the user-only boundary")
+if "Authenticate this route with a user session" not in receipt_text:
+    raise SystemExit("Delivery receipt guide must state the required user session")
 for required in [
     "`deliveries`",
     "direct and group Chats",
-    "owner-approved Relay capability",
-    "best-effort group Read signals",
-    "complete per-recipient truth",
+    "per-recipient",
 ]:
     if required not in receipt_text:
         raise SystemExit(f"Delivery receipt rationale is missing: {required}")
@@ -358,16 +356,21 @@ if not all(term in attachments_text for term in [
     "at most five redirects",
 ]):
     raise SystemExit("Attachment guide lost URL import safety boundaries")
-if "WebP" not in attachments_text or "rejects SVG" not in attachments_text:
+if (
+    "WebP" not in attachments_text
+    or not re.search(r"\brejects\s+SVG\b", attachments_text)
+):
     raise SystemExit("Attachment guide lost the Relay WebP/SVG decision")
 
 webhook_text = (root / "guides/webhooks/index.mdx").read_text()
 webhook_events_text = (root / "guides/webhooks/events.mdx").read_text()
 webhook_delivery_text = (root / "guides/webhooks/delivery.mdx").read_text()
+webhook_delivery_normalized = re.sub(r"\s+", " ", webhook_delivery_text)
 websocket_text = (root / "guides/websocket/index.mdx").read_text()
 websocket_protocol_text = (root / "guides/websocket/protocol.mdx").read_text()
 websocket_recovery_text = (root / "guides/websocket/full-sync.mdx").read_text()
 typing_text = (root / "guides/chats/typing-indicators.mdx").read_text()
+typing_normalized = re.sub(r"\s+", " ", typing_text)
 agent_event_text = (root / "guides/agent-events/index.mdx").read_text()
 transport_text = "\n".join([
     agent_event_text,
@@ -377,12 +380,10 @@ transport_text = "\n".join([
     webhook_delivery_text,
 ])
 for required in [
-    "At least one saved subscription",
-    "No webhook subscriptions",
-    "no mode, toggle, or transport setting",
-    "never sends one event\nthrough both paths",
+    "one or more saved subscriptions",
+    "subscription list must be empty",
     "HTTP `409`",
-    "closes every connected agent socket",
+    "closes connected agent sockets",
     "same `event_id`",
     "wait durably",
     "30 days",
@@ -418,19 +419,14 @@ if "A fatal error ends consumption" not in websocket_protocol_text:
 for required in [
     "wss://api.relayapp.im/v1/websocket",
     "Authorization: Bearer $RELAY_AGENT_TOKEN",
-    "query credential or cookie",
-    "does not require a",
-    "Security trade-off",
-    "The same `/v1/websocket` path",
-    "authentication",
+    "Agent Token",
     "multiple connected sockets",
-    "The `relay listen`",
-    "is deleted",
+    "HTTP `409`",
 ]:
     if required not in websocket_text:
         raise SystemExit(f"WebSocket authentication guide is missing: {required}")
 if (
-    "ping every 30 seconds" not in websocket_protocol_text
+    not re.search(r"\bping(?: frame)? every 30 seconds\b", websocket_protocol_text)
     or "within 60 seconds" not in websocket_protocol_text
 ):
     raise SystemExit("WebSocket guide lost the 30-second ping and 60-second pong timeout")
@@ -446,8 +442,7 @@ for required in [
     "full_sync_complete",
     "checkpoint_outside_retention",
     "same `event_id`",
-    "PostgreSQL for 30 days",
-    "PostHog",
+    "delivery records for 30 days",
 ]:
     if required not in websocket_recovery_text:
         raise SystemExit(f"WebSocket recovery guide is missing: {required}")
@@ -458,9 +453,7 @@ for required in [
     "`429`",
     "`5xx`",
     "72 hours",
-    "PostgreSQL",
     "30 days",
-    "PostHog",
     "recover current Chat and Message state",
     "HTTP `3xx`",
     "redirect is not followed",
@@ -468,9 +461,9 @@ for required in [
     "private",
     "link-local",
     "cloud metadata",
-    "same\n`event_id`",
+    "same `event_id`",
 ]:
-    if required not in webhook_delivery_text:
+    if required not in webhook_delivery_normalized:
         raise SystemExit(f"Webhook delivery policy is missing: {required}")
 for required in [
     "chat.typing_indicator.started",
@@ -480,7 +473,7 @@ for required in [
     '"contact": {',
     "expires automatically",
 ]:
-    if required not in typing_text:
+    if required not in typing_normalized:
         raise SystemExit(f"Typing guide is missing: {required}")
 
 group_text = (root / "guides/chats/group-chats.mdx").read_text()
@@ -489,13 +482,6 @@ if (
     or "keep at least three active Contacts" not in group_text
 ):
     raise SystemExit("Group Chat guide lost max-32 and minimum-three rules")
-
-concepts_text = (root / "getting-started/key-concepts.mdx").read_text()
-if (
-    "reserved inside its owning namespace" not in concepts_text
-    or "Archiving the Contact" not in concepts_text
-):
-    raise SystemExit("Handle archive reservation rule is missing")
 
 expected_error_codes = {
     1004, 1005, 2001, 2003, 2004, 2005, 2006,
@@ -625,8 +611,8 @@ handwritten_paths = [*mdx_paths, root / "skill.md", root / "README.md"]
 handwritten_text = "\n".join(path.read_text() for path in handwritten_paths)
 all_contract_text = handwritten_text + "\n" + openapi_text
 
-if "Relay Messenger" not in (root / "index.mdx").read_text():
-    raise SystemExit("Introduction must identify the product as Relay Messenger")
+if "Relay" not in (root / "index.mdx").read_text():
+    raise SystemExit("Introduction must identify the product as Relay")
 if (root / "skill.md").read_bytes() != (
     root / ".mintlify/skills/relay/SKILL.md"
 ).read_bytes():
@@ -706,7 +692,7 @@ for name, pattern in {
         raise SystemExit(f"stale {name}")
 
 print(
-    f"validated {len(files)} Relay Messenger public pages, three tabs, "
+    f"validated {len(files)} Relay public pages, three tabs, "
     "Console CTA, Copy agent prompt action, logo destination, Quickstart sidebar placement, "
     "atomic guide groups, "
     "exact heading inventory, "

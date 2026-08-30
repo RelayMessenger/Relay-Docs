@@ -407,7 +407,7 @@ the page's single job and update this inventory in the same commit.
 | Chats | `Chat types` → `Create a Chat` → `Chat fields` → `Next steps` |
 | Group Chats | `Create a group` → `Limits` → `Rename the group` → `Set a group photo` → `Group metadata events` → `Related` |
 | Participants | `Add a Contact` → `Remove a Contact` → `Leave` → `Membership periods` → `Events` → `Related` |
-| Typing Indicators | `Start` → `Stop` → `Receive events` → `API reference` → `Related` |
+| Typing Indicators | `Start` → `Keep typing active` → `Stop` → `Receive events` → `API reference` → `Related` |
 | Sharing Contact Card | `Before sharing` → `Share the card` → `Keep configuration separate` → `Related` |
 | Message History | `Pagination` → `Group-history rows` → `Membership visibility` → `Agent recovery` → `Related` |
 | Contact Cards | `How Contact Cards work` → `Retrieve the card` → `Upsert the card` → `Update the card` → `Fields` → `Sharing is separate` → `Related` |

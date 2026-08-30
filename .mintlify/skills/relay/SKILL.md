@@ -1,22 +1,26 @@
 ---
 name: relay
-description: Build a Relay Messenger agent backend with the v1 API, Webhooks, or WebSocket.
+description: Build an agent and start talking to it in Relay.
 ---
 
-# Relay Messenger developer integration
+# Relay developer integration
 
-Relay Messenger carries Messages between users and agents. The agent backend
-owns its model, tools, memory, and behavior.
+Build an agent and start talking to it in Relay.
+
+Your backend owns the agent's model, tools, memory, and behavior. Relay carries
+Messages between the agent and other users.
 
 ## Start
 
 1. Read `https://docs.relayapp.im/llms.txt` and the current OpenAPI.
-2. Read the Agent Events guide before choosing a backend shape.
-3. Set `RELAY_API_URL` for the target environment and use a matching Agent Token.
+2. Read the Agent Events guide and choose Webhooks or WebSocket.
+3. Set `RELAY_API_URL` for the target environment and use an Agent Token from
+   that environment.
 4. Store the Agent Token in server-side secret storage.
-5. Save a webhook subscription for Webhook delivery, or save none and connect by WebSocket.
-6. Commit each `event_id` under a uniqueness rule before webhook `2xx` or WebSocket ACK.
-7. Run model and tool work after acknowledgement.
+5. Configure the selected event path.
+6. Commit each `event_id` once in durable storage before Webhook `2xx` or
+   WebSocket ACK.
+7. Run model and tool work after acknowledgment.
 8. Mark the Chat Read when the agent actually reads it.
 9. Reply through `POST /v1/chats/{chatId}/messages` with a stable idempotency key.
 
@@ -30,47 +34,52 @@ owns its model, tools, memory, and behavior.
 - Replies and reactions target zero-based `part_index`.
 - Group membership controls which history a Contact can read.
 
-## Event path
+## Agent events
 
-| Saved configuration | Agent event path |
-| --- | --- |
-| At least one webhook subscription | Webhook only |
-| No webhook subscriptions | WebSocket only |
+| Path | Configuration | Acceptance |
+| --- | --- | --- |
+| Webhooks | Save public HTTPS subscriptions for selected event types. | Verify the signature, deduplicate `event_id`, commit durably, then return `2xx`. |
+| WebSocket | Connect to `/v1/websocket` with an empty subscription list. | Deduplicate `event_id`, commit durably, then send a cumulative ACK. |
 
-There is no mode, toggle, or transport setting. Relay never sends one event
-through both paths.
+Saving the first webhook subscription closes active agent sockets with code
+`4410`. Matching pending events move to active Webhooks. Deleting the final
+subscription moves pending events to WebSocket. Transferred events keep their
+`event_id`.
 
-Creating the first subscription closes connected agent sockets and drains
-pending events to Webhooks. Deleting the last drains pending events to
-WebSocket. With no subscription and no connection, events wait durably for up
-to 30 days.
+Relay retains pending events for 30 days. A WebSocket upgrade returns HTTP
+`409` while the agent has a saved webhook subscription.
 
-A WebSocket upgrade while any subscription exists returns HTTP `409`. Pending
-events keep the same `event_id` across path changes.
+## Accept events
 
-## Event acceptance
+For Webhooks:
 
 ```text
-verify → deduplicate event_id → durable commit → 2xx or ACK → process
+verify signature → deduplicate event_id → durable commit → 2xx → process
 ```
 
-Acknowledgement does not mean bytes received, handler start, model completion,
-reply, or Read.
+For WebSocket:
 
-Webhook retries can repeat an `event_id`. Reject webhook destinations that
-resolve to localhost, private, link-local, or cloud metadata addresses. Never
-follow redirects.
+```text
+deduplicate event_id → durable commit → cumulative ACK → process
+```
 
-WebSocket ACKs are cumulative. Recover with replay or FULL sync after a stale
-checkpoint. Relay pings every 30 seconds and requires a pong within 60
-seconds.
+Return `2xx` or send the ACK only after the durable commit. That acceptance
+marks the Message Delivered to the agent. Run model and tool work next, then
+mark the Chat Read when the agent reads the content.
 
-The shared `/v1/websocket` path uses authentication to distinguish user and
-agent connections. Agent backends authenticate the upgrade with
+Webhook delivery is at least once. After the initial attempt, Relay retries
+network errors, HTTP `429`, and HTTP `5xx` responses up to 10 times with delays
+from 2 to 600 seconds. Each attempt has a 10-second response window.
+
+Use a direct public HTTPS webhook destination. Relay validates DNS answers and
+treats redirects as terminal delivery failures.
+
+WebSocket ACKs are cumulative. Relay replays pending events after a reconnect.
+Complete FULL sync when the checkpoint is older than retention. Relay sends a
+ping every 30 seconds and requires a pong within 60 seconds.
+
+Agent backends authenticate the `/v1/websocket` upgrade with
 `Authorization: Bearer <Agent Token>`.
-
-Use the SDK WebSocket directly during local development. The `relay listen`
-command is deleted.
 
 ## Canonical contract
 
@@ -79,7 +88,8 @@ command is deleted.
 - Treat registered Handles as public messaging addresses.
 - Treat every inbound `event_id` as at-least-once.
 - Recover current state with ordinary REST reads or WebSocket FULL sync.
+- Retain `trace_id` from API errors and agent events for debugging.
 - Use a staging API root and staging Agent Token together during staging tests.
 
-Use the OpenAPI for exact fields, limits, and errors. Mark anything not proved
-by the docs or contract as unknown.
+Use the OpenAPI contract for exact fields, limits, and errors. Label unproved
+behavior `unknown`.

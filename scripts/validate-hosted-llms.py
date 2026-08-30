@@ -42,11 +42,11 @@ for page in [
         raise SystemExit(f"llms.txt is missing page: {page}")
 
 for rule in [
-    "at least one webhook subscription",
-    "no webhook subscriptions",
-    "no mode, toggle, or transport setting",
+    "one or more saved subscriptions",
+    "zero webhook subscriptions",
+    "empty subscription list",
     "http `409`",
-    "closes every connected agent socket",
+    "closes connected agent sockets",
     "deleting the last subscription",
     "wait durably",
     "30 days",
@@ -59,9 +59,6 @@ for rule in [
     "link-local",
     "redirect is not followed",
     "same `event_id`",
-    "`relay listen`",
-    "is deleted",
-    "same `/v1/websocket` path",
 ]:
     if rule not in normalized:
         raise SystemExit(f"llms-full.txt is missing final transport rule: {rule}")

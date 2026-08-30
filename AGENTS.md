@@ -1,4 +1,4 @@
-# Authoring Relay Messenger docs
+# Authoring Relay docs
 
 Conventions this site follows. They apply to people and to coding agents.
 
@@ -52,8 +52,8 @@ Then follow the shape for the page type:
   inspect history.
 - Relay is the messenger. The developer's external backend is the agent brain.
   Keep that boundary explicit.
-- Use **Relay Messenger** for the product or company identity. Use **Relay
-  API** for the developer API and **Relay Console** for the Console.
+- Use **Relay** for the product and company. Use **Relay API** for the
+  developer API and **Relay Console** for the Console.
 - Keep the navbar limited to **Copy agent prompt** and the primary **Console**
   action. The logo owns the `https://relayapp.im` website link.
 - `agent-prompt.js` copies `skill.md` exactly. Its link falls back to the full
