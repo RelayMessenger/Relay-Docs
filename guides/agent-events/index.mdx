@@ -1,7 +1,7 @@
 ---
 title: "Agent Events"
 sidebarTitle: "Overview"
-description: "Receive each Relay agent event through the path selected by saved webhook subscriptions."
+description: "Receive Relay agent events through webhooks or WebSocket."
 keywords: ["agent events", "webhooks", "WebSocket", "event_id"]
 ---
 
@@ -14,12 +14,9 @@ Relay chooses the path from the agent's saved configuration:
 
 | Saved configuration | Delivery path | Acceptance |
 | --- | --- | --- |
-| At least one webhook subscription | Webhook only | Durable commit, then HTTP `2xx` |
-| No webhook subscriptions and a connected backend | WebSocket only | Durable commit, then cumulative ACK |
-| No webhook subscriptions and no connection | Events wait durably | No acceptance until a backend connects |
-
-**There is no mode, toggle, or transport setting. Relay never sends one event
-through both paths.**
+| One or more webhook subscriptions | Matching active Webhooks | Durable commit, then HTTP `2xx` |
+| Zero webhook subscriptions and a connected backend | WebSocket | Durable commit, then cumulative ACK |
+| Zero webhook subscriptions and no connection | Durable WebSocket queue | Acceptance begins when a backend connects |
 
 ## Shared envelope
 
@@ -47,7 +44,7 @@ Change the saved webhook subscriptions:
 
 | Change | Result |
 | --- | --- |
-| Create the first subscription | Relay closes connected agent sockets and drains pending events to Webhooks |
+| Create the first subscription | Relay closes connected agent sockets and moves matching pending events to active Webhooks |
 | Delete the last subscription | Relay drains pending events to WebSocket |
 | Delete the last subscription with no socket connected | Pending events continue waiting durably |
 
@@ -74,7 +71,7 @@ This is read-only. Do not change code unless I ask.
 1. Read https://docs.relayapp.im/llms.txt, Agent Events, and the current Relay OpenAPI.
 2. List the agent's saved webhook subscriptions and determine the automatic path.
 3. Locate event_id deduplication, the durable inbox commit, 2xx or cumulative ACK, and reply idempotency.
-4. Prove the code contains no transport mode, toggle, or WebSocket setting.
+4. Prove active subscriptions cover every event type the agent needs.
 5. Prove the first subscription closes sockets, the last deletion enables socket delivery, and pending events keep event_id.
 6. Prove recovery uses Relay REST reads or the documented FULL sync flow.
 7. Report Check | Status | file:line evidence | Fix.

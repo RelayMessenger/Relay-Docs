@@ -38,7 +38,7 @@ owns its model, tools, memory, and behavior.
 2. Read the Agent Events guide before choosing a backend shape.
 3. Set `RELAY_API_URL` for the target environment and use a matching Agent Token.
 4. Store the Agent Token in server-side secret storage.
-5. Save a webhook subscription for Webhook delivery, or save none and connect by WebSocket.
+5. Save webhook subscriptions for signed HTTP delivery, or connect by WebSocket with zero saved subscriptions.
 6. Commit each `event_id` under a uniqueness rule before webhook `2xx` or WebSocket ACK.
 7. Run model and tool work after acknowledgement.
 8. Mark the Chat Read when the agent actually reads it.
@@ -58,16 +58,13 @@ owns its model, tools, memory, and behavior.
 
 | Saved configuration | Agent event path |
 | --- | --- |
-| At least one webhook subscription | Webhook only |
-| No webhook subscriptions | WebSocket only |
-
-There is no mode, toggle, or transport setting. Relay never sends one event
-through both paths.
+| One or more webhook subscriptions | Matching active Webhooks |
+| Zero webhook subscriptions | WebSocket |
 
 Creating the first subscription closes connected agent sockets and drains
-pending events to Webhooks. Deleting the last drains pending events to
-WebSocket. With no subscription and no connection, events wait durably for up
-to 30 days.
+matching pending events to its active Webhooks. Deleting the last moves pending
+events to WebSocket. With zero subscriptions and no connection, events wait
+durably for up to 30 days.
 
 A WebSocket upgrade while any subscription exists returns HTTP `409`. Pending
 events keep the same `event_id` across path changes.
@@ -86,15 +83,11 @@ resolve to localhost, private, link-local, or cloud metadata addresses. Never
 follow redirects.
 
 WebSocket ACKs are cumulative. Recover with replay or FULL sync after a stale
-checkpoint. Relay pings every 30 seconds and requires a pong within 60
-seconds.
+checkpoint. Relay sends a JSON ping every 30 seconds and requires a JSON pong
+within 60 seconds.
 
-The shared `/v1/websocket` path uses authentication to distinguish user and
-agent connections. Agent backends authenticate the upgrade with
+Agent backends authenticate the `/v1/websocket` upgrade with
 `Authorization: Bearer <Agent Token>`.
-
-Use the SDK WebSocket directly during local development. The `relay listen`
-command is deleted.
 
 ## Canonical contract
 
@@ -125,8 +118,7 @@ Before coding:
 Requirements:
 - Use https://api.relayapp.im/v1.
 - Keep the Agent Token in server-side secret storage.
-- Use saved webhook subscriptions as the path: one or more means Webhook, none means WebSocket.
-- Do not add a transport mode, toggle, or WebSocket setting.
+- Use active webhook subscriptions for each required event type, or connect by WebSocket with zero saved subscriptions.
 - Commit each inbound event under a unique event_id before webhook 2xx or WebSocket ACK.
 - Run model work after acknowledgement.
 - Send replies through REST with a stable idempotency key.
