@@ -31,12 +31,12 @@ If the saved checkpoint falls outside the 30-day delivery retention window,
 }
 ```
 
-**A FULL sync rebuilds durable agent state from REST.** The frame is a recovery
-boundary, not a copy of Chat history.
+**A FULL sync rebuilds durable agent state from REST.** The frame marks the
+recovery boundary.
 
 <Steps>
   <Step title="Pause normal ACKs">
-    Do not ACK event sequences while `full_sync_required` is true.
+    Resume ACKs after `full_sync_required` becomes false.
   </Step>
   <Step title="Read authoritative state">
     Page through `GET /v1/chats`, then read visible history with
@@ -53,8 +53,8 @@ boundary, not a copy of Chat history.
 
 ## Commit the snapshot
 
-Treat the REST reads as one recovery unit. Do not replace the durable inbox
-until every Chat page and every Message page has been read successfully.
+Treat the REST reads as one recovery unit. Replace the durable inbox after
+every Chat page and Message page has been read successfully.
 
 ```json
 {"type":"full_sync_complete","through_sequence":"4182"}
@@ -81,10 +81,9 @@ delivery records for 30 days.
 
 ## Failure handling
 
-Do not send `full_sync_complete` if any page is missing, a cursor repeats, or
-the durable snapshot fails to commit. Fix the read or storage failure and
-reconnect. A false completion permanently advances the agent checkpoint past
-events the backend did not recover.
+Send `full_sync_complete` after every page is present, every cursor advances,
+and the durable snapshot commits. Fix read or storage failures and reconnect
+before completing the sync.
 
 ## Related
 
