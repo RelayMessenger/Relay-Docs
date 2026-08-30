@@ -1,35 +1,39 @@
 ---
 title: "WebSocket"
 sidebarTitle: "Overview"
-description: "Receive Relay agent events over one durable WebSocket connection."
+description: "Receive Relay agent events over durable WebSocket connections when no webhook subscription is saved."
 keywords: ["WebSocket", "agent events", "Authorization", "ACK"]
 ---
 
-Use WebSocket as the alternate event transport for an always-on agent backend.
+Use WebSocket for an always-on agent backend with no saved webhook
+subscriptions.
 
-Webhooks are the default. Relay uses one selected transport for each agent, so
-it never sends the same event through both at once.
+**Having no webhook subscriptions selects WebSocket delivery automatically.**
+There is no mode, toggle, or WebSocket setting.
 
 ## Select WebSocket delivery
 
 <CodeGroup>
 ```typescript TypeScript SDK
-await relay.websocket.update({ enabled: true });
+const { subscriptions } = await relay.webhookSubscriptions.list();
+
+if (subscriptions.length > 0) {
+  throw new Error("Delete webhook subscriptions before connecting.");
+}
 ```
 
 ```bash cURL
-curl -sS -X PUT https://api.relayapp.im/v1/websocket \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"enabled":true}'
+curl -sS https://api.relayapp.im/v1/webhook-subscriptions \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 </CodeGroup>
 
-The response includes `enabled`, the durable `acked_through` checkpoint, and
-any pending `full_sync_through` boundary.
+The subscription list must be empty. A WebSocket upgrade with any saved
+subscription returns HTTP `409` and does not open a connection.
 
-Setting `enabled` to `false` returns delivery to active webhook subscriptions.
-Pending events move to the newly selected transport with the same `event_id`.
+Deleting the last subscription drains pending events to WebSocket with the
+same `event_id`. When no backend is connected, pending events wait durably for
+up to 30 days.
 
 ## Connect with the SDK
 
@@ -63,6 +67,17 @@ Authorization: Bearer $RELAY_AGENT_TOKEN
 **Relay does not accept a query credential or cookie and does not require a
 WebSocket subprotocol.** A URL with a query string is rejected.
 
+The same `/v1/websocket` path also serves Relay user clients. Authentication
+determines whether the connection belongs to a user or agent. Developer
+integrations use the Agent Token shown above.
+
+Creating the first webhook subscription closes every connected agent socket
+and drains pending events to Webhooks. Relay never delivers one event through
+both paths.
+
+Use the SDK connection directly during local development. The `relay listen`
+forwarding command is deleted.
+
 ## Security trade-off
 
 Direct bearer authentication keeps the handshake and API surface small. The
@@ -74,8 +89,8 @@ narrow connection-only credential.
 - Never expose the token to browser JavaScript.
 - Revoke and replace the Agent Token if any upgrade log leaks it.
 
-One active WebSocket is allowed per agent. A newer connection replaces the
-previous one.
+An agent may have multiple connected sockets. They receive the same sequenced
+events and share one cumulative checkpoint.
 
 ## Review with an agent
 
@@ -93,10 +108,11 @@ This is read-only. Do not change code unless I ask.
 4. Prove onEvent resolves only after the event is durably committed.
 5. Prove onFullSync rebuilds and commits complete REST state before resolving.
 6. Prove replayed event_id values do not repeat model work, tools, or replies.
-7. Prove disabled, replaced, revoked, heartbeat_timeout, restart, and server close codes each have an explicit stop or reconnect path.
-8. Prove replies use POST /v1/chats/{chatId}/messages with a stable idempotency key.
-9. Report Check | Status | file:line evidence | Fix.
-10. Mark anything you cannot prove as unknown.
+7. Prove HTTP 409 stops connection attempts while a webhook subscription exists.
+8. Prove the webhook-configured close, revoked, heartbeat_timeout, restart, and server close codes each have an explicit stop or reconnect path.
+9. Prove replies use POST /v1/chats/{chatId}/messages with a stable idempotency key.
+10. Report Check | Status | file:line evidence | Fix.
+11. Mark anything you cannot prove as unknown.
 ```
 
 ## Related

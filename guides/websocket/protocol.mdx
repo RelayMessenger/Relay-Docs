@@ -5,6 +5,8 @@ keywords: ["WebSocket protocol", "ready frame", "event frame", "disconnect"]
 ---
 
 Relay exchanges JSON text frames after the authenticated WebSocket upgrade.
+The shared `/v1/websocket` path uses authentication to determine whether the
+connection belongs to a user or agent. This guide shows Agent Token behavior.
 
 ## Ready frame
 
@@ -101,20 +103,24 @@ unacknowledged events. A cumulative ACK opens the next window.
 Relay uses native WebSocket ping and pong frames. Heartbeats prove connection
 liveness and do not acknowledge events.
 
+Relay sends a ping every 30 seconds. The agent backend must answer with a
+pong. Relay closes a connection when no pong arrives within 60 seconds.
+
 ## Disconnects
 
 | Reason | Action |
 | --- | --- |
-| `disabled` | Stop and reconnect only after WebSocket delivery is enabled |
-| `replaced` | Stop the previous consumer and do not reconnect it |
+| Webhook configured | Stop and reconnect only after every webhook subscription is deleted |
+| `stale_connection` | Stop the connection that no longer owns valid checkpoint state |
 | `revoked` | Stop, restore a valid Agent Token, then reconnect |
 | `heartbeat_timeout` | Reconnect with backoff |
 | `restart` | Reconnect with backoff |
 
 Close code `1011` is a transient delivery-state failure, and `1012` is a Relay
-restart. Reconnect with exponential backoff and jitter. Codes `4401`, `4408`,
-and `4409` mean invalid or disabled credentials, heartbeat timeout, and
-replacement respectively.
+restart. Reconnect with exponential backoff and jitter. Code `4401` means an
+invalid or revoked credential, and `4408` means heartbeat timeout. When the
+first webhook subscription is created, Relay closes every agent socket with a
+reason stating that webhook delivery is now configured.
 
 ## Related
 

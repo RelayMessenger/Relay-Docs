@@ -24,7 +24,7 @@ contract and operating boundaries.
 ````text Relay agent prompt
 ---
 name: relay
-description: Build a Relay Messenger agent backend with the v1 API, webhooks, or WebSocket.
+description: Build a Relay Messenger agent backend with the v1 API, Webhooks, or WebSocket.
 ---
 
 # Relay Messenger developer integration
@@ -35,10 +35,10 @@ owns its model, tools, memory, and behavior.
 ## Start
 
 1. Read `https://docs.relayapp.im/llms.txt` and the current OpenAPI.
-2. Set the API root to `https://api.relayapp.im`.
-3. Store the Agent Token in server-side secret storage.
-4. Use signed webhooks by default, or enable agent-only WebSocket as the alternate.
-5. For WebSocket, upgrade `wss://api.relayapp.im/v1/websocket` with `Authorization: Bearer <Agent Token>`.
+2. Read the Agent Events guide before choosing a backend shape.
+3. Set `RELAY_API_URL` for the target environment and use a matching Agent Token.
+4. Store the Agent Token in server-side secret storage.
+5. Save a webhook subscription for Webhook delivery, or save none and connect by WebSocket.
 6. Commit each `event_id` under a uniqueness rule before webhook `2xx` or WebSocket ACK.
 7. Run model and tool work after acknowledgement.
 8. Mark the Chat Read when the agent actually reads it.
@@ -54,32 +54,59 @@ owns its model, tools, memory, and behavior.
 - Replies and reactions target zero-based `part_index`.
 - Group membership controls which history a Contact can read.
 
+## Event path
+
+| Saved configuration | Agent event path |
+| --- | --- |
+| At least one webhook subscription | Webhook only |
+| No webhook subscriptions | WebSocket only |
+
+There is no mode, toggle, or transport setting. Relay never sends one event
+through both paths.
+
+Creating the first subscription closes connected agent sockets and drains
+pending events to Webhooks. Deleting the last drains pending events to
+WebSocket. With no subscription and no connection, events wait durably for up
+to 30 days.
+
+A WebSocket upgrade while any subscription exists returns HTTP `409`. Pending
+events keep the same `event_id` across path changes.
+
 ## Event acceptance
 
 ```text
 verify → deduplicate event_id → durable commit → 2xx or ACK → process
 ```
 
-Acknowledgement does not mean bytes received, handler start, model completion, reply, or Read.
+Acknowledgement does not mean bytes received, handler start, model completion,
+reply, or Read.
 
-Relay sends events through one selected transport, not both. Pending events
-keep the same `event_id` when the transport changes. Every event uses the fixed
-`webhook_version` value `2026-02-03`.
+Webhook retries can repeat an `event_id`. Reject webhook destinations that
+resolve to localhost, private, link-local, or cloud metadata addresses. Never
+follow redirects.
 
-Typing uses `POST` and `DELETE /v1/chats/{chatId}/typing`. Agent transports
-receive `chat.typing_indicator.started` and
-`chat.typing_indicator.stopped`; both payloads identify the authenticated
-`contact`.
+WebSocket ACKs are cumulative. Recover with replay or FULL sync after a stale
+checkpoint. Relay pings every 30 seconds and requires a pong within 60
+seconds.
+
+The shared `/v1/websocket` path uses authentication to distinguish user and
+agent connections. Agent backends authenticate the upgrade with
+`Authorization: Bearer <Agent Token>`.
+
+Use the SDK WebSocket directly during local development. The `relay listen`
+command is deleted.
 
 ## Canonical contract
 
 - Call the `/v1` paths defined by the current OpenAPI.
 - Send Message commands through REST.
 - Treat registered Handles as public messaging addresses.
+- Treat every inbound `event_id` as at-least-once.
 - Recover current state with ordinary REST reads or WebSocket FULL sync.
-- Treat WebSocket ACKs as cumulative acceptance frames.
+- Use a staging API root and staging Agent Token together during staging tests.
 
-Use the OpenAPI for exact fields, limits, and errors. Mark anything not proved by the docs or contract as unknown.
+Use the OpenAPI for exact fields, limits, and errors. Mark anything not proved
+by the docs or contract as unknown.
 ````
 
 ## Build prompt
@@ -98,6 +125,8 @@ Before coding:
 Requirements:
 - Use https://api.relayapp.im/v1.
 - Keep the Agent Token in server-side secret storage.
+- Use saved webhook subscriptions as the path: one or more means Webhook, none means WebSocket.
+- Do not add a transport mode, toggle, or WebSocket setting.
 - Commit each inbound event under a unique event_id before webhook 2xx or WebSocket ACK.
 - Run model work after acknowledgement.
 - Send replies through REST with a stable idempotency key.

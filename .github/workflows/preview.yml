@@ -1,0 +1,106 @@
+name: Preview docs
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Existing branch to preview
+        required: true
+        default: dev
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    name: Validate and preview
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    environment: docs-preview
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: >-
+            ${{ github.event_name == 'workflow_dispatch' &&
+            inputs.branch || github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run validate
+
+      - name: Trigger Mintlify preview
+        env:
+          MINTLIFY_API_KEY: ${{ secrets.MINTLIFY_API_KEY }}
+          MINTLIFY_PROJECT_ID: ${{ vars.MINTLIFY_PROJECT_ID }}
+          PREVIEW_BRANCH: >-
+            ${{ github.event_name == 'workflow_dispatch' &&
+            inputs.branch || github.head_ref }}
+        run: |
+          set -euo pipefail
+          test -n "$MINTLIFY_API_KEY"
+          test -n "$MINTLIFY_PROJECT_ID"
+          test -n "$PREVIEW_BRANCH"
+
+          response=$(curl --fail-with-body --silent --show-error \
+            -X POST \
+            "https://api.mintlify.com/v1/project/preview/$MINTLIFY_PROJECT_ID" \
+            -H "Authorization: Bearer $MINTLIFY_API_KEY" \
+            -H "Content-Type: application/json" \
+            --data "$(python3 -c \
+              'import json, os; print(json.dumps({"branch": os.environ["PREVIEW_BRANCH"]}))')")
+
+          read -r status_id preview_url < <(
+            python3 - "$response" <<'PY'
+          import json
+          import sys
+
+          result = json.loads(sys.argv[1])
+          print(result["statusId"], result["previewUrl"])
+          PY
+          )
+
+          for attempt in $(seq 1 60); do
+            status_response=$(curl --fail-with-body --silent --show-error \
+              "https://api.mintlify.com/v1/project/update-status/$status_id" \
+              -H "Authorization: Bearer $MINTLIFY_API_KEY")
+            deployment_status=$(python3 -c \
+              'import json, sys; print(json.load(sys.stdin)["status"])' \
+              <<< "$status_response")
+
+            case "$deployment_status" in
+              success) break ;;
+              failure)
+                printf '%s\n' "$status_response"
+                exit 1
+                ;;
+              queued|in_progress) sleep 10 ;;
+              *)
+                echo "Unknown Mintlify deployment status: $deployment_status"
+                exit 1
+                ;;
+            esac
+
+            if [ "$attempt" -eq 60 ]; then
+              echo "Mintlify preview timed out."
+              exit 1
+            fi
+          done
+
+          npm run validate:hosted-llms -- "$preview_url"
+
+          python3 - "$preview_url" "$status_id" >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import sys
+
+          print("## Mintlify preview queued")
+          print()
+          print(f"- Preview: {sys.argv[1]}")
+          print(f"- Status ID: `{sys.argv[2]}`")
+          print("- Generated `llms.txt` and `llms-full.txt`: validated")
+          PY

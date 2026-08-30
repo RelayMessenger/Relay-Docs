@@ -368,16 +368,44 @@ websocket_text = (root / "guides/websocket/index.mdx").read_text()
 websocket_protocol_text = (root / "guides/websocket/protocol.mdx").read_text()
 websocket_recovery_text = (root / "guides/websocket/full-sync.mdx").read_text()
 typing_text = (root / "guides/chats/typing-indicators.mdx").read_text()
-if "Webhooks are the default" not in webhook_text + "\n" + websocket_text:
-    raise SystemExit("event transport docs must identify the default")
-if "same event through both" not in webhook_text + "\n" + websocket_text:
-    raise SystemExit("event transport docs must prevent dual delivery assumptions")
+agent_event_text = (root / "guides/agent-events/index.mdx").read_text()
+transport_text = "\n".join([
+    agent_event_text,
+    webhook_text,
+    websocket_text,
+    websocket_protocol_text,
+    webhook_delivery_text,
+])
+for required in [
+    "At least one saved subscription",
+    "No webhook subscriptions",
+    "no mode, toggle, or transport setting",
+    "never sends one event\nthrough both paths",
+    "HTTP `409`",
+    "closes every connected agent socket",
+    "same `event_id`",
+    "wait durably",
+    "30 days",
+]:
+    if required.lower() not in transport_text.lower():
+        raise SystemExit(f"final event path decision is missing: {required}")
+for forbidden in [
+    "relay.websocket.update",
+    "PUT https://api.relayapp.im/v1/websocket",
+    '{"enabled":true}',
+    '{"enabled":false}',
+    "WebSocket is enabled",
+]:
+    if forbidden.lower() in transport_text.lower():
+        raise SystemExit(f"stale WebSocket setting returned: {forbidden}")
 if (
     'webhook_version":"2026-02-03"' not in webhook_events_text
     or "use this fixed payload version" not in webhook_events_text
 ):
     raise SystemExit("webhook event guide lost the fixed payload version")
-for reason in ["disabled", "replaced", "revoked", "heartbeat_timeout", "restart"]:
+if "Webhook configured" not in websocket_protocol_text:
+    raise SystemExit("WebSocket protocol is missing the webhook-configured close")
+for reason in ["stale_connection", "revoked", "heartbeat_timeout", "restart"]:
     if f"`{reason}`" not in websocket_protocol_text:
         raise SystemExit(f"WebSocket protocol is missing disconnect reason: {reason}")
 if "A fatal error ends consumption" not in websocket_protocol_text:
@@ -388,9 +416,19 @@ for required in [
     "query credential or cookie",
     "does not require a",
     "Security trade-off",
+    "The same `/v1/websocket` path",
+    "authentication",
+    "multiple connected sockets",
+    "The `relay listen`",
+    "is deleted",
 ]:
     if required not in websocket_text:
         raise SystemExit(f"WebSocket authentication guide is missing: {required}")
+if (
+    "ping every 30 seconds" not in websocket_protocol_text
+    or "within 60 seconds" not in websocket_protocol_text
+):
+    raise SystemExit("WebSocket guide lost the 30-second ping and 60-second pong timeout")
 for forbidden in [
     "/v1/websocket-connections",
     "relay_ticket_",
@@ -419,6 +457,13 @@ for required in [
     "30 days",
     "PostHog",
     "recover current Chat and Message state",
+    "HTTP `3xx`",
+    "redirect is not followed",
+    "localhost",
+    "private",
+    "link-local",
+    "cloud metadata",
+    "same\n`event_id`",
 ]:
     if required not in webhook_delivery_text:
         raise SystemExit(f"Webhook delivery policy is missing: {required}")
@@ -478,6 +523,29 @@ for path in error_paths:
         raise SystemExit(f"error.doc_url drifted in {path.relative_to(root)}")
 
 openapi_text = (root / "api-reference/openapi.yaml").read_text()
+openapi_transport_blockers = []
+if "operationId: getWebSocketSettings" in openapi_text:
+    openapi_transport_blockers.append("GET /v1/websocket settings operation")
+if "operationId: updateWebSocketSettings" in openapi_text:
+    openapi_transport_blockers.append("PUT /v1/websocket settings operation")
+if "WebSocketSettingsUpdate:" in openapi_text:
+    openapi_transport_blockers.append("WebSocketSettingsUpdate schema")
+if "Whether agent events use the WebSocket instead of webhook subscriptions." in openapi_text:
+    openapi_transport_blockers.append("enabled transport field")
+if "Agent delivery uses\n        successful durable webhook acceptance instead" in openapi_text:
+    openapi_transport_blockers.append("webhook-only Agent Delivered description")
+if re.search(
+    r"WebSocketDisconnectFrame:[\s\S]*?\n\s+- disabled\n",
+    openapi_text,
+):
+    openapi_transport_blockers.append("disabled WebSocket disconnect reason")
+if openapi_transport_blockers:
+    print(
+        "OPENAPI BLOCKER: the server owner must remove "
+        + ", ".join(openapi_transport_blockers)
+        + " before this branch can publish.",
+        file=sys.stderr,
+    )
 if "x-page-icon:" in openapi_text:
     raise SystemExit("decorative API Reference icons returned")
 delivery_status = re.search(
@@ -639,5 +707,5 @@ print(
     "exact heading inventory, "
     "frontmatter, bodyless Contact Card sharing, exact delivery states and error pages, "
     "typing, exact OpenAPI event inventory, webhook retries, transport recovery, URL safety, "
-    "WebSocket disconnects, package identity, and stale-contract bans"
+    "final automatic event paths, WebSocket disconnects, package identity, and stale-contract bans"
 )

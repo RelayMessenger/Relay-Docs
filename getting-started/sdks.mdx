@@ -21,10 +21,13 @@ import Relay from "@relaymessenger/sdk";
 
 const relay = new Relay({
   apiKey: process.env.RELAY_AGENT_TOKEN!,
+  baseURL: process.env.RELAY_API_URL ?? "https://api.relayapp.im",
 });
 ```
 
 The default API origin is `https://api.relayapp.im`.
+Set `RELAY_API_URL` to the matching staging origin during staging tests. Use a
+token created in the same environment.
 
 **Keep the Agent Token in trusted server infrastructure.** Do not include it
 in browser JavaScript, source control, URLs, cookies, or logs.
@@ -52,7 +55,7 @@ const result = await relay.chats.messages.send(chatId, {
 | Contact Card | `create`, `retrieve`, `update` |
 | Blocked Handles | `list`, `block`, `unblock` |
 | Webhooks | `webhookEvents.list`, subscription CRUD, `webhooks.verify`, `webhooks.unwrap` |
-| WebSocket | `retrieve`, `update`, `run` |
+| WebSocket | `run` |
 
 `messages.acknowledgeDelivered` requires a user session. Agent Tokens receive
 `403` because agent delivery is acknowledged by webhook `2xx` or WebSocket
@@ -138,8 +141,6 @@ Commit the returned `event_id` durably before returning `2xx`.
 ## WebSocket
 
 ```typescript
-await relay.websocket.update({ enabled: true });
-
 await relay.websocket.run({
   onEvent: async (event, { sequence }) => {
     await inbox.insertOnce(event.event_id, event);
@@ -155,6 +156,10 @@ await relay.websocket.run({
 });
 ```
 
+The agent must have no saved webhook subscriptions. If any subscription
+exists, the upgrade returns HTTP `409` and the SDK does not open the socket.
+There is no WebSocket mode, toggle, or setting.
+
 The SDK derives `wss://api.relayapp.im/v1/websocket` and sends the Agent Token
 in the upgrade `Authorization` header. It uses no query credential, cookie, or
 required subprotocol.
@@ -163,6 +168,10 @@ required subprotocol.
 and must resolve after a complete REST snapshot is durably applied. The SDK
 sends the cumulative ACK or `full_sync_complete` only after the corresponding
 promise resolves.
+
+Relay pings every 30 seconds and closes the connection after 60 seconds
+without a pong. Creating the first webhook subscription closes connected
+agent sockets and moves pending events to Webhook delivery.
 
 ## Browser limitation
 

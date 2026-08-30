@@ -1,7 +1,7 @@
 ---
 title: "Agent Events"
 sidebarTitle: "Overview"
-description: "Choose one durable transport for incoming Relay agent events."
+description: "Receive each Relay agent event through the path selected by saved webhook subscriptions."
 keywords: ["agent events", "webhooks", "WebSocket", "event_id"]
 ---
 
@@ -10,19 +10,20 @@ membership, Chat metadata, and typing.
 
 ## Choose a transport
 
-| Transport | Best for | Acceptance |
+Relay chooses the path from the agent's saved configuration:
+
+| Saved configuration | Delivery path | Acceptance |
 | --- | --- | --- |
-| Webhooks | Serverless or request-driven backends | Durable commit, then HTTP `2xx` |
-| WebSocket | Always-on backends | Durable commit, then cumulative ACK |
+| At least one webhook subscription | Webhook only | Durable commit, then HTTP `2xx` |
+| No webhook subscriptions and a connected backend | WebSocket only | Durable commit, then cumulative ACK |
+| No webhook subscriptions and no connection | Events wait durably | No acceptance until a backend connects |
 
-Webhooks are the default. WebSocket is optional and agent-only.
-
-**Relay sends each event through one selected transport, not both.** Pending
-events move to the newly selected transport with the same `event_id`.
+**There is no mode, toggle, or transport setting. Relay never sends one event
+through both paths.**
 
 ## Shared envelope
 
-Both transports carry the same event envelope:
+Webhooks and WebSocket carry the same event envelope:
 
 ```json
 {
@@ -42,16 +43,17 @@ delivery means a replay can contain the same ID and frozen body.
 
 ## Switch transports
 
-Use `PUT /v1/websocket`:
+Change the saved webhook subscriptions:
 
-| Body | Selected transport |
+| Change | Result |
 | --- | --- |
-| `{"enabled":true}` | WebSocket |
-| `{"enabled":false}` | Active webhook subscriptions |
+| Create the first subscription | Relay closes connected agent sockets and drains pending events to Webhooks |
+| Delete the last subscription | Relay drains pending events to WebSocket |
+| Delete the last subscription with no socket connected | Pending events continue waiting durably |
 
-Enabling WebSocket waits for an in-flight webhook request to finish. Returning
-to webhooks requires an active subscription for every pending event type.
-Either condition can return `409`.
+Pending events keep the same `event_id` across a path change and remain
+available for 30 days. A WebSocket upgrade while any webhook subscription
+exists returns HTTP `409`.
 
 ## Recovery
 
@@ -70,12 +72,13 @@ You are auditing a codebase that receives Relay agent events.
 This is read-only. Do not change code unless I ask.
 
 1. Read https://docs.relayapp.im/llms.txt, Agent Events, and the current Relay OpenAPI.
-2. Identify whether the agent selects webhooks or WebSocket.
+2. List the agent's saved webhook subscriptions and determine the automatic path.
 3. Locate event_id deduplication, the durable inbox commit, 2xx or cumulative ACK, and reply idempotency.
-4. Prove transport switching preserves event_id and cannot run both consumers.
-5. Prove recovery uses Relay REST reads or the documented FULL sync flow.
-6. Report Check | Status | file:line evidence | Fix.
-7. Mark anything you cannot prove as unknown.
+4. Prove the code contains no transport mode, toggle, or WebSocket setting.
+5. Prove the first subscription closes sockets, the last deletion enables socket delivery, and pending events keep event_id.
+6. Prove recovery uses Relay REST reads or the documented FULL sync flow.
+7. Report Check | Status | file:line evidence | Fix.
+8. Mark anything you cannot prove as unknown.
 ```
 
 ## Related

@@ -1,11 +1,31 @@
 #!/usr/bin/env python3
 import json
+import re
 import sys
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 source = (root / "skill.md").read_text()
 target = root / "agent-prompt.js"
+mintlify_skill_target = root / ".mintlify/skills/relay/SKILL.md"
+agent_page_target = root / "getting-started/ai-agents.mdx"
+
+
+def render_agent_page(page: str) -> str:
+    pattern = re.compile(
+        r"(^## Relay agent prompt\n.*?^````text Relay agent prompt\n)"
+        r".*?"
+        r"(^````$)",
+        re.M | re.S,
+    )
+    rendered, count = pattern.subn(
+        lambda match: match.group(1) + source.rstrip("\n") + "\n" + match.group(2),
+        page,
+        count=1,
+    )
+    if count != 1:
+        raise SystemExit("could not locate the visible Relay agent prompt")
+    return rendered
 
 output = f"""(() => {{
   const RELAY_AGENT_PROMPT = {json.dumps(source, ensure_ascii=False)};
@@ -91,7 +111,29 @@ output = f"""(() => {{
 if "--check" in sys.argv:
     if not target.is_file() or target.read_text() != output:
         raise SystemExit("agent-prompt.js is stale; run npm run build:agent-prompt")
-    print("Copy agent prompt payload is synchronized with skill.md")
+    if (
+        not mintlify_skill_target.is_file()
+        or mintlify_skill_target.read_text() != source
+    ):
+        raise SystemExit(
+            ".mintlify/skills/relay/SKILL.md is stale; "
+            "run npm run build:agent-prompt"
+        )
+    expected_agent_page = render_agent_page(agent_page_target.read_text())
+    if agent_page_target.read_text() != expected_agent_page:
+        raise SystemExit(
+            "the visible Relay agent prompt is stale; "
+            "run npm run build:agent-prompt"
+        )
+    print(
+        "Copy action, visible prompt, and Mintlify skill are synchronized "
+        "with skill.md"
+    )
 else:
     target.write_text(output)
-    print("Built agent-prompt.js from skill.md")
+    mintlify_skill_target.write_text(source)
+    agent_page_target.write_text(render_agent_page(agent_page_target.read_text()))
+    print(
+        "Built agent-prompt.js, visible prompt, and Mintlify skill "
+        "from skill.md"
+    )
