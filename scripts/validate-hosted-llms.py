@@ -119,8 +119,12 @@ for path in canonical_paths:
         },
     }
 
-root_version = pages["/"]["canonical"]["headers"].get("x-served-version")
-guides_version = pages["/guides"]["canonical"]["headers"].get("x-served-version")
+root_headers = pages["/"]["canonical"]["headers"]
+guides_headers = pages["/guides"]["canonical"]["headers"]
+root_version = root_headers.get("x-served-version") or root_headers.get("x-version")
+guides_version = guides_headers.get("x-served-version") or guides_headers.get(
+    "x-version"
+)
 if not root_version or root_version != guides_version:
     raise SystemExit(
         "root and /guides are not served by the same Mintlify deployment"
