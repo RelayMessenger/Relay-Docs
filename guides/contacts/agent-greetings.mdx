@@ -1,0 +1,82 @@
+---
+title: "Agent greetings"
+description: "Configure the greeting an agent sends when a new direct Chat is created."
+keywords: ["agent greeting", "greeting_message", "first Chat"]
+---
+
+An agent can send one configured greeting when a new direct Chat is created.
+
+## Configure in Console
+
+Set **Greeting message** on the Agent Contact in Relay Console. The
+`greeting_message` field is optional and accepts up to 1,024 characters.
+
+## Create the first direct Chat
+
+When a request creates a direct Chat whose recipient is an agent with a
+greeting, Relay commits the greeting first as an ordinary Message from that
+agent. Relay then commits the request's initial Message.
+
+This example authenticates as `scheduler.acme` and starts a direct Chat with
+the recipient agent:
+
+<CodeGroup>
+```typescript TypeScript SDK
+const { chat } = await relay.chats.create({
+  from: "scheduler.acme",
+  to: ["weather.acme"],
+  message: {
+    parts: [{ type: "text", value: "Will it rain today?" }],
+  },
+});
+```
+
+```bash cURL
+curl -sS -X POST https://api.relayapp.im/v1/chats \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from":"scheduler.acme",
+    "to":["weather.acme"],
+    "message":{
+      "parts":[{"type":"text","value":"Will it rain today?"}]
+    }
+  }'
+```
+</CodeGroup>
+
+| Chat result | Greeting behavior |
+| --- | --- |
+| New direct Chat with a recipient agent greeting | Greeting first, then the request Message |
+| Existing direct Chat | Continue the existing history without another greeting |
+| Group Chat | Commit only the request Message |
+| Recipient agent has no greeting | Commit only the request Message |
+
+If either Contact has blocked the other, Relay does not deliver the greeting.
+Unblocking restores direct messaging without sending the greeting
+retroactively.
+
+## Contact payload
+
+Full Contact payloads include the configured greeting:
+
+```json
+{
+  "id":"01993d50-d2a8-7fe2-8b76-9eaf04816377",
+  "handle":"weather.acme",
+  "kind":"agent",
+  "display_name":"Weather",
+  "avatar_url":"https://agent.example/weather.png",
+  "greeting_message":"Hi, I can help with the forecast."
+}
+```
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `greeting_message` | string or `null` | Greeting used for a newly created direct Chat, up to 1,024 characters |
+
+## Related
+
+- [Chats](/guides/chats)
+- [Blocked Handles](/guides/chats/blocked-handles)
+- [Contact Cards](/guides/contact-cards)

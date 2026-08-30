@@ -98,6 +98,7 @@ Chats
 
 Contacts
   Contact Cards
+  Agent greetings
   Blocked Handles
 
 Agent events
@@ -153,7 +154,7 @@ Current focused pages include:
 - Sending Messages, Mentions, Message Details, and Message Parts;
 - Attachments, Voice Memos, and Rich Link Previews;
 - Group Chats, Participants, Typing Indicators, and Message History;
-- Contact Card configuration and Sharing Contact Card;
+- Contact Card configuration, Agent greetings, and Sharing Contact Card;
 - Webhooks, Webhook Subscriptions, Webhook Event Types, and Webhook Delivery;
 - WebSocket, Protocol, Acknowledgements, and FULL sync.
 
@@ -339,12 +340,13 @@ Each Error Code page includes:
 | Sharing Contact Card | Share the configured card inside an existing Chat |
 | Message History | Page through visible Message and Chat event history |
 | Contact Cards | Configure an agent's public card |
+| Agent greetings | Configure the first Message in a new direct Chat |
 | Blocked Handles | Block, list, and unblock Handles |
 | Agent Events | Select and operate an agent event path |
 | Webhooks | Receive and verify signed HTTPS events |
 | Webhook Subscriptions | Configure event destinations and event filters |
 | Webhook Event Types | Read the versioned event envelope and payloads |
-| Webhook Delivery | Implement retries, terminal handling, and redrive |
+| Webhook Delivery | Implement retries and terminal handling |
 | WebSocket | Connect an always-on agent backend |
 | Protocol | Implement current frames, heartbeats, and close codes |
 | Acknowledgements | Commit and cumulatively acknowledge events |
@@ -398,7 +400,7 @@ the page's single job and update this inventory in the same commit.
 | Rich Link Previews | `Send a link part` → `Composition rules` → `Start a Chat with a link` → `Related` |
 | Replies | `Reply to a Message` → `Target a part` → `List a reply thread` → `Related` |
 | Reactions | `Add a reaction` → `Reaction types` → `Remove a reaction` → `Events` → `Related` |
-| Delivery Receipts | `Response fields` → `Delivered boundaries` → `Acknowledge user delivery` → `Mark Read` → `Direct and group presentation` → `Related` |
+| Delivery Receipts | `Response fields` → `Delivered boundaries` → `Mark Read` → `Direct and group presentation` → `Related` |
 
 ### Chats and Contacts
 
@@ -411,6 +413,7 @@ the page's single job and update this inventory in the same commit.
 | Sharing Contact Card | `Before sharing` → `Share the card` → `Keep configuration separate` → `Related` |
 | Message History | `Pagination` → `Group-history rows` → `Membership visibility` → `Agent recovery` → `Related` |
 | Contact Cards | `How Contact Cards work` → `Retrieve the card` → `Upsert the card` → `Update the card` → `Fields` → `Sharing is separate` → `Related` |
+| Agent greetings | `Configure in Console` → `Create the first direct Chat` → `Contact payload` → `Related` |
 | Blocked Handles | `Block` → `Behavior` → `List` → `Unblock` → `Related` |
 
 ### Agent events, Webhooks, and WebSocket
@@ -421,7 +424,7 @@ the page's single job and update this inventory in the same commit.
 | Webhooks | `Flow` → `Create a subscription` → `Verify the signature` → `Acknowledge safely` → `Review with an agent` → `Related` |
 | Webhook Subscriptions | `Create` → `Store the signing secret` → `List, retrieve, update, or delete` → `Related` |
 | Webhook Event Types | `List supported events` → `Envelope` → `Message events` → `Payload version` → `Reaction events` → `Chat events` → `Related` |
-| Webhook Delivery | `Delivery policy` → `Retry classes` → `Receiver pattern` → `Delivered meaning` → `Terminal state and redrive` → `Review with an agent` → `Related` |
+| Webhook Delivery | `Delivery policy` → `Retry classes` → `Receiver pattern` → `Delivered meaning` → `Terminal delivery` → `Review with an agent` → `Related` |
 | WebSocket | `Select WebSocket delivery` → `Connect` → `Review with an agent` → `Related` |
 | WebSocket Protocol | `Ready frame` → `Event frame` → `Error frame` → `Backpressure` → `Heartbeats` → `Disconnects` → `Related` |
 | Acknowledgements | `Frame` → `Safe order` → `Delivery meaning` → `Replay` → `Errors` → `Review with an agent` → `Related` |
@@ -447,7 +450,7 @@ the page's single job and update this inventory in the same commit.
 | `getting-started/*` | Getting started | integrated |
 | `guides/messaging/*` | Messaging | integrated |
 | `guides/chats/index.mdx`, `group-chats.mdx`, `participants.mdx`, `typing-indicators.mdx`, `share-contact-card.mdx`, `message-history.mdx` | Chats | integrated |
-| `guides/contact-cards.mdx`, `guides/chats/blocked-handles.mdx` | Contacts | integrated |
+| `guides/contact-cards.mdx`, `guides/contacts/agent-greetings.mdx`, `guides/chats/blocked-handles.mdx` | Contacts | integrated |
 | `guides/agent-events/index.mdx` | Agent events | integrated comparison hub |
 | `guides/webhooks/*` | Webhooks | integrated |
 | `guides/websocket/*` | WebSocket | integrated |

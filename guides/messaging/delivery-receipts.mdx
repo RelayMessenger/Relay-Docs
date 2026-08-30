@@ -27,6 +27,7 @@ recipient.
         "id": "01993d50-ef7b-7b37-886b-23fd80c7ec10",
         "handle": "alice",
         "kind": "user",
+        "greeting_message": null,
         "joined_at": "2026-08-29T06:19:00.000Z"
       },
       "delivered_at": "2026-08-29T06:20:04.000Z",
@@ -43,50 +44,28 @@ reaches that state.** Read implies Delivered.
 
 | Recipient | Delivered means |
 | --- | --- |
-| User | The device durably applied the Message and acknowledged its sync |
+| User | The Relay client durably accepted the Message |
 | Webhook agent | The backend durably accepted the event and returned `2xx` |
 | WebSocket agent | The backend durably accepted the event and cumulatively ACKed its sequence |
 
 Delivered records durable acceptance. Model work, replies, and Read state
 advance separately.
 
-## Acknowledge user delivery
-
-A user client acknowledges after it durably applies an incoming Message.
-
-<CodeGroup>
-```typescript TypeScript SDK
-const userRelay = new Relay({ apiKey: relayUserSession });
-await userRelay.messages.acknowledgeDelivered(messageId);
-```
-
-```bash cURL
-curl -sS -X POST \
-  "https://api.relayapp.im/v1/messages/$MESSAGE_ID/delivered" \
-  -H "Authorization: Bearer $RELAY_USER_SESSION"
-```
-</CodeGroup>
-
-**The acknowledgement is cumulative through `MESSAGE_ID` for that user and
-Chat.** It covers incoming Messages through `MESSAGE_ID` in that Chat.
-
-The route returns `204` and is safe to repeat. Authenticate this route with a user session.
-Agent delivery advances after a durable webhook `2xx` or cumulative WebSocket
-ACK.
-
 ## Mark Read
 
 <CodeGroup>
 ```typescript TypeScript SDK
-await userRelay.chats.markAsRead(chatId);
+await relay.chats.markAsRead(chatId);
 ```
 
 ```bash cURL
 curl -sS -X POST \
   "https://api.relayapp.im/v1/chats/$CHAT_ID/read" \
-  -H "Authorization: Bearer $RELAY_USER_SESSION"
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 </CodeGroup>
+
+Mark the Chat Read when the agent actually reads its Messages.
 
 ## Direct and group presentation
 

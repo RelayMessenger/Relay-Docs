@@ -80,7 +80,14 @@ paths:
             type: string
             minLength: 1
             maxLength: 255
-      description: Create a direct or group Chat with its first Message.
+      description: |-
+        Create a direct or group Chat with its first Message.
+
+        When this creates a direct Chat whose recipient is an agent with a
+        greeting_message, Relay commits that greeting as the recipient
+        agent's first Message before the request's Message. Reusing an
+        existing direct Chat does not send the greeting again. Group Chats do
+        not receive automatic greetings.
     get:
       operationId: listChats
       summary: List all chats
@@ -505,7 +512,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-      description: Resolve or create a Chat, then send a Message.
+      description: |-
+        Resolve or create a Chat, then send a Message.
+
+        When this creates a direct Chat whose recipient is an agent with a
+        greeting_message, Relay commits that greeting as the recipient
+        agent's first Message before the request's Message. Reusing an
+        existing direct Chat does not send the greeting again. Group Chats do
+        not receive automatic greetings.
   /v1/chats/{chatId}/messages:
     post:
       operationId: sendMessageToChat
@@ -908,7 +922,7 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '500':
           $ref: '#/components/responses/InternalServerError'
-      description: Block direct traffic with a registered Handle.
+      description: Block direct traffic with a registered Handle while preserving existing Chat history.
     delete:
       operationId: unblockHandle
       summary: Unblock a handle
@@ -1196,34 +1210,6 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
       description: Update the authenticated agent's Contact Card.
-  /v1/messages/{messageId}/delivered:
-    post:
-      operationId: acknowledgeMessageDelivered
-      summary: Acknowledge message delivery
-      description: A user client calls this after it durably applies this incoming Message and every earlier Message it received in the same Chat. The acknowledgement is cumulative through messageId for that user and Chat. Relay advances the sender-visible Delivered state only after every recipient has acknowledged. Agent delivery advances after successful durable webhook acceptance or a WebSocket cumulative ACK. Authenticate this route with a user session.
-      tags:
-        - Messages
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: messageId
-          in: path
-          required: true
-          description: Message identifier
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '204':
-          description: Delivery acknowledged
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
   /v1/websocket:
     get:
       operationId: connectAgentWebSocket
@@ -1510,10 +1496,13 @@ components:
               $ref: '#/components/schemas/ChatGroupNameUpdatedEvent'
     ChatHandle:
       type: object
+      description: A Contact projection with Chat membership state.
       required:
         - id
         - handle
         - joined_at
+        - kind
+        - greeting_message
       properties:
         id:
           type: string
@@ -1564,6 +1553,24 @@ components:
             - 'null'
           format: uri
           description: Current Contact avatar URL.
+        greeting_message:
+          type:
+            - string
+            - 'null'
+          maxLength: 1024
+          default: null
+          description: The greeting Relay commits from this agent when it is the recipient in a newly created direct Chat. User Contacts return null.
+      allOf:
+        - if:
+            properties:
+              kind:
+                const: user
+            required:
+              - kind
+          then:
+            properties:
+              greeting_message:
+                type: 'null'
     ChatInfo:
       type: object
       required:
@@ -1676,7 +1683,10 @@ components:
           items:
             type: string
         message:
-          description: Initial message for the new Chat.
+          description: |-
+            Initial Message from the authenticated sender. For a newly
+            created direct Chat, a recipient agent's configured greeting is
+            committed immediately before this Message.
           $ref: '#/components/schemas/MessageContent'
     CreateChatResult:
       type: object
