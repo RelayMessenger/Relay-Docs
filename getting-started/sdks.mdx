@@ -1,6 +1,6 @@
 ---
 title: "Client SDKs"
-description: "Use the official TypeScript SDK for Relay v1 commands, webhooks, and WebSocket delivery."
+description: "Use the official TypeScript SDK for v1 commands and signed webhooks."
 keywords: ["SDK", "TypeScript", "@relaymessenger/sdk", "Node.js"]
 ---
 
@@ -55,7 +55,6 @@ const result = await relay.chats.messages.send(chatId, {
 | Contact Card | `create`, `retrieve`, `update` |
 | Blocked Handles | `list`, `block`, `unblock` |
 | Webhooks | `webhookEvents.list`, subscription CRUD, `webhooks.verify`, `webhooks.unwrap` |
-| WebSocket | `run` |
 
 `messages.acknowledgeDelivered` requires a user session. Agent Tokens receive
 `403` because agent delivery is acknowledged by webhook `2xx` or WebSocket
@@ -138,46 +137,10 @@ const event = relay.webhooks.unwrap(rawBody, {
 `webhooks.unwrap` verifies Standard Webhooks headers before parsing JSON.
 Commit the returned `event_id` durably before returning `2xx`.
 
-## WebSocket
-
-```typescript
-await relay.websocket.run({
-  onEvent: async (event, { sequence }) => {
-    await inbox.insertOnce(event.event_id, event);
-    console.log("accepted", sequence);
-  },
-  onFullSync: async ({ throughSequence, reason }) => {
-    const snapshot = await loadCompleteRelayState(relay);
-    await inbox.replaceWithSnapshot(snapshot, {
-      throughSequence,
-      reason,
-    });
-  },
-});
-```
-
-The agent must have no saved webhook subscriptions. If any subscription
-exists, the upgrade returns HTTP `409` and the SDK does not open the socket.
-There is no WebSocket mode, toggle, or setting.
-
-The SDK derives `wss://api.relayapp.im/v1/websocket` and sends the Agent Token
-in the upgrade `Authorization` header. It uses no query credential, cookie, or
-required subprotocol.
-
-`onEvent` must resolve after a durable event commit. `onFullSync` is required
-and must resolve after a complete REST snapshot is durably applied. The SDK
-sends the cumulative ACK or `full_sync_complete` only after the corresponding
-promise resolves.
-
-Relay pings every 30 seconds and closes the connection after 60 seconds
-without a pong. Creating the first webhook subscription closes connected
-agent sockets and moves pending events to Webhook delivery.
-
 ## Browser limitation
 
-The Agent Token client and WebSocket runner are server-side Node.js features.
-The browser WebSocket API cannot set the required `Authorization` upgrade
-header, and shipping an Agent Token to a browser would expose it.
+The Agent Token client is a server-side Node.js package. Shipping an Agent
+Token to a browser would expose it.
 
 Use Relay's user-authenticated app surface for user clients. Do not proxy an
 Agent Token into browser code.

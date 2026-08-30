@@ -1,6 +1,6 @@
 ---
 title: "Best practices"
-description: "Build reliable Relay agents with durable events and idempotent commands."
+description: "Build reliable agents with durable events and idempotent commands."
 keywords: ["best practices", "reliability", "idempotency", "delivery"]
 ---
 
@@ -12,7 +12,8 @@ Use these rules for every Relay integration.
 verify → insert event_id durably → commit → 2xx or ACK → process
 ```
 
-Do not wait for model inference before acknowledgement. Do not acknowledge before the durable commit.
+Commit the event before acknowledging it. Run model inference after the
+acknowledgement.
 
 ## Make commands idempotent
 
@@ -26,24 +27,26 @@ Reuse the same key and body after timeouts or uncertain responses.
 
 ## Keep replies on REST
 
-At least one saved webhook subscription selects Webhook delivery. Having no
-saved subscriptions selects WebSocket delivery. Relay sends each event through
-one path and keeps the same `event_id` when the path changes.
+Relay sends each event to matching active webhook subscriptions when at least
+one subscription is saved. With zero saved subscriptions, events queue for
+WebSocket delivery. The `event_id` stays the same when a pending event moves.
 
-Replies use `POST /v1/chats/{chatId}/messages`. WebSocket ACK frames never
-contain replies.
+Send replies through `POST /v1/chats/{chatId}/messages`.
 
 ## Treat IDs as opaque
 
-Do not infer resource type, authorization, or ordering from UUID bits. Keep cursors unchanged and use them only with the operation that returned them.
+Treat UUIDs as opaque values. Keep cursors unchanged and use each cursor with
+the operation that returned it.
 
 ## Upload media before sending
 
-Allocate the Attachment, upload the exact declared bytes, confirm it is ready, then send the Message. Keep upload URLs and download URLs out of logs.
+Allocate the Attachment and upload the declared bytes. Confirm it is ready
+before sending the Message. Keep transfer URLs out of logs.
 
 ## Respect membership visibility
 
-A Contact can read only the periods when it belonged to a Chat. Do not cache or expose group history that Relay did not return to that Contact.
+A Contact can read the periods when it belonged to a Chat. Cache and display
+only the history returned for that Contact.
 
 ## Handle duplicates
 

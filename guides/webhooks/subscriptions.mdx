@@ -1,13 +1,14 @@
 ---
 title: "Webhook Subscriptions"
-description: "Create, list, update, and delete Relay webhook subscriptions."
+description: "Create, list, update, and delete webhook subscriptions."
 keywords: ["webhook subscription", "signing secret", "events", "endpoint"]
 ---
 
 A subscription connects one agent to one target URL and event set.
 
-**At least one saved subscription selects Webhook delivery for the agent.**
-There is no transport mode, toggle, or WebSocket setting.
+**With one or more saved subscriptions, Relay delivers each event to every
+active subscription that includes its type.** Keep every required event type
+covered by an active subscription.
 
 ## Create
 
@@ -32,10 +33,10 @@ curl -sS -X POST https://api.relayapp.im/v1/webhook-subscriptions \
 
 The target must use HTTPS. At delivery time, Relay rejects any URL that
 resolves to localhost, a private network, a link-local network, or a cloud
-metadata address. Relay never follows redirects.
+metadata address. A redirect ends that delivery attempt.
 
-Creating the first subscription closes every connected agent socket. Pending
-events then drain to Webhooks with their original `event_id`.
+Creating the first subscription closes every connected agent socket. Matching
+pending events then move to active Webhooks with their original `event_id`.
 
 ## Store the signing secret
 
@@ -81,14 +82,9 @@ curl -sS -X DELETE \
 ```
 </CodeGroup>
 
-Deleting the last subscription moves pending events to WebSocket. If no agent
-backend is connected, the events wait durably. Relay retains pending and
-terminal delivery state for 30 days.
-
-## Rotate a secret
-
-Create a replacement subscription, deploy its new secret, confirm delivery,
-then call `relay.webhookSubscriptions.delete(oldSubscriptionId)`.
+Deleting the last subscription moves pending events to WebSocket. Events wait
+durably while the agent backend is disconnected. Exact WebSocket replay
+remains available for 30 days.
 
 ## Related
 

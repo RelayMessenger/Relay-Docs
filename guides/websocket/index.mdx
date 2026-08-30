@@ -1,15 +1,14 @@
 ---
 title: "WebSocket"
 sidebarTitle: "Overview"
-description: "Receive Relay agent events over durable WebSocket connections when no webhook subscription is saved."
+description: "Receive agent events over a durable WebSocket connection."
 keywords: ["WebSocket", "agent events", "Authorization", "ACK"]
 ---
 
-Use WebSocket for an always-on agent backend with no saved webhook
+Use WebSocket for an always-on agent backend with zero saved webhook
 subscriptions.
 
-**Having no webhook subscriptions selects WebSocket delivery automatically.**
-There is no mode, toggle, or WebSocket setting.
+**A WebSocket connection requires zero saved webhook subscriptions.**
 
 ## Select WebSocket delivery
 
@@ -29,60 +28,24 @@ curl -sS https://api.relayapp.im/v1/webhook-subscriptions \
 </CodeGroup>
 
 The subscription list must be empty. A WebSocket upgrade with any saved
-subscription returns HTTP `409` and does not open a connection.
+subscription returns HTTP `409` before the upgrade completes.
 
 Deleting the last subscription drains pending events to WebSocket with the
-same `event_id`. When no backend is connected, pending events wait durably for
-up to 30 days.
+same `event_id`. Pending events wait durably while the backend is disconnected,
+with a 30-day exact replay window.
 
-## Connect with the SDK
+## Connect
 
-```typescript
-await relay.websocket.run({
-  onEvent: async (event, { sequence }) => {
-    await inbox.insertOnce(event.event_id, event);
-    console.log("accepted", sequence);
-  },
-  onFullSync: async ({ throughSequence, reason }) => {
-    const snapshot = await loadCompleteRelayState(relay);
-    await inbox.replaceWithSnapshot(snapshot, {
-      throughSequence,
-      reason,
-    });
-  },
-});
-```
-
-`onEvent` must resolve only after the event is durably committed.
-`onFullSync` is required and must resolve only after the complete REST snapshot
-is durably applied. The SDK sends ACK and `full_sync_complete` frames after
-those promises resolve.
-
-The SDK upgrades `wss://api.relayapp.im/v1/websocket` with:
+Upgrade `wss://api.relayapp.im/v1/websocket` with:
 
 ```http
 Authorization: Bearer $RELAY_AGENT_TOKEN
 ```
 
-**Relay does not accept a query credential or cookie and does not require a
-WebSocket subprotocol.** A URL with a query string is rejected.
-
-The same `/v1/websocket` path also serves Relay user clients. Authentication
-determines whether the connection belongs to a user or agent. Developer
-integrations use the Agent Token shown above.
+An upgrade URL with a query string returns HTTP `400`.
 
 Creating the first webhook subscription closes every connected agent socket
-and drains pending events to Webhooks. Relay never delivers one event through
-both paths.
-
-Use the SDK connection directly during local development. The `relay listen`
-forwarding command is deleted.
-
-## Security trade-off
-
-Direct bearer authentication keeps the handshake and API surface small. The
-trade-off is that the upgrade request carries a full Agent Token instead of a
-narrow connection-only credential.
+and moves matching pending events to active Webhooks.
 
 - Use `wss://` and connect only from trusted server infrastructure.
 - Remove `Authorization` headers from proxy, access, and error logs.
@@ -103,10 +66,10 @@ You are auditing a codebase that consumes Relay WebSocket events.
 This is read-only. Do not change code unless I ask.
 
 1. Read https://docs.relayapp.im/llms.txt, the WebSocket guides, and the current Relay OpenAPI.
-2. Locate relay.websocket.run, the direct wss://api.relayapp.im/v1/websocket upgrade, Authorization header, event persistence, deduplication, cumulative ACK, reconnect, FULL sync, and reply code.
+2. Locate the direct wss://api.relayapp.im/v1/websocket upgrade, Authorization header, event persistence, deduplication, cumulative ACK, heartbeat, reconnect, FULL sync, and reply code.
 3. Prove the Agent Token never enters a URL, cookie, browser bundle, or log.
-4. Prove onEvent resolves only after the event is durably committed.
-5. Prove onFullSync rebuilds and commits complete REST state before resolving.
+4. Prove each ACK is sent only after the event is durably committed.
+5. Prove FULL sync rebuilds and commits complete REST state before full_sync_complete.
 6. Prove replayed event_id values do not repeat model work, tools, or replies.
 7. Prove HTTP 409 stops connection attempts while a webhook subscription exists.
 8. Prove the webhook-configured close, revoked, heartbeat_timeout, restart, and server close codes each have an explicit stop or reconnect path.

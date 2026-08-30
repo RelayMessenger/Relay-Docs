@@ -1,12 +1,11 @@
 ---
 title: "WebSocket Protocol"
-description: "Reference Relay WebSocket ready, event, error, heartbeat, and disconnect behavior."
+description: "Review WebSocket ready, event, error, heartbeat, and disconnect behavior."
 keywords: ["WebSocket protocol", "ready frame", "event frame", "disconnect"]
 ---
 
 Relay exchanges JSON text frames after the authenticated WebSocket upgrade.
-The shared `/v1/websocket` path uses authentication to determine whether the
-connection belongs to a user or agent. This guide shows Agent Token behavior.
+This guide describes Agent Token behavior.
 
 ## Ready frame
 
@@ -30,7 +29,7 @@ Relay sends `ready` after the connection opens:
 | `acked_through` | Highest sequence Relay has durably accepted |
 | `full_sync_required` | Whether normal event delivery is paused for recovery |
 | `full_sync_through` | Exact recovery boundary, or `null` |
-| `heartbeat_interval_ms` | Expected ping and pong interval |
+| `heartbeat_interval_ms` | Server ping interval |
 | `max_in_flight` | Maximum unacknowledged events on this connection |
 
 ## Event frame
@@ -63,7 +62,7 @@ accepting an event.
 {
   "type":"error",
   "code":"stale_connection",
-  "message":"This connection was replaced.",
+  "message":"This Agent Token is revoked.",
   "fatal":true,
   "retryable":false
 }
@@ -76,22 +75,19 @@ accepting an event.
 | `fatal` | Stop using the current connection when `true` |
 | `retryable` | Whether a fresh connection can retry the condition |
 
-**A fatal error ends consumption on that connection.** Correct an
-authentication, configuration, or competing-consumer problem before
-reconnecting. Use backoff after a Relay server failure.
+**A fatal error ends consumption on that connection.** Correct the named
+authentication or configuration problem before reconnecting. Use backoff
+after a Relay server failure.
 
 | Code | Action |
 | --- | --- |
 | `invalid_frame` | Correct the client frame |
 | `ack_out_of_range` | Correct the cumulative ACK |
-| `stale_connection` | Stop the replaced or invalid connection |
-| `ack_failed` | Reconnect and resume with backoff |
-| `delivery_failed` | Reconnect and resume with backoff |
+| `stale_connection` | Stop the connection and restore valid authentication |
 | `full_sync_required` | Complete recovery before sending an ACK |
 | `full_sync_mismatch` | Send the exact required recovery boundary |
 
-`ack_failed` and `delivery_failed` are fatal and retryable. Protocol mistakes
-are not retryable until the frame or state is corrected.
+Protocol mistakes require a corrected frame or state before retrying.
 
 ## Backpressure
 
@@ -100,26 +96,35 @@ unacknowledged events. A cumulative ACK opens the next window.
 
 ## Heartbeats
 
-Relay uses native WebSocket ping and pong frames. Heartbeats prove connection
-liveness and do not acknowledge events.
+Relay sends a JSON ping frame every 30 seconds:
 
-Relay sends a ping every 30 seconds. The agent backend must answer with a
-pong. Relay closes a connection when no pong arrives within 60 seconds.
+```json
+{"type":"ping","sent_at":"2026-08-29T06:20:30.000Z"}
+```
+
+Reply with a JSON pong frame:
+
+```json
+{"type":"pong"}
+```
+
+Relay requires a pong within 60 seconds and closes the connection after that
+timeout. Heartbeats prove connection liveness. Event ACKs advance delivery.
 
 ## Disconnects
 
 | Reason | Action |
 | --- | --- |
-| `webhook_configured` | Stop and reconnect only after every webhook subscription is deleted |
+| `webhook_configured` | Delete every webhook subscription, then reconnect |
 | `revoked` | Stop, restore a valid Agent Token, then reconnect |
 | `heartbeat_timeout` | Reconnect with backoff |
 | `restart` | Reconnect with backoff |
 
-Close code `1011` is a transient delivery-state failure, and `1012` is a Relay
-restart. Reconnect with exponential backoff and jitter. Code `4401` means an
-invalid or revoked credential, and `4408` means heartbeat timeout. Code `4410`
-means the first webhook subscription was created, so Relay closed every agent
-socket and moved pending events to webhook delivery.
+Close code `1011` is a transient delivery failure. Code `1012` is a Relay
+restart. Reconnect to either with exponential backoff and jitter. Code `4401`
+means the credential is invalid or revoked. Code `4408` means the heartbeat
+timed out. Code `4410` means the first webhook subscription closed every agent
+socket and moved matching pending events to active Webhooks.
 
 ## Related
 

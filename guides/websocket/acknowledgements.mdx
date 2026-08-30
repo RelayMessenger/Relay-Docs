@@ -1,6 +1,6 @@
 ---
 title: "WebSocket Acknowledgements"
-description: "Commit Relay WebSocket events durably before sending a cumulative ACK."
+description: "Commit WebSocket events durably before sending a cumulative ACK."
 keywords: ["WebSocket ACK", "cumulative acknowledgement", "durable inbox", "through_sequence"]
 ---
 
@@ -28,28 +28,25 @@ read event
   → run tools and model work
 ```
 
-Do not ACK when bytes arrive, when a handler starts, or after only an in-memory
-queue write.
+Send the ACK after the durable commit shown above.
 
 ## Delivery meaning
 
 Acknowledging a `message.received` event marks that agent recipient Delivered.
-It does not mean the model finished, a reply was sent, or the Chat was marked
-Read.
+Model work, replies, and Read state advance separately.
 
 ## Replay
 
-If a connection closes before Relay commits the ACK, Relay can send the event
-again. Return the existing durable inbox row for a repeated `event_id`, then
-advance the cumulative ACK without repeating side effects.
+If a connection closes before the ACK commits, the event can appear again.
+Return the existing durable inbox row for a repeated `event_id`. Then advance
+the cumulative ACK while running each side effect once.
 
 ## Errors
 
 | Code | Meaning | Action |
 | --- | --- | --- |
 | `ack_out_of_range` | ACK is above the highest sequence Relay sent | Correct the sequence |
-| `ack_failed` | Relay could not commit the ACK | Reconnect with backoff |
-| `stale_connection` | A newer or invalid connection owns the checkpoint | Stop this consumer |
+| `stale_connection` | The connection can no longer advance the checkpoint | Stop this consumer |
 | `full_sync_required` | Normal ACKs are paused | Complete FULL sync first |
 
 ## Review with an agent

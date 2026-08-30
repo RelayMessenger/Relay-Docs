@@ -1,381 +1,59 @@
-# Relay Messenger documentation information architecture
+# Relay documentation information architecture
 
-Status: working source of truth for the Docs rebuild  
-Method: outer shell first, then page structure, then examples and prose  
-Source priority: Relay contract → Linq presentation → Photon presentation
-
-This document defines how Relay Messenger documentation is organized and
-taught. It is deliberately one document: navigation, page topology,
-typography, code presentation, and content boundaries must be decided together
-before individual pages are polished.
+This file controls Relay's public documentation structure. It keeps
+navigation, page responsibilities, examples, and generated reference content
+aligned with the current contract.
 
 ## Product identity
 
-| Surface | Approved name |
+| Surface | Name |
 | --- | --- |
-| Product and company | Relay Messenger |
+| Product and company | Relay |
 | Developer interface | Relay API |
 | Developer dashboard | Relay Console |
 | TypeScript package | `@relaymessenger/sdk` |
 | Public API origin | `https://api.relayapp.im` |
 | Console origin | `https://console.relayapp.im` |
 
-The `relayapp.im` hostnames are current domains. They do not change the
-product name.
+The `relayapp.im` hostnames are Relay's current domains.
 
-## 1. Source boundary
+## 1. Contract boundary
 
-### Relay behavior
+Public behavior comes from three current sources:
 
-Only the current Relay Server OpenAPI, implementation, and tests prove Relay
-behavior:
+1. Relay Server OpenAPI defines public paths, fields, limits, errors, and
+   authentication.
+2. Relay Server implementation and tests prove runtime behavior.
+3. Relay SDK source and tests prove TypeScript methods and return types.
 
-- `../_worktrees/Relay-Server-local/contracts/developer/openapi.yaml`
-- `../_worktrees/Relay-Server-local/server/src`
-- `../_worktrees/Relay-Server-local/server/test`
-- `../Relay-SDK/packages/sdk/src`
-- `../Relay-SDK/packages/sdk/test`
+`api-reference/openapi.yaml` is byte-identical to the approved Relay Server
+contract. `api-reference/openapi.mint.yaml` is the generated Mintlify bundle.
+Endpoint pages come from that bundle.
 
-Linq and Photon are presentation and mechanism references. They cannot prove
-that Relay implements a feature.
+Every public claim maps to a current contract field, implementation branch, or
+test. Public pages describe the supported Relay path directly.
 
-### Linq presentation sources
+## 2. Public model
 
-- Frozen index:
-  `../_sources/linq/official-docs/llms.txt`
-- Frozen complete corpus:
-  `../_sources/linq/official-docs/llms-full.txt`
-- Frozen OpenAPI:
-  `../_sources/linq/openapi/linq-api-v3.yaml`
-- Research:
-  `../Relay-Research/research/docs-deep-research/docs-craft-20260818/companies/linq.md`
-- Live canonical pages:
-  - [docs.linqapp.com](https://docs.linqapp.com/)
-  - [Quickstart](https://docs.linqapp.com/getting-started/quickstart/)
-  - [Client SDKs](https://docs.linqapp.com/getting-started/sdks/)
-  - [Sending Messages](https://docs.linqapp.com/guides/messaging/sending-messages/)
-  - [Webhooks](https://docs.linqapp.com/guides/webhooks/)
+Use Relay's current resource names consistently:
 
-### Photon presentation sources
+| Resource | Meaning |
+| --- | --- |
+| Contact | A user or agent profile |
+| Handle | A Contact's public messaging address |
+| Chat | A direct or group message container |
+| Message | One ordered set of parts in a Chat |
+| part | A text, media, or link unit inside a Message |
+| Attachment | Uploaded media referenced by a Message part |
+| Agent event | A versioned event delivered by Webhook or WebSocket |
 
-- Frozen docs:
-  `../_sources/photon/official-docs/pages`
-- Frozen SDK:
-  `../_sources/photon/repos/spectrum-ts`
-- Research:
-  `../Relay-Research/research/docs-deep-research/docs-craft-20260818/companies/photon.md`
-- Live canonical pages:
-  - [Spectrum introduction](https://photon.codes/docs/spectrum-ts/introduction)
-  - [Spectrum Getting Started](https://photon.codes/docs/spectrum-ts/getting-started)
-  - [Webhook overview](https://photon.codes/docs/webhooks/overview)
-  - [Webhook delivery](https://photon.codes/docs/webhooks/delivery)
+Use `participants` for group membership operations and `participant.*` event
+names. Use Webhooks for signed HTTPS event delivery and WebSocket for a durable
+agent connection. Message commands use REST.
 
-## 2. The onion method
+## 3. Site topology
 
-Documentation is rebuilt from the outside inward.
-
-### Pass A — outer shell
-
-Freeze:
-
-1. top-level tabs;
-2. sidebar groups;
-3. page inventory;
-4. page names;
-5. page order;
-6. generated-reference boundary.
-
-No page-level prose decision may override this hierarchy.
-
-### Pass B — page system
-
-For each page, freeze:
-
-1. reader job;
-2. prerequisites;
-3. H2/H3 outline;
-4. what belongs here;
-5. what links elsewhere;
-6. page archetype.
-
-No detailed example is written until the page has one clear job.
-
-### Pass C — presentation system
-
-Apply:
-
-1. TypeScript SDK/cURL tabs;
-2. request and response examples;
-3. tables;
-4. notes and warnings;
-5. agent-review prompts;
-6. related-page links.
-
-### Pass D — content
-
-Write and edit exact prose. Verify every behavior against Relay source.
-
-### Pass E — rendered proof
-
-Validate links, Mintlify build, accessibility, desktop scanability, narrow
-widths, and generated API reference.
-
-## 3. What Linq does well
-
-### Outer topology
-
-Linq separates five products of documentation:
-
-```text
-Get started
-Guides
-Error Codes
-API Reference
-V2 API (legacy)
-```
-
-Its current V3 narrative path is:
-
-```text
-Introduction
-Quickstart
-Authentication
-Client SDKs
-Key Concepts
-AI coding agents
-Best Practices
-
-Messaging
-Chats
-Contact Cards
-Integrations
-Webhooks
-Platform
-Examples / FAQ
-```
-
-The API Reference is generated and resource-oriented. It does not replace the
-task guides. Error Codes have a separate top-level surface and one page per
-stable code.
-
-### Ordering principle
-
-The rendered sidebar prioritizes:
-
-1. first success;
-2. credentials;
-3. supported clients;
-4. shared vocabulary;
-5. common writes;
-6. common content;
-7. chat management;
-8. inbound events;
-9. reliability and debugging;
-10. less common integrations.
-
-This is more useful than alphabetical ordering. The frozen `llms.txt` index is
-alphabetical inside some groups, so it is evidence of inventory, not always of
-the human sidebar order.
-
-### Split decisions
-
-Linq gives separate pages to concepts with different tasks:
-
-- Sending Messages
-- Mentions
-- Message Details
-- Attachments
-- Voice Memos
-- Rich Link Previews
-- Reactions
-- Group Chats
-- Typing Indicators
-- Sharing Contact Card
-- Webhooks
-- Webhook Subscriptions
-- Webhook Events
-
-This makes search results and sidebar labels literal. A reader does not open a
-generic “Messaging” essay to find an upload sequence.
-
-### Combine decisions
-
-Linq combines material when it is one workflow:
-
-- text, media, and links begin on Sending Messages;
-- create/list/update/delete subscription operations share Webhook
-  Subscriptions;
-- closely related field semantics live on Message Details;
-- one Error Code page combines cause, fix, and retry guidance.
-
-### Page grammar
-
-Strong Linq pages use this order:
-
-1. direct opening sentence;
-2. important note when necessary;
-3. task heading;
-4. rule immediately before code;
-5. runnable example;
-6. real response or field table;
-7. failure/retry behavior;
-8. next steps.
-
-Paragraphs are short. Bold text marks an operational rule, not ordinary nouns.
-Tables compare states, limits, fields, or decisions. Code carries mechanics.
-
-### Human and agent surfaces
-
-Linq supports:
-
-- Copy Markdown;
-- per-page Markdown;
-- `llms.txt`;
-- `llms-full.txt`;
-- OpenAPI;
-- AI coding-agent setup;
-- copyable audit prompts.
-
-These are additive. Human pages remain readable without an agent.
-
-### Linq weaknesses Relay should not copy
-
-- duplicated or conflicting first-send examples;
-- long generated descriptions repeated on resource indexes;
-- unsupported or legacy products mixed into modern discovery;
-- plugins present only on GitHub and drifting from current webhook docs;
-- SDK trees duplicated by language when guide tabs already explain the task.
-
-## 4. What Photon does well
-
-### Outer topology
-
-Photon separates major operating modes into top-level tabs:
-
-```text
-Spectrum SDK
-CLI
-Webhooks
-Low-level SDKs
-API Reference
-```
-
-That separation is important. Runtime SDK work, webhook delivery, management
-HTTP, and low-level platform SDKs do not pretend to be one protocol.
-
-### SDK-first teaching
-
-Photon’s primary reader path is:
-
-```text
-Introduction
-Getting Started
-Messages
-Spaces and Users
-Reactions and Replies
-Content builders
-Providers
-Advanced lifecycle
-Best practices
-Troubleshooting
-```
-
-The first screen usually contains the normal TypeScript call. Exact return
-semantics follow it. Package and method names are central because the SDK is
-the product surface.
-
-### Hub-and-child pattern
-
-Photon uses a hub page when a category is real and broad:
-
-- Content hub → one page per builder;
-- Provider hub → one page per provider;
-- iMessage feature hub → one page per feature;
-- Webhook overview → quickstart, events, verification, delivery, management,
-  troubleshooting.
-
-A hub or Overview is justified only when it orients several child tasks. A
-group with one page does not need a ceremonial Overview.
-
-### Transport separation
-
-Photon explicitly separates:
-
-- runtime SDK/gRPC;
-- HTTP webhook observation;
-- management HTTP API;
-- low-level SDKs.
-
-Its webhook pages do not imply that webhooks can perform runtime sends. Its
-management API introduction says it is not the message runtime.
-
-### Page grammar
-
-Photon pages commonly use:
-
-1. package or mechanism name;
-2. its one job;
-3. install;
-4. normal call;
-5. important variant;
-6. exact success boundary;
-7. feature/method/example table;
-8. troubleshooting.
-
-Mermaid appears where sequence or architecture is easier to understand
-visually. Screenshots are rare and reserved for external dashboard work.
-
-### Photon weaknesses Relay should not copy
-
-- runtime behavior split across docs and multiple READMEs;
-- TypeScript-only runtime forcing Python integrations through a sidecar;
-- marketing provider claims exceeding documented providers;
-- broken or stale generated agent assets;
-- management API and runtime SDK requiring careful reader disambiguation.
-
-## 5. Relay combine/split rules
-
-Create a separate page when any of these changes:
-
-1. reader goal;
-2. credential;
-3. protocol;
-4. acknowledgement boundary;
-5. retry rule;
-6. resource lifecycle;
-7. failure model;
-8. likely search phrase.
-
-Combine material when:
-
-1. it is one short workflow;
-2. separating it would force the reader to alternate pages;
-3. every section uses the same credential and failure model;
-4. the combined page remains scannable from H2 headings.
-
-### Required splits
-
-- Webhooks and WebSocket
-- Attachments and Voice Memos
-- Group Chats and Participants
-- Typing and Message sending
-- Contact Card configuration and sharing a Contact Card
-- Guides and generated API Reference
-- Error explanation and endpoint reference
-
-### Required combinations
-
-- webhook subscription CRUD on one page;
-- start and stop typing on one page;
-- add and remove reactions on one page;
-- add, remove, and leave membership in one Participants page;
-- direct and group receipt storage in one Delivery Receipts page, with the UI
-  distinction explicit;
-- TypeScript SDK and cURL for the same task in one guide.
-
-## 6. Relay Messenger outer topology
-
-Relay Messenger has three top-level tabs.
+Relay has three top-level tabs:
 
 ```text
 Guides
@@ -383,9 +61,7 @@ Error Codes
 API Reference
 ```
 
-### Guides
-
-Exact group and page order:
+The Guides tab uses this exact order:
 
 ```text
 Introduction
@@ -448,76 +124,51 @@ Examples
   Examples
 ```
 
-### Error Codes
+Error Codes groups stable errors by `1xxx`, `2xxx`, and `3xxx`. API Reference
+contains the shared conventions page followed by generated endpoint groups.
 
-```text
-Overview
-1xxx request errors
-2xxx resource errors
-3xxx server errors
-```
+## 4. Reader order
 
-Each code page must state:
+The sidebar teaches Relay in this sequence:
 
-1. HTTP status;
-2. cause;
-3. exact fix;
-4. retry rule;
-5. related endpoint or guide.
+1. complete a first request;
+2. authenticate;
+3. install the maintained SDK;
+4. learn shared resources;
+5. send and read Messages;
+6. manage Chat content and membership;
+7. receive agent events;
+8. implement reliability and debugging.
 
-### API Reference
+Pages follow task frequency rather than alphabetical order.
 
-```text
-Overview
-Generated endpoint groups from the Relay API OpenAPI
-```
+## 5. Page responsibilities
 
-Do not hand-maintain endpoint fields in narrative pages. OpenAPI is the field
-authority.
+A page owns one developer job. Separate pages carry separate resource
+lifecycles, credentials, protocols, acknowledgement boundaries, retry rules,
+or common search terms.
 
-## 7. Page inventory decisions
+Current focused pages include:
 
-| Page | Job | Why separate |
-| --- | --- | --- |
-| Quickstart | first successful send and receive setup | highest-frequency onboarding path |
-| Authentication | protect and send an Agent Token | security boundary |
-| Client SDKs | install and operate `@relaymessenger/sdk` | maintained client surface |
-| Key Concepts | define Contact, Handle, Chat, Message, part, event | vocabulary once |
-| Sending Messages | choose new/existing Chat and send | primary write |
-| Mentions | encode group mention and UTF-16 range | distinct validation failures |
-| Message Details | retrieve one Message or thread | read task |
-| Message Parts | understand ordered text/media/link parts | content model |
-| Attachments | allocate, raw PUT, retrieve, delete | independent upload lifecycle |
-| Voice Memos | send audio with voice presentation | dedicated endpoint |
-| Rich Link Previews | send a sole link part | special composition rule |
-| Replies | target Message and part | threading rule |
-| Reactions | add/remove, part target, replacement state | mutation lifecycle |
-| Delivery Receipts | per-recipient truth and acknowledgement boundaries | reliability contract |
-| Group Chats | create, name, photo, limits | group lifecycle |
-| Participants | add/remove/leave and history window | membership authorization |
-| Typing Indicators | transient start/stop and expiry | transient failure model |
-| Sharing Contact Card | share configured card inside Chat | explicit user action |
-| Message History | cursor reads and membership visibility | recovery/read task |
-| Contact Cards | configure agent profile card | profile lifecycle |
-| Blocked Handles | block/list/unblock | safety state |
-| Webhooks | choose and receive webhook transport | serverless-friendly ingress |
-| Webhook Subscriptions | configure destinations/events | configuration lifecycle |
-| Webhook Event Types | enumerate and interpret envelopes | schema discovery |
-| Webhook Delivery | retries, terminal state, redrive | delivery reliability |
-| WebSocket | choose and connect transport | long-running ingress |
-| Protocol | exact frame grammar and close codes | wire contract |
-| Acknowledgements | durable cumulative ACK | correctness boundary |
-| FULL sync | recovery outside retention | destructive recovery workflow |
+- Sending Messages, Mentions, Message Details, and Message Parts;
+- Attachments, Voice Memos, and Rich Link Previews;
+- Group Chats, Participants, Typing Indicators, and Message History;
+- Contact Card configuration and Sharing Contact Card;
+- Webhooks, Webhook Subscriptions, Webhook Event Types, and Webhook Delivery;
+- WebSocket, Protocol, Acknowledgements, and FULL sync.
 
-## 8. Canonical page archetypes
+Closely related operations stay together: webhook subscription CRUD, reaction
+add/remove, typing start/stop, and participant add/remove/leave.
+
+## 6. Page archetypes
 
 ### Task guide
 
 ```text
-Opening sentence: result
-Prerequisites (only if needed)
+Outcome sentence
+Prerequisites when required
 ## Perform the task
-TypeScript / cURL tabs
+TypeScript SDK and cURL
 Real response
 ## Rules
 ## Failure and retry behavior
@@ -527,26 +178,24 @@ Real response
 ### Concept page
 
 ```text
-Opening sentence: definition
+Direct definition
 ## Core model
-Small diagram or table
+Small table or diagram
 ## Invariants
 ## Example
 ## Related
 ```
 
-Concept pages do not repeat every operation.
-
 ### Protocol page
 
 ```text
-Opening sentence: boundary
-## Connect / authenticate
-## Client → server frames
-## Server → client frames
+Direct protocol boundary
+## Connect and authenticate
+## Client to server frames
+## Server to client frames
 ## Ordering and acknowledgement
-## Reconnect / recovery
-## Errors / close codes
+## Reconnect and recovery
+## Errors and close codes
 ## Review with an agent
 ```
 
@@ -554,141 +203,80 @@ Opening sentence: boundary
 
 ```text
 One-sentence cause
-Status and code
-## Why it happened
+HTTP status and Relay code
+## Response
 ## Fix
 ## Retry
 ## Related
 ```
 
-### Generated reference
+## 7. Heading and prose system
 
-Generated from OpenAPI. Narrative additions belong in operation descriptions
-or guides, not duplicated field tables.
+Mintlify supplies the page title from frontmatter. H2 headings describe the
+reader's sequence. H3 headings group comparable variants under one H2.
 
-## 9. Heading topology
+Public prose uses:
 
-### H1
+- one direct opening sentence;
+- paragraphs of one to three sentences;
+- active voice and second person;
+- sentence case headings;
+- bold text for a single operational rule;
+- numbered lists for ordered work;
+- tables for fields, states, limits, and comparisons;
+- `Next steps`, `Related`, or `See also` as the final section.
 
-One page title from frontmatter/Mintlify. Do not write a second decorative H1.
+Relay nouns keep their contract capitalization: Contact, Handle, Chat, Message,
+Attachment, Agent Token, Webhooks, and WebSocket.
 
-### H2
+## 8. TypeScript SDK and cURL
 
-H2s describe the reader’s sequence or question:
-
-- `## Create an upload`
-- `## Upload the raw bytes`
-- `## Retry behavior`
-
-Avoid:
-
-- `## Overview` inside a page already titled Overview;
-- `## Current status`;
-- `## More information`;
-- headings used for one sentence.
-
-### H3
-
-Use H3 only when one H2 has multiple comparable variants. Do not descend to
-H4 for ordinary guides.
-
-### Scan test
-
-A reader scanning only title, H2s, bold rules, tables, and code must understand
-the page’s job and main constraints.
-
-## 10. Typography and prose
-
-- One to three sentences per paragraph.
-- Lead with the answer.
-- Use **bold** for one operational rule or irreversible boundary.
-- Never bold an entire paragraph.
-- Use bullets for independent rules.
-- Use numbered steps for order.
-- Use tables only for comparisons, states, fields, limits, or retry decisions.
-- Prefer literal words over internal architecture vocabulary.
-- Define a Relay noun once, capitalize it consistently, and link back.
-- Use `Contact`, `Handle`, `Chat`, `Message`, `part`, `Agent Token`,
-  `Webhooks`, and `WebSocket`.
-
-## 11. TypeScript SDK and cURL
-
-### Rule
-
-Every executable developer task supported by `@relaymessenger/sdk` uses one
-Mintlify tab group:
+Executable developer tasks show equivalent options in this order:
 
 ```text
-[ TypeScript SDK ] [ cURL ]
+TypeScript SDK
+cURL
 ```
 
-TypeScript is first. cURL is second. They must perform the same operation with
-the same identifiers and content.
+The TypeScript call comes from `@relaymessenger/sdk`. The cURL request uses the
+same operation, identifiers, and payload. Pure concepts, retry tables,
+WebSocket frame examples, and generated endpoint reference use the clearest
+single representation.
 
-### Where tabs are required
+Attachment examples keep allocation, raw upload, and Message creation in one
+workflow. WebSocket examples use the SDK's maintained connection runner and
+the current `/v1/websocket` contract.
 
-- Quickstart
-- send/resolve/create Chat
-- mentions
-- retrieve Message/thread
-- attachments
-- voice memos
-- replies
-- reactions
-- groups and participants
-- typing
-- Contact Card configuration/sharing
-- blocked Handles
-- webhook subscriptions/events where SDK methods exist
-- WebSocket setup/run
+## 9. Code and response presentation
 
-### Where tabs are not required
+Code examples use current paths, fields, event names, and limits. Each task
+keeps identifiers consistent from request through response. Credentials appear
+as environment variables.
 
-- pure concept pages;
-- retry tables;
-- wire-frame JSON;
-- database reasoning;
-- generated API Reference;
-- user-only internal app operations not exposed by the Agent SDK.
+The first mutation on a page includes its canonical response when later steps
+use the returned ID. Error examples include HTTP status, `error.code`, and
+`trace_id`. Retry guidance names the exact idempotency or acknowledgement
+boundary.
 
-### Attachment exception
+## 10. Operational safety
 
-The TypeScript tab should show the SDK’s allocate/upload helper. The cURL tab
-should show allocation plus raw `PUT`. Do not split one upload workflow across
-unrelated pages.
+Developer-facing safety instructions stay next to the action they protect:
 
-### Accuracy rule
+- Agent Tokens remain in server-side secret storage.
+- Message retries reuse a stable idempotency key.
+- Webhook receivers verify the signature and commit `event_id` before `2xx`.
+- WebSocket consumers commit `event_id` before a cumulative ACK.
+- Webhook destinations use direct public HTTPS endpoints.
+- FULL sync completes before later WebSocket acknowledgements.
+- Logs retain `trace_id` and omit credentials, signing secrets, and message
+  content unless the developer explicitly needs that content.
 
-Method names come from `Relay-SDK/packages/sdk/src` and its tests. A guessed
-SDK call is worse than a cURL-only example.
+Warnings are reserved for security, data loss, irreversible actions, and
+duplicate side effects. Notes and tips carry ordinary context.
 
-## 12. Code and response presentation
+## 11. Agent-friendly treatment
 
-- Put the rule immediately before code.
-- Include imports/client creation once per page when needed.
-- Use the same `chatId`, `messageId`, and Handle throughout a page.
-- Show the canonical response after the first mutation where later steps use
-  its ID.
-- Do not use ellipses inside payloads whose exact shape matters.
-- Use UUID-shaped examples and realistic Handles.
-- Never show a credential value.
-- State what success proves and what it does not prove.
-
-## 13. Callouts
-
-Use:
-
-- `<Note>` for context that prevents a common misunderstanding;
-- `<Info>` for a deliberate Relay difference;
-- `<Warning>` for data loss, security, irreversible actions, or duplicate
-  side effects;
-- `<Tip>` for optional convenience.
-
-Do not stack callouts. Most pages need zero or one near the relevant step.
-
-## 14. Agent-friendly treatment
-
-Keep Mintlify header actions:
+Mintlify header actions expose page copy and source viewing:
 
 ```json
 {
@@ -699,53 +287,85 @@ Keep Mintlify header actions:
 }
 ```
 
-Header navigation has two actions:
+The secondary navbar action copies `skill.md`. The primary navbar action opens
+Relay Console. The Relay logo opens `https://relayapp.im`.
 
-- **Copy agent prompt** is a secondary link with Mintlify's `copy` icon. The
-  root custom script copies `skill.md` exactly and shows transient **Copied**
-  feedback without replacing the icon. Its normal `href` opens the exact
-  `Relay agent prompt` section when JavaScript or clipboard access is
-  unavailable.
-- **Console** is the primary action and opens Relay Console.
+Review-with-an-agent blocks are used for concrete codebase audits such as
+authentication, idempotency, webhook verification, durable ACK, and FULL sync.
+Each prompt reads current Relay docs and OpenAPI, requests file-and-line
+evidence, and reports unknown findings explicitly.
 
-The Relay logo opens `https://relayapp.im`. Mintlify's native **Copy page**
-action keeps its original name because it copies the current page Markdown.
+## 12. Overview pages
 
-Use a Review with an agent block only when a concrete audit is valuable:
+Overview pages orient multiple child tasks and provide the shortest useful
+path through the category. Messaging, Chats, Webhooks, and WebSocket have
+category overviews. Agent Events connects the two supported agent event paths.
+Contacts and Platform link directly to their task pages.
 
-- authentication;
-- idempotency;
-- webhook verification;
-- durable ACK;
-- FULL sync;
-- migration.
+## 13. API Reference and errors
 
-The prompt must:
+The API Reference overview owns conventions shared by all endpoints. Generated
+endpoint pages own request fields, response fields, status codes, and schemas.
+Guides own workflows, sequencing, acceptance boundaries, and recovery.
 
-1. read current Relay docs/OpenAPI;
-2. be read-only unless asked;
-3. require file-and-line evidence;
-4. say `unknown` instead of guessing.
+Each Error Code page includes:
 
-## 15. Overview policy
+1. HTTP status and Relay error code;
+2. response example;
+3. corrective action;
+4. retry behavior;
+5. related endpoint or guide.
 
-An Overview page is retained only when it:
+## 14. Page jobs
 
-1. defines a real category;
-2. explains how child pages relate;
-3. gives a decision or path the children cannot repeat efficiently.
+| Page | Developer job |
+| --- | --- |
+| Quickstart | Send a first Message and receive an agent event |
+| Authentication | Store and send an Agent Token |
+| Client SDKs | Install and use `@relaymessenger/sdk` |
+| Key Concepts | Learn Contact, Handle, Chat, Message, part, and event |
+| Sending Messages | Create or use a Chat and send ordered parts |
+| Mentions | Address a Contact with UTF-16 ranges in a group Chat |
+| Message Details | Retrieve a Message, thread, or Chat history |
+| Attachments | Allocate, upload, retrieve, and delete media |
+| Voice Memos | Upload and send audio with voice presentation |
+| Rich Link Previews | Send a link part |
+| Replies | Target a Message and `part_index` |
+| Reactions | Add and remove a reaction on a Message part |
+| Delivery Receipts | Read per-recipient state and acknowledgement boundaries |
+| Group Chats | Create and update a group Chat |
+| Participants | Add, remove, leave, and understand membership periods |
+| Typing Indicators | Start, refresh, stop, and receive typing state |
+| Sharing Contact Card | Share the configured card inside an existing Chat |
+| Message History | Page through visible Message and Chat event history |
+| Contact Cards | Configure an agent's public card |
+| Blocked Handles | Block, list, and unblock Handles |
+| Agent Events | Select and operate an agent event path |
+| Webhooks | Receive and verify signed HTTPS events |
+| Webhook Subscriptions | Configure event destinations and event filters |
+| Webhook Event Types | Read the versioned event envelope and payloads |
+| Webhook Delivery | Implement retries, terminal handling, and redrive |
+| WebSocket | Connect an always-on agent backend |
+| Protocol | Implement current frames, heartbeats, and close codes |
+| Acknowledgements | Commit and cumulatively acknowledge events |
+| FULL sync | Recover after a checkpoint falls outside retention |
+| Idempotency | Retry commands without duplicate side effects |
+| Rate Limits | Design around current request and content limits |
+| Debugging | Use IDs, errors, and traces to diagnose requests |
 
-Therefore:
+## 15. Validation sequence
 
-- Messaging, Chats, Webhooks, and WebSocket may have orienting root pages.
-- Agent Events is a thin comparison hub because choosing one of two transports
-  is a real decision shared by Webhooks and WebSocket; it must not absorb either
-  protocol's mechanics.
-- Contacts does not need a separate Overview while it has only Contact Cards
-  and Blocked Handles.
-- Platform does not need an Overview.
-- A one-page Introduction group is acceptable because Introduction is the site
-  landing page, not a category placeholder.
+A documentation change passes these checks in order:
+
+1. Relay Server and Docs OpenAPI byte comparison;
+2. Mintlify OpenAPI bundle rebuild and diff;
+3. agent prompt synchronization;
+4. docs topology and heading inventory;
+5. JSON and shell example validation;
+6. Mintlify broken-link validation;
+7. Mintlify site validation;
+8. Mintlify accessibility validation;
+9. desktop and narrow rendered inspection.
 
 ## 16. Exact heading skeletons
 
@@ -759,7 +379,7 @@ the page's single job and update this inventory in the same commit.
 | Introduction | `Prerequisites` → `What you can build` → `Key capabilities` → `Authentication` → `Quick example` → `Next steps` |
 | Quickstart | `Prerequisites` → `1. Set your credentials` → `2. Choose the SDK or HTTPS` → `3. Create a webhook subscription` → `4. Accept the event durably` → `5. Mark Read and reply` → `Review with an agent` → `Next steps` |
 | Authentication | `Credentials` → `Agent Tokens` → `WebSocket authentication` → `Errors` → `Related` |
-| Client SDKs | `Install` → `Create a client` → `Send a Message` → `Resources` → `Pagination` → `Retries and idempotency` → `Errors` → `Webhook verification` → `WebSocket` → `Browser limitation` → `Runnable examples` → `Related` |
+| Client SDKs | `Install` → `Create a client` → `Send a Message` → `Resources` → `Pagination` → `Retries and idempotency` → `Errors` → `Webhook verification` → `Browser limitation` → `Runnable examples` → `Related` |
 | Key Concepts | `Contacts and Handles` → `Chats` → `Messages and parts` → `Attachments` → `Delivery` → `Events` → `Idempotency` → `Related` |
 | AI coding agents | `Documentation files` → `Relay agent prompt` → `Build prompt` → `Audit prompt` → `Related` |
 | Best Practices | `Accept events before processing` → `Make commands idempotent` → `Keep replies on REST` → `Treat IDs as opaque` → `Upload media before sending` → `Respect membership visibility` → `Handle duplicates` → `Related` |
@@ -787,7 +407,7 @@ the page's single job and update this inventory in the same commit.
 | Chats | `Chat types` → `Create a Chat` → `Chat fields` → `Next steps` |
 | Group Chats | `Create a group` → `Limits` → `Rename the group` → `Set a group photo` → `Group metadata events` → `Related` |
 | Participants | `Add a Contact` → `Remove a Contact` → `Leave` → `Membership periods` → `Events` → `Related` |
-| Typing Indicators | `Start or refresh` → `Refresh and auto-clear` → `Stop` → `Receive events` → `API reference` → `Related` |
+| Typing Indicators | `Start` → `Keep typing active` → `Stop` → `Receive events` → `API reference` → `Related` |
 | Sharing Contact Card | `Before sharing` → `Share the card` → `Keep configuration separate` → `Related` |
 | Message History | `Pagination` → `Group-history rows` → `Membership visibility` → `Agent recovery` → `Related` |
 | Contact Cards | `How Contact Cards work` → `Retrieve the card` → `Upsert the card` → `Update the card` → `Fields` → `Sharing is separate` → `Related` |
@@ -799,10 +419,10 @@ the page's single job and update this inventory in the same commit.
 | --- | --- |
 | Agent Events | `Choose a transport` → `Shared envelope` → `Switch transports` → `Recovery` → `Review with an agent` → `Related` |
 | Webhooks | `Flow` → `Create a subscription` → `Verify the signature` → `Acknowledge safely` → `Review with an agent` → `Related` |
-| Webhook Subscriptions | `Create` → `Store the signing secret` → `List, retrieve, update, or delete` → `Rotate a secret` → `Related` |
+| Webhook Subscriptions | `Create` → `Store the signing secret` → `List, retrieve, update, or delete` → `Related` |
 | Webhook Event Types | `List supported events` → `Envelope` → `Message events` → `Payload version` → `Reaction events` → `Chat events` → `Related` |
 | Webhook Delivery | `Delivery policy` → `Retry classes` → `Receiver pattern` → `Delivered meaning` → `Terminal state and redrive` → `Review with an agent` → `Related` |
-| WebSocket | `Select WebSocket delivery` → `Connect with the SDK` → `Security trade-off` → `Review with an agent` → `Related` |
+| WebSocket | `Select WebSocket delivery` → `Connect` → `Review with an agent` → `Related` |
 | WebSocket Protocol | `Ready frame` → `Event frame` → `Error frame` → `Backpressure` → `Heartbeats` → `Disconnects` → `Related` |
 | Acknowledgements | `Frame` → `Safe order` → `Delivery meaning` → `Replay` → `Errors` → `Review with an agent` → `Related` |
 | FULL sync | `Normal reconnect` → `When Relay requires FULL sync` → `Commit the snapshot` → `Events during sync` → `Retention` → `Failure handling` → `Related` |
@@ -836,55 +456,24 @@ the page's single job and update this inventory in the same commit.
 | `api-reference/*` | API Reference | generated from the current OpenAPI |
 | `error/*` | Error Codes | integrated one-code pages |
 
-## 18. Validation gates
+## 18. Release gates
 
-### Outer shell
+A release is ready when:
 
-- exact top-level tabs;
-- exact group order;
-- exact page order;
-- Webhooks and WebSocket are separate;
-- no unsupported feature page;
-- no stale or orphan page.
-
-### Page system
-
-- one job per page;
-- no duplicate H1;
-- no empty Overview;
-- no `Current status`;
-- no H4 in ordinary guides;
-- every task page ends with related/next steps.
-
-### SDK/API presentation
-
-- TypeScript tab before cURL;
-- equivalent operation and payload;
-- every SDK method exists in current source;
-- no Python or Go examples until maintained SDKs exist;
-- no browser Agent Token example.
-
-### Contract
-
-- Server and Docs OpenAPI byte-identical;
-- all examples match current paths, fields, events, limits, and auth;
-- no ticket, query credential, required subprotocol, polling, `service`, or
-  unsupported feature residue.
-
-### Rendering
-
-- Mintlify validate;
-- broken links;
-- accessibility;
-- desktop and narrow screenshots;
-- readable heading density;
-- code tabs visible without horizontal page overflow.
+- every MDX page appears once in `docs.json` navigation;
+- the three top-level tabs and Guide groups match the current topology;
+- page headings match the inventory below;
+- TypeScript and cURL variants perform equivalent operations;
+- the Docs OpenAPI is byte-identical to the approved Relay Server contract;
+- the Mintlify OpenAPI bundle is reproducible;
+- examples match the current API and SDK;
+- generated `llms.txt` and `llms-full.txt` contain the current public pages;
+- links, site validation, and accessibility checks pass;
+- desktop and narrow layouts remain readable.
 
 ## 19. Final principle
 
-Relay copies Linq’s resource-oriented discovery and human/agent accessibility.
-Relay copies Photon’s SDK precision, transport separation, and explicit
-success boundaries.
-
-Relay does not copy either company’s product vocabulary or unsupported
-features. The Docs structure follows the product Relay actually has.
+Relay documentation teaches the current product from the first request through
+reliable event processing. The contract defines behavior, the SDK defines
+maintained TypeScript calls, and each public page explains one developer job in
+simple language.

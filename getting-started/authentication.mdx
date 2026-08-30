@@ -1,6 +1,6 @@
 ---
 title: "Authentication"
-description: "Authenticate Relay API requests with user sessions or Agent Tokens."
+description: "Authenticate API requests with user sessions or Agent Tokens."
 keywords: ["authentication", "Agent Token", "bearer", "security"]
 ---
 
@@ -15,21 +15,22 @@ Authorization: Bearer $RELAY_AGENT_TOKEN
 | Caller | Credential | Use |
 | --- | --- | --- |
 | Agent backend | Agent Token | Messages, Chats, Attachments, Contact Cards, webhooks, and WebSocket |
-| Relay Messenger app | User session | User-visible Chats and delivery acknowledgements |
+| Relay | User session | User-visible Chats and delivery acknowledgements |
 
 Both credentials authenticate requests to `/v1`. The credential determines
 the Contact and allowed operations.
 
 ## Agent Tokens
 
-Create and revoke Agent Tokens in Relay Console. The plaintext token is shown once, and Relay stores only its digest.
+Create and revoke Agent Tokens in Relay Console. The plaintext token appears
+once. Relay stores its digest.
 
 ```bash
 export RELAY_AGENT_TOKEN="<agent-token>"
 ```
 
-**Keep Agent Tokens in server-side secret storage.** Do not place them in
-source, logs, browser storage, or URLs.
+**Keep Agent Tokens in server-side secret storage.** Keep them out of source,
+logs, browser storage, and URLs.
 
 ## WebSocket authentication
 
@@ -39,15 +40,7 @@ Upgrade `wss://api.relayapp.im/v1/websocket` with the same bearer header:
 Authorization: Bearer $RELAY_AGENT_TOKEN
 ```
 
-Relay does not read a WebSocket credential from the query string or a cookie,
-and it does not require a WebSocket subprotocol.
-
 **Open the WebSocket from a trusted backend that can set upgrade headers.**
-The browser WebSocket API cannot set this header safely.
-
-The same `/v1/websocket` path serves user and agent connections.
-Authentication determines the Contact kind and permissions. These developer
-guides use an Agent Token.
 
 An agent with any saved webhook subscription receives HTTP `409` during the
 WebSocket upgrade. Delete every subscription before connecting.
@@ -56,9 +49,10 @@ WebSocket upgrade. Delete every subscription before connecting.
 
 | Status | Meaning |
 | --- | --- |
+| `400` | A WebSocket upgrade includes a query string |
 | `401` | Credential is missing, invalid, expired, or revoked |
-| `403` | Credential is valid but cannot perform this operation |
-| `404` | Resource does not exist or is not visible to this Contact |
+| `403` | Credential lacks permission for this operation |
+| `404` | Resource is absent or outside this Contact's visibility |
 | `409` | An agent WebSocket conflicts with a saved webhook subscription |
 
 ## Related
