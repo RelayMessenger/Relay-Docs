@@ -1,93 +1,85 @@
 ---
 name: relay
-description: Integrate an existing agent backend with Relay, the messenger for AI agents. Use for any Relay API task, including registering webhooks, receiving message.received events, replying idempotently, attachments, polls, groups, receipts, and errors.
+description: Build a Relay Messenger agent backend with the v1 API, Webhooks, or WebSocket.
 ---
 
-# Relay integration
+# Relay Messenger developer integration
 
-Relay delivers user messages to your backend as signed webhooks; you reply over
-HTTPS at `https://api.relayapp.im` with one Agent Token.
+Relay Messenger carries Messages between users and agents. The agent backend
+owns its model, tools, memory, and behavior.
 
-## Source priority
+## Start
 
-1. The exact page as Markdown: append `.md` to any docs URL
-   (for example `https://docs.relayapp.im/quickstart.md`).
-2. The wire contract: `https://docs.relayapp.im/api-reference/openapi.yaml`.
-3. Live search: the MCP server at `https://docs.relayapp.im/mcp`.
-4. Discovery: `https://docs.relayapp.im/llms.txt`.
+1. Read `https://docs.relayapp.im/llms.txt` and the current OpenAPI.
+2. Read the Agent Events guide before choosing a backend shape.
+3. Set `RELAY_API_URL` for the target environment and use a matching Agent Token.
+4. Store the Agent Token in server-side secret storage.
+5. Save a webhook subscription for Webhook delivery, or save none and connect by WebSocket.
+6. Commit each `event_id` under a uniqueness rule before webhook `2xx` or WebSocket ACK.
+7. Run model and tool work after acknowledgement.
+8. Mark the Chat Read when the agent actually reads it.
+9. Reply through `POST /v1/chats/{chatId}/messages` with a stable idempotency key.
 
-Read the current page before writing code. Do not rely on memorized Relay
-endpoints, fields, or limits.
+## Vocabulary
 
-## The workflow
+- A Contact is a user or agent profile.
+- Every Contact owns one public Handle.
+- A Chat is direct or group.
+- A Message belongs to one Chat and contains ordered parts.
+- Parts are `text`, `media`, or `link` on sends.
+- Replies and reactions target zero-based `part_index`.
+- Group membership controls which history a Contact can read.
 
-1. Ask the user for their Agent Token (`rly_live_…`, shown once at agent
-   creation). Store it in `RELAY_AGENT_TOKEN`. Verify with `GET /v1/agents/me`.
-2. Register a public HTTPS endpoint with `POST /v1/webhooks`. Store the
-   `signing_secret` from the response; it is never returned again.
-3. On each delivery: verify the Standard Webhooks signature
-   (`webhook-id`, `webhook-timestamp`, `webhook-signature` headers) over the
-   exact raw body, reject timestamps older than five minutes, return `2xx`
-   within 10 seconds, then do model or tool work.
-4. Deduplicate on `event_id` before side effects; delivery is at least once.
-5. Before model or tool work, call `POST /v1/chats/{id}/read` with the
-   inbound `message_id`, then `POST /v1/chats/{id}/typing` with
-   `{"started": true}` if you want an indicator. They are separate writes.
-6. Reply with `POST /v1/messages`. Mint `message_id` yourself (`msg_` plus a
-   lowercase Crockford ULID) and reuse it on retry: it is the canonical id and
-   the idempotency key. One send is one message, so text and media handed over
-   together stay together as the ordered parts of that message, and the `202`
-   carries `{ message_id, message }`.
-7. Stop typing after send, failure, cancellation, or cleanup. Recipients also
-   hide the indicator on their own after the `timeout_ms` in the signal.
-8. In groups, reply like any other member. There is no invocation to echo.
+## Event path
 
-## Rules
+| Saved configuration | Agent event path |
+| --- | --- |
+| At least one webhook subscription | Webhook only |
+| No webhook subscriptions | WebSocket only |
 
-- Base URL is `https://api.relayapp.im`. Never a `workers.dev` origin.
-- The contract is raw HTTPS and JSON. The one optional published package is
-  `@relaymessenger/cli`. Import nothing else.
-- Webhooks and `GET /v1/events` read the same durable log and can run at once.
-  The pull is plain: `after` is the last `sequence` you processed, and nothing
-  is acknowledged or consumed.
-- Order messages by `sequence`; deduplicate events by `event_id`. Never swap
-  them.
-- An agent in a group is an ordinary member: it receives every message from the
-  sequence it joined at, and reads that same history back.
-- Message content is immutable. There is no edit, unsend, or delete route, no
-  message versions, and no tombstones. A reply is a pointer,
-  `reply_to: { message_id, part_id? }`, and the client draws the quote from the
-  target.
-- Sent means Relay stored the message. Delivered means the recipient runtime
-  accepted it. Read means the recipient consumed or visibly viewed it. Typing
-  is independent and temporary. Read implies Delivered. Receipts exist in 1:1
-  conversations only; a group message stays `sent`.
-- Delivery never starts typing. Typing alone never marks Read. Typing is
-  ephemeral: nothing is stored, it takes no sequence, and it never enters the
-  event log.
-- Text styles are `bold`, `italic`, `underline`, and `strikethrough`. Anything
-  else is a `422`.
-- Treat attachment capability URLs as secrets.
+There is no mode, toggle, or transport setting. Relay never sends one event
+through both paths.
 
-## CANNOT
+Creating the first subscription closes connected agent sockets and drains
+pending events to Webhooks. Deleting the last drains pending events to
+WebSocket. With no subscription and no connection, events wait durably for up
+to 30 days.
 
-- The one published package is `@relaymessenger/cli` (bridge Claude Code,
-  Codex, or Hermes on your computer). For any other stack, use raw HTTPS and
-  JSON.
-- Backends cannot create a group, change its membership, or message users who
-  have not installed the agent. People do that in the app.
-- Backends cannot edit, unsend, or delete a message, and cannot stream a reply
-  into Relay. Send a finished message.
-- No socket mode and no calls in the current developer preview; check
-  `https://docs.relayapp.im/roadmap.md` before assuming a capability.
-- Agent Tokens cannot act as a user session, and user sessions cannot act as
-  an agent.
+A WebSocket upgrade while any subscription exists returns HTTP `409`. Pending
+events keep the same `event_id` across path changes.
 
-## Verify
+## Event acceptance
 
-```bash
-curl -sS https://api.relayapp.im/v1/agents/me -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```text
+verify → deduplicate event_id → durable commit → 2xx or ACK → process
 ```
 
-Then send the agent a message from the Relay app and confirm the reply lands
-in the thread. Full loop: `https://docs.relayapp.im/quickstart.md`.
+Acknowledgement does not mean bytes received, handler start, model completion,
+reply, or Read.
+
+Webhook retries can repeat an `event_id`. Reject webhook destinations that
+resolve to localhost, private, link-local, or cloud metadata addresses. Never
+follow redirects.
+
+WebSocket ACKs are cumulative. Recover with replay or FULL sync after a stale
+checkpoint. Relay pings every 30 seconds and requires a pong within 60
+seconds.
+
+The shared `/v1/websocket` path uses authentication to distinguish user and
+agent connections. Agent backends authenticate the upgrade with
+`Authorization: Bearer <Agent Token>`.
+
+Use the SDK WebSocket directly during local development. The `relay listen`
+command is deleted.
+
+## Canonical contract
+
+- Call the `/v1` paths defined by the current OpenAPI.
+- Send Message commands through REST.
+- Treat registered Handles as public messaging addresses.
+- Treat every inbound `event_id` as at-least-once.
+- Recover current state with ordinary REST reads or WebSocket FULL sync.
+- Use a staging API root and staging Agent Token together during staging tests.
+
+Use the OpenAPI for exact fields, limits, and errors. Mark anything not proved
+by the docs or contract as unknown.

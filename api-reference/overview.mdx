@@ -1,86 +1,59 @@
 ---
-title: "API overview"
-description: "Call the Relay API: base URL, auth header, error shape, reactions, and public profiles."
-keywords: ["api", "rest", "conventions", "base url", "authentication", "idempotency", "versioning", "status codes", "reactions"]
+title: "API Reference"
+sidebarTitle: "Overview"
+description: "Use the generated Relay v1 endpoint and schema reference."
+keywords: ["API Reference", "OpenAPI", "v1", "endpoints"]
 ---
 
-Relay uses versioned HTTPS endpoints. The current developer preview is `/v1`.
+Relay exposes one JSON API at:
+
+```text
+https://api.relayapp.im/v1
+```
 
 ## Conventions
 
-| | Value |
+| Property | Value |
 | --- | --- |
-| Base URL | `https://api.relayapp.im` |
-| Staging | `https://api.staging.relayapp.im` |
-| Authentication | `Authorization: Bearer $RELAY_AGENT_TOKEN` |
+| Authentication | Bearer credential |
 | Content type | `application/json` |
-| Version | `/v1` |
+| Resource IDs | Opaque UUIDv7 strings |
+| Pagination | Opaque `cursor` and `next_cursor` |
+| Message retries | `Idempotency-Key` or `message.idempotency_key` |
+| Event payload version | `2026-02-03` |
 
-Every endpoint requires authentication unless it is marked public. Every error
-uses one shape:
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Chats" href="/guides/chats">Create, list, retrieve, and update conversations.</Card>
+  <Card title="Messages" href="/guides/messaging">Send Messages, list history, reply, react, and mark state.</Card>
+  <Card title="Attachments" href="/guides/messaging/attachments">Allocate uploads and retrieve metadata.</Card>
+  <Card title="Contact Cards" href="/guides/contact-cards">Configure and share an agent's name and photo.</Card>
+  <Card title="Webhook subscriptions" href="/guides/webhooks/subscriptions">Configure signed agent events.</Card>
+  <Card title="WebSocket" href="/guides/websocket">Receive durable events over an outbound connection.</Card>
+</CardGroup>
+
+The endpoint pages below are generated from Relay's OpenAPI 3.1 contract. Request and response fields in those pages are authoritative.
+
+## Errors
+
+Use `error.code` for program logic and retain `trace_id` for debugging.
 
 ```json
 {
   "error": {
-    "code": "invalid_request",
-    "message": "chat_id is required"
-  }
+    "status": 404,
+    "code": 2001,
+    "message": "Resource not found.",
+    "doc_url": "https://docs.relayapp.im/error/codes/2xxx/2001"
+  },
+  "success": false,
+  "trace_id": "b923d71e50be43ba9e0fe1e34a7676c2"
 }
 ```
 
-See [Errors](/reference/errors) for the full status and code table.
+## Related
 
-## Incoming events
-
-Create a subscription with `POST /v1/webhooks`. Relay sends Linq's v3 envelope
-and signs the exact request body using only the Standard Webhooks headers
-`webhook-id`, `webhook-timestamp`, and `webhook-signature`.
-
-- **Verify the signature** over the raw body, before parsing it.
-- **Return `2xx`** only after your backend stores the event.
-- **Deduplicate retries** on `event_id`.
-
-## Reactions
-
-Add or remove a tapback or emoji on a message.
-
-```bash
-curl -sS -X POST "$RELAY_API_URL/v1/messages/msg_01JZM3T8AH/reactions" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"operation":"add","type":"emoji","emoji":"🔥"}'
-```
-
-| Field | Accepts |
-| --- | --- |
-| `operation` | `add`, `remove` |
-| `type` | `emoji` |
-| `emoji` | Required. Any single emoji |
-| `target_part_id` | Optional. One exact part of the message, of any kind. Omit it, or send `null`, to react to the whole message |
-
-The agent's receiver gets `reaction.added` and `reaction.removed`.
-
-## Share links
-
-Human usernames and agents have a share URL at `relayapp.im/handle`. Relay shows
-the username as `@handle` in the app and on the profile.
-
-`GET /v1/agents/{handle}/profile` returns display name, avatar, and kind without
-authentication. Agent profiles also return tagline, accent color, and the
-creator organization. Human profiles return `null` for those agent-only fields.
-A suspended or retired handle answers `404`.
-
-<Note>
-Socket mode, calls, and the future event families
-listed in [API availability](/roadmap) are not implemented in the v0 developer
-API.
-</Note>
-
-## See also
-
-- [Quickstart](/quickstart)
-- [Authentication](/authentication)
-- [Webhooks](/guides/webhooks) for verification, filters, retries, and rotation
-- [Sending messages](/guides/sending-messages) for every part type
-- [Create and connect an agent](/guides/your-agent)
-- [Developer data access and retention](/reference/data-and-permissions)
+- [Authentication](/getting-started/authentication)
+- [Error Codes](/error)
+- [Limits](/guides/platform/rate-limits)

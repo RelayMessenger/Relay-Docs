@@ -1,0 +1,183 @@
+---
+title: "Quickstart"
+description: "Receive one user Message through a webhook and send one reply."
+keywords: ["quickstart", "Agent Token", "webhook", "reply"]
+---
+
+Connect an agent backend, receive one user Message, and send one reply.
+
+## Prerequisites
+
+- An agent created in [Relay Console](https://console.relayapp.im)
+- The Agent Token shown when you create it
+- A public HTTPS endpoint
+- A durable database or queue for incoming events
+
+## 1. Set your credentials
+
+```bash
+export RELAY_API_URL="https://api.relayapp.im"
+export RELAY_AGENT_TOKEN="<agent-token>"
+```
+
+## 2. Choose the SDK or HTTPS
+
+<Tabs>
+  <Tab title="TypeScript SDK">
+    ```bash
+    npm install @relaymessenger/sdk
+    ```
+
+    ```typescript
+    import Relay from "@relaymessenger/sdk";
+
+    const relay = new Relay({
+      apiKey: process.env.RELAY_AGENT_TOKEN!,
+    });
+    ```
+  </Tab>
+  <Tab title="cURL">
+    Use `$RELAY_API_URL` and `$RELAY_AGENT_TOKEN` from step 1.
+  </Tab>
+</Tabs>
+
+## 3. Create a webhook subscription
+
+<CodeGroup>
+```typescript TypeScript SDK
+const subscription = await relay.webhookSubscriptions.create({
+  target_url: "https://agent.example/webhooks/relay",
+  subscribed_events: ["message.received"],
+});
+```
+
+```bash cURL
+curl -sS -X POST "$RELAY_API_URL/v1/webhook-subscriptions" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "target_url":"https://agent.example/webhooks/relay",
+    "subscribed_events":["message.received"]
+  }'
+```
+</CodeGroup>
+
+Save `signing_secret` from the response. Relay returns it once.
+
+Creating the agent's first subscription selects Webhook delivery and closes
+any connected agent sockets. Relay drains pending events to this subscription
+without changing their `event_id`.
+
+```json
+{
+  "id":"01993d50-34ca-7613-8df2-d3f8cc975d04",
+  "target_url":"https://agent.example/webhooks/relay",
+  "subscribed_events":["message.received"],
+  "is_active":true,
+  "signing_secret":"whsec_<base64-key>",
+  "created_at":"2026-08-29T06:20:00.000Z",
+  "updated_at":"2026-08-29T06:20:00.000Z"
+}
+```
+
+## 4. Accept the event durably
+
+<Steps>
+  <Step title="Verify">
+    Verify the Standard Webhooks signature against the exact raw request body.
+  </Step>
+  <Step title="Deduplicate">
+    Insert `event_id` under a unique constraint.
+  </Step>
+  <Step title="Commit">
+    Save the event or a durable job before responding.
+  </Step>
+  <Step title="Respond">
+    Return `200` or `204` within 10 seconds.
+  </Step>
+  <Step title="Process">
+    Run the model and send the reply after the response.
+  </Step>
+</Steps>
+
+**A webhook `2xx` means durable acceptance, not model completion.**
+
+Relay retries `429`, `5xx`, timeouts, and connection failures. Other `4xx`
+responses end delivery, so reject only requests that must not be retried.
+
+The SDK verifies and unwraps the unmodified body:
+
+```typescript
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+  webhookSecret: process.env.RELAY_WEBHOOK_SECRET!,
+});
+
+const event = relay.webhooks.unwrap(rawBody, {
+  headers: request.headers,
+});
+
+await inbox.insertOnce(event.event_id, event);
+return new Response(null, { status: 204 });
+```
+
+## 5. Mark Read and reply
+
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.chats.markAsRead(chatId);
+
+await relay.chats.messages.send(chatId, {
+  message: {
+    parts: [{ type: "text", value: "Tomorrow at 2:00 PM works." }],
+    reply_to: { message_id: messageId, part_index: 0 },
+    idempotency_key: `reply-${eventId}`,
+  },
+});
+```
+
+```bash cURL
+curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/read" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+
+curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: reply-$EVENT_ID" \
+  --data-binary @- <<JSON
+{
+  "message": {
+    "parts": [{"type":"text","value":"Tomorrow at 2:00 PM works."}],
+    "reply_to": {"message_id":"$MESSAGE_ID","part_index":0}
+  }
+}
+JSON
+```
+</CodeGroup>
+
+## Review with an agent
+
+**Audit this webhook integration against the current contract.** Copy this prompt into your coding agent.
+
+<CodeGroup>
+```text Audit Relay webhook integration
+Audit this Relay integration without changing code.
+
+1. Read https://docs.relayapp.im/llms.txt and the current Relay OpenAPI first.
+2. Locate Agent Token authentication and the webhook receiver.
+3. Prove the signature is verified against the raw body.
+4. Prove event_id is committed under a uniqueness rule before the 2xx response.
+5. Prove model work happens after the response.
+6. Prove replies use POST /v1/chats/{chatId}/messages with a stable idempotency key.
+7. Report Check | Status | file:line evidence | Fix.
+8. Mark anything you cannot prove as unknown.
+```
+</CodeGroup>
+
+## Next steps
+
+- [Authentication](/getting-started/authentication)
+- [Client SDKs](/getting-started/sdks)
+- [Sending Messages](/guides/messaging/sending-messages)
+- [Webhooks](/guides/webhooks)
+- [WebSocket](/guides/websocket)

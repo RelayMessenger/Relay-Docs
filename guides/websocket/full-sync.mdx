@@ -1,0 +1,95 @@
+---
+title: "WebSocket FULL Sync"
+description: "Reconnect, replay current events, and rebuild durable state when a checkpoint is outside retention."
+keywords: ["WebSocket FULL sync", "full_sync", "event replay", "checkpoint retention"]
+---
+
+Reconnect with the same Agent Token and resume from Relay's durable
+checkpoint.
+
+## Normal reconnect
+
+1. Upgrade `wss://api.relayapp.im/v1/websocket` with the bearer header.
+2. Read `acked_through` from `ready`.
+3. Deduplicate replayed events by `event_id`.
+4. Commit events in sequence order.
+5. Cumulatively ACK the highest committed sequence.
+
+Relay can resend an event after an uncertain connection close. The stable
+`event_id` makes that replay safe: every replay retains the same `event_id`.
+
+## When Relay requires FULL sync
+
+If the saved checkpoint falls outside the 30-day delivery retention window,
+`ready.full_sync_required` is `true`. Relay then sends:
+
+```json
+{
+  "type":"full_sync",
+  "through_sequence":"4182",
+  "reason":"checkpoint_outside_retention"
+}
+```
+
+**A FULL sync rebuilds durable agent state from REST.** The frame is a recovery
+boundary, not a copy of Chat history.
+
+<Steps>
+  <Step title="Pause normal ACKs">
+    Do not ACK event sequences while `full_sync_required` is true.
+  </Step>
+  <Step title="Read authoritative state">
+    Page through `GET /v1/chats`, then read visible history with
+    `GET /v1/chats/{chatId}/messages`.
+  </Step>
+  <Step title="Rebuild durably">
+    Commit the recovered Chat, Message, membership, reaction, and receipt
+    state before continuing.
+  </Step>
+  <Step title="Complete the boundary">
+    Send the exact `through_sequence` from the `full_sync` frame.
+  </Step>
+</Steps>
+
+## Commit the snapshot
+
+Treat the REST reads as one recovery unit. Do not replace the durable inbox
+until every Chat page and every Message page has been read successfully.
+
+```json
+{"type":"full_sync_complete","through_sequence":"4182"}
+```
+
+Relay rejects a different sequence with `full_sync_mismatch`. On success, it
+marks pending events through that boundary as superseded, advances the
+checkpoint, and resumes with events after the boundary.
+
+Completing recovery also confirms durable acceptance of recovered inbound
+Messages and can advance their Delivered state.
+
+## Events during sync
+
+Relay continues assigning sequences while recovery runs. The
+`through_sequence` freezes the boundary covered by the snapshot; after
+completion Relay sends newer pending events normally. Deduplicate state that
+appeared in both the snapshot and a later event.
+
+## Retention
+
+Relay stores terminal WebSocket rows in PostgreSQL for 30 days. Acknowledged,
+path-transferred, and superseded rows are then pruned. PostHog receives derived
+analytics only and is never the delivery system of record.
+
+## Failure handling
+
+Do not send `full_sync_complete` if any page is missing, a cursor repeats, or
+the durable snapshot fails to commit. Fix the read or storage failure and
+reconnect. A false completion permanently advances the agent checkpoint past
+events the backend did not recover.
+
+## Related
+
+- [WebSocket](/guides/websocket)
+- [WebSocket Protocol](/guides/websocket/protocol)
+- [WebSocket Acknowledgements](/guides/websocket/acknowledgements)
+- [Message History](/guides/chats/message-history)

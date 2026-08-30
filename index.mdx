@@ -1,87 +1,98 @@
 ---
-title: "Build an agent people can message"
-sidebarTitle: "Home"
-description: "Receive a signed message event and send one reply over HTTPS."
-keywords: ["relay", "agent messenger", "ai agents", "quickstart", "send message", "webhook"]
+title: "Introduction"
+description: "Build agents that users message as Contacts in Relay Messenger."
+keywords: ["Relay Messenger", "Relay API", "agents", "messaging", "introduction"]
 ---
 
-Relay sends messages to your backend as signed events. Your backend sends
-replies over HTTPS.
+Relay Messenger connects users and agents in direct and group conversations.
 
-You keep the model, tools, memory, and hosting. Relay runs the agent profile,
-conversation, delivery, media, and app.
+> **New to Relay?** Follow the [Quickstart](/getting-started/quickstart) to connect an agent, or open the [API Reference](/api-reference/overview) for every endpoint and schema.
 
-## Start with your coding agent
+Use the official [TypeScript SDK](/getting-started/sdks) for a Node agent
+backend, or call the same `/v1` operations over HTTPS.
 
-Copy this into your coding agent, then answer its questions.
+## Prerequisites
 
-````markdown Agent prompt
-Build a Relay agent backend with me.
+To build an agent, you need:
 
-1. Fetch https://docs.relayapp.im/llms.txt and follow its agent instructions.
-   If you cannot fetch it, stop and tell me.
-2. Before writing code, ask me for my Agent Token (rly_live_..., shown once
-   when I create the agent in the Relay app) and my public HTTPS webhook URL.
-3. Implement the loop: verify the token with GET /v1/agents/me, receive one
-   message.received event, mark it read with POST /v1/chats/{id}/read,
-   start POST /v1/chats/{id}/typing, reply with POST /v1/messages
-   carrying a client-minted message_id, which is the send's idempotency key,
-   and stop typing when done.
+- An agent and Agent Token from [Relay Console](https://console.relayapp.im)
+- A durable database or queue for incoming events
+- A public HTTPS endpoint for a saved webhook subscription, or an always-on
+  process that connects when no subscription is saved
 
-The contract is raw HTTPS and JSON at https://api.relayapp.im. Webhook bodies
-use Linq's v3 shape with webhook_version 2026-02-03. The optional published
-package is @relaymessenger/cli. Import nothing else.
-````
+## What you can build
 
-<Columns cols={3}>
-  <Card title="Quickstart" icon="zap" href="/quickstart">
-    Receive one message and send one reply.
-  </Card>
-  <Card title="Connect a runtime" icon="blocks" href="/integrations">
-    Connect Claude Code, Codex, Hermes, OpenClaw, or your own runtime.
-  </Card>
-  <Card title="API reference" icon="square-terminal" href="/api-reference/overview">
-    Read every endpoint, field, response, and status code.
-  </Card>
-</Columns>
+- **Personal agents** that live beside a user's other conversations
+- **Support agents** that reply with text, media, audio, and files
+- **Group agents** that respond when mentioned in a shared Chat
+- **Webhook backends** that receive signed HTTPS requests
+- **Always-on backends** that receive events over a WebSocket
 
-## Send a message
+## Key capabilities
 
-Every send uses an Agent Token. Mint the `message_id` yourself: it names the
-resulting message and is the send's idempotency key.
+| Capability | Description |
+| --- | --- |
+| Multipart Messages | Send ordered text, media, and link parts |
+| Attachments | Upload images, video, audio, and files up to 100 MB |
+| Group Chats | Add and remove Contacts, rename groups, and set group photos |
+| Replies and reactions | Target an exact Message part |
+| Contact Cards | Configure an agent's name and photo, then share it into an existing Chat |
+| Delivery state | Track Sent, Delivered, and Read per recipient |
+| Agent events | Save a webhook subscription for signed HTTP delivery, or connect by WebSocket when none is saved |
 
-```bash
-curl -sS -X POST "https://api.relayapp.im/v1/messages" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message_id": "msg_01k1m4q9vn2r7t9b4c6qdh8xwy",
-    "chat_id": "cnv_01JZC7K4RQ",
-    "parts": [{ "type": "text", "text": "Tomorrow at 2:00 PM works." }]
-  }'
+## Authentication
+
+Every request uses a bearer credential:
+
+```http
+Authorization: Bearer $RELAY_AGENT_TOKEN
 ```
 
-Relay returns `202 Accepted` with `{ message_id, message }`. One send is one
-message: text and media handed over together stay together as its ordered
-parts.
+Users and agents call the same `/v1` API. The credential determines the Contact and permissions.
 
-## What Relay carries
+## Quick example
 
-| Capability | Start here |
-| --- | --- |
-| Text, images, files, voice memos, and link previews | [Send messages](/guides/sending-messages) |
-| Signed events and retries | [Webhooks](/guides/webhooks) |
-| Group conversations an agent takes part in | [Group conversations](/guides/group-conversations) |
-| Delivery, Read, and typing state | [Read receipts](/guides/read-receipts) |
+Send a Message to an existing Chat:
 
-## Choose a start
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.chats.messages.send(chatId, {
+  message: {
+    parts: [{ type: "text", value: "I can help with that." }],
+    idempotency_key: `reply-${eventId}`,
+  },
+});
+```
 
-- [Create and connect an agent](/guides/your-agent)
-- [Complete the quickstart](/quickstart)
-- [Learn the five core objects](/concepts)
-- [Give the docs to a coding agent](/reference/machine-readable)
+```bash cURL
+curl -sS -X POST https://api.relayapp.im/v1/chats/$CHAT_ID/messages \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: reply-$EVENT_ID" \
+  -d '{
+    "message": {
+      "parts": [{"type":"text","value":"I can help with that."}]
+    }
+  }'
+```
+</CodeGroup>
 
-<Note>
-Relay is in developer preview and ships through TestFlight.
-[See current availability](/current-status).
-</Note>
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" href="/getting-started/quickstart">
+    Receive one Message and send one reply.
+  </Card>
+  <Card title="Client SDKs" href="/getting-started/sdks">
+    Use the official TypeScript client.
+  </Card>
+  <Card title="Messaging" href="/guides/messaging">
+    Send text, media, voice memos, replies, mentions, and reactions.
+  </Card>
+  <Card title="Webhooks" href="/guides/webhooks">
+    Receive signed events at an HTTPS endpoint.
+  </Card>
+  <Card title="WebSocket" href="/guides/websocket">
+    Receive events through an always-on connection.
+  </Card>
+</CardGroup>

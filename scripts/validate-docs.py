@@ -1,0 +1,716 @@
+#!/usr/bin/env python3
+import json
+import re
+import sys
+from pathlib import Path
+
+root = Path(__file__).resolve().parents[1]
+config = json.loads((root / "docs.json").read_text())
+if config.get("name") != "Relay Messenger":
+    raise SystemExit("site identity must be Relay Messenger")
+if config.get("description") != "Relay Messenger API v1 documentation.":
+    raise SystemExit("site description must use the Relay Messenger identity")
+if config.get("navbar", {}).get("primary") != {
+    "type": "button",
+    "label": "Console",
+    "href": "https://console.relayapp.im",
+}:
+    raise SystemExit("top-right docs action must open Relay Console")
+if config.get("navbar", {}).get("links") != [
+    {
+        "label": "Copy agent prompt",
+        "href": "/getting-started/ai-agents#relay-agent-prompt",
+        "icon": "copy",
+    }
+]:
+    raise SystemExit("Copy agent prompt must be the only secondary navbar action")
+if config.get("logo") != {
+    "light": "/logo/light.png",
+    "dark": "/logo/dark.png",
+    "href": "https://relayapp.im",
+}:
+    raise SystemExit("Relay logo must link to https://relayapp.im")
+
+
+def pages(value):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key == "pages" and isinstance(item, list):
+                yield from (page for page in item if isinstance(page, str))
+            yield from pages(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from pages(item)
+
+
+def has_key(value, forbidden):
+    if isinstance(value, dict):
+        return forbidden in value or any(has_key(item, forbidden) for item in value.values())
+    if isinstance(value, list):
+        return any(has_key(item, forbidden) for item in value)
+    return False
+
+
+def h2_headings(text):
+    prose = re.sub(
+        r"^(`{3,})[^\n]*\n.*?^\1\s*$",
+        "",
+        text,
+        flags=re.M | re.S,
+    )
+    return re.findall(r"^## (.+)$", prose, re.M)
+
+
+mdx_paths = sorted(root.rglob("*.mdx"))
+navigated_list = list(pages(config.get("navigation", {})))
+navigated = set(navigated_list)
+files = {str(path.relative_to(root).with_suffix("")) for path in mdx_paths}
+duplicates = sorted(page for page in navigated if navigated_list.count(page) > 1)
+if duplicates:
+    raise SystemExit(f"pages appear more than once in navigation: {duplicates}")
+if navigated != files:
+    raise SystemExit(f"navigation/orphan mismatch: {sorted(navigated ^ files)}")
+
+tabs = config["navigation"]["tabs"]
+actual_tabs = [tab["tab"] for tab in tabs]
+expected_tabs = ["Guides", "Error Codes", "API Reference"]
+if actual_tabs != expected_tabs:
+    raise SystemExit(f"top tab order changed: {actual_tabs}")
+
+expected_guide_groups = [
+    "Introduction",
+    "Getting started",
+    "Messaging",
+    "Chats",
+    "Contacts",
+    "Agent events",
+    "Webhooks",
+    "WebSocket",
+    "Platform",
+    "Examples",
+]
+actual_guide_groups = [group["group"] for group in tabs[0]["groups"]]
+if actual_guide_groups != expected_guide_groups:
+    raise SystemExit(f"guide group order changed: {actual_guide_groups}")
+
+expected_guide_pages = {
+    "Introduction": ["index"],
+    "Getting started": [
+        "getting-started/quickstart",
+        "getting-started/authentication",
+        "getting-started/sdks",
+        "getting-started/key-concepts",
+        "getting-started/ai-agents",
+        "getting-started/best-practices",
+    ],
+    "Messaging": [
+        "guides/messaging/index",
+        "guides/messaging/sending-messages",
+        "guides/messaging/mentions",
+        "guides/messaging/message-details",
+        "guides/messaging/message-parts",
+        "guides/messaging/attachments",
+        "guides/messaging/voice-memos",
+        "guides/messaging/rich-link-previews",
+        "guides/messaging/replies",
+        "guides/messaging/reactions",
+        "guides/messaging/delivery-receipts",
+    ],
+    "Chats": [
+        "guides/chats/index",
+        "guides/chats/group-chats",
+        "guides/chats/participants",
+        "guides/chats/typing-indicators",
+        "guides/chats/share-contact-card",
+        "guides/chats/message-history",
+    ],
+    "Contacts": [
+        "guides/contact-cards",
+        "guides/chats/blocked-handles",
+    ],
+    "Agent events": ["guides/agent-events/index"],
+    "Webhooks": [
+        "guides/webhooks/index",
+        "guides/webhooks/subscriptions",
+        "guides/webhooks/events",
+        "guides/webhooks/delivery",
+    ],
+    "WebSocket": [
+        "guides/websocket/index",
+        "guides/websocket/protocol",
+        "guides/websocket/acknowledgements",
+        "guides/websocket/full-sync",
+    ],
+    "Platform": [
+        "guides/platform/idempotency",
+        "guides/platform/rate-limits",
+        "guides/platform/debugging",
+    ],
+    "Examples": ["examples/index"],
+}
+for group in tabs[0]["groups"]:
+    expected = expected_guide_pages[group["group"]]
+    if group["pages"] != expected:
+        raise SystemExit(
+            f"{group['group']} page order changed: {group['pages']}"
+        )
+
+expected_error_groups = [
+    "Overview",
+    "1xxx request errors",
+    "2xxx resource errors",
+    "3xxx server errors",
+]
+actual_error_groups = [group["group"] for group in tabs[1]["groups"]]
+if actual_error_groups != expected_error_groups:
+    raise SystemExit(f"error group order changed: {actual_error_groups}")
+
+if has_key(config.get("navigation", {}), "icon") or has_key(config.get("navigation", {}), "icons"):
+    raise SystemExit("decorative navigation icons returned")
+if config.get("contextual") != {"options": ["copy", "view"], "display": "header"}:
+    raise SystemExit("header Copy page/Markdown actions changed")
+if "getting-started/quickstart" not in navigated:
+    raise SystemExit("Quickstart must remain a sidebar guide")
+if (root / "current-status.mdx").exists():
+    raise SystemExit("Current status belongs in the evidence site, not public docs")
+
+required_paths = [
+    root / "guides/contact-cards.mdx",
+    root / "guides/chats/share-contact-card.mdx",
+    root / "guides/chats/typing-indicators.mdx",
+    root / "guides/messaging/delivery-receipts.mdx",
+    root / "guides/websocket/index.mdx",
+    root / "guides/websocket/protocol.mdx",
+    root / "guides/websocket/full-sync.mdx",
+    root / "error/index.mdx",
+]
+for path in required_paths:
+    if not path.exists():
+        raise SystemExit(f"required atomic guide missing: {path.relative_to(root)}")
+for path in [
+    root / "guides/messaging/index.mdx",
+    root / "guides/chats/index.mdx",
+    root / "guides/webhooks/index.mdx",
+    root / "guides/websocket/index.mdx",
+    root / "api-reference/overview.mdx",
+]:
+    if 'sidebarTitle: "Overview"' not in path.read_text():
+        raise SystemExit(f"overview sidebar label drifted: {path.relative_to(root)}")
+for stale in [
+    root / "guides/chats/install-agents.mdx",
+    root / "guides/socket-mode.mdx",
+    root / "guides/socket-mode-protocol.mdx",
+    root / "guides/webhooks/choose-transport.mdx",
+    root / "guides/platform/errors.mdx",
+    root / "error/codes/2xxx/2014.mdx",
+]:
+    if stale.exists():
+        raise SystemExit(f"stale page returned: {stale.relative_to(root)}")
+
+if "--topology-only" in sys.argv:
+    print(
+        f"validated Docs topology: {len(files)} pages, "
+        f"{len(expected_guide_groups)} ordered Guide groups"
+    )
+    raise SystemExit(0)
+
+for path in mdx_paths:
+    text = path.read_text()
+    end = text.find("\n---\n", 4)
+    if not text.startswith("---\n") or end < 0:
+        raise SystemExit(f"bad frontmatter: {path}")
+    keys = {
+        line.split(":", 1)[0]
+        for line in text[4:end].splitlines()
+        if ":" in line
+    }
+    missing = {"title", "description", "keywords"} - keys
+    if missing:
+        raise SystemExit(f"missing {sorted(missing)} in {path}")
+    if "—" in text:
+        raise SystemExit(f"em dash in {path}")
+    headings = h2_headings(text)
+    if not headings or headings[-1] not in {"Next steps", "Related", "See also"}:
+        raise SystemExit(f"page must end with Next steps, Related, or See also: {path}")
+
+    for block in re.findall(
+        r"<(?:CodeGroup|Tabs)>[\s\S]*?</(?:CodeGroup|Tabs)>",
+        text,
+    ):
+        if "TypeScript SDK" in block and "cURL" in block:
+            if block.index("TypeScript SDK") > block.index("cURL"):
+                raise SystemExit(
+                    f"TypeScript SDK must appear before cURL: {path.relative_to(root)}"
+                )
+
+architecture_text = (root / "INFORMATION-ARCHITECTURE.md").read_text()
+heading_inventory = architecture_text.split(
+    "## 16. Exact heading skeletons", 1
+)[1].split("## 17. Current page map", 1)[0]
+documented_heading_rows = {
+    page.strip().lower(): re.findall(r"`([^`]+)`", order)
+    for page, order in re.findall(r"^\| ([^|]+) \| (.+) \|$", heading_inventory, re.M)
+    if "`" in order
+}
+heading_aliases = {
+    "participants and membership": "participants",
+    "websocket acknowledgements": "acknowledgements",
+    "websocket full sync": "full sync",
+    "limits": "rate limits",
+    "error codes": "error overview",
+    "api reference": "api reference overview",
+}
+for path in mdx_paths:
+    text = path.read_text()
+    frontmatter = text.split("---", 2)[1]
+    title_match = re.search(r'^title:\s*"([^"]+)"', frontmatter, re.M)
+    if not title_match:
+        raise SystemExit(f"quoted title missing from frontmatter: {path}")
+    title = title_match.group(1).lower()
+    if "error/codes/" in str(path.relative_to(root)):
+        inventory_key = "one error code"
+    else:
+        inventory_key = heading_aliases.get(title, title)
+    expected_headings = documented_heading_rows.get(inventory_key)
+    if expected_headings is None:
+        raise SystemExit(
+            f"heading inventory missing for {path.relative_to(root)}: {inventory_key}"
+        )
+    actual_headings = h2_headings(text)
+    if actual_headings != expected_headings:
+        raise SystemExit(
+            f"heading inventory drifted for {path.relative_to(root)}: "
+            f"{actual_headings} != {expected_headings}"
+        )
+
+side_by_side_guides = [
+    "getting-started/quickstart.mdx",
+    "guides/messaging/sending-messages.mdx",
+    "guides/messaging/mentions.mdx",
+    "guides/messaging/message-details.mdx",
+    "guides/messaging/attachments.mdx",
+    "guides/messaging/voice-memos.mdx",
+    "guides/messaging/rich-link-previews.mdx",
+    "guides/messaging/replies.mdx",
+    "guides/messaging/reactions.mdx",
+    "guides/messaging/delivery-receipts.mdx",
+    "guides/chats/group-chats.mdx",
+    "guides/chats/participants.mdx",
+    "guides/chats/typing-indicators.mdx",
+    "guides/chats/share-contact-card.mdx",
+    "guides/chats/message-history.mdx",
+    "guides/chats/blocked-handles.mdx",
+    "guides/contact-cards.mdx",
+    "guides/webhooks/index.mdx",
+    "guides/webhooks/subscriptions.mdx",
+    "guides/webhooks/events.mdx",
+    "guides/websocket/index.mdx",
+]
+for relative in side_by_side_guides:
+    text = (root / relative).read_text()
+    if "TypeScript SDK" not in text or "cURL" not in text:
+        raise SystemExit(f"SDK/cURL task variants missing: {relative}")
+
+share_text = (root / "guides/chats/share-contact-card.mdx").read_text()
+if "POST /v1/chats/{chatId}/share_contact_card" not in share_text:
+    raise SystemExit("Contact Card sharing guide lost the canonical route")
+if not re.search(r"\bexisting Chat\b", share_text):
+    raise SystemExit("Contact Card sharing guide must require an existing Chat")
+if not re.search(
+    r"\b(?:no (?:request )?body|without a (?:request )?body|do not send a request body)\b",
+    share_text,
+    re.I,
+):
+    raise SystemExit("Contact Card sharing guide must state that the route is bodyless")
+
+contact_text = (root / "guides/contact-cards.mdx").read_text()
+if not re.search(r"\bPOST https://api\.relayapp\.im/v1/contact_card\b", contact_text):
+    raise SystemExit("Contact Card configuration guide lost POST /v1/contact_card")
+if not re.search(
+    r"\bPATCH\b[\s\S]{0,100}api\.relayapp\.im/v1/contact_card\?handle=",
+    contact_text,
+):
+    raise SystemExit("Contact Card configuration guide lost its PATCH operation")
+
+receipt_text = (root / "guides/messaging/delivery-receipts.mdx").read_text()
+if "/v1/messages/$MESSAGE_ID/delivered" not in receipt_text:
+    raise SystemExit("Delivery receipt guide lost the user acknowledgement route")
+if not re.search(r"\bcumulative\b", receipt_text, re.I):
+    raise SystemExit("Delivery receipt guide must explain cumulative user delivery")
+if "Agent Tokens cannot call it" not in receipt_text:
+    raise SystemExit("Delivery receipt guide must preserve the user-only boundary")
+for required in [
+    "`deliveries`",
+    "direct and group Chats",
+    "owner-approved Relay capability",
+    "best-effort group Read signals",
+    "complete per-recipient truth",
+]:
+    if required not in receipt_text:
+        raise SystemExit(f"Delivery receipt rationale is missing: {required}")
+
+attachments_text = (root / "guides/messaging/attachments.mdx").read_text()
+if "Public URL media parts per Message" not in attachments_text:
+    raise SystemExit("Attachment guide must scope the 40-part limit to URL media")
+if not all(term in attachments_text for term in [
+    "Every DNS answer",
+    "Every hop is revalidated",
+    "at most five redirects",
+]):
+    raise SystemExit("Attachment guide lost URL import safety boundaries")
+if "WebP" not in attachments_text or "rejects SVG" not in attachments_text:
+    raise SystemExit("Attachment guide lost the Relay WebP/SVG decision")
+
+webhook_text = (root / "guides/webhooks/index.mdx").read_text()
+webhook_events_text = (root / "guides/webhooks/events.mdx").read_text()
+webhook_delivery_text = (root / "guides/webhooks/delivery.mdx").read_text()
+websocket_text = (root / "guides/websocket/index.mdx").read_text()
+websocket_protocol_text = (root / "guides/websocket/protocol.mdx").read_text()
+websocket_recovery_text = (root / "guides/websocket/full-sync.mdx").read_text()
+typing_text = (root / "guides/chats/typing-indicators.mdx").read_text()
+agent_event_text = (root / "guides/agent-events/index.mdx").read_text()
+transport_text = "\n".join([
+    agent_event_text,
+    webhook_text,
+    websocket_text,
+    websocket_protocol_text,
+    webhook_delivery_text,
+])
+for required in [
+    "At least one saved subscription",
+    "No webhook subscriptions",
+    "no mode, toggle, or transport setting",
+    "never sends one event\nthrough both paths",
+    "HTTP `409`",
+    "closes every connected agent socket",
+    "same `event_id`",
+    "wait durably",
+    "30 days",
+]:
+    if required.lower() not in transport_text.lower():
+        raise SystemExit(f"final event path decision is missing: {required}")
+for forbidden in [
+    "relay.websocket.update",
+    "PUT https://api.relayapp.im/v1/websocket",
+    '{"enabled":true}',
+    '{"enabled":false}',
+    "WebSocket is enabled",
+]:
+    if forbidden.lower() in transport_text.lower():
+        raise SystemExit(f"stale WebSocket setting returned: {forbidden}")
+if (
+    'webhook_version":"2026-02-03"' not in webhook_events_text
+    or "use this fixed payload version" not in webhook_events_text
+):
+    raise SystemExit("webhook event guide lost the fixed payload version")
+if (
+    "`4410`" not in websocket_protocol_text
+    or "`webhook_configured`" not in websocket_protocol_text
+):
+    raise SystemExit("WebSocket protocol is missing the webhook-configured close")
+for reason in ["revoked", "heartbeat_timeout", "restart", "webhook_configured"]:
+    if f"`{reason}`" not in websocket_protocol_text:
+        raise SystemExit(f"WebSocket protocol is missing disconnect reason: {reason}")
+if "`stale_connection`" not in websocket_protocol_text:
+    raise SystemExit("WebSocket protocol is missing stale-connection error handling")
+if "A fatal error ends consumption" not in websocket_protocol_text:
+    raise SystemExit("WebSocket protocol lost fatal error handling")
+for required in [
+    "wss://api.relayapp.im/v1/websocket",
+    "Authorization: Bearer $RELAY_AGENT_TOKEN",
+    "query credential or cookie",
+    "does not require a",
+    "Security trade-off",
+    "The same `/v1/websocket` path",
+    "authentication",
+    "multiple connected sockets",
+    "The `relay listen`",
+    "is deleted",
+]:
+    if required not in websocket_text:
+        raise SystemExit(f"WebSocket authentication guide is missing: {required}")
+if (
+    "ping every 30 seconds" not in websocket_protocol_text
+    or "within 60 seconds" not in websocket_protocol_text
+):
+    raise SystemExit("WebSocket guide lost the 30-second ping and 60-second pong timeout")
+for forbidden in [
+    "/v1/websocket-connections",
+    "relay_ticket_",
+    "relay.v1.json",
+]:
+    if forbidden in websocket_text + "\n" + websocket_protocol_text:
+        raise SystemExit(f"stale WebSocket handshake returned: {forbidden}")
+for required in [
+    "full_sync",
+    "full_sync_complete",
+    "checkpoint_outside_retention",
+    "same `event_id`",
+    "PostgreSQL for 30 days",
+    "PostHog",
+]:
+    if required not in websocket_recovery_text:
+        raise SystemExit(f"WebSocket recovery guide is missing: {required}")
+for required in [
+    "1 immediate attempt",
+    "Up to 10",
+    "10 seconds per attempt",
+    "`429`",
+    "`5xx`",
+    "72 hours",
+    "PostgreSQL",
+    "30 days",
+    "PostHog",
+    "recover current Chat and Message state",
+    "HTTP `3xx`",
+    "redirect is not followed",
+    "localhost",
+    "private",
+    "link-local",
+    "cloud metadata",
+    "same\n`event_id`",
+]:
+    if required not in webhook_delivery_text:
+        raise SystemExit(f"Webhook delivery policy is missing: {required}")
+for required in [
+    "chat.typing_indicator.started",
+    "chat.typing_indicator.stopped",
+    "every 60 seconds",
+    "85 to 90 seconds",
+    '"contact": {',
+    "expires automatically",
+]:
+    if required not in typing_text:
+        raise SystemExit(f"Typing guide is missing: {required}")
+
+group_text = (root / "guides/chats/group-chats.mdx").read_text()
+if (
+    "2 to 31 recipient Handles plus the sender" not in group_text
+    or "keep at least three active Contacts" not in group_text
+):
+    raise SystemExit("Group Chat guide lost max-32 and minimum-three rules")
+
+concepts_text = (root / "getting-started/key-concepts.mdx").read_text()
+if (
+    "reserved inside its owning namespace" not in concepts_text
+    or "Archiving the Contact" not in concepts_text
+):
+    raise SystemExit("Handle archive reservation rule is missing")
+
+expected_error_codes = {
+    1004, 1005, 2001, 2003, 2004, 2005, 2006,
+    2007, 2008, 2015, 2023, 2025, 2026, 3006,
+}
+error_paths = sorted((root / "error/codes").rglob("*.mdx"))
+actual_error_codes = {int(path.stem) for path in error_paths}
+if actual_error_codes != expected_error_codes:
+    raise SystemExit(
+        f"error code pages drifted: {sorted(actual_error_codes ^ expected_error_codes)}"
+    )
+for path in error_paths:
+    blocks = re.findall(r"```json\n(.*?)\n```", path.read_text(), re.S)
+    if len(blocks) != 1:
+        raise SystemExit(f"expected one JSON response example in {path.relative_to(root)}")
+    try:
+        example = json.loads(blocks[0])
+    except json.JSONDecodeError as error:
+        raise SystemExit(f"invalid error JSON in {path.relative_to(root)}: {error}") from error
+    status = example.get("error", {}).get("status")
+    if not isinstance(status, int):
+        raise SystemExit(f"required error.status missing in {path.relative_to(root)}")
+    code = example.get("error", {}).get("code")
+    if code != int(path.stem):
+        raise SystemExit(f"error.code does not match page path in {path.relative_to(root)}")
+    expected_doc_url = (
+        f"https://docs.relayapp.im/error/codes/{int(path.stem) // 1000}xxx/{path.stem}"
+    )
+    if example.get("error", {}).get("doc_url") != expected_doc_url:
+        raise SystemExit(f"error.doc_url drifted in {path.relative_to(root)}")
+
+openapi_text = (root / "api-reference/openapi.yaml").read_text()
+openapi_transport_blockers = []
+if "operationId: getWebSocketSettings" in openapi_text:
+    openapi_transport_blockers.append("GET /v1/websocket settings operation")
+if "operationId: updateWebSocketSettings" in openapi_text:
+    openapi_transport_blockers.append("PUT /v1/websocket settings operation")
+if "WebSocketSettingsUpdate:" in openapi_text:
+    openapi_transport_blockers.append("WebSocketSettingsUpdate schema")
+if "Whether agent events use the WebSocket instead of webhook subscriptions." in openapi_text:
+    openapi_transport_blockers.append("enabled transport field")
+if "Agent delivery uses\n        successful durable webhook acceptance instead" in openapi_text:
+    openapi_transport_blockers.append("webhook-only Agent Delivered description")
+if re.search(
+    r"WebSocketDisconnectFrame:[\s\S]*?\n\s+- disabled\n",
+    openapi_text,
+):
+    openapi_transport_blockers.append("disabled WebSocket disconnect reason")
+if openapi_transport_blockers:
+    print(
+        "OPENAPI BLOCKER: the server owner must remove "
+        + ", ".join(openapi_transport_blockers)
+        + " before this branch can publish.",
+        file=sys.stderr,
+    )
+if "x-page-icon:" in openapi_text:
+    raise SystemExit("decorative API Reference icons returned")
+delivery_status = re.search(
+    r"^    DeliveryStatus:\n.*?^      enum:\n((?:^        - [^\n]+\n)+)",
+    openapi_text,
+    re.M | re.S,
+)
+if not delivery_status:
+    raise SystemExit("DeliveryStatus enum missing from OpenAPI")
+delivery_values = re.findall(r"^        - (.+)$", delivery_status.group(1), re.M)
+if delivery_values != ["sent", "delivered", "read"]:
+    raise SystemExit(f"DeliveryStatus drifted: {delivery_values}")
+if re.search(r"^\s+deprecated:\s*true\s*$", openapi_text, re.M):
+    raise SystemExit("deprecated compatibility surface returned to OpenAPI")
+openapi_paths = re.findall(r"^  (/[^:]+):$", openapi_text, re.M)
+if not openapi_paths or any(not path.startswith("/v1/") for path in openapi_paths):
+    raise SystemExit(f"every public OpenAPI path must live under /v1: {openapi_paths}")
+for required_path in [
+    "/v1/chats/{chatId}/share_contact_card",
+    "/v1/chats/{chatId}/typing",
+    "/v1/websocket",
+]:
+    if required_path not in openapi_paths:
+        raise SystemExit(f"canonical OpenAPI path missing: {required_path}")
+if "/v1/websocket-connections" in openapi_paths:
+    raise SystemExit("stale WebSocket connection-credential endpoint returned")
+event_type_block = re.search(
+    r"^    WebhookEventType:\n.*?^      enum:\n"
+    r"((?:^        - [^\n]+\n)+)",
+    openapi_text,
+    re.M | re.S,
+)
+if not event_type_block:
+    raise SystemExit("WebhookEventType enum missing from OpenAPI")
+contract_events = {
+    value.strip()
+    for value in re.findall(r"^        - (.+)$", event_type_block.group(1), re.M)
+}
+documented_events = set(
+    re.findall(
+        r"`((?:message|reaction|participant|chat)\.[a-z_.]+)`",
+        webhook_events_text,
+    )
+)
+if documented_events != contract_events:
+    raise SystemExit(
+        "Webhook Event Types page drifted from OpenAPI: "
+        f"{sorted(documented_events ^ contract_events)}"
+    )
+share_path_start = openapi_text.index("  /v1/chats/{chatId}/share_contact_card:")
+share_path_end = openapi_text.find("\n  /v1/", share_path_start + 2)
+share_operation = openapi_text[
+    share_path_start:share_path_end if share_path_end >= 0 else len(openapi_text)
+]
+if "requestBody:" in share_operation:
+    raise SystemExit("Contact Card sharing route must remain bodyless in OpenAPI")
+disconnect = re.search(
+    r"^    WebSocketDisconnectFrame:\n.*?^        reason:\n"
+    r".*?^          enum:\n((?:^            - [^\n]+\n)+)",
+    openapi_text,
+    re.M | re.S,
+)
+if not disconnect:
+    raise SystemExit("WebSocket disconnect reason enum missing from OpenAPI")
+disconnect_reasons = re.findall(r"^            - (.+)$", disconnect.group(1), re.M)
+if disconnect_reasons != [
+    "revoked", "heartbeat_timeout", "restart", "webhook_configured"
+]:
+    raise SystemExit(f"WebSocket disconnect reasons drifted: {disconnect_reasons}")
+
+handwritten_paths = [*mdx_paths, root / "skill.md", root / "README.md"]
+handwritten_text = "\n".join(path.read_text() for path in handwritten_paths)
+all_contract_text = handwritten_text + "\n" + openapi_text
+
+if "Relay Messenger" not in (root / "index.mdx").read_text():
+    raise SystemExit("Introduction must identify the product as Relay Messenger")
+if (root / "skill.md").read_bytes() != (
+    root / ".mintlify/skills/relay/SKILL.md"
+).read_bytes():
+    raise SystemExit("published Relay skill drifted from skill.md")
+skill_text = (root / "skill.md").read_text()
+agent_prompt_page = (root / "getting-started/ai-agents.mdx").read_text()
+prompt_match = re.search(
+    r"^## Relay agent prompt\n.*?^````text Relay agent prompt\n"
+    r"(.*?)\n````$",
+    agent_prompt_page,
+    re.M | re.S,
+)
+if not prompt_match or prompt_match.group(1) + "\n" != skill_text:
+    raise SystemExit("visible Relay agent prompt drifted from skill.md")
+agent_prompt_script = (root / "agent-prompt.js").read_text()
+prompt_assignment = re.search(
+    r"const RELAY_AGENT_PROMPT = (.+);$",
+    agent_prompt_script,
+    re.M,
+)
+if (
+    not prompt_assignment
+    or json.loads(prompt_assignment.group(1)) != skill_text
+):
+    raise SystemExit("agent-prompt.js payload drifted from skill.md")
+if (
+    'const FALLBACK_PATH = "/getting-started/ai-agents#relay-agent-prompt";'
+    not in agent_prompt_script
+):
+    raise SystemExit("agent-prompt.js lost its safe fallback destination")
+if "@relaymessenger/sdk" not in handwritten_text:
+    raise SystemExit("public docs must name the @relaymessenger/sdk package")
+if "@relayapp/sdk" in handwritten_text:
+    raise SystemExit("deprecated SDK package name returned")
+
+for name, pattern in {
+    "deprecated product name": r"\bRelay App\b",
+    "Business API name": r"\bBusiness API\b",
+    "Partner API name": r"\bPartner API\b",
+    "mobile product namespace": r"\bmobile(?: API| namespace| endpoint| boundary)?\b",
+    "realtime product name": r"\breal[ -]?time\b",
+}.items():
+    if re.search(pattern, handwritten_text, re.I):
+        raise SystemExit(f"stale {name}")
+
+for name, pattern in {
+    "Socket Mode product name": r"\bSocket Mode\b",
+    "agent installation lifecycle": r"\bagent installation\b|\binstalled agents?\b|\binstall agents?\b",
+    "agent share-link lifecycle": r"\bshare[- ]link\b",
+    "stale guide path": r"guides/(?:socket-mode|chats/install-agents|webhooks/choose-transport|platform/errors)",
+    "old public status language": r"current-status|Current status|known contract residue|local proof|evidence app",
+    "old WebSocket handshake": r"/v1/websocket-connections|relay_ticket_|relay\.v1\.json|\?ticket=",
+    "source-company language": r"\bLinq\b",
+}.items():
+    if re.search(pattern, handwritten_text, re.I):
+        raise SystemExit(f"stale {name}")
+
+for name, pattern in {
+    "old URL namespace": r"/api/(?:partner|mobile)|api\.relayapp\.im/api/",
+    "old route version": r"/v[23]/",
+    "wire service field": r"[\"']service[\"']\s*:|\bservice\s*:\s*[\"']?Relay",
+    "mobile realtime endpoint": r"/v1/realtime|/v1/client/realtime",
+    "prefixed ID": r"\b(?:msg|agt|usr|cnv|prt|att|evt|wh)_[A-Za-z0-9]",
+    "uuidv4 example": r"\b[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b",
+    "human identity kind": r"\bkind\b.{0,30}\bhumans?\b|\bhumans?\b.{0,30}\bkind\b",
+    "message parts table": r"\bmessage_parts?\b",
+    "unsupported payments": r"\bpayments?\b",
+    "unsupported edits": r"\b(?:edited|editing|edits?)\b",
+    "unsupported unsend": r"\bunsend\b",
+    "long polling": r"long[ -]poll",
+    "noncanonical error URL": r"docs\.relayapp\.im/error/codes/\dxxx/\d{4}/",
+    "carrier API residue": r"from-number|sending line|line flagging|S3 will|sandbox and production",
+    "received delivery status": r"`sent`,\s*`received`,\s*`delivered`",
+    "deprecated compatibility field": r"[\"'](?:compatibility_source|service|from_number|to_number)[\"']\s*:",
+}.items():
+    if re.search(pattern, all_contract_text, re.I):
+        raise SystemExit(f"stale {name}")
+
+print(
+    f"validated {len(files)} Relay Messenger public pages, three tabs, "
+    "Console CTA, Copy agent prompt action, logo destination, Quickstart sidebar placement, "
+    "atomic guide groups, "
+    "exact heading inventory, "
+    "frontmatter, bodyless Contact Card sharing, exact delivery states and error pages, "
+    "typing, exact OpenAPI event inventory, webhook retries, transport recovery, URL safety, "
+    "final automatic event paths, WebSocket disconnects, package identity, and stale-contract bans"
+)

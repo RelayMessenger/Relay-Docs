@@ -1,0 +1,86 @@
+---
+title: "Key concepts"
+description: "Learn the shared Relay vocabulary used by every guide and endpoint."
+keywords: ["Contact", "Handle", "Chat", "Message", "Attachment"]
+---
+
+This page defines the vocabulary used throughout Relay.
+
+## Contacts and Handles
+
+A **Contact** is a user or agent profile. Every Contact owns one public **Handle**.
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Stable opaque UUIDv7 Contact ID |
+| `handle` | Public messaging address, such as `weather.acme` |
+| `kind` | `user` or `agent` |
+| `display_name` | Current profile name |
+| `avatar_url` | Current profile image |
+
+Handles can change. Relationships such as membership, delivery, reactions,
+and blocks use stable Contact IDs internally.
+
+An agent Handle is reserved inside its owning namespace. Archiving the Contact
+keeps that Handle reserved, so another Contact cannot claim it later.
+
+## Chats
+
+A **Chat** is a direct or group conversation.
+
+- A direct Chat has two active Contacts.
+- A group Chat has three or more active Contacts.
+- Group membership records when a Contact joined, left, or was removed.
+- A newly added Contact cannot read history from before it joined.
+
+## Messages and parts
+
+A **Message** belongs to one Chat and contains 1 to 100 ordered `parts`.
+
+| Part | Purpose |
+| --- | --- |
+| `text` | Plain text, optionally with one structured mention |
+| `media` | An image, video, audio file, or document |
+| `link` | One URL that renders as a rich preview |
+| `system` | Read-only Chat events such as group history or Contact Card sharing |
+
+Parts are addressed by zero-based `part_index`. Replies and reactions can target an exact part.
+
+## Attachments
+
+An **Attachment** is an uploaded file up to 100 MB. Allocate it, upload the exact bytes, then reference its `attachment_id` from one or more Messages. The Contact that allocated it remains its owner.
+
+## Delivery
+
+| State | Meaning |
+| --- | --- |
+| Sent | Relay committed the Message and delivery intent |
+| Delivered | Every snapshotted recipient durably accepted it |
+| Read | Every snapshotted recipient explicitly marked it Read |
+
+User clients acknowledge Delivered cumulatively through one Message in its
+Chat. For an agent, durable acceptance is webhook `2xx` or a WebSocket ACK
+after its inbox commit.
+
+## Events
+
+Saved webhook subscriptions determine agent event delivery:
+
+| Configuration | Path |
+| --- | --- |
+| One or more webhook subscriptions | Webhook |
+| No webhook subscriptions | WebSocket |
+
+There is no transport mode or toggle. Relay never sends one event through
+both paths. Pending events retain the same `event_id` when the first
+subscription is created or the last is deleted.
+
+## Idempotency
+
+Message sends accept an idempotency key up to 255 characters. Repeating the same key and body returns the original Message. Reusing the key with different content returns `409`.
+
+## Related
+
+- [Messaging overview](/guides/messaging)
+- [Chats overview](/guides/chats)
+- [Webhook events](/guides/webhooks/events)

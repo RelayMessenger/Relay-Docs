@@ -1,0 +1,197 @@
+---
+title: "Client SDKs"
+description: "Use the official TypeScript SDK for Relay v1 commands, webhooks, and WebSocket delivery."
+keywords: ["SDK", "TypeScript", "@relaymessenger/sdk", "Node.js"]
+---
+
+`@relaymessenger/sdk` is the first-class TypeScript client for Relay v1.
+
+## Install
+
+```bash
+npm install @relaymessenger/sdk
+```
+
+The supported runtime is Node.js `22.22.3` or newer.
+
+## Create a client
+
+```typescript
+import Relay from "@relaymessenger/sdk";
+
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+  baseURL: process.env.RELAY_API_URL ?? "https://api.relayapp.im",
+});
+```
+
+The default API origin is `https://api.relayapp.im`.
+Set `RELAY_API_URL` to the matching staging origin during staging tests. Use a
+token created in the same environment.
+
+**Keep the Agent Token in trusted server infrastructure.** Do not include it
+in browser JavaScript, source control, URLs, cookies, or logs.
+
+## Send a Message
+
+```typescript
+const result = await relay.chats.messages.send(chatId, {
+  message: {
+    parts: [{ type: "text", value: "Hello from Relay." }],
+    idempotency_key: crypto.randomUUID(),
+  },
+});
+```
+
+## Resources
+
+| Resource | Current methods |
+| --- | --- |
+| Chats | `create`, `retrieve`, `update`, `listChats`, `leaveChat`, `markAsRead`, `shareContactCard`, `startTyping`, `stopTyping`, `sendVoicememo` |
+| Chat Messages | `chats.messages.list`, `chats.messages.send` |
+| Participants | `chats.participants.add`, `chats.participants.remove` |
+| Messages | `create`, `retrieve`, `addReaction`, `listMessagesThread`, `acknowledgeDelivered` |
+| Attachments | `create`, `upload`, `retrieve`, `delete` |
+| Contact Card | `create`, `retrieve`, `update` |
+| Blocked Handles | `list`, `block`, `unblock` |
+| Webhooks | `webhookEvents.list`, subscription CRUD, `webhooks.verify`, `webhooks.unwrap` |
+| WebSocket | `run` |
+
+`messages.acknowledgeDelivered` requires a user session. Agent Tokens receive
+`403` because agent delivery is acknowledged by webhook `2xx` or WebSocket
+ACK.
+
+## Pagination
+
+Chat pages expose `.chats`; Message pages expose `.messages`. Both support
+`.hasNextPage()`, `.getNextPage()`, and async iteration:
+
+```typescript
+const page = await relay.chats.listChats({ limit: 50 });
+
+for await (const chat of page) {
+  console.log(chat.id);
+}
+```
+
+## Retries and idempotency
+
+The client defaults to a 15-second request timeout and two retries.
+
+It retries network failures, timeouts, HTTP `408`, `429`, and `5xx` only when
+the operation is safe:
+
+- reads and idempotent HTTP methods;
+- commands explicitly marked retryable by the SDK;
+- Message sends with an idempotency key.
+
+**A Message POST without an idempotency key is not retried.**
+
+```typescript
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+  timeout: 15_000,
+  maxRetries: 2,
+});
+```
+
+Per-request `timeout`, `maxRetries`, `signal`, and headers are also supported.
+
+## Errors
+
+```typescript
+import Relay, { RelayAPIError } from "@relaymessenger/sdk";
+
+try {
+  await relay.chats.retrieve(chatId);
+} catch (error) {
+  if (error instanceof RelayAPIError) {
+    console.error({
+      status: error.status,
+      code: error.code,
+      traceId: error.traceId,
+      docURL: error.docURL,
+      retryAfter: error.retryAfter,
+      retryable: error.retryable,
+    });
+  }
+}
+```
+
+Use `code` for program logic and retain `traceId` for support and debugging.
+
+## Webhook verification
+
+Configure the signing secret and pass the unmodified request body:
+
+```typescript
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+  webhookSecret: process.env.RELAY_WEBHOOK_SECRET!,
+});
+
+const event = relay.webhooks.unwrap(rawBody, {
+  headers: request.headers,
+});
+```
+
+`webhooks.unwrap` verifies Standard Webhooks headers before parsing JSON.
+Commit the returned `event_id` durably before returning `2xx`.
+
+## WebSocket
+
+```typescript
+await relay.websocket.run({
+  onEvent: async (event, { sequence }) => {
+    await inbox.insertOnce(event.event_id, event);
+    console.log("accepted", sequence);
+  },
+  onFullSync: async ({ throughSequence, reason }) => {
+    const snapshot = await loadCompleteRelayState(relay);
+    await inbox.replaceWithSnapshot(snapshot, {
+      throughSequence,
+      reason,
+    });
+  },
+});
+```
+
+The agent must have no saved webhook subscriptions. If any subscription
+exists, the upgrade returns HTTP `409` and the SDK does not open the socket.
+There is no WebSocket mode, toggle, or setting.
+
+The SDK derives `wss://api.relayapp.im/v1/websocket` and sends the Agent Token
+in the upgrade `Authorization` header. It uses no query credential, cookie, or
+required subprotocol.
+
+`onEvent` must resolve after a durable event commit. `onFullSync` is required
+and must resolve after a complete REST snapshot is durably applied. The SDK
+sends the cumulative ACK or `full_sync_complete` only after the corresponding
+promise resolves.
+
+Relay pings every 30 seconds and closes the connection after 60 seconds
+without a pong. Creating the first webhook subscription closes connected
+agent sockets and moves pending events to Webhook delivery.
+
+## Browser limitation
+
+The Agent Token client and WebSocket runner are server-side Node.js features.
+The browser WebSocket API cannot set the required `Authorization` upgrade
+header, and shipping an Agent Token to a browser would expose it.
+
+Use Relay's user-authenticated app surface for user clients. Do not proxy an
+Agent Token into browser code.
+
+## Runnable examples
+
+- [Quickstart](/getting-started/quickstart)
+- [Examples](/examples)
+- [Attachments](/guides/messaging/attachments)
+- [Webhooks](/guides/webhooks)
+- [WebSocket](/guides/websocket)
+
+## Related
+
+- [Authentication](/getting-started/authentication)
+- [Best Practices](/getting-started/best-practices)
+- [API Reference](/api-reference/overview)

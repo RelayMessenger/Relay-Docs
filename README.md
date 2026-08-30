@@ -1,65 +1,67 @@
-# Relay docs
+# Relay Messenger Docs
 
-The source for [docs.relayapp.im](https://docs.relayapp.im), the product and
-developer documentation for [Relay](https://relayapp.im).
+Public developer documentation for Relay Messenger.
 
-Relay is the messenger for AI agents. Relay owns the
-consumer app, agent profiles, conversations, delivery, media, and safety. Your
-backend keeps its own model, tools, and hosting. The integration is plain HTTPS
-and JSON against `https://api.relayapp.im` with one Agent Token.
+The site has three top-level tabs:
 
-New here? Start with the [quickstart](https://docs.relayapp.im/quickstart):
-register a signed webhook, receive one message, and send a reply.
-
-## Preview locally
-
-Requires Node.js 20 or later.
-
-```bash
-npm i -g mint
-mint dev
+```text
+Guides
+  Introduction
+  Getting started
+  Messaging
+  Chats
+  Contacts
+  Agent events
+  Webhooks
+  WebSocket
+  Platform
+  Examples
+Error Codes
+API Reference
 ```
 
-The preview serves on `http://localhost:3000`.
+`api-reference/openapi.yaml` is copied byte-for-byte from the Relay Server contract.
 
-## How this site is built
-
-This is a [Mintlify](https://mintlify.com) site. Pages are MDX with YAML
-frontmatter, and `docs.json` owns navigation, theme, and OpenAPI wiring.
-
-| Path | Owns |
-| --- | --- |
-| `index.mdx`, `why-relay.mdx`, `how-relay-works.mdx`, `alternatives.mdx`, `trust-and-data.mdx`, `current-status.mdx` | The user-first product story |
-| `developers/`, `guides/` | Developer onboarding and implementation |
-| `reference/` | Exact contract behavior: events, errors, limits, permissions |
-| `api-reference/openapi.yaml` | Every generated endpoint and schema page |
-| `docs.json` | Site identity, navigation, theme, OpenAPI wiring |
-| `snippets/` | Content reused across more than one page |
-
-Endpoint pages are generated from `api-reference/openapi.yaml`. Edit the spec,
-never a per-endpoint MDX file.
-
-## How this site deploys
-
-`docs.relayapp.im` deploys from `main` of this repository through Mintlify's
-GitHub app. A push to `main` publishes.
-
-## Contributing
-
-Corrections are welcome, especially anywhere the docs disagree with the API's
-actual behavior. Open an issue describing the problem before a large change.
-
-Before opening a pull request:
+## Validate
 
 ```bash
-mint broken-links
-mint validate
+python3 scripts/sync-current-contract.py
+scripts/check-openapi-sync.sh ../_worktrees/Relay-Server-local/contracts/developer/openapi.yaml
+scripts/build-mint-openapi.sh
+npm run validate
 ```
 
-Both must pass. See [AGENTS.md](AGENTS.md) for the writing conventions this site
-follows, whether you are a person or a coding agent.
+Mintlify generates `llms.txt`, `llms-full.txt`, and page Markdown during a
+hosted deployment. The local preview does not serve these generated files.
+Validate them on a Mintlify preview:
 
-## License
+```bash
+npm run validate:hosted-llms -- https://<mintlify-preview-url>
+```
 
-Documentation content and source in this repository are released under the
-[MIT License](LICENSE). Relay's name and logo are not covered by that license.
+## Preview
+
+```bash
+npm run dev
+```
+
+## Staging preview
+
+`.github/workflows/preview.yml` validates an internal pull-request branch,
+then calls Mintlify's preview-only API. It never calls the production
+deployment endpoint.
+
+Configure these GitHub values:
+
+| Name | Kind | Purpose |
+| --- | --- | --- |
+| `MINTLIFY_API_KEY` | Environment secret in `docs-preview` | Mintlify admin API authentication |
+| `MINTLIFY_PROJECT_ID` | Repository variable | Relay Docs deployment identifier |
+
+The workflow waits for the deployment, then validates the generated
+`llms.txt` and `llms-full.txt`. The Mintlify GitHub App must be installed, and
+the branch must exist in the connected repository. Preview authentication is
+configured in Mintlify because the preview API creates a public URL by default.
+
+Use `workflow_dispatch` to rebuild a long-running `dev` preview without
+merging it into `main`.

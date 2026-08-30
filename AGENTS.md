@@ -1,4 +1,4 @@
-# Authoring Relay docs
+# Authoring Relay Messenger docs
 
 Conventions this site follows. They apply to people and to coding agents.
 
@@ -45,7 +45,6 @@ Then follow the shape for the page type:
 | Task guide | Outcome sentence → prerequisites → first runnable `curl` → real response → failure and retry behavior → `Next steps` |
 | Concept | Definition and ownership boundary → smallest wire example → lifecycle and invariants → `See also` |
 | Reference | Canonical shape first → field, limit, and error tables → `See also` |
-| Status | Mark tables, not narrative |
 
 ## Write for an agent operator
 
@@ -53,13 +52,20 @@ Then follow the shape for the page type:
   inspect history.
 - Relay is the messenger. The developer's external backend is the agent brain.
   Keep that boundary explicit.
+- Use **Relay Messenger** for the product or company identity. Use **Relay
+  API** for the developer API and **Relay Console** for the Console.
+- Keep the navbar limited to **Copy agent prompt** and the primary **Console**
+  action. The logo owns the `https://relayapp.im` website link.
+- `agent-prompt.js` copies `skill.md` exactly. Its link falls back to the full
+  prompt code block when JavaScript or clipboard access is unavailable.
+- Keep Mintlify's native **Copy page** label honest.
 - Use `https://api.relayapp.im` and `$RELAY_AGENT_TOKEN` in examples.
-- Show raw HTTPS and JSON before any abstraction. Do not imply a maintained SDK,
-  framework, model provider, or host.
+- Show the maintained TypeScript SDK and equivalent raw HTTPS side by side,
+  with the SDK first. Do not imply an unsupported framework, model provider,
+  or host.
 - Prefer `curl -sS` with exact headers, status codes, and idempotency behavior.
-- Mint the `message_id` in the example and reuse it on retry. It is the
-  message's canonical id and the send's idempotency key; there is no separate
-  idempotency header to derive.
+- Use `Idempotency-Key` or `message.idempotency_key` exactly as the current
+  OpenAPI allows. Reuse the same value and request after an uncertain send.
 - Distinguish implemented behavior from roadmap behavior. Mark an intentionally
   documented but unshipped surface `coming soon`; never present it as available.
 
@@ -104,27 +110,11 @@ of them.
 | `<Check>` | Confirming a successful outcome |
 | `<Warning>` | Real breakage, security, or data-loss risk |
 
-## Status marks
-
-Availability and status tables use a mark in the first column, because Relay
-distinguishes five states and a mark reads faster than five words.
-
-| Mark | Means |
-| :---: | --- |
-| ✅ | Supported, or production-proved |
-| 🔵 | Available in developer preview: the route and schema exist |
-| ⚠️ | Conditional, limited, or proved locally but not shipped |
-| ⏳ | Specified, coming later |
-| ❌ | Not available |
-
-Center mark columns with `| :---: |`.
-
 ## Never hand-write endpoint pages
 
-Edit `api-reference/openapi.yaml` for an endpoint's operation, parameters,
-request body, responses, schemas, security, examples, tags, summary, and
-description. Mintlify generates the endpoint pages from that file. Keep
-`api-reference/overview.mdx` for conventions shared across several endpoints.
+Edit the canonical Relay Server OpenAPI first, then copy it byte-for-byte to
+`api-reference/openapi.yaml`. Mintlify generates endpoint pages from that file.
+Keep `api-reference/overview.mdx` for conventions shared across endpoints.
 
 ## Before you open a pull request
 

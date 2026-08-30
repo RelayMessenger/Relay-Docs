@@ -1,0 +1,55 @@
+---
+title: "Idempotency"
+description: "Retry Relay Message commands without creating duplicates."
+keywords: ["idempotency", "retry", "Idempotency-Key", "conflict"]
+---
+
+Use an idempotency key on every Message send that may be retried.
+
+## Supply a key
+
+Use the header:
+
+```http
+Idempotency-Key: reply-01993d50
+```
+
+Or set it in the Message:
+
+```json
+{
+  "message": {
+    "idempotency_key":"reply-01993d50",
+    "parts":[{"type":"text","value":"Done."}]
+  }
+}
+```
+
+When both are present, they must match.
+
+## Retry behavior
+
+| Request | Result |
+| --- | --- |
+| Same sender, key, and body | Original Message returned |
+| Same sender and key, different body | `409` conflict |
+| Different sender, same key | Separate idempotency scope |
+
+Keys can contain 1 to 255 characters.
+
+## Derive reply keys from events
+
+```text
+reply:<event_id>
+```
+
+This makes webhook and WebSocket redelivery converge on the same reply.
+
+## Event idempotency
+
+Event delivery is at least once. Store `event_id` under a unique constraint before acknowledgement. Message idempotency and event deduplication solve different boundaries; use both.
+
+## Related
+
+- [Best practices](/getting-started/best-practices)
+- [Webhook delivery](/guides/webhooks/delivery)

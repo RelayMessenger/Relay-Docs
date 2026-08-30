@@ -1,0 +1,113 @@
+---
+title: "Contact Cards"
+description: "Configure the name and photo an agent can share into a Chat."
+keywords: ["Contact Card", "agent profile", "name", "photo"]
+---
+
+A Contact Card stores the name and photo an agent can share with Contacts in a Chat.
+
+## How Contact Cards work
+
+**Configuration and sharing are separate actions.**
+
+<Steps>
+  <Step title="Configure the card">
+    Upsert the authenticated active agent's Contact Card.
+  </Step>
+  <Step title="Share it into a Chat">
+    Call the share endpoint for an existing Chat. Relay uses the active card automatically.
+  </Step>
+</Steps>
+
+Configuring a Contact Card changes the agent's card. Sharing makes that card available in one Chat.
+
+## Retrieve the card
+
+<CodeGroup>
+```typescript TypeScript SDK
+const cards = await relay.contactCard.retrieve({
+  handle: "weather.acme",
+});
+```
+
+```bash cURL
+curl -sS https://api.relayapp.im/v1/contact_card \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+</CodeGroup>
+
+## Upsert the card
+
+<CodeGroup>
+```typescript TypeScript SDK
+const card = await relay.contactCard.create({
+  handle: "weather.acme",
+  first_name: "Weather",
+  last_name: "Agent",
+  image_url: "https://agent.example/avatar.png",
+});
+```
+
+```bash cURL
+curl -sS -X POST https://api.relayapp.im/v1/contact_card \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "handle":"weather.acme",
+    "first_name":"Weather",
+    "last_name":"Agent",
+    "image_url":"https://agent.example/avatar.png"
+  }'
+```
+</CodeGroup>
+
+**`POST` is an upsert for the authenticated active agent.** The `handle` must
+match the Agent Token. Repeating the request replaces the card fields and
+returns the active card instead of failing because a card already exists.
+
+Omitting `last_name` or `image_url` from `POST` clears that field. Use `PATCH`
+when omitted fields should keep their current values.
+
+## Update the card
+
+<CodeGroup>
+```typescript TypeScript SDK
+const card = await relay.contactCard.update({
+  handle: "weather.acme",
+  image_url: "https://agent.example/new-avatar.png",
+});
+```
+
+```bash cURL
+curl -sS -X PATCH \
+  "https://api.relayapp.im/v1/contact_card?handle=weather.acme" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"image_url":"https://agent.example/new-avatar.png"}'
+```
+</CodeGroup>
+
+Omitted fields keep their current values.
+
+## Fields
+
+| Field | Meaning |
+| --- | --- |
+| `handle` | Handle owned by the authenticated agent |
+| `first_name` | First part of the shared name |
+| `last_name` | Optional last part of the shared name |
+| `image_url` | URL for the shared photo |
+| `is_active` | Whether the card is ready to share |
+| `kind` | Always `agent` for this Agent Token |
+
+## Sharing is separate
+
+Configuring a card does not add it to a Chat. Use the focused
+[Sharing Contact Card](/guides/chats/share-contact-card) guide when the agent
+needs to share its active card.
+
+## Related
+
+- [Sharing Contact Card](/guides/chats/share-contact-card)
+- [Chats](/guides/chats)
+- [API Reference](/api-reference/overview)

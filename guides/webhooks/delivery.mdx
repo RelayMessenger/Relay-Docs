@@ -1,0 +1,103 @@
+---
+title: "Webhook delivery"
+description: "Handle webhook timeouts, retries, duplicates, terminal state, and operator redrive."
+keywords: ["webhook retries", "at least once", "redrive", "retention"]
+---
+
+Relay delivers each webhook at least once and keeps its request body and
+`event_id` unchanged across retries.
+
+## Delivery policy
+
+| Setting | Value |
+| --- | --- |
+| Initial delivery | 1 immediate attempt |
+| Retries | Up to 10 |
+| Response window | 10 seconds per attempt |
+| Backoff | Exponential from 2 seconds to a 10-minute cap |
+| Total failed attempts | 11 |
+| Duplicate delivery | Possible |
+
+The nominal retry delays are `2s`, `4s`, `8s`, `16s`, `32s`, `64s`, `128s`,
+`256s`, `512s`, and `600s`.
+
+## Retry classes
+
+| Result | Relay action |
+| --- | --- |
+| HTTP `2xx` | Succeed |
+| HTTP `429` | Retry |
+| HTTP `5xx` | Retry |
+| Response timeout | Retry |
+| Temporary connection or network failure | Retry |
+| Invalid URL, permanent DNS failure, or unsafe destination | Terminal |
+| HTTP `3xx` | Terminal, redirect is not followed |
+| Any other HTTP response | Terminal |
+
+Relay marks a retryable delivery dead only after the initial attempt and all
+ten retries fail. A terminal response stops earlier.
+
+Relay resolves the destination for each attempt. It rejects localhost,
+private, link-local, and cloud metadata addresses before sending.
+
+## Receiver pattern
+
+```text
+verify signature
+  → insert event_id if absent
+  → commit durable inbox
+  → return 2xx
+  → process asynchronously
+```
+
+If the backend commits but the response is lost, Relay retries with the same
+`event_id`. Store that ID under a uniqueness rule and return success for a
+duplicate without repeating model work, tools, or replies.
+
+## Delivered meaning
+
+For `message.received`, Relay marks the agent recipient Delivered only after
+the receiver returns `2xx`. The receiver contract requires a durable commit
+before that response.
+
+## Terminal state and redrive
+
+Relay stores every attempt and terminal result in PostgreSQL. Succeeded, dead,
+and path-transferred rows remain for 30 days, then Relay prunes them.
+
+PostHog receives derived analytics only. It is never the delivery system of
+record.
+
+An operator can redrive a dead webhook from Relay Console for 72 hours after
+the event was created. Redrive restarts the delivery attempts with the same
+frozen body and `event_id`.
+
+After 72 hours, recover current Chat and Message state through ordinary REST
+reads.
+
+## Review with an agent
+
+**Audit a webhook receiver for retries and durable deduplication.** Copy this
+prompt into your coding agent.
+
+```text
+You are auditing a codebase that receives Relay webhooks.
+
+This is read-only. Do not change code unless I ask.
+
+1. Read https://docs.relayapp.im/llms.txt, the Webhook guides, and the current Relay OpenAPI.
+2. Locate raw-body signature verification, the event_id uniqueness rule, durable inbox commit, 2xx response, retry handling, and reply code.
+3. Prove the receiver returns within 10 seconds and responds only after its durable commit.
+4. Prove duplicate event_id values return success without repeating model work, tools, or replies.
+5. Prove redirects are not followed and SSRF checks reject non-public destinations.
+6. Prove ordinary 4xx responses are used only for terminal requests.
+7. Prove recovery uses ordinary REST reads and the documented Console redrive window.
+8. Report Check | Status | file:line evidence | Fix.
+9. Mark anything you cannot prove as unknown.
+```
+
+## Related
+
+- [Webhooks](/guides/webhooks)
+- [Webhook Event Types](/guides/webhooks/events)
+- [Idempotency](/guides/platform/idempotency)

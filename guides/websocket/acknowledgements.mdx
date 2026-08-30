@@ -1,0 +1,79 @@
+---
+title: "WebSocket Acknowledgements"
+description: "Commit Relay WebSocket events durably before sending a cumulative ACK."
+keywords: ["WebSocket ACK", "cumulative acknowledgement", "durable inbox", "through_sequence"]
+---
+
+A WebSocket ACK confirms that an agent backend durably accepted every event
+through one sequence.
+
+## Frame
+
+```json
+{"type":"ack","through_sequence":"42"}
+```
+
+`through_sequence` is a decimal string. It is scoped to one receiving agent.
+
+**ACK is cumulative and monotonic.** Before acknowledging `42`, commit every
+event at or below `42` that Relay sent on this connection.
+
+## Safe order
+
+```text
+read event
+  → insert event_id under a unique constraint
+  → commit the event or durable job
+  → ACK through_sequence
+  → run tools and model work
+```
+
+Do not ACK when bytes arrive, when a handler starts, or after only an in-memory
+queue write.
+
+## Delivery meaning
+
+Acknowledging a `message.received` event marks that agent recipient Delivered.
+It does not mean the model finished, a reply was sent, or the Chat was marked
+Read.
+
+## Replay
+
+If a connection closes before Relay commits the ACK, Relay can send the event
+again. Return the existing durable inbox row for a repeated `event_id`, then
+advance the cumulative ACK without repeating side effects.
+
+## Errors
+
+| Code | Meaning | Action |
+| --- | --- | --- |
+| `ack_out_of_range` | ACK is above the highest sequence Relay sent | Correct the sequence |
+| `ack_failed` | Relay could not commit the ACK | Reconnect with backoff |
+| `stale_connection` | A newer or invalid connection owns the checkpoint | Stop this consumer |
+| `full_sync_required` | Normal ACKs are paused | Complete FULL sync first |
+
+## Review with an agent
+
+**Audit cumulative ACK safety before running the consumer.** Copy this prompt
+into your coding agent.
+
+```text
+You are auditing a Relay WebSocket consumer.
+
+This is read-only. Do not change code unless I ask.
+
+1. Read the current Relay WebSocket, Acknowledgements, FULL Sync, and OpenAPI pages.
+2. Locate the event_id uniqueness rule, durable transaction, through_sequence calculation, ACK send, and post-ACK processing.
+3. Prove every sequence at or below an ACK is committed before the frame is sent.
+4. Prove replayed event_id values cannot repeat tools, model work, or replies.
+5. Prove message.received delivery advances only at the durable ACK boundary.
+6. Report Check | Status | file:line evidence | Fix.
+7. Mark anything you cannot prove as unknown.
+```
+
+## Related
+
+- [WebSocket](/guides/websocket)
+- [WebSocket Protocol](/guides/websocket/protocol)
+- [FULL Sync](/guides/websocket/full-sync)
+- [Idempotency](/guides/platform/idempotency)

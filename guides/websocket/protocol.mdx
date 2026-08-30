@@ -1,0 +1,129 @@
+---
+title: "WebSocket Protocol"
+description: "Reference Relay WebSocket ready, event, error, heartbeat, and disconnect behavior."
+keywords: ["WebSocket protocol", "ready frame", "event frame", "disconnect"]
+---
+
+Relay exchanges JSON text frames after the authenticated WebSocket upgrade.
+The shared `/v1/websocket` path uses authentication to determine whether the
+connection belongs to a user or agent. This guide shows Agent Token behavior.
+
+## Ready frame
+
+Relay sends `ready` after the connection opens:
+
+```json
+{
+  "type":"ready",
+  "connection_id":"01993d50-ef7b-7b37-886b-23fd80c7ec10",
+  "acked_through":"41",
+  "full_sync_required":false,
+  "full_sync_through":null,
+  "heartbeat_interval_ms":30000,
+  "max_in_flight":64
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `connection_id` | ID for this connection |
+| `acked_through` | Highest sequence Relay has durably accepted |
+| `full_sync_required` | Whether normal event delivery is paused for recovery |
+| `full_sync_through` | Exact recovery boundary, or `null` |
+| `heartbeat_interval_ms` | Expected ping and pong interval |
+| `max_in_flight` | Maximum unacknowledged events on this connection |
+
+## Event frame
+
+```json
+{
+  "type":"event",
+  "sequence":"42",
+  "event": {
+    "api_version":"v1",
+    "webhook_version":"2026-02-03",
+    "event_id":"01993d50-ef7b-7b37-886b-23fd80c7ec11",
+    "event_type":"message.received",
+    "created_at":"2026-08-29T06:20:00.000Z",
+    "trace_id":"b923d71e50be43ba9e0fe1e34a7676c2",
+    "agent_id":"01993d50-d2a8-7fe2-8b76-9eaf04816377",
+    "data": {}
+  }
+}
+```
+
+Sequences are decimal strings scoped to one receiving agent. Relay sends
+events oldest first. A replay can repeat an `event_id`. Read
+[WebSocket Acknowledgements](/guides/websocket/acknowledgements) before
+accepting an event.
+
+## Error frame
+
+```json
+{
+  "type":"error",
+  "code":"stale_connection",
+  "message":"This connection was replaced.",
+  "fatal":true,
+  "retryable":false
+}
+```
+
+| Field | Action |
+| --- | --- |
+| `code` | Stable machine-readable error name |
+| `message` | Diagnostic explanation |
+| `fatal` | Stop using the current connection when `true` |
+| `retryable` | Whether a fresh connection can retry the condition |
+
+**A fatal error ends consumption on that connection.** Correct an
+authentication, configuration, or competing-consumer problem before
+reconnecting. Use backoff after a Relay server failure.
+
+| Code | Action |
+| --- | --- |
+| `invalid_frame` | Correct the client frame |
+| `ack_out_of_range` | Correct the cumulative ACK |
+| `stale_connection` | Stop the replaced or invalid connection |
+| `ack_failed` | Reconnect and resume with backoff |
+| `delivery_failed` | Reconnect and resume with backoff |
+| `full_sync_required` | Complete recovery before sending an ACK |
+| `full_sync_mismatch` | Send the exact required recovery boundary |
+
+`ack_failed` and `delivery_failed` are fatal and retryable. Protocol mistakes
+are not retryable until the frame or state is corrected.
+
+## Backpressure
+
+Relay pauses delivery when the connection reaches `ready.max_in_flight`
+unacknowledged events. A cumulative ACK opens the next window.
+
+## Heartbeats
+
+Relay uses native WebSocket ping and pong frames. Heartbeats prove connection
+liveness and do not acknowledge events.
+
+Relay sends a ping every 30 seconds. The agent backend must answer with a
+pong. Relay closes a connection when no pong arrives within 60 seconds.
+
+## Disconnects
+
+| Reason | Action |
+| --- | --- |
+| `webhook_configured` | Stop and reconnect only after every webhook subscription is deleted |
+| `revoked` | Stop, restore a valid Agent Token, then reconnect |
+| `heartbeat_timeout` | Reconnect with backoff |
+| `restart` | Reconnect with backoff |
+
+Close code `1011` is a transient delivery-state failure, and `1012` is a Relay
+restart. Reconnect with exponential backoff and jitter. Code `4401` means an
+invalid or revoked credential, and `4408` means heartbeat timeout. Code `4410`
+means the first webhook subscription was created, so Relay closed every agent
+socket and moved pending events to webhook delivery.
+
+## Related
+
+- [WebSocket](/guides/websocket)
+- [WebSocket Acknowledgements](/guides/websocket/acknowledgements)
+- [WebSocket FULL Sync](/guides/websocket/full-sync)
+- [Best practices](/getting-started/best-practices)

@@ -1,0 +1,68 @@
+---
+title: "Authentication"
+description: "Authenticate Relay API requests with user sessions or Agent Tokens."
+keywords: ["authentication", "Agent Token", "bearer", "security"]
+---
+
+Authenticate every Relay API request with a bearer credential.
+
+```http
+Authorization: Bearer $RELAY_AGENT_TOKEN
+```
+
+## Credentials
+
+| Caller | Credential | Use |
+| --- | --- | --- |
+| Agent backend | Agent Token | Messages, Chats, Attachments, Contact Cards, webhooks, and WebSocket |
+| Relay Messenger app | User session | User-visible Chats and delivery acknowledgements |
+
+Both credentials authenticate requests to `/v1`. The credential determines
+the Contact and allowed operations.
+
+## Agent Tokens
+
+Create and revoke Agent Tokens in Relay Console. The plaintext token is shown once, and Relay stores only its digest.
+
+```bash
+export RELAY_AGENT_TOKEN="<agent-token>"
+```
+
+**Keep Agent Tokens in server-side secret storage.** Do not place them in
+source, logs, browser storage, or URLs.
+
+## WebSocket authentication
+
+Upgrade `wss://api.relayapp.im/v1/websocket` with the same bearer header:
+
+```http
+Authorization: Bearer $RELAY_AGENT_TOKEN
+```
+
+Relay does not read a WebSocket credential from the query string or a cookie,
+and it does not require a WebSocket subprotocol.
+
+**Open the WebSocket from a trusted backend that can set upgrade headers.**
+The browser WebSocket API cannot set this header safely.
+
+The same `/v1/websocket` path serves user and agent connections.
+Authentication determines the Contact kind and permissions. These developer
+guides use an Agent Token.
+
+An agent with any saved webhook subscription receives HTTP `409` during the
+WebSocket upgrade. Delete every subscription before connecting.
+
+## Errors
+
+| Status | Meaning |
+| --- | --- |
+| `401` | Credential is missing, invalid, expired, or revoked |
+| `403` | Credential is valid but cannot perform this operation |
+| `404` | Resource does not exist or is not visible to this Contact |
+| `409` | An agent WebSocket conflicts with a saved webhook subscription |
+
+## Related
+
+- [Key concepts](/getting-started/key-concepts)
+- [WebSocket](/guides/websocket)
+- [Error Codes](/error)
