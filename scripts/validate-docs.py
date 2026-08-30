@@ -285,6 +285,7 @@ for path in mdx_paths:
 
 side_by_side_guides = [
     "getting-started/quickstart.mdx",
+    "guides/chats/index.mdx",
     "guides/messaging/sending-messages.mdx",
     "guides/messaging/mentions.mdx",
     "guides/messaging/message-details.mdx",
@@ -361,6 +362,14 @@ if (
     or not re.search(r"\brejects\s+SVG\b", attachments_text)
 ):
     raise SystemExit("Attachment guide lost the Relay WebP/SVG decision")
+for required in [
+    "relay.attachments.retrieve",
+    'attachment.status !== "complete"',
+    '"Range: bytes=0-1048575"',
+    "relay.attachments.delete",
+]:
+    if required not in attachments_text:
+        raise SystemExit(f"Attachment lifecycle guide is missing: {required}")
 
 webhook_text = (root / "guides/webhooks/index.mdx").read_text()
 webhook_events_text = (root / "guides/webhooks/events.mdx").read_text()
@@ -422,6 +431,7 @@ for required in [
     "Agent Token",
     "multiple connected sockets",
     "HTTP `409`",
+    "relay.websocket.run",
 ]:
     if required not in websocket_text:
         raise SystemExit(f"WebSocket authentication guide is missing: {required}")

@@ -61,8 +61,41 @@ curl -sS -X PUT "$UPLOAD_URL" \
 </CodeGroup>
 
 Do not use multipart form data. The body length and Content-Type must match the allocation.
+The upload URL remains valid until `expires_at`, 15 minutes after allocation.
+An interrupted or rejected upload remains `pending`, so retry the same URL
+with the complete bytes while it is valid.
 
-## 3. Send the Attachment
+## 3. Confirm the upload
+
+Retrieve the Attachment before sending it:
+
+<CodeGroup>
+```typescript TypeScript SDK
+const attachment = await relay.attachments.retrieve(
+  allocation.attachment_id,
+);
+
+if (attachment.status !== "complete") {
+  throw new Error(`Attachment is ${attachment.status}.`);
+}
+```
+
+```bash cURL
+curl -sS \
+  "https://api.relayapp.im/v1/attachments/$ATTACHMENT_ID" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+</CodeGroup>
+
+| Status | Meaning |
+| --- | --- |
+| `pending` | Relay is waiting for the complete upload |
+| `complete` | The Attachment can be downloaded and sent |
+| `failed` | The upload expired before completion |
+
+Allocate a new Attachment after an upload expires.
+
+## 4. Send the Attachment
 
 <CodeGroup>
 ```typescript TypeScript SDK
@@ -88,6 +121,34 @@ curl -sS -X POST "https://api.relayapp.im/v1/chats/$CHAT_ID/messages" \
       }]
     }
   }'
+```
+</CodeGroup>
+
+## 5. Download or delete
+
+`retrieve` returns an opaque `download_url`. Downloads support one byte range
+at a time for audio, video, and resumable file reads:
+
+```bash
+curl -sS "$DOWNLOAD_URL" \
+  -H "Range: bytes=0-1048575" \
+  --output attachment.part
+```
+
+A valid range returns `206` with `Content-Range`. An invalid or multiple range
+returns `416`.
+
+Delete an unreferenced Attachment:
+
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.attachments.delete(attachmentId);
+```
+
+```bash cURL
+curl -sS -X DELETE \
+  "https://api.relayapp.im/v1/attachments/$ATTACHMENT_ID" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 </CodeGroup>
 
@@ -168,7 +229,8 @@ SVG.
 
 Only the Contact that allocated an Attachment can retrieve or send it. An
 Attachment can be reused across Messages, but it cannot be deleted after a
-Message or group photo references it. Signed transfer URLs are capabilities;
+Message or group photo references it. Relay returns `404` instead of revealing
+an Attachment owned by another Contact. Signed transfer URLs are capabilities;
 keep them out of logs.
 
 ## Related
