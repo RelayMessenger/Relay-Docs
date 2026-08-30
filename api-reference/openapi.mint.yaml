@@ -925,10 +925,9 @@ paths:
       description: |-
         Block direct traffic with a registered Handle.
 
-        Blocking is allowed when the Handle belongs to a default agent. The
-        block preserves existing Chat history, stops direct traffic in both
-        directions, and stops greeting delivery. Relay still grants and
-        retains the default direct Chat.
+        The block preserves existing Chat history, stops direct traffic in
+        both directions, and prevents an agent greeting from being delivered
+        while the block is active.
     delete:
       operationId: unblockHandle
       summary: Unblock a handle
@@ -1249,9 +1248,10 @@ paths:
       operationId: deleteConversation
       summary: Delete a conversation for the current user
       description: |-
-        Archive-delete a conversation for the authenticated user session.
-        Relay returns 409 while the Chat is direct and its active peer is
-        currently a default agent.
+        Clear a conversation only for the authenticated user. The peer's Chat
+        and Message history is unchanged. Future activity may make the
+        conversation reappear. Relay returns 409 for protected first-party
+        Chats.
       tags:
         - Chats
       security:
@@ -1266,13 +1266,13 @@ paths:
             format: uuid
       responses:
         '204':
-          description: Conversation archived for the authenticated user; no body.
+          description: Conversation cleared for the authenticated user. The peer's history is unchanged. No body.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '409':
-          description: The active direct peer is currently a default agent.
+          description: Relay protects this first-party Chat from deletion.
           content:
             application/json:
               schema:
@@ -1570,7 +1570,6 @@ components:
         - joined_at
         - kind
         - greeting_message
-        - is_default
       properties:
         id:
           type: string
@@ -1627,11 +1626,7 @@ components:
             - 'null'
           maxLength: 1024
           default: null
-          description: The greeting Relay commits from this agent when it is the recipient in a newly created direct Chat or is granted as a default agent. User Contacts return null.
-        is_default:
-          type: boolean
-          default: false
-          description: Whether Relay grants this agent to new users and backfills existing users. User Contacts return false.
+          description: The greeting Relay commits from this agent when it is the recipient in a newly created direct Chat. User Contacts return null.
       allOf:
         - if:
             properties:
@@ -1643,8 +1638,6 @@ components:
             properties:
               greeting_message:
                 type: 'null'
-              is_default:
-                const: false
     ChatInfo:
       type: object
       required:
@@ -3622,46 +3615,6 @@ x-tagGroups:
     tags:
       - Webhooks
       - WebSocket
-x-relay-default-agents:
-  contact_fields:
-    greeting_message:
-      applies_to: agent
-      nullable: true
-      max_length: 1024
-    is_default:
-      applies_to: agent
-      nullable: false
-      default: false
-  direct_chat_creation:
-    greeting_sender: recipient_agent
-    greeting_when_configured: true
-    greeting_order: before_request_message
-    new_direct_chats_only: true
-    group_chats: false
-  signup:
-    grant_each_active_default_agent_once: true
-    greeting_sender: default_agent
-    greeting_when_configured: true
-  backfill:
-    trigger: is_default_false_to_true
-    existing_users: true
-    missing_direct_chats_only: true
-    greeting_when_configured: true
-    blocked_pairs:
-      grant_default_chat: true
-      deliver_greeting: false
-  un_default:
-    preserve_existing_chats_and_messages: true
-    stop_future_signup_grants: true
-  lifecycle:
-    refuse_direct_chat_deletion_while_peer_is_default: true
-    refuse_agent_archive_while_is_default: true
-  blocking:
-    allowed_for_default_agents: true
-    preserve_history: true
-    grant_and_retain_default_chat: true
-    block_greeting_delivery: true
-    reject_direct_traffic_both_directions: true
 x-relay-websocket-frames:
   ready:
     type: object

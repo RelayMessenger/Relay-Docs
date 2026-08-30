@@ -126,7 +126,7 @@ expected_guide_pages = {
     ],
     "Contacts": [
         "guides/contact-cards",
-        "guides/contacts/default-agents",
+        "guides/contacts/agent-greetings",
         "guides/chats/blocked-handles",
     ],
     "Agent events": ["guides/agent-events/index"],
@@ -180,7 +180,7 @@ required_paths = [
     root / "guides/chats/share-contact-card.mdx",
     root / "guides/chats/typing-indicators.mdx",
     root / "guides/messaging/delivery-receipts.mdx",
-    root / "guides/contacts/default-agents.mdx",
+    root / "guides/contacts/agent-greetings.mdx",
     root / "guides/websocket/index.mdx",
     root / "guides/websocket/protocol.mdx",
     root / "guides/websocket/full-sync.mdx",
@@ -204,6 +204,7 @@ for stale in [
     root / "guides/socket-mode-protocol.mdx",
     root / "guides/webhooks/choose-transport.mdx",
     root / "guides/platform/errors.mdx",
+    root / "guides/contacts/default-agents.mdx",
     root / "error/codes/2xxx/2014.mdx",
 ]:
     if stale.exists():
@@ -244,6 +245,28 @@ for path in mdx_paths:
                 raise SystemExit(
                     f"TypeScript SDK must appear before cURL: {path.relative_to(root)}"
                 )
+
+private_contact_field = "is_" + "default"
+private_contact_phrase = "default " + "agent"
+public_contract_paths = [
+    *mdx_paths,
+    root / "docs.json",
+    root / "skill.md",
+    root / ".mintlify/skills/relay/SKILL.md",
+    root / "agent-prompt.js",
+    root / "api-reference/openapi.yaml",
+    root / "api-reference/openapi.mint.yaml",
+]
+for path in public_contract_paths:
+    text = path.read_text()
+    if private_contact_field in text:
+        raise SystemExit(
+            f"private Contact field leaked into {path.relative_to(root)}"
+        )
+    if private_contact_phrase in text.lower():
+        raise SystemExit(
+            f"private Contact lifecycle leaked into {path.relative_to(root)}"
+        )
 
 architecture_text = (root / "INFORMATION-ARCHITECTURE.md").read_text()
 heading_inventory = architecture_text.split(
@@ -304,7 +327,7 @@ side_by_side_guides = [
     "guides/chats/message-history.mdx",
     "guides/chats/blocked-handles.mdx",
     "guides/contact-cards.mdx",
-    "guides/contacts/default-agents.mdx",
+    "guides/contacts/agent-greetings.mdx",
     "guides/webhooks/index.mdx",
     "guides/webhooks/subscriptions.mdx",
     "guides/webhooks/events.mdx",
@@ -336,32 +359,21 @@ if not re.search(
 ):
     raise SystemExit("Contact Card configuration guide lost its PATCH operation")
 
-default_agents_text = (root / "guides/contacts/default-agents.mdx").read_text()
+agent_greetings_text = (root / "guides/contacts/agent-greetings.mdx").read_text()
 blocked_handles_text = (root / "guides/chats/blocked-handles.mdx").read_text()
 for required in [
     "`greeting_message`",
-    "`is_default`",
     "1,024 characters",
-    "false` to `true",
-    "existing direct Chats and greetings stay unchanged",
-    "future signup grants stop",
-    "refuses deletion of a direct Chat",
-    "refuses to archive an Agent Contact",
-    "Blocking a default agent is allowed",
-    "still grants and retains the default",
+    "ordinary Message",
+    "Existing direct Chat",
+    "Group Chat",
     "does not deliver the greeting",
     "Contact payload",
 ]:
-    if required.lower() not in default_agents_text.lower():
-        raise SystemExit(f"Default-agent contract guide is missing: {required}")
-for forbidden in [
-    "skips a grant or backfill",
-    "grant or backfill | skipped",
-]:
-    if forbidden.lower() in (
-        default_agents_text + "\n" + blocked_handles_text
-    ).lower():
-        raise SystemExit(f"Stale blocked-default behavior returned: {forbidden}")
+    if required.lower() not in agent_greetings_text.lower():
+        raise SystemExit(f"Agent greeting guide is missing: {required}")
+if "Agent greeting | Not delivered while the block is active" not in blocked_handles_text:
+    raise SystemExit("Blocked Handles guide lost agent greeting behavior")
 
 receipt_text = (root / "guides/messaging/delivery-receipts.mdx").read_text()
 if "/v1/messages/$MESSAGE_ID/delivered" not in receipt_text:
@@ -601,40 +613,13 @@ if not chat_handle:
 chat_handle_text = chat_handle.group(1)
 for required in [
     "        - greeting_message",
-    "        - is_default",
     "        greeting_message:",
     "          maxLength: 1024",
-    "        is_default:",
-    "          default: false",
     "                const: user",
     '                type: "null"',
-    "                const: false",
 ]:
     if required not in chat_handle_text:
-        raise SystemExit(f"Contact default-agent field contract is missing: {required}")
-for required in [
-    "x-relay-default-agents:",
-    "greeting_order: before_request_message",
-    "grant_each_active_default_agent_once: true",
-    "trigger: is_default_false_to_true",
-    "blocked_pairs:",
-    "grant_default_chat: true",
-    "deliver_greeting: false",
-    "preserve_existing_chats_and_messages: true",
-    "refuse_direct_chat_deletion_while_peer_is_default: true",
-    "refuse_agent_archive_while_is_default: true",
-    "allowed_for_default_agents: true",
-    "grant_and_retain_default_chat: true",
-    "block_greeting_delivery: true",
-]:
-    if required not in openapi_text:
-        raise SystemExit(f"Default-agent lifecycle contract is missing: {required}")
-for forbidden in [
-    "blocked_pairs: skipped",
-    "default_grants_do_not_override_blocks: true",
-]:
-    if forbidden in openapi_text:
-        raise SystemExit(f"Stale blocked-default contract returned: {forbidden}")
+        raise SystemExit(f"Contact greeting field contract is missing: {required}")
 openapi_paths = re.findall(r"^  (/[^:]+):$", openapi_text, re.M)
 if not openapi_paths or any(not path.startswith("/v1/") for path in openapi_paths):
     raise SystemExit(f"every public OpenAPI path must live under /v1: {openapi_paths}")
@@ -707,7 +692,11 @@ delete_conversation = openapi_text[
 for required in [
     "    delete:",
     "operationId: deleteConversation",
-    "authenticated user session",
+    "authenticated user",
+    "only for the authenticated user",
+    "peer's Chat",
+    "Future activity may make",
+    "protected first-party",
     '        "204":',
     '        "409":',
     "        - BearerAuth: []",
@@ -849,6 +838,7 @@ print(
     "exact heading inventory, "
     "frontmatter, bodyless Contact Card sharing, exact delivery states and error pages, "
     "typing, exact OpenAPI event inventory, webhook retries, transport recovery, URL safety, "
-    "default-agent lifecycle, final automatic event paths, WebSocket disconnects, "
+    "agent greetings, private Contact field exclusion, conversation clearing, "
+    "final automatic event paths, WebSocket disconnects, "
     "package identity, and stale-contract bans"
 )
