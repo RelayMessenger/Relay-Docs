@@ -403,11 +403,16 @@ if (
     or "use this fixed payload version" not in webhook_events_text
 ):
     raise SystemExit("webhook event guide lost the fixed payload version")
-if "Webhook configured" not in websocket_protocol_text:
+if (
+    "`4410`" not in websocket_protocol_text
+    or "`webhook_configured`" not in websocket_protocol_text
+):
     raise SystemExit("WebSocket protocol is missing the webhook-configured close")
-for reason in ["stale_connection", "revoked", "heartbeat_timeout", "restart"]:
+for reason in ["revoked", "heartbeat_timeout", "restart", "webhook_configured"]:
     if f"`{reason}`" not in websocket_protocol_text:
         raise SystemExit(f"WebSocket protocol is missing disconnect reason: {reason}")
+if "`stale_connection`" not in websocket_protocol_text:
+    raise SystemExit("WebSocket protocol is missing stale-connection error handling")
 if "A fatal error ends consumption" not in websocket_protocol_text:
     raise SystemExit("WebSocket protocol lost fatal error handling")
 for required in [
@@ -612,7 +617,7 @@ if not disconnect:
     raise SystemExit("WebSocket disconnect reason enum missing from OpenAPI")
 disconnect_reasons = re.findall(r"^            - (.+)$", disconnect.group(1), re.M)
 if disconnect_reasons != [
-    "disabled", "replaced", "revoked", "heartbeat_timeout", "restart"
+    "revoked", "heartbeat_timeout", "restart", "webhook_configured"
 ]:
     raise SystemExit(f"WebSocket disconnect reasons drifted: {disconnect_reasons}")
 

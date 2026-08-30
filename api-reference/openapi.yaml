@@ -1206,8 +1206,8 @@ paths:
       summary: Acknowledge message delivery
       description: A user client calls this after it durably applies this incoming Message and every earlier Message it
         received in the same Chat. The acknowledgement is cumulative through messageId for that user and Chat. Relay
-        advances the sender-visible Delivered state only after every recipient has acknowledged. Agent delivery uses
-        successful durable webhook acceptance instead; Agent Tokens cannot call this route.
+        advances the sender-visible Delivered state only after every recipient has acknowledged. Agent delivery advances
+        after successful durable webhook acceptance or a WebSocket cumulative ACK; Agent Tokens cannot call this route.
       tags:
         - Messages
       security:
@@ -1233,46 +1233,15 @@ paths:
           $ref: "#/components/responses/InternalServerError"
   /v1/websocket:
     get:
-      operationId: getWebSocketSettings
-      summary: Get WebSocket settings
+      operationId: connectAgentWebSocket
+      summary: Connect an Agent WebSocket
       tags:
         - WebSocket
       security:
         - BearerAuth: []
       responses:
-        "200":
-          description: Current WebSocket setting and durable ACK checkpoint
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/WebSocketSettings"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-      description: "Read the authenticated agent's WebSocket setting and durable checkpoint. Upgrade
-        wss://api.relayapp.im/v1/websocket with Authorization: Bearer <Agent Token>. Relay does not use a query
-        credential, cookie, or required subprotocol."
-    put:
-      operationId: updateWebSocketSettings
-      summary: Update WebSocket settings
-      tags:
-        - WebSocket
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/WebSocketSettingsUpdate"
-      responses:
-        "200":
-          description: Updated receive mode
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/WebSocketSettings"
+        "101":
+          description: WebSocket connection accepted
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -1281,8 +1250,9 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/Conflict"
-      description: Enable or disable WebSocket event delivery. Undelivered events move to the newly selected transport with
-        the same event_id.
+      description: "Upgrade wss://api.relayapp.im/v1/websocket with Authorization: Bearer <Agent Token>. Relay does not use a
+        query credential, cookie, or required subprotocol. If the Agent has any saved webhook subscription, Relay
+        returns 409; delete the subscriptions to use the WebSocket."
 components:
   schemas:
     AddParticipantRequest:
@@ -3160,11 +3130,10 @@ components:
         reason:
           type: string
           enum:
-            - disabled
-            - replaced
             - revoked
             - heartbeat_timeout
             - restart
+            - webhook_configured
     WebSocketErrorFrame:
       type: object
       additionalProperties: false
@@ -3245,6 +3214,30 @@ components:
           type: string
           enum:
             - checkpoint_outside_retention
+    WebSocketPingFrame:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - sent_at
+      properties:
+        type:
+          type: string
+          enum:
+            - ping
+        sent_at:
+          type: string
+          format: date-time
+    WebSocketPongFrame:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum:
+            - pong
     WebSocketReadyFrame:
       type: object
       additionalProperties: false
@@ -3280,35 +3273,6 @@ components:
         max_in_flight:
           type: integer
           minimum: 1
-    WebSocketSettings:
-      type: object
-      additionalProperties: false
-      required:
-        - enabled
-        - acked_through
-        - full_sync_through
-      properties:
-        enabled:
-          type: boolean
-          description: Whether agent events use the WebSocket instead of webhook subscriptions.
-        acked_through:
-          type: string
-          pattern: ^(0|[1-9][0-9]*)$
-          description: Highest contiguous WebSocket sequence durably accepted by the agent backend.
-        full_sync_through:
-          type:
-            - string
-            - "null"
-          pattern: ^(0|[1-9][0-9]*)$
-          description: Sequence the backend must cover with a FULL sync before event delivery resumes.
-    WebSocketSettingsUpdate:
-      type: object
-      additionalProperties: false
-      required:
-        - enabled
-      properties:
-        enabled:
-          type: boolean
     WebhookEnvelopeBase:
       type: object
       required:
@@ -3609,6 +3573,10 @@ x-relay-websocket-frames:
     $ref: "#/components/schemas/WebSocketFullSyncFrame"
   full_sync_complete:
     $ref: "#/components/schemas/WebSocketFullSyncCompleteFrame"
+  ping:
+    $ref: "#/components/schemas/WebSocketPingFrame"
+  pong:
+    $ref: "#/components/schemas/WebSocketPongFrame"
   error:
     $ref: "#/components/schemas/WebSocketErrorFrame"
   disconnect:
@@ -3616,9 +3584,9 @@ x-relay-websocket-frames:
 x-relay-websocket-close-codes:
   "1011": Relay could not load or commit delivery state; reconnect and resume.
   "1012": Relay is restarting; reconnect and resume.
-  "4401": The Agent Token is invalid, revoked, or WebSocket delivery is disabled.
+  "4401": The Agent Token is invalid or revoked.
   "4408": The heartbeat timed out.
-  "4409": A newer connection replaced this one.
+  "4410": Webhook delivery is now configured for this Agent.
 x-relay-webhooks:
   message.sent.v2026-02-03:
     post:
