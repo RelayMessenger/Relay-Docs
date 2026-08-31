@@ -817,6 +817,35 @@ if "2026-02-03" in openapi_text:
     raise SystemExit("copied Linq webhook version returned to the Relay OpenAPI")
 if "2026-08-30" not in openapi_text:
     raise SystemExit("Relay webhook contract version is missing from OpenAPI")
+openapi_normalized = re.sub(r"\s+", " ", openapi_text)
+mint_openapi_normalized = re.sub(r"\s+", " ", mint_openapi_text)
+for description in [
+    (
+        "Explicitly mark visible Messages in a Chat as Read. Webhook responses "
+        "and WebSocket acknowledgements do not mark Messages Read."
+    ),
+    (
+        "Current aggregate receipt state. Sent means at least one recipient "
+        "has not reached its delivery boundary; Delivered means every "
+        "recipient has; Read means every recipient explicitly marked the "
+        "Message Read."
+    ),
+    (
+        "When this recipient reached Delivered. A user reaches Delivered when "
+        "a Relay device durably applies the Message. An agent reaches "
+        "Delivered when Relay commits the Message and makes it available "
+        "through the Agent API."
+    ),
+    "Every message recipient reached its Delivered boundary.",
+]:
+    if description not in openapi_normalized:
+        raise SystemExit(
+            f"canonical OpenAPI lost approved receipt description: {description}"
+        )
+    if description not in mint_openapi_normalized:
+        raise SystemExit(
+            f"Mintlify OpenAPI lost approved receipt description: {description}"
+        )
 openapi_transport_blockers = []
 if "operationId: getWebSocketSettings" in openapi_text:
     openapi_transport_blockers.append("GET /v1/websocket settings operation")
