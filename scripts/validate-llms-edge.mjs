@@ -17,10 +17,12 @@ assert.equal(vars.LLMS_VERSION, await sha256("llms.txt"));
 assert.equal(vars.LLMS_FULL_VERSION, await sha256("llms-full.txt"));
 assert.equal(vars.MINTLIFY_ORIGIN, "https://relay-staging.mintlify.app");
 assert.deepEqual(
-  config.env.staging.routes.map((route) => route.pattern).sort(),
+  config.env.staging.routes,
   [
-    "docs.staging.relayapp.im/llms-full.txt",
-    "docs.staging.relayapp.im/llms.txt",
+    {
+      pattern: "docs.staging.relayapp.im",
+      custom_domain: true,
+    },
   ],
 );
 
@@ -30,6 +32,7 @@ const worker = await readFile(
 );
 assert.match(worker, /response\.body/);
 assert.match(worker, /no-store, max-age=0/);
+assert.match(worker, /X-Relay-Docs-Proxy/);
 assert.doesNotMatch(worker, /response\.(text|json|arrayBuffer)\(/);
 assert.doesNotMatch(worker, /Set-Cookie.*set/i);
 
