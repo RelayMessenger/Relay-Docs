@@ -134,6 +134,26 @@ index = fetch("llms.txt")["body"].decode("utf-8")
 complete = fetch("llms-full.txt")["body"].decode("utf-8")
 normalized = re.sub(r"\s+", " ", complete).lower()
 
+sdk_install_commands = [
+    line.strip()
+    for line in complete.splitlines()
+    if re.match(r"^(?:npm (?:install|i)|pnpm add|yarn add|bun add)\b", line.strip())
+    and "@relaymessenger/sdk" in line
+]
+if len(sdk_install_commands) != 2:
+    raise SystemExit(
+        "llms-full.txt must contain both staging SDK installation commands"
+    )
+for command in sdk_install_commands:
+    package_tokens = [
+        token for token in command.split() if token.startswith("@relaymessenger/sdk")
+    ]
+    if package_tokens != ["@relaymessenger/sdk@staging"]:
+        raise SystemExit(
+            "llms-full.txt contains a non-staging SDK install command: "
+            f"{command}"
+        )
+
 for page in [
     "Agent Events",
     "Webhook Subscriptions",
