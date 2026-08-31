@@ -1,11 +1,23 @@
 ---
-title: "WebSocket Protocol"
-description: "Review WebSocket ready, event, error, heartbeat, and disconnect behavior."
-keywords: ["WebSocket protocol", "ready frame", "event frame", "disconnect"]
+title: "WebSocket frames"
+sidebarTitle: "Frames"
+description: "See every WebSocket frame and the complete agent event catalog."
+keywords: ["WebSocket frames", "WebSocket events", "ready frame", "event frame", "disconnect"]
 ---
 
 Relay exchanges JSON text frames after the authenticated WebSocket upgrade.
-This guide describes Agent Token behavior.
+
+| Frame | Direction | Purpose |
+| --- | --- | --- |
+| `ready` | Relay to backend | Confirm the connection and current checkpoint |
+| `event` | Relay to backend | Deliver one sequenced [agent event](/guides/agent-events/events) |
+| `full_sync` | Relay to backend | Pause delivery and set the recovery boundary |
+| `error` | Relay to backend | Report a protocol or delivery failure |
+| `disconnect` | Relay to backend | State why Relay is closing the connection |
+| `ping` | Relay to backend | Check connection liveness |
+| `ack` | Backend to Relay | Accept all events through one sequence |
+| `full_sync_complete` | Backend to Relay | Commit recovery through the required boundary |
+| `pong` | Backend to Relay | Answer a heartbeat |
 
 ## Ready frame
 
@@ -56,6 +68,9 @@ events oldest first. A replay can repeat an `event_id`. Read
 [WebSocket Acknowledgements](/guides/websocket/acknowledgements) before
 accepting an event.
 
+**An `event` frame can carry any of Relay's 15 agent event types.** See the
+[complete event table](/guides/agent-events/events#all-event-types).
+
 ## Error frame
 
 ```json
@@ -84,6 +99,8 @@ after a Relay server failure.
 | `invalid_frame` | Correct the client frame |
 | `ack_out_of_range` | Correct the cumulative ACK |
 | `stale_connection` | Stop the connection and restore valid authentication |
+| `ack_failed` | Reconnect with backoff. Relay did not save the ACK |
+| `delivery_failed` | Reconnect with backoff. Relay could not load the next event |
 | `full_sync_required` | Complete recovery before sending an ACK |
 | `full_sync_mismatch` | Send the exact required recovery boundary |
 
@@ -129,6 +146,7 @@ socket and moved matching pending events to active Webhooks.
 ## Related
 
 - [WebSocket](/guides/websocket)
+- [Agent event types](/guides/agent-events/events)
 - [WebSocket Acknowledgements](/guides/websocket/acknowledgements)
 - [WebSocket FULL Sync](/guides/websocket/full-sync)
 - [Best practices](/getting-started/best-practices)

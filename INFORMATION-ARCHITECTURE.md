@@ -103,16 +103,16 @@ Contacts
 
 Agent events
   Agent Events
+  Event types
 
 Webhooks
   Webhooks
   Webhook Subscriptions
-  Webhook Event Types
   Webhook Delivery
 
 WebSocket
   WebSocket
-  Protocol
+  Frames
   Acknowledgements
   FULL sync
 
@@ -155,8 +155,9 @@ Current focused pages include:
 - Attachments, Voice Memos, and Rich Link Previews;
 - Group Chats, Participants, Typing Indicators, and Message History;
 - Add requests, Contact Card configuration, and Sharing Contact Card;
-- Webhooks, Webhook Subscriptions, Webhook Event Types, and Webhook Delivery;
-- WebSocket, Protocol, Acknowledgements, and FULL sync.
+- Agent Events and the shared Event types catalog;
+- Webhooks, Webhook Subscriptions, and Webhook Delivery;
+- WebSocket, Frames, Acknowledgements, and FULL sync.
 
 Closely related operations stay together: webhook subscription CRUD, reaction
 add/remove, typing start/stop, and participant add/remove/leave.
@@ -345,10 +346,10 @@ Each Error Code page includes:
 | Agent Events | Select and operate an agent event path |
 | Webhooks | Receive and verify signed HTTPS events |
 | Webhook Subscriptions | Configure event destinations and event filters |
-| Webhook Event Types | Read the versioned event envelope and payloads |
+| Agent event types | Read every event delivered by Webhooks or WebSocket |
 | Webhook Delivery | Implement retries and terminal handling |
 | WebSocket | Connect an always-on agent backend |
-| Protocol | Implement current frames, heartbeats, and close codes |
+| WebSocket frames | Implement every frame, heartbeat, and close code |
 | Acknowledgements | Commit and cumulatively acknowledge events |
 | FULL sync | Recover after a checkpoint falls outside retention |
 | Idempotency | Retry commands without duplicate side effects |
@@ -423,10 +424,10 @@ the page's single job and update this inventory in the same commit.
 | Agent Events | `Choose a transport` → `Shared envelope` → `Switch transports` → `Recovery` → `Review with an agent` → `Related` |
 | Webhooks | `Flow` → `Create a subscription` → `Verify the signature` → `Acknowledge safely` → `Review with an agent` → `Related` |
 | Webhook Subscriptions | `Create` → `Store the signing secret` → `List, retrieve, update, or delete` → `Related` |
-| Webhook Event Types | `List supported events` → `Envelope` → `Message events` → `Payload version` → `Reaction events` → `Chat events` → `Contact events` → `Related` |
+| Agent event types | `All event types` → `Envelope` → `Payload version` → `Transport wrappers` → `Related` |
 | Webhook Delivery | `Delivery policy` → `Retry classes` → `Receiver pattern` → `Delivered meaning` → `Terminal delivery` → `Review with an agent` → `Related` |
 | WebSocket | `Select WebSocket delivery` → `Connect` → `Review with an agent` → `Related` |
-| WebSocket Protocol | `Ready frame` → `Event frame` → `Error frame` → `Backpressure` → `Heartbeats` → `Disconnects` → `Related` |
+| WebSocket frames | `Ready frame` → `Event frame` → `Error frame` → `Backpressure` → `Heartbeats` → `Disconnects` → `Related` |
 | Acknowledgements | `Frame` → `Safe order` → `Delivery meaning` → `Replay` → `Errors` → `Review with an agent` → `Related` |
 | FULL sync | `Normal reconnect` → `When Relay requires FULL sync` → `Commit the snapshot` → `Events during sync` → `Retention` → `Failure handling` → `Related` |
 
@@ -438,7 +439,7 @@ the page's single job and update this inventory in the same commit.
 | Rate Limits | `Messages` → `Chats` → `Attachments` → `Agent events` → `Related` |
 | Debugging | `IDs to record` → `Error response` → `Safe logs` → `Event debugging` → `Related` |
 | Examples | `Agent backends` → `Messaging` → `Reliability` → `Related` |
-| Error overview | `Envelope fields` → `Error code ranges` → `1xxx request errors` → `2xxx resource errors` → `3xxx server errors` → `Related` |
+| Error Codes | `All error codes` → `Envelope` → `Related` |
 | One error code | `Response` → `Fix` → `Retry` → `Related` |
 | API Reference overview | `Conventions` → `Resources` → `Errors` → `Related` |
 
@@ -451,7 +452,7 @@ the page's single job and update this inventory in the same commit.
 | `guides/messaging/*` | Messaging | integrated |
 | `guides/chats/index.mdx`, `group-chats.mdx`, `participants.mdx`, `typing-indicators.mdx`, `share-contact-card.mdx`, `message-history.mdx` | Chats | integrated |
 | `guides/contacts/add-requests.mdx`, `guides/contact-cards.mdx`, `guides/chats/blocked-handles.mdx` | Contacts | integrated |
-| `guides/agent-events/index.mdx` | Agent events | integrated comparison hub |
+| `guides/agent-events/*` | Agent events | integrated comparison hub and shared event catalog |
 | `guides/webhooks/*` | Webhooks | integrated |
 | `guides/websocket/*` | WebSocket | integrated |
 | `guides/platform/*` | Platform | integrated |

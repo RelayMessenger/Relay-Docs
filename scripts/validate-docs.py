@@ -140,11 +140,13 @@ expected_guide_pages = {
         "guides/contact-cards",
         "guides/chats/blocked-handles",
     ],
-    "Agent events": ["guides/agent-events/index"],
+    "Agent events": [
+        "guides/agent-events/index",
+        "guides/agent-events/events",
+    ],
     "Webhooks": [
         "guides/webhooks/index",
         "guides/webhooks/subscriptions",
-        "guides/webhooks/events",
         "guides/webhooks/delivery",
     ],
     "WebSocket": [
@@ -177,6 +179,17 @@ actual_error_groups = [group["group"] for group in tabs[1]["groups"]]
 if actual_error_groups != expected_error_groups:
     raise SystemExit(f"error group order changed: {actual_error_groups}")
 
+api_tab = tabs[2]
+if api_tab.get("openapi") != "api-reference/openapi.mint.yaml":
+    raise SystemExit("generated API groups must sit directly under API Reference")
+if api_tab.get("groups") != [
+    {
+        "group": "API Reference",
+        "pages": ["api-reference/overview"],
+    }
+]:
+    raise SystemExit(f"API Reference overview group changed: {api_tab.get('groups')}")
+
 if has_key(config.get("navigation", {}), "icon") or has_key(config.get("navigation", {}), "icons"):
     raise SystemExit("decorative navigation icons returned")
 if config.get("contextual") != {"options": ["copy", "view"], "display": "header"}:
@@ -192,6 +205,7 @@ required_paths = [
     root / "guides/chats/typing-indicators.mdx",
     root / "guides/messaging/delivery-receipts.mdx",
     root / "guides/contacts/add-requests.mdx",
+    root / "guides/agent-events/events.mdx",
     root / "guides/websocket/index.mdx",
     root / "guides/websocket/protocol.mdx",
     root / "guides/websocket/full-sync.mdx",
@@ -209,6 +223,18 @@ for path in [
 ]:
     if 'sidebarTitle: "Overview"' not in path.read_text():
         raise SystemExit(f"overview sidebar label drifted: {path.relative_to(root)}")
+for relative, label in {
+    "error/index.mdx": "All errors",
+    "guides/agent-events/events.mdx": "Event types",
+    "guides/webhooks/subscriptions.mdx": "Subscriptions",
+    "guides/webhooks/delivery.mdx": "Delivery",
+    "guides/websocket/protocol.mdx": "Frames",
+    "guides/websocket/acknowledgements.mdx": "Acknowledgements",
+    "guides/websocket/full-sync.mdx": "FULL sync",
+}.items():
+    path = root / relative
+    if f'sidebarTitle: "{label}"' not in path.read_text():
+        raise SystemExit(f"concise sidebar label drifted: {relative}")
 for stale in [
     root / "guides/chats/install-agents.mdx",
     root / "guides/socket-mode.mdx",
@@ -329,8 +355,9 @@ heading_aliases = {
     "participants and membership": "participants",
     "websocket acknowledgements": "acknowledgements",
     "websocket full sync": "full sync",
+    "websocket frames": "websocket frames",
     "limits": "rate limits",
-    "error codes": "error overview",
+    "error codes": "error codes",
     "api reference": "api reference overview",
 }
 for path in mdx_paths:
@@ -378,7 +405,7 @@ side_by_side_guides = [
     "guides/contacts/add-requests.mdx",
     "guides/webhooks/index.mdx",
     "guides/webhooks/subscriptions.mdx",
-    "guides/webhooks/events.mdx",
+    "guides/agent-events/events.mdx",
     "guides/websocket/index.mdx",
 ]
 for relative in side_by_side_guides:
@@ -461,7 +488,7 @@ for required in [
         raise SystemExit(f"Attachment lifecycle guide is missing: {required}")
 
 webhook_text = (root / "guides/webhooks/index.mdx").read_text()
-webhook_events_text = (root / "guides/webhooks/events.mdx").read_text()
+webhook_events_text = (root / "guides/agent-events/events.mdx").read_text()
 webhook_delivery_text = (root / "guides/webhooks/delivery.mdx").read_text()
 webhook_delivery_normalized = re.sub(r"\s+", " ", webhook_delivery_text)
 websocket_text = (root / "guides/websocket/index.mdx").read_text()
@@ -592,7 +619,18 @@ if actual_error_codes != expected_error_codes:
         f"error code pages drifted: {sorted(actual_error_codes ^ expected_error_codes)}"
     )
 for path in error_paths:
-    blocks = re.findall(r"```json\n(.*?)\n```", path.read_text(), re.S)
+    error_text = path.read_text()
+    sidebar_match = re.search(r'^sidebarTitle: "([^"]+)"$', error_text, re.M)
+    if (
+        not sidebar_match
+        or not sidebar_match.group(1).startswith(path.stem)
+        or sidebar_match.group(1).startswith(f"Error {path.stem}")
+        or len(sidebar_match.group(1)) > 28
+    ):
+        raise SystemExit(
+            f"error sidebar title is not concise: {path.relative_to(root)}"
+        )
+    blocks = re.findall(r"```json\n(.*?)\n```", error_text, re.S)
     if len(blocks) != 1:
         raise SystemExit(f"expected one JSON response example in {path.relative_to(root)}")
     try:
@@ -612,6 +650,9 @@ for path in error_paths:
         raise SystemExit(f"error.doc_url drifted in {path.relative_to(root)}")
 
 openapi_text = (root / "api-reference/openapi.yaml").read_text()
+mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
+if "\n      x-mint:\n" in openapi_text:
+    raise SystemExit("Mintlify presentation metadata entered the locked OpenAPI")
 openapi_transport_blockers = []
 if "operationId: getWebSocketSettings" in openapi_text:
     openapi_transport_blockers.append("GET /v1/websocket settings operation")
@@ -748,6 +789,25 @@ if len(operation_ids) != len(expected_operation_ids) or set(operation_ids) != ex
         "OpenAPI operation inventory drifted: "
         f"{sorted(set(operation_ids) ^ expected_operation_ids)}"
     )
+mint_sidebar_operations = dict(re.findall(
+    r"^      operationId: ([A-Za-z0-9]+)\n"
+    r"^      x-mint:\n"
+    r"^        metadata:\n"
+    r"^          sidebarTitle: ([^\n]+)$",
+    mint_openapi_text,
+    re.M,
+))
+if set(mint_sidebar_operations) != expected_operation_ids:
+    raise SystemExit(
+        "concise API sidebar inventory drifted: "
+        f"{sorted(set(mint_sidebar_operations) ^ expected_operation_ids)}"
+    )
+if re.search(
+    r"^      x-mint:\n^        metadata:\n(?:^          .+\n)*^          title:",
+    mint_openapi_text,
+    re.M,
+):
+    raise SystemExit("Mintlify presentation metadata must preserve endpoint H1 titles")
 event_type_block = re.search(
     r"^    WebhookEventType:\n.*?^      enum:\n"
     r"((?:^        - [^\n]+\n)+)",
@@ -768,7 +828,7 @@ documented_events = set(
 )
 if documented_events != contract_events:
     raise SystemExit(
-        "Webhook Event Types page drifted from OpenAPI: "
+        "Agent event types page drifted from OpenAPI: "
         f"{sorted(documented_events ^ contract_events)}"
     )
 share_path_start = openapi_text.index("  /v1/chats/{chatId}/share_contact_card:")
