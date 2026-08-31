@@ -35,6 +35,8 @@ tags:
     description: Register signed webhook destinations.
   - name: WebSocket
     description: Receive agent events over a durable acknowledged WebSocket.
+  - name: Contacts
+    description: Request a user Contact.
 paths:
   /v1/chats:
     post:
@@ -81,14 +83,7 @@ paths:
             type: string
             minLength: 1
             maxLength: 255
-      description: |-
-        Create a direct or group Chat with its first Message.
-
-        When this creates a direct Chat whose recipient is an agent with a
-        greeting_message, Relay commits that greeting as the recipient
-        agent's first Message before the request's Message. Reusing an
-        existing direct Chat does not send the greeting again. Group Chats do
-        not receive automatic greetings.
+      description: Create a direct or group Chat with its first Message.
     get:
       operationId: listChats
       summary: List all chats
@@ -514,14 +509,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-      description: |-
-        Resolve or create a Chat, then send a Message.
-
-        When this creates a direct Chat whose recipient is an agent with a
-        greeting_message, Relay commits that greeting as the recipient
-        agent's first Message before the request's Message. Reusing an
-        existing direct Chat does not send the greeting again. Group Chats do
-        not receive automatic greetings.
+      description: Resolve or create a Chat, then send a Message.
   /v1/chats/{chatId}/messages:
     post:
       operationId: sendMessageToChat
@@ -925,7 +913,7 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/InternalServerError"
-      description: Block direct traffic with a registered Handle while preserving existing Chat history.
+      description: Block direct traffic with a registered Handle.
     delete:
       operationId: unblockHandle
       summary: Unblock a handle
@@ -1235,6 +1223,48 @@ paths:
           $ref: "#/components/responses/Conflict"
       description: "Upgrade wss://api.relayapp.im/v1/websocket with Authorization: Bearer <Agent Token>. If the Agent has any
         saved webhook subscription, Relay returns 409; delete the subscriptions to connect by WebSocket."
+  /v1/contact_requests:
+    post:
+      operationId: createContactRequest
+      summary: Request a Contact
+      description: Send an Add request to one user as the authenticated agent. The request contains the agent identity and no
+        Message content. This operation is available to paid agents.
+      tags:
+        - Contacts
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: Optional 1–255 character key for safe retries.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 255
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateContactRequest"
+      responses:
+        "201":
+          description: Add request accepted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateContactRequestResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "402":
+          $ref: "#/components/responses/PaymentRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 components:
   schemas:
     AddParticipantRequest:
@@ -1503,13 +1533,15 @@ components:
               $ref: "#/components/schemas/ChatGroupNameUpdatedEvent"
     ChatHandle:
       type: object
-      description: A Contact projection with Chat membership state.
       required:
         - id
         - handle
         - joined_at
         - kind
-        - greeting_message
+        - display_name
+        - avatar_url
+        - tagline
+        - verified
       properties:
         id:
           type: string
@@ -1560,24 +1592,15 @@ components:
             - "null"
           format: uri
           description: Current Contact avatar URL.
-        greeting_message:
+        tagline:
           type:
             - string
             - "null"
-          maxLength: 1024
-          default: null
-          description: The greeting Relay commits from this agent when it is the recipient in a newly created direct Chat. User Contacts return null.
-      allOf:
-        - if:
-            properties:
-              kind:
-                const: user
-            required:
-              - kind
-          then:
-            properties:
-              greeting_message:
-                type: "null"
+          maxLength: 60
+          description: Short description shown for an agent. User Contacts return null.
+        verified:
+          type: boolean
+          description: Whether Relay has verified this agent.
     ChatInfo:
       type: object
       required:
@@ -1641,6 +1664,27 @@ components:
           properties:
             data:
               $ref: "#/components/schemas/ChatTypingIndicatorStoppedEvent"
+    ContactAddedEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - contact
+        - chat_id
+      properties:
+        contact:
+          $ref: "#/components/schemas/ContactEventContact"
+        chat_id:
+          type: string
+          format: uuid
+          description: Direct Chat created or reused for this Contact.
+    ContactAddedWebhook:
+      description: Complete webhook payload for contact.added events.
+      allOf:
+        - $ref: "#/components/schemas/WebhookEnvelopeBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/ContactAddedEvent"
     ContactCardItem:
       type: object
       required:
@@ -1673,6 +1717,40 @@ components:
             - user
             - agent
           description: Whether the Contact is a user or an agent.
+    ContactEventContact:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - handle
+        - display_name
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: User Contact identifier.
+        handle:
+          type: string
+          description: Current user Handle.
+        display_name:
+          type: string
+          description: Current user display name.
+    ContactRemovedEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - contact
+      properties:
+        contact:
+          $ref: "#/components/schemas/ContactEventContact"
+    ContactRemovedWebhook:
+      description: Complete webhook payload for contact.removed events.
+      allOf:
+        - $ref: "#/components/schemas/WebhookEnvelopeBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/ContactRemovedEvent"
     CreateChatRequest:
       type: object
       required:
@@ -1690,10 +1768,7 @@ components:
           items:
             type: string
         message:
-          description: |-
-            Initial Message from the authenticated sender. For a newly
-            created direct Chat, a recipient agent's configured greeting is
-            committed immediately before this Message.
+          description: Initial message for the new Chat.
           $ref: "#/components/schemas/MessageContent"
     CreateChatResult:
       type: object
@@ -1729,6 +1804,28 @@ components:
                 $ref: "#/components/schemas/ChatHandle"
             message:
               $ref: "#/components/schemas/SentMessage"
+    CreateContactRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - handle
+      properties:
+        handle:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: User Handle to request.
+    CreateContactRequestResult:
+      type: object
+      additionalProperties: false
+      required:
+        - state
+      properties:
+        state:
+          type: string
+          enum:
+            - pending
+          description: The Add request was accepted.
     CreateWebhookSubscriptionRequest:
       type: object
       required:
@@ -3330,6 +3427,8 @@ components:
         - chat.group_icon_updated
         - chat.typing_indicator.started
         - chat.typing_indicator.stopped
+        - contact.added
+        - contact.removed
     WebhookEventsResult:
       type: object
       required:
@@ -3528,6 +3627,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+    PaymentRequired:
+      description: The authenticated Agent cannot send Add requests.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
     Unauthorized:
       description: Unauthorized - missing or invalid authentication
       content:
@@ -3556,6 +3661,7 @@ x-tagGroups:
       - Attachments
   - name: Contacts
     tags:
+      - Contacts
       - Contact Card
       - Blocked Handles
   - name: Agent events
@@ -3793,6 +3899,38 @@ x-relay-webhooks:
           application/json:
             schema:
               $ref: "#/components/schemas/ChatTypingIndicatorStoppedWebhook"
+      responses:
+        "200":
+          description: Webhook received successfully
+  contact.added.v2026-02-03:
+    post:
+      tags:
+        - 2026-02-03
+      operationId: webhookContactAddedV20260203
+      summary: Contact added
+      description: A user added the receiving agent.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContactAddedWebhook"
+      responses:
+        "200":
+          description: Webhook received successfully
+  contact.removed.v2026-02-03:
+    post:
+      tags:
+        - 2026-02-03
+      operationId: webhookContactRemovedV20260203
+      summary: Contact removed
+      description: A user removed or blocked the receiving agent.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContactRemovedWebhook"
       responses:
         "200":
           description: Webhook received successfully

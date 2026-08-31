@@ -1,0 +1,97 @@
+---
+title: "Add requests"
+description: "Let users add your agent, or ask a user to add a Premium Handle."
+keywords: ["Add", "Add request", "Premium Handle", "contact.added"]
+---
+
+Users can add any agent, while an agent with a Premium Handle can ask a user
+to add it.
+
+## How Add works
+
+| Handle | Users can add the agent | Agent can Message users who added it | Agent can send an Add request |
+| --- | --- | --- | --- |
+| Username-scoped Handle, `@name.anything`, free | Yes | Yes | No |
+| Premium Handle, `@name` | Yes | Yes | Yes |
+
+When a user adds your agent, Relay creates or reuses their direct Chat and
+sends your backend `contact.added`. Use the event's `chat_id` to send the
+agent's first Message through the normal Message endpoint.
+
+## Send an Add request
+
+An Add request shows the agent's name and Handle. Send the target user's
+Handle without the leading `@`:
+
+<CodeGroup>
+```typescript TypeScript SDK
+const request = await relay.contactRequests.create({
+  handle: "advait",
+});
+```
+
+```bash cURL
+curl -sS -X POST https://api.relayapp.im/v1/contact_requests \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"handle":"advait"}'
+```
+</CodeGroup>
+
+## Read the response
+
+Relay returns `201` when it accepts the request:
+
+```json
+{
+  "state": "pending"
+}
+```
+
+For the user's privacy, `pending` reveals only that Relay accepted the
+request. `contact.added` is the signal that the user added the agent.
+
+| Status | Meaning |
+| --- | --- |
+| `201` | Relay accepted the Add request |
+| `402` | The authenticated agent does not have a Premium Handle |
+| `403` | The request is not allowed |
+| `404` | The target Handle does not resolve to an active user |
+
+## Receive Contact events
+
+`contact.added` includes the user Contact and the direct Chat to use:
+
+```json
+{
+  "api_version": "v1",
+  "webhook_version": "2026-02-03",
+  "event_type": "contact.added",
+  "event_id": "01993d50-4133-7178-8e16-7c1455c91d43",
+  "created_at": "2026-08-31T16:00:00.000Z",
+  "trace_id": "b923d71e50be43ba9e0fe1e34a7676c2",
+  "agent_id": "01993d50-d2a8-7fe2-8b76-9eaf04816377",
+  "data": {
+    "contact": {
+      "id": "01993d50-ef7b-7b37-886b-23fd80c7ec10",
+      "handle": "advait",
+      "display_name": "Advait"
+    },
+    "chat_id": "01993d50-754d-7f51-a51b-5da552024fd1"
+  }
+}
+```
+
+| Event | Meaning | Data disclosed |
+| --- | --- | --- |
+| `contact.added` | A user added the receiving agent | User Contact `id`, `handle`, and `display_name`, plus `chat_id` |
+| `contact.removed` | A user removed or blocked the receiving agent | User Contact `id`, `handle`, and `display_name` |
+
+These events use the agent's configured [event path](/guides/agent-events).
+
+## Related
+
+- [Sending Messages](/guides/messaging/sending-messages)
+- [Webhook Event Types](/guides/webhooks/events)
+- [Agent Events](/guides/agent-events)
+- [Authentication](/getting-started/authentication)

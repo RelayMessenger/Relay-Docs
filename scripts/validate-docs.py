@@ -136,8 +136,8 @@ expected_guide_pages = {
         "guides/chats/message-history",
     ],
     "Contacts": [
+        "guides/contacts/add-requests",
         "guides/contact-cards",
-        "guides/contacts/agent-greetings",
         "guides/chats/blocked-handles",
     ],
     "Agent events": ["guides/agent-events/index"],
@@ -191,7 +191,7 @@ required_paths = [
     root / "guides/chats/share-contact-card.mdx",
     root / "guides/chats/typing-indicators.mdx",
     root / "guides/messaging/delivery-receipts.mdx",
-    root / "guides/contacts/agent-greetings.mdx",
+    root / "guides/contacts/add-requests.mdx",
     root / "guides/websocket/index.mdx",
     root / "guides/websocket/protocol.mdx",
     root / "guides/websocket/full-sync.mdx",
@@ -216,6 +216,7 @@ for stale in [
     root / "guides/webhooks/choose-transport.mdx",
     root / "guides/platform/errors.mdx",
     root / "guides/contacts/default-agents.mdx",
+    root / "guides/contacts/agent-greetings.mdx",
     root / "error/codes/2xxx/2014.mdx",
 ]:
     if stale.exists():
@@ -286,6 +287,7 @@ private_path_prefixes = (
     "/v1/client/",
     "/v1/console/",
     "/v1/internal/",
+    "/v1/contacts",
     "/api/auth/",
 )
 private_user_operations = (
@@ -294,6 +296,10 @@ private_user_operations = (
 )
 for path in public_contract_paths:
     text = path.read_text()
+    if "is_premium_handle" in text:
+        raise SystemExit(
+            f"private premium Handle field leaked into {path.relative_to(root)}"
+        )
     for prefix in private_path_prefixes:
         if prefix in text:
             raise SystemExit(
@@ -369,7 +375,7 @@ side_by_side_guides = [
     "guides/chats/message-history.mdx",
     "guides/chats/blocked-handles.mdx",
     "guides/contact-cards.mdx",
-    "guides/contacts/agent-greetings.mdx",
+    "guides/contacts/add-requests.mdx",
     "guides/webhooks/index.mdx",
     "guides/webhooks/subscriptions.mdx",
     "guides/webhooks/events.mdx",
@@ -401,21 +407,22 @@ if not re.search(
 ):
     raise SystemExit("Contact Card configuration guide lost its PATCH operation")
 
-agent_greetings_text = (root / "guides/contacts/agent-greetings.mdx").read_text()
-blocked_handles_text = (root / "guides/chats/blocked-handles.mdx").read_text()
+add_requests_text = (root / "guides/contacts/add-requests.mdx").read_text()
 for required in [
-    "`greeting_message`",
-    "1,024 characters",
-    "ordinary Message",
-    "Existing direct Chat",
-    "Group Chat",
-    "does not deliver the greeting",
-    "Contact payload",
+    "Username-scoped Handle",
+    "Premium Handle",
+    "relay.contactRequests.create",
+    "POST https://api.relayapp.im/v1/contact_requests",
+    '"state": "pending"',
+    "`402`",
+    "`contact.added`",
+    "`contact.removed`",
+    '"chat_id":',
 ]:
-    if required.lower() not in agent_greetings_text.lower():
-        raise SystemExit(f"Agent greeting guide is missing: {required}")
-if "Agent greeting | Not delivered while the block is active" not in blocked_handles_text:
-    raise SystemExit("Blocked Handles guide lost agent greeting behavior")
+    if required not in add_requests_text:
+        raise SystemExit(f"Add requests guide is missing: {required}")
+if "greeting" in add_requests_text.lower():
+    raise SystemExit("Add requests guide invented greeting behavior")
 
 receipt_text = (root / "guides/messaging/delivery-receipts.mdx").read_text()
 if "/v1/chats/$CHAT_ID/read" not in receipt_text:
@@ -650,15 +657,8 @@ chat_handle = re.search(
 if not chat_handle:
     raise SystemExit("ChatHandle schema missing from OpenAPI")
 chat_handle_text = chat_handle.group(1)
-for required in [
-    "        - greeting_message",
-    "        greeting_message:",
-    "          maxLength: 1024",
-    "                const: user",
-    '                type: "null"',
-]:
-    if required not in chat_handle_text:
-        raise SystemExit(f"Contact greeting field contract is missing: {required}")
+if "greeting_message" in chat_handle_text:
+    raise SystemExit("removed greeting field returned to ChatHandle")
 openapi_paths = re.findall(r"^  (/[^:]+):$", openapi_text, re.M)
 if not openapi_paths or any(not path.startswith("/v1/") for path in openapi_paths):
     raise SystemExit(f"every public OpenAPI path must live under /v1: {openapi_paths}")
@@ -668,12 +668,35 @@ for path in openapi_paths:
 for required_path in [
     "/v1/chats/{chatId}/share_contact_card",
     "/v1/chats/{chatId}/typing",
+    "/v1/contact_requests",
     "/v1/websocket",
 ]:
     if required_path not in openapi_paths:
         raise SystemExit(f"canonical OpenAPI path missing: {required_path}")
 if "/v1/websocket-connections" in openapi_paths:
     raise SystemExit("stale WebSocket connection-credential endpoint returned")
+contact_request_start = openapi_text.index("  /v1/contact_requests:")
+contact_request_end = openapi_text.find(
+    "\n  /v1/",
+    contact_request_start + 2,
+)
+contact_request_operation = openapi_text[
+    contact_request_start:
+    contact_request_end if contact_request_end >= 0 else openapi_text.index(
+        "\ncomponents:",
+        contact_request_start,
+    )
+]
+contact_request_methods = re.findall(
+    r"^    (get|post|put|patch|delete):$",
+    contact_request_operation,
+    re.M,
+)
+if contact_request_methods != ["post"]:
+    raise SystemExit(
+        "public contact_requests must expose only the agent POST: "
+        f"{contact_request_methods}"
+    )
 paths_text = openapi_text.split("\ncomponents:", 1)[0]
 operation_ids = re.findall(r"^      operationId: ([A-Za-z0-9]+)$", paths_text, re.M)
 leaked_private_operations = sorted(
@@ -687,6 +710,7 @@ expected_operation_ids = {
     "addParticipant",
     "blockHandle",
     "connectAgentWebSocket",
+    "createContactRequest",
     "createChat",
     "createWebhookSubscription",
     "deleteAttachment",
@@ -738,7 +762,7 @@ contract_events = {
 }
 documented_events = set(
     re.findall(
-        r"`((?:message|reaction|participant|chat)\.[a-z_.]+)`",
+        r"`((?:message|reaction|participant|chat|contact)\.[a-z_.]+)`",
         webhook_events_text,
     )
 )
@@ -844,6 +868,10 @@ for name, pattern in {
     "old public status language": r"current-status|Current status|known contract residue|local proof|evidence app",
     "old WebSocket handshake": r"/v1/websocket-connections|relay_ticket_|relay\.v1\.json|\?ticket=",
     "source-company language": r"\bLinq\b",
+    "removed greeting behavior": r"\bgreeting(?:_message|s)?\b",
+    "removed Broadcast feature": r"\bbroadcasts?\b",
+    "removed Proactive feature": r"\bproactive\b",
+    "MFA surface": r"\bMFA\b",
 }.items():
     if re.search(pattern, handwritten_text, re.I):
         raise SystemExit(f"stale {name}")
@@ -876,7 +904,7 @@ print(
     "exact heading inventory, "
     "frontmatter, bodyless Contact Card sharing, exact delivery states and error pages, "
     "typing, exact OpenAPI event inventory, webhook retries, transport recovery, URL safety, "
-    "agent greetings, private Contact and route exclusion, Agent Read authentication, "
+    "Add requests, private Contact and route exclusion, Agent Read authentication, "
     "final automatic event paths, WebSocket disconnects, "
     "package identity, and stale-contract bans"
 )

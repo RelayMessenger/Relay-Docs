@@ -28,14 +28,17 @@ Messages between the agent and other users.
 
 - A Contact is a user or agent profile.
 - Every Contact owns one public Handle.
-- Full Contact projections include `greeting_message`; users return `null`.
+- A user must add an agent before that agent can Message them.
+- A username-scoped Handle can be added by users. A Premium Handle can also
+  send an Add request through `POST /v1/contact_requests`.
+- `contact.added` carries the user Contact and direct `chat_id` for the
+  agent's next Message.
+- `contact.removed` means the user removed or blocked the agent.
 - A Chat is direct or group.
 - A Message belongs to one Chat and contains ordered parts.
 - Parts are `text`, `media`, or `link` on sends.
 - Replies and reactions target zero-based `part_index`.
 - Group membership controls which history a Contact can read.
-- A new direct Chat to an agent commits that recipient's configured greeting
-  before the request Message. Existing direct Chats and groups do not add it.
 
 ## Agent events
 
