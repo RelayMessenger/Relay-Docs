@@ -6,6 +6,17 @@ keywords: ["Attachment", "upload", "media", "100 MB"]
 
 Pre-upload files when you need trusted ownership, metadata, reuse, or files larger than 10 MB.
 
+Staging separates API requests from byte transfer:
+
+| Operation | Staging origin | Request | Access |
+| --- | --- | --- | --- |
+| Allocate or refresh | `https://api.staging.relayapp.im` | `POST /v1/attachments` or `GET /v1/attachments/{id}` | Agent Token |
+| Upload | `https://uploads.staging.relayapp.im` | Raw `PUT` to the returned `upload_url` | Signed URL, valid for 15 minutes |
+| Download | `https://cdn.staging.relayapp.im` | `GET` or `HEAD` on the returned `download_url` | Signed bearer URL, valid for one hour |
+
+**The `attachment_id` is permanent for the Attachment.** Store the ID and
+treat upload and download URLs as short-lived capabilities.
+
 ## 1. Create an upload
 
 <CodeGroup>
@@ -18,7 +29,7 @@ const allocation = await relay.attachments.create({
 ```
 
 ```bash cURL
-curl -sS -X POST https://api.relayapp.im/v1/attachments \
+curl -sS -X POST https://api.staging.relayapp.im/v1/attachments \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -34,8 +45,8 @@ The response contains an `attachment_id`, signed upload URL, HTTP method, exact 
 ```json
 {
   "attachment_id":"01993d50-d263-7d6b-87ce-90aba89b7815",
-  "upload_url":"https://api.relayapp.im/attachment-transfers/<token>",
-  "download_url":"https://api.relayapp.im/attachment-transfers/<token>",
+  "upload_url":"https://uploads.staging.relayapp.im/attachments/<token>",
+  "download_url":"https://cdn.staging.relayapp.im/attachments/<token>",
   "http_method":"PUT",
   "expires_at":"2026-08-29T06:35:00.000Z",
   "required_headers":{
@@ -60,7 +71,10 @@ curl -sS -X PUT "$UPLOAD_URL" \
 ```
 </CodeGroup>
 
-Do not use multipart form data. The body length and Content-Type must match the allocation.
+Send the file bytes as the complete request body. Do not base64 encode them or
+wrap them in multipart form data. The body length and `Content-Type` must match
+the allocation.
+
 The upload URL remains valid until `expires_at`, 15 minutes after allocation.
 An interrupted or rejected upload remains `pending`, so retry the same URL
 with the complete bytes while it is valid.
@@ -82,10 +96,13 @@ if (attachment.status !== "complete") {
 
 ```bash cURL
 curl -sS \
-  "https://api.relayapp.im/v1/attachments/$ATTACHMENT_ID" \
+  "https://api.staging.relayapp.im/v1/attachments/$ATTACHMENT_ID" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 </CodeGroup>
+
+Each successful retrieval returns the same permanent ID and a fresh
+`download_url` that is valid for one hour.
 
 | Status | Meaning |
 | --- | --- |
@@ -110,7 +127,7 @@ await relay.chats.messages.send(chatId, {
 ```
 
 ```bash cURL
-curl -sS -X POST "https://api.relayapp.im/v1/chats/$CHAT_ID/messages" \
+curl -sS -X POST "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -126,8 +143,14 @@ curl -sS -X POST "https://api.relayapp.im/v1/chats/$CHAT_ID/messages" \
 
 ## 5. Download or delete
 
-`retrieve` returns an opaque `download_url`. Downloads support one byte range
-at a time for audio, video, and resumable file reads:
+`retrieve` returns a signed `download_url` on
+`https://cdn.staging.relayapp.im`. The URL grants bearer access for one hour,
+so do not store it as the Attachment identity. Call
+`GET https://api.staging.relayapp.im/v1/attachments/{id}` with an Agent Token
+to replace an expired URL.
+
+Downloads support one byte range at a time for audio, video, and resumable
+file reads:
 
 ```bash
 curl -sS "$DOWNLOAD_URL" \
@@ -147,7 +170,7 @@ await relay.attachments.delete(attachmentId);
 
 ```bash cURL
 curl -sS -X DELETE \
-  "https://api.relayapp.im/v1/attachments/$ATTACHMENT_ID" \
+  "https://api.staging.relayapp.im/v1/attachments/$ATTACHMENT_ID" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 </CodeGroup>
@@ -170,7 +193,7 @@ await relay.chats.messages.send(chatId, {
 ```
 
 ```bash cURL
-curl -sS -X POST "https://api.relayapp.im/v1/chats/$CHAT_ID/messages" \
+curl -sS -X POST "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -227,11 +250,15 @@ SVG.
 
 ## Ownership
 
-Only the Contact that allocated an Attachment can retrieve or send it. An
-Attachment can be reused across Messages, but it cannot be deleted after a
-Message or group photo references it. Relay returns `404` instead of revealing
-an Attachment owned by another Contact. Signed transfer URLs are capabilities;
-keep them out of logs.
+| Action | Authorized Contact |
+| --- | --- |
+| Send or reuse | Contact that allocated the Attachment |
+| Retrieve metadata and refresh the download URL | Owner, or a Contact authorized to read a Chat Message containing the Attachment |
+| Delete | Owner, while no Message or group photo references the Attachment |
+
+Relay returns `404` when the caller cannot read the Attachment. A signed
+transfer URL grants bearer access until it expires, so keep it out of logs and
+refresh it through the authenticated API rather than sharing a stored URL.
 
 ## Related
 
