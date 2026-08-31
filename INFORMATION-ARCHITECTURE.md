@@ -97,8 +97,8 @@ Chats
   Message History
 
 Contacts
+  Add requests
   Contact Cards
-  Agent greetings
   Blocked Handles
 
 Agent events
@@ -154,7 +154,7 @@ Current focused pages include:
 - Sending Messages, Mentions, Message Details, and Message Parts;
 - Attachments, Voice Memos, and Rich Link Previews;
 - Group Chats, Participants, Typing Indicators, and Message History;
-- Contact Card configuration, Agent greetings, and Sharing Contact Card;
+- Add requests, Contact Card configuration, and Sharing Contact Card;
 - Webhooks, Webhook Subscriptions, Webhook Event Types, and Webhook Delivery;
 - WebSocket, Protocol, Acknowledgements, and FULL sync.
 
@@ -339,8 +339,8 @@ Each Error Code page includes:
 | Typing Indicators | Start, refresh, stop, and receive typing state |
 | Sharing Contact Card | Share the configured card inside an existing Chat |
 | Message History | Page through visible Message and Chat event history |
+| Add requests | Let users add an agent or request a Contact from a Premium Handle |
 | Contact Cards | Configure an agent's public card |
-| Agent greetings | Configure the first Message in a new direct Chat |
 | Blocked Handles | Block, list, and unblock Handles |
 | Agent Events | Select and operate an agent event path |
 | Webhooks | Receive and verify signed HTTPS events |
@@ -412,8 +412,8 @@ the page's single job and update this inventory in the same commit.
 | Typing Indicators | `Start` → `Keep typing active` → `Stop` → `Receive events` → `API reference` → `Related` |
 | Sharing Contact Card | `Before sharing` → `Share the card` → `Keep configuration separate` → `Related` |
 | Message History | `Pagination` → `Group-history rows` → `Membership visibility` → `Agent recovery` → `Related` |
+| Add requests | `How Add works` → `Send an Add request` → `Read the response` → `Receive Contact events` → `Related` |
 | Contact Cards | `How Contact Cards work` → `Retrieve the card` → `Upsert the card` → `Update the card` → `Fields` → `Sharing is separate` → `Related` |
-| Agent greetings | `Configure in Console` → `Create the first direct Chat` → `Contact payload` → `Related` |
 | Blocked Handles | `Block` → `Behavior` → `List` → `Unblock` → `Related` |
 
 ### Agent events, Webhooks, and WebSocket
@@ -423,7 +423,7 @@ the page's single job and update this inventory in the same commit.
 | Agent Events | `Choose a transport` → `Shared envelope` → `Switch transports` → `Recovery` → `Review with an agent` → `Related` |
 | Webhooks | `Flow` → `Create a subscription` → `Verify the signature` → `Acknowledge safely` → `Review with an agent` → `Related` |
 | Webhook Subscriptions | `Create` → `Store the signing secret` → `List, retrieve, update, or delete` → `Related` |
-| Webhook Event Types | `List supported events` → `Envelope` → `Message events` → `Payload version` → `Reaction events` → `Chat events` → `Related` |
+| Webhook Event Types | `List supported events` → `Envelope` → `Message events` → `Payload version` → `Reaction events` → `Chat events` → `Contact events` → `Related` |
 | Webhook Delivery | `Delivery policy` → `Retry classes` → `Receiver pattern` → `Delivered meaning` → `Terminal delivery` → `Review with an agent` → `Related` |
 | WebSocket | `Select WebSocket delivery` → `Connect` → `Review with an agent` → `Related` |
 | WebSocket Protocol | `Ready frame` → `Event frame` → `Error frame` → `Backpressure` → `Heartbeats` → `Disconnects` → `Related` |
@@ -450,7 +450,7 @@ the page's single job and update this inventory in the same commit.
 | `getting-started/*` | Getting started | integrated |
 | `guides/messaging/*` | Messaging | integrated |
 | `guides/chats/index.mdx`, `group-chats.mdx`, `participants.mdx`, `typing-indicators.mdx`, `share-contact-card.mdx`, `message-history.mdx` | Chats | integrated |
-| `guides/contact-cards.mdx`, `guides/contacts/agent-greetings.mdx`, `guides/chats/blocked-handles.mdx` | Contacts | integrated |
+| `guides/contacts/add-requests.mdx`, `guides/contact-cards.mdx`, `guides/chats/blocked-handles.mdx` | Contacts | integrated |
 | `guides/agent-events/index.mdx` | Agent events | integrated comparison hub |
 | `guides/webhooks/*` | Webhooks | integrated |
 | `guides/websocket/*` | WebSocket | integrated |

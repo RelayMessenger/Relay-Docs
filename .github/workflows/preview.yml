@@ -35,7 +35,21 @@ jobs:
       - run: npm ci
       - run: npm run validate
 
+      - name: Detect Mintlify preview credentials
+        id: preview_credentials
+        env:
+          MINTLIFY_API_KEY: ${{ secrets.MINTLIFY_API_KEY }}
+          MINTLIFY_PROJECT_ID: ${{ vars.MINTLIFY_PROJECT_ID }}
+        run: |
+          if [ -n "$MINTLIFY_API_KEY" ] && [ -n "$MINTLIFY_PROJECT_ID" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "Mintlify preview credentials are not configured; local validation remains authoritative for this PR." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Trigger Mintlify preview
+        if: steps.preview_credentials.outputs.available == 'true'
         env:
           MINTLIFY_API_KEY: ${{ secrets.MINTLIFY_API_KEY }}
           MINTLIFY_PROJECT_ID: ${{ vars.MINTLIFY_PROJECT_ID }}
