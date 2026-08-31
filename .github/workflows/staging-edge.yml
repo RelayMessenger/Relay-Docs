@@ -1,0 +1,87 @@
+name: Staging LLM edge
+
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: relay-docs-llms-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy and verify canonical LLM files
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    environment: staging
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: staging
+          fetch-depth: 0
+
+      - name: Pin the hosted staging branch
+        run: |
+          git fetch origin staging
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/staging)"
+          test -z "$(git status --porcelain)"
+          echo "RELEASE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Load staging Cloudflare credentials
+        uses: Infisical/secrets-action@v1.0.9
+        with:
+          method: oidc
+          identity-id: 35c5afed-649f-4b2d-8e73-cf70338b3994
+          project-slug: relay-yscy
+          env-slug: staging
+          secret-path: /ci/website
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+      - run: npm run check:llms-edge
+
+      - name: Wait for the matching Mintlify source
+        run: |
+          set -euo pipefail
+          expected="$(sha256sum llms-full.txt | cut -d' ' -f1)"
+          source_url="https://relay-staging.mintlify.app/llms-full.txt?relay_source=$expected"
+          for attempt in $(seq 1 60); do
+            if curl -fsSL --max-time 30 "$source_url" \
+              | sha256sum \
+              | grep -q "^$expected "; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Mintlify did not serve the matching staging LLM bundle." >&2
+          exit 1
+
+      - name: Deploy the exact staging proxy
+        run: |
+          npx wrangler deploy \
+            --config edge/llms-proxy/wrangler.jsonc \
+            --env staging \
+            --message "GitHub $RELEASE_SHA"
+
+      - name: Verify canonical staging files
+        run: |
+          set -euo pipefail
+          expected="$(sha256sum llms-full.txt | cut -d' ' -f1)"
+          headers="$RUNNER_TEMP/llms-full.headers"
+          body="$RUNNER_TEMP/llms-full.txt"
+          curl -fsS -D "$headers" -o "$body" \
+            https://docs.staging.relayapp.im/llms-full.txt
+          test "$(sha256sum "$body" | cut -d' ' -f1)" = "$expected"
+          grep -Fqi "cache-control: no-store, max-age=0" "$headers"
+          grep -Fqi "x-relay-docs-proxy: cloudflare-staging" "$headers"
+          grep -Fqi "x-relay-docs-source: $expected" "$headers"
+          ! grep -Fqi "greeting_message" "$body"
+          grep -Fq "/v1/contact_requests" "$body"
