@@ -206,9 +206,8 @@ Direct protocol boundary
 ```text
 One-sentence cause
 HTTP status and Relay code
-## Response
-## Fix
-## Retry
+## Troubleshooting
+Retry rule
 ## Related
 ```
 
@@ -424,7 +423,7 @@ the page's single job and update this inventory in the same commit.
 | Agent Events | `Choose a transport` → `Shared envelope` → `Switch transports` → `Recovery` → `Review with an agent` → `Related` |
 | Webhooks | `Flow` → `Create a subscription` → `Verify the signature` → `Acknowledge safely` → `Review with an agent` → `Related` |
 | Webhook Subscriptions | `Create` → `Store the signing secret` → `List, retrieve, update, or delete` → `Related` |
-| Agent event types | `All event types` → `Envelope` → `Payload version` → `Transport wrappers` → `Related` |
+| Agent event types | `All event types` → `Envelope` → `Payload fields` → `Delivery paths` → `Related` |
 | Webhook Delivery | `Delivery policy` → `Retry classes` → `Receiver pattern` → `Delivered meaning` → `Terminal delivery` → `Review with an agent` → `Related` |
 | WebSocket | `Select WebSocket delivery` → `Connect` → `Review with an agent` → `Related` |
 | WebSocket frames | `Ready frame` → `Event frame` → `Error frame` → `Backpressure` → `Heartbeats` → `Disconnects` → `Related` |
@@ -439,9 +438,9 @@ the page's single job and update this inventory in the same commit.
 | Rate Limits | `Messages` → `Chats` → `Attachments` → `Agent events` → `Related` |
 | Debugging | `IDs to record` → `Error response` → `Safe logs` → `Event debugging` → `Related` |
 | Examples | `Agent backends` → `Messaging` → `Reliability` → `Related` |
-| Error Codes | `All error codes` → `Envelope` → `Related` |
-| One error code | `Response` → `Fix` → `Retry` → `Related` |
-| API Reference overview | `Conventions` → `Resources` → `Errors` → `Related` |
+| Error Codes | `Error response` → `1xxx request errors` → `2xxx errors` → `3xxx server errors` → `Related` |
+| One error code | `Troubleshooting` → `Related` |
+| API Reference overview | `Endpoints` → `Conventions` → `Errors` → `Related` |
 
 ## 17. Current page map
 

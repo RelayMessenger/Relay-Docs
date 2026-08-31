@@ -5,27 +5,27 @@ description: "See every event delivered through Relay Webhooks and WebSocket."
 keywords: ["agent events", "webhook events", "WebSocket events", "message.received", "event types"]
 ---
 
-Relay delivers the same 15 agent event types through Webhooks and WebSocket.
+Relay delivers the same 15 event types through Webhooks and WebSocket.
 
 ## All event types
 
-| Event | Fires when | `data` |
+| Event | Fires when | Payload schema |
 | --- | --- | --- |
-| `message.sent` | An agent Message commits | `chat`, `id`, `direction`, `sender_handle`, `parts`, timestamps, and optional `reply_to` |
-| `message.received` | A Message commits for the receiving agent | Same Message fields as `message.sent` |
-| `message.delivered` | Every recipient durably accepts the Message | Same Message fields as `message.sent`, including `delivered_at` |
-| `message.read` | Every recipient marks the Message Read | Same Message fields as `message.sent`, including `read_at` |
-| `reaction.added` | A Contact adds a reaction | `chat_id`, `from_handle`, `message_id`, `part_index`, `reaction_type`, `custom_emoji`, `is_from_me`, `reacted_at` |
-| `reaction.removed` | A Contact removes a reaction | Same reaction fields as `reaction.added` |
-| `participant.added` | A Contact joins a group Chat | `chat_id`, `participant`, `added_at` |
-| `participant.removed` | A Contact leaves or is removed from a group Chat | `chat_id`, `participant`, `removed_at` |
-| `chat.created` | Relay creates a Chat for the receiving agent | `id`, `display_name`, `group_chat_icon`, `handles`, `is_group`, `created_at`, `updated_at` |
-| `chat.group_name_updated` | A group Chat name changes | `chat_id`, `old_value`, `new_value`, `changed_by_handle`, `updated_at` |
-| `chat.group_icon_updated` | A group Chat icon changes | `chat_id`, `old_value`, `new_value`, `changed_by_handle`, `updated_at` |
-| `chat.typing_indicator.started` | A Contact starts or refreshes typing | `chat_id`, `contact` |
-| `chat.typing_indicator.stopped` | A Contact stops typing | `chat_id`, `contact` |
-| `contact.added` | A user adds the receiving agent | `contact`, `chat_id` |
-| `contact.removed` | A user removes or blocks the receiving agent | `contact` |
+| `message.sent` | An agent-authenticated Message commits | `MessageEvent` |
+| `message.received` | A user Message commits for the receiving agent | `MessageEvent` |
+| `message.delivered` | Every recipient durably accepts the Message | `MessageEvent` |
+| `message.read` | Every recipient marks the Message Read | `MessageEvent` |
+| `reaction.added` | A Chat member adds or replaces a reaction | `ReactionEventBase` |
+| `reaction.removed` | A Chat member removes its matching reaction | `ReactionEventBase` |
+| `participant.added` | A Handle is added to a group Chat | `ParticipantAddedEvent` |
+| `participant.removed` | A Handle is removed from a group Chat | `ParticipantRemovedEvent` |
+| `chat.created` | Relay creates a Chat for the receiving agent | `ChatCreatedEvent` |
+| `chat.group_name_updated` | A group Chat name changes | `ChatGroupNameUpdatedEvent` |
+| `chat.group_icon_updated` | A group Chat icon changes | `ChatGroupIconUpdatedEvent` |
+| `chat.typing_indicator.started` | A Contact starts or refreshes typing | `ChatTypingIndicatorStartedEvent` |
+| `chat.typing_indicator.stopped` | A Contact stops typing | `ChatTypingIndicatorStoppedEvent` |
+| `contact.added` | A user adds the receiving agent | `ContactAddedEvent` |
+| `contact.removed` | A user removes or blocks the receiving agent | `ContactRemovedEvent` |
 
 List the supported names from the API:
 
@@ -42,18 +42,26 @@ curl -sS https://api.relayapp.im/v1/webhook-events \
 
 ## Envelope
 
-Every transport uses this event envelope:
+Every event uses the same envelope. This example is a complete
+`contact.added` event:
 
 ```json
 {
-  "api_version":"v1",
-  "webhook_version":"2026-02-03",
-  "event_type":"message.received",
-  "event_id":"01993d50-4133-7178-8e16-7c1455c91d43",
-  "created_at":"2026-08-29T06:20:00.000Z",
-  "trace_id":"b923d71e50be43ba9e0fe1e34a7676c2",
-  "agent_id":"01993d50-d2a8-7fe2-8b76-9eaf04816377",
-  "data": {}
+  "api_version": "v1",
+  "webhook_version": "2026-08-30",
+  "event_type": "contact.added",
+  "event_id": "00000000-0000-7000-8000-000000000010",
+  "created_at": "2026-08-31T06:00:00.000Z",
+  "trace_id": "0123456789abcdef0123456789abcdef",
+  "agent_id": "00000000-0000-7000-8000-000000000011",
+  "data": {
+    "contact": {
+      "id": "00000000-0000-7000-8000-000000000012",
+      "handle": "advait",
+      "display_name": "Advait"
+    },
+    "chat_id": "00000000-0000-7000-8000-000000000013"
+  }
 }
 ```
 
@@ -62,7 +70,7 @@ Every transport uses this event envelope:
 | Field | Meaning |
 | --- | --- |
 | `api_version` | Relay API version, currently `v1` |
-| `webhook_version` | Fixed payload version, `2026-02-03` |
+| `webhook_version` | Fixed payload version, `2026-08-30` |
 | `event_type` | Event name |
 | `event_id` | Stable deduplication key |
 | `created_at` | Event creation time |
@@ -70,15 +78,37 @@ Every transport uses this event envelope:
 | `agent_id` | Receiving agent Contact ID |
 | `data` | Event-specific payload |
 
+**Every current event uses `webhook_version: "2026-08-30"`.** Subscriptions
+use this fixed payload version. Routine deployments do not change it; Relay
+assigns a new date only when the payload contract changes.
+
+## Payload fields
+
+| Events | Required `data` fields | Optional `data` fields |
+| --- | --- | --- |
+| `message.*` | `chat.id`, `id`, `direction`, `sender_handle`, `parts` | `chat.is_group`, `chat.owner_handle`, `idempotency_key`, `sent_at`, `delivered_at`, `read_at`, `reply_to` |
+| `reaction.*` | `chat_id`, `from_handle`, `message_id`, `part_index`, `reaction_type`, `is_from_me`, `reacted_at` | `custom_emoji` |
+| `participant.added` | `chat_id`, `participant`, `added_at` | None |
+| `participant.removed` | `chat_id`, `participant`, `removed_at` | None |
+| `chat.created` | `id`, `display_name`, `handles`, `is_group`, `created_at`, `updated_at` | `group_chat_icon` |
+| `chat.group_name_updated` | `chat_id`, `updated_at` | `old_value`, `new_value`, `changed_by_handle` |
+| `chat.group_icon_updated` | `chat_id`, `updated_at` | `old_value`, `new_value`, `changed_by_handle` |
+| `chat.typing_indicator.*` | `chat_id`, `contact` | None |
+| `contact.added` | `contact`, `chat_id` | None |
+| `contact.removed` | `contact` | None |
+
+`sender_handle`, `from_handle`, and `participant` use the full `ChatHandle`
+shape. Message `parts` contain text, media, or link response parts.
+
 ### Media payload
 
-A `message.received` webhook with media includes the permanent Attachment ID
+A `message.received` event with media includes the permanent Attachment ID
 and a signed one-hour download URL:
 
 ```json
 {
   "api_version":"v1",
-  "webhook_version":"2026-02-03",
+  "webhook_version":"2026-08-30",
   "event_type":"message.received",
   "event_id":"01993d50-4133-7178-8e16-7c1455c91d43",
   "created_at":"2026-08-29T06:20:00.000Z",
@@ -122,12 +152,7 @@ Token to refresh it through `GET /v1/attachments/{id}` at
 `https://api.staging.relayapp.im`. The response includes a fresh one-hour URL
 on `https://cdn.staging.relayapp.im`.
 
-## Payload version
-
-**Every current event uses `webhook_version: "2026-02-03"`.** Subscriptions
-use this fixed payload version.
-
-## Transport wrappers
+## Delivery paths
 
 | Transport | Event location | Accept after |
 | --- | --- | --- |

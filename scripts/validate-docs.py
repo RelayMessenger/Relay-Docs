@@ -47,7 +47,15 @@ def pages(value):
     if isinstance(value, dict):
         for key, item in value.items():
             if key == "pages" and isinstance(item, list):
-                yield from (page for page in item if isinstance(page, str))
+                yield from (
+                    page
+                    for page in item
+                    if isinstance(page, str)
+                    and not re.match(
+                        r"^(GET|POST|PUT|PATCH|DELETE) /",
+                        page,
+                    )
+                )
             yield from pages(item)
     elif isinstance(value, list):
         for item in value:
@@ -172,7 +180,7 @@ for group in tabs[0]["groups"]:
 expected_error_groups = [
     "Overview",
     "1xxx request errors",
-    "2xxx resource errors",
+    "2xxx errors",
     "3xxx server errors",
 ]
 actual_error_groups = [group["group"] for group in tabs[1]["groups"]]
@@ -182,13 +190,91 @@ if actual_error_groups != expected_error_groups:
 api_tab = tabs[2]
 if api_tab.get("openapi") != "api-reference/openapi.mint.yaml":
     raise SystemExit("generated API groups must sit directly under API Reference")
-if api_tab.get("groups") != [
+expected_api_groups = [
     {
         "group": "API Reference",
         "pages": ["api-reference/overview"],
-    }
-]:
-    raise SystemExit(f"API Reference overview group changed: {api_tab.get('groups')}")
+    },
+    {
+        "group": "Chats",
+        "pages": [
+            "POST /v1/chats",
+            "GET /v1/chats",
+            "GET /v1/chats/{chatId}",
+            "PUT /v1/chats/{chatId}",
+            "POST /v1/chats/{chatId}/participants",
+            "DELETE /v1/chats/{chatId}/participants",
+            "POST /v1/chats/{chatId}/leave",
+            "POST /v1/chats/{chatId}/typing",
+            "DELETE /v1/chats/{chatId}/typing",
+            "POST /v1/chats/{chatId}/read",
+            "POST /v1/chats/{chatId}/share_contact_card",
+        ],
+    },
+    {
+        "group": "Messages",
+        "pages": [
+            "POST /v1/messages",
+            "POST /v1/chats/{chatId}/messages",
+            "GET /v1/chats/{chatId}/messages",
+            "GET /v1/messages/{messageId}/thread",
+            "POST /v1/chats/{chatId}/voicememo",
+            "GET /v1/messages/{messageId}",
+            "POST /v1/messages/{messageId}/reactions",
+        ],
+    },
+    {
+        "group": "Attachments",
+        "pages": [
+            "POST /v1/attachments",
+            "GET /v1/attachments/{attachmentId}",
+            "DELETE /v1/attachments/{attachmentId}",
+        ],
+    },
+    {
+        "group": "Blocked Handles",
+        "pages": [
+            "GET /v1/blocked_handles",
+            "POST /v1/blocked_handles",
+            "DELETE /v1/blocked_handles",
+        ],
+    },
+    {
+        "group": "Webhooks",
+        "pages": [
+            "GET /v1/webhook-events",
+            "POST /v1/webhook-subscriptions",
+            "GET /v1/webhook-subscriptions",
+            "GET /v1/webhook-subscriptions/{subscriptionId}",
+            "PUT /v1/webhook-subscriptions/{subscriptionId}",
+            "DELETE /v1/webhook-subscriptions/{subscriptionId}",
+        ],
+    },
+    {
+        "group": "Contact Card",
+        "pages": [
+            "GET /v1/contact_card",
+            "POST /v1/contact_card",
+            "PATCH /v1/contact_card",
+        ],
+    },
+    {
+        "group": "WebSocket",
+        "pages": ["GET /v1/websocket"],
+    },
+    {
+        "group": "Contacts",
+        "pages": ["POST /v1/contact_requests"],
+    },
+]
+if api_tab.get("groups") != expected_api_groups:
+    raise SystemExit(f"API Reference operation order changed: {api_tab.get('groups')}")
+if config.get("api") != {
+    "playground": {"display": "simple"},
+    "params": {"expanded": "closed"},
+    "examples": {"languages": ["curl"], "defaults": "required"},
+}:
+    raise SystemExit("API Reference must keep a simple, collapsed cURL presentation")
 
 if has_key(config.get("navigation", {}), "icon") or has_key(config.get("navigation", {}), "icons"):
     raise SystemExit("decorative navigation icons returned")
@@ -525,10 +611,27 @@ for forbidden in [
     if forbidden.lower() in transport_text.lower():
         raise SystemExit(f"stale WebSocket setting returned: {forbidden}")
 if (
-    'webhook_version":"2026-02-03"' not in webhook_events_text
+    '"webhook_version": "2026-08-30"' not in webhook_events_text
     or "use this fixed payload version" not in webhook_events_text
 ):
     raise SystemExit("webhook event guide lost the fixed payload version")
+for required in [
+    "MessageEvent",
+    "ReactionEventBase",
+    "ParticipantAddedEvent",
+    "ParticipantRemovedEvent",
+    "ChatCreatedEvent",
+    "ChatGroupNameUpdatedEvent",
+    "ChatGroupIconUpdatedEvent",
+    "ChatTypingIndicatorStartedEvent",
+    "ChatTypingIndicatorStoppedEvent",
+    "ContactAddedEvent",
+    "ContactRemovedEvent",
+]:
+    if f"`{required}`" not in webhook_events_text:
+        raise SystemExit(f"event payload schema missing from catalog: {required}")
+if '"data": {}' in webhook_events_text:
+    raise SystemExit("event catalog returned an empty event-specific payload")
 if (
     "`4410`" not in websocket_protocol_text
     or "`webhook_configured`" not in websocket_protocol_text
@@ -618,8 +721,26 @@ if actual_error_codes != expected_error_codes:
     raise SystemExit(
         f"error code pages drifted: {sorted(actual_error_codes ^ expected_error_codes)}"
     )
+expected_error_statuses = {
+    1004: "`400`",
+    1005: "`400`",
+    2001: "`404`",
+    2003: "`403`",
+    2004: "`401`",
+    2005: "`500`",
+    2006: "`413`, `415`, or `422`",
+    2007: "`404`",
+    2008: "`429`",
+    2015: "`409`",
+    2023: "`409`",
+    2025: "`404`",
+    2026: "`403`",
+    3006: "`500`",
+}
+error_overview_text = (root / "error/index.mdx").read_text()
 for path in error_paths:
     error_text = path.read_text()
+    code = int(path.stem)
     sidebar_match = re.search(r'^sidebarTitle: "([^"]+)"$', error_text, re.M)
     if (
         not sidebar_match
@@ -630,29 +751,26 @@ for path in error_paths:
         raise SystemExit(
             f"error sidebar title is not concise: {path.relative_to(root)}"
         )
-    blocks = re.findall(r"```json\n(.*?)\n```", error_text, re.S)
-    if len(blocks) != 1:
-        raise SystemExit(f"expected one JSON response example in {path.relative_to(root)}")
-    try:
-        example = json.loads(blocks[0])
-    except json.JSONDecodeError as error:
-        raise SystemExit(f"invalid error JSON in {path.relative_to(root)}: {error}") from error
-    status = example.get("error", {}).get("status")
-    if not isinstance(status, int):
-        raise SystemExit(f"required error.status missing in {path.relative_to(root)}")
-    code = example.get("error", {}).get("code")
-    if code != int(path.stem):
-        raise SystemExit(f"error.code does not match page path in {path.relative_to(root)}")
-    expected_doc_url = (
-        f"https://docs.relayapp.im/error/codes/{int(path.stem) // 1000}xxx/{path.stem}"
-    )
-    if example.get("error", {}).get("doc_url") != expected_doc_url:
-        raise SystemExit(f"error.doc_url drifted in {path.relative_to(root)}")
+    if f'| {expected_error_statuses[code]} | `{code}` |' not in error_text:
+        raise SystemExit(f"error status/code row drifted in {path.relative_to(root)}")
+    if "## Troubleshooting" not in error_text or "**Retry:**" not in error_text:
+        raise SystemExit(f"error recovery guidance missing in {path.relative_to(root)}")
+    if "```json" in error_text:
+        raise SystemExit(f"shared error envelope duplicated in {path.relative_to(root)}")
+    if f'description: "Resolve Relay error {code}."' in error_text:
+        raise SystemExit(f"generic error description returned in {path.relative_to(root)}")
+    expected_link = f"/error/codes/{code // 1000}xxx/{code}"
+    if expected_link not in error_overview_text:
+        raise SystemExit(f"error overview link missing: {expected_link}")
 
 openapi_text = (root / "api-reference/openapi.yaml").read_text()
 mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 if "\n      x-mint:\n" in openapi_text:
     raise SystemExit("Mintlify presentation metadata entered the locked OpenAPI")
+if "2026-02-03" in openapi_text:
+    raise SystemExit("copied Linq webhook version returned to the Relay OpenAPI")
+if "2026-08-30" not in openapi_text:
+    raise SystemExit("Relay webhook contract version is missing from OpenAPI")
 openapi_transport_blockers = []
 if "operationId: getWebSocketSettings" in openapi_text:
     openapi_transport_blockers.append("GET /v1/websocket settings operation")
@@ -789,6 +907,37 @@ if len(operation_ids) != len(expected_operation_ids) or set(operation_ids) != ex
         "OpenAPI operation inventory drifted: "
         f"{sorted(set(operation_ids) ^ expected_operation_ids)}"
     )
+contract_endpoint_refs = []
+for path_match in re.finditer(
+    r"^  (/[^:]+):\n(.*?)(?=^  /[^:]+:\n|\Z)",
+    paths_text,
+    re.M | re.S,
+):
+    endpoint = path_match.group(1)
+    for method in re.findall(
+        r"^    (get|post|put|patch|delete):$",
+        path_match.group(2),
+        re.M,
+    ):
+        contract_endpoint_refs.append(f"{method.upper()} {endpoint}")
+configured_endpoint_refs = [
+    page
+    for group in expected_api_groups[1:]
+    for page in group["pages"]
+]
+if (
+    len(configured_endpoint_refs) != len(set(configured_endpoint_refs))
+    or set(configured_endpoint_refs) != set(contract_endpoint_refs)
+):
+    raise SystemExit(
+        "API Reference endpoint order drifted from OpenAPI: "
+        f"{sorted(set(configured_endpoint_refs) ^ set(contract_endpoint_refs))}"
+    )
+api_overview_text = (root / "api-reference/overview.mdx").read_text()
+for endpoint_ref in configured_endpoint_refs:
+    method, endpoint = endpoint_ref.split(" ", 1)
+    if f"| `{method}` | `{endpoint}` |" not in api_overview_text:
+        raise SystemExit(f"API overview endpoint missing: {endpoint_ref}")
 mint_sidebar_operations = dict(re.findall(
     r"^      operationId: ([A-Za-z0-9]+)\n"
     r"^      x-mint:\n"
@@ -820,10 +969,13 @@ contract_events = {
     value.strip()
     for value in re.findall(r"^        - (.+)$", event_type_block.group(1), re.M)
 }
+event_catalog_text = webhook_events_text.split(
+    "## All event types", 1
+)[1].split("## Envelope", 1)[0]
 documented_events = set(
     re.findall(
         r"`((?:message|reaction|participant|chat|contact)\.[a-z_.]+)`",
-        webhook_events_text,
+        event_catalog_text,
     )
 )
 if documented_events != contract_events:
