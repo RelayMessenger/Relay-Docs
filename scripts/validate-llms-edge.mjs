@@ -20,8 +20,24 @@ assert.equal(vars.LLMS_FULL_VERSION, await sha256("llms-full.txt"));
 assert.equal(vars.MINTLIFY_ORIGIN, "https://relay-staging.mintlify.app");
 assert.match(llmsIndex, /\/guides\/agent-events\/events\.md/);
 assert.doesNotMatch(llmsIndex, /\/guides\/webhooks\/events\.md/);
+assert.match(llmsFull, /"api_version": "v1"/);
 assert.match(llmsFull, /webhook_version": "2026-08-30"/);
 assert.doesNotMatch(llmsFull, /2026-02-03/);
+assert.match(
+  llmsFull,
+  /Agent \| Relay committed the Message and it is readable through the Relay API/,
+);
+assert.match(
+  llmsFull,
+  /Webhook `2xx` responses and WebSocket ACKs acknowledge event transport only/,
+);
+assert.match(
+  llmsFull,
+  /the only operation that advances Read is\s+`POST \/v1\/chats\/\{chatId\}\/read`/,
+);
+assert.match(llmsFull, /does\s+not show those labels in group Chats/);
+assert.doesNotMatch(llmsFull, /marks that agent recipient Delivered/i);
+assert.doesNotMatch(llmsFull, /marks the Message Delivered to the agent/i);
 assert.deepEqual(
   config.env.staging.routes,
   [

@@ -549,6 +549,52 @@ for required in [
 ]:
     if required not in receipt_text:
         raise SystemExit(f"Delivery receipt rationale is missing: {required}")
+receipt_normalized = re.sub(r"\s+", " ", receipt_text)
+for required in [
+    "| User | The Relay client application applied the Message on that recipient's device |",
+    "| Agent | Relay committed the Message and it is readable through the Relay API |",
+    "Webhook `2xx` responses and WebSocket ACKs acknowledge event transport only.",
+    "**Read is optional.**",
+    "the only operation that advances Read is `POST /v1/chats/{chatId}/read`",
+    "does not show those labels in group Chats",
+    "Message API remains the source of truth for per-recipient state in direct and group Chats",
+]:
+    if required not in receipt_normalized:
+        raise SystemExit(f"approved delivery wording is missing: {required}")
+
+delivery_surface_text = "\n".join(
+    (root / relative).read_text()
+    for relative in [
+        "getting-started/key-concepts.mdx",
+        "getting-started/quickstart.mdx",
+        "guides/agent-events/index.mdx",
+        "guides/messaging/delivery-receipts.mdx",
+        "guides/webhooks/index.mdx",
+        "guides/webhooks/delivery.mdx",
+        "guides/websocket/acknowledgements.mdx",
+        "guides/websocket/full-sync.mdx",
+        "skill.md",
+    ]
+)
+delivery_surface_normalized = re.sub(r"\s+", " ", delivery_surface_text)
+for required in [
+    "An agent recipient reaches Delivered when Relay commits the Message and it is readable through the Relay API.",
+    "A webhook `2xx` acknowledges event transport only.",
+    "A WebSocket ACK acknowledges event transport only.",
+    "Read is optional",
+    "`POST /v1/chats/{chatId}/read`",
+]:
+    if required not in delivery_surface_normalized:
+        raise SystemExit(f"delivery surface is missing: {required}")
+for forbidden in [
+    "agent reaches Delivered after a webhook",
+    "marks that agent recipient Delivered",
+    "marks the Message Delivered to the agent",
+    "can advance their Delivered state",
+    "message.received delivery advances only at the durable ACK boundary",
+]:
+    if forbidden.lower() in delivery_surface_normalized.lower():
+        raise SystemExit(f"stale delivery semantics returned: {forbidden}")
 
 attachments_text = (root / "guides/messaging/attachments.mdx").read_text()
 if "Public URL media parts per Message" not in attachments_text:
@@ -1007,6 +1053,32 @@ if disconnect_reasons != [
 handwritten_paths = [*mdx_paths, root / "skill.md", root / "README.md"]
 handwritten_text = "\n".join(path.read_text() for path in handwritten_paths)
 all_contract_text = handwritten_text + "\n" + openapi_text
+generated_paths = [root / "llms.txt", root / "llms-full.txt"]
+generated_text = "\n".join(path.read_text() for path in generated_paths)
+published_contract_text = all_contract_text + "\n" + generated_text
+
+if "2026-02-03" in published_contract_text:
+    raise SystemExit("stale webhook version returned to public product docs")
+if "2026-08-30" not in published_contract_text:
+    raise SystemExit("Relay webhook version is missing from public product docs")
+for field, expected in [
+    ("api_version", "v1"),
+    ("webhook_version", "2026-08-30"),
+]:
+    for value in re.findall(
+        rf'(?m)^[ \t]*["\']?{field}["\']?[ \t]*:[ \t]*'
+        rf'["\']?([^"\'\s,}}]+)',
+        published_contract_text,
+    ):
+        if value != expected:
+            raise SystemExit(
+                f"public {field} must be {expected}, found {value}"
+            )
+route_versions = set(re.findall(r"/v([0-9]+)/", published_contract_text))
+if route_versions != {"1"}:
+    raise SystemExit(
+        f"public product docs must use only /v1: {sorted(route_versions)}"
+    )
 
 if "Relay" not in (root / "index.mdx").read_text():
     raise SystemExit("Introduction must identify the product as Relay")

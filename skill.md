@@ -18,10 +18,11 @@ Messages between the agent and other users.
    that environment.
 4. Store the Agent Token in server-side secret storage.
 5. Configure the selected event path.
-6. Commit each `event_id` once in durable storage before Webhook `2xx` or
-   WebSocket ACK.
+6. Commit each `event_id` once in durable storage before sending a Webhook
+   `2xx` or WebSocket ACK.
 7. Run model and tool work after acknowledgment.
-8. Mark the Chat Read when the agent actually reads it.
+8. Optionally mark the Chat Read only through
+   `POST /v1/chats/{chatId}/read`.
 9. Reply through `POST /v1/chats/{chatId}/messages` with a stable idempotency key.
 
 ## Vocabulary
@@ -42,7 +43,7 @@ Messages between the agent and other users.
 
 ## Agent events
 
-| Path | Configuration | Acceptance |
+| Path | Configuration | Transport acknowledgement |
 | --- | --- | --- |
 | Webhooks | Save public HTTPS subscriptions for selected event types. | Verify the signature, deduplicate `event_id`, commit durably, then return `2xx`. |
 | WebSocket | Connect to `/v1/websocket` with an empty subscription list. | Deduplicate `event_id`, commit durably, then send a cumulative ACK. |
@@ -69,9 +70,12 @@ For WebSocket:
 deduplicate event_id → durable commit → cumulative ACK → process
 ```
 
-Return `2xx` or send the ACK only after the durable commit. That acceptance
-marks the Message Delivered to the agent. Run model and tool work next, then
-mark the Chat Read when the agent reads the content.
+Return `2xx` or send the ACK only after the durable commit. These are transport
+acknowledgements only. They do not advance Delivered or Read.
+
+For an agent recipient, Delivered means Relay committed the Message and it is
+readable through the Relay API. Read is optional and advances only through
+`POST /v1/chats/{chatId}/read`. Run model and tool work independently.
 
 Webhook delivery is at least once. After the initial attempt, Relay retries
 network errors, HTTP `429`, and HTTP `5xx` responses up to 10 times with delays

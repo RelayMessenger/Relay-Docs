@@ -50,6 +50,13 @@ deleted_wording = {
     "duplicate-path disclaimer": re.compile(
         r"relay never sends one event through both paths", re.IGNORECASE
     ),
+    "stale Relay webhook version": re.compile(r"2026-02-03"),
+    "webhook acknowledgement controls Delivered": re.compile(
+        r"marks that agent recipient delivered", re.IGNORECASE
+    ),
+    "transport acceptance controls Delivered": re.compile(
+        r"marks the message delivered to the agent", re.IGNORECASE
+    ),
 }
 
 
@@ -346,6 +353,11 @@ for rule in [
     "link-local",
     "redirect is not followed",
     "same `event_id`",
+    "relay committed the message and it is readable through the relay api",
+    "webhook `2xx` responses and websocket acks acknowledge event transport only",
+    "read is optional",
+    "the only operation that advances read is `post /v1/chats/{chatid}/read`",
+    "does not show those labels in group chats",
 ]:
     if rule not in normalized:
         raise SystemExit(f"llms-full.txt is missing final transport rule: {rule}")
