@@ -36,4 +36,26 @@ assert.match(worker, /X-Relay-Docs-Proxy/);
 assert.doesNotMatch(worker, /response\.(text|json|arrayBuffer)\(/);
 assert.doesNotMatch(worker, /Set-Cookie.*set/i);
 
-console.log("staging LLM edge source, routes, and streaming boundary verified");
+const workflow = await readFile(
+  new URL(".github/workflows/staging-edge.yml", root),
+  "utf8",
+);
+const credentialStepStart = workflow.indexOf(
+  "- name: Load approved staging Worker deploy credentials",
+);
+assert.notEqual(credentialStepStart, -1);
+const credentialStepEnd = workflow.indexOf("\n      - ", credentialStepStart + 1);
+assert.notEqual(credentialStepEnd, -1);
+const credentialStep = workflow.slice(credentialStepStart, credentialStepEnd);
+assert.match(credentialStep, /env-slug: staging/);
+assert.match(credentialStep, /secret-path: \/ci\/server/);
+assert.doesNotMatch(workflow, /secret-path: \/ci\/website/);
+assert.match(
+  workflow,
+  /wrangler deploy[\s\S]*?--config edge\/llms-proxy\/wrangler\.jsonc[\s\S]*?--env staging/,
+);
+assert.doesNotMatch(workflow, /--env (?:production|prod)\b/);
+
+console.log(
+  "staging LLM edge source, deployment credentials, routes, and streaming boundary verified",
+);
