@@ -12,10 +12,16 @@ const vars = config.env.staging.vars;
 const sha256 = async (path) => createHash("sha256")
   .update(await readFile(new URL(path, root)))
   .digest("hex");
+const llmsIndex = await readFile(new URL("llms.txt", root), "utf8");
+const llmsFull = await readFile(new URL("llms-full.txt", root), "utf8");
 
 assert.equal(vars.LLMS_VERSION, await sha256("llms.txt"));
 assert.equal(vars.LLMS_FULL_VERSION, await sha256("llms-full.txt"));
 assert.equal(vars.MINTLIFY_ORIGIN, "https://relay-staging.mintlify.app");
+assert.match(llmsIndex, /\/guides\/agent-events\/events\.md/);
+assert.doesNotMatch(llmsIndex, /\/guides\/webhooks\/events\.md/);
+assert.match(llmsFull, /webhook_version": "2026-08-30"/);
+assert.doesNotMatch(llmsFull, /2026-02-03/);
 assert.deepEqual(
   config.env.staging.routes,
   [
@@ -30,6 +36,9 @@ const worker = await readFile(
   new URL("edge/llms-proxy/src/index.ts", root),
   "utf8",
 );
+assert.match(worker, /import llms from "\.\.\/\.\.\/\.\.\/llms\.txt"/);
+assert.match(worker, /import llmsFull from "\.\.\/\.\.\/\.\.\/llms-full\.txt"/);
+assert.match(worker, /document\.body/);
 assert.match(worker, /response\.body/);
 assert.match(worker, /no-store, max-age=0/);
 assert.match(worker, /X-Relay-Docs-Proxy/);
@@ -55,7 +64,8 @@ assert.match(
   /wrangler deploy[\s\S]*?--config edge\/llms-proxy\/wrangler\.jsonc[\s\S]*?--env staging/,
 );
 assert.doesNotMatch(workflow, /--env (?:production|prod)\b/);
+assert.doesNotMatch(workflow, /Wait for the matching Mintlify source/);
 
 console.log(
-  "staging LLM edge source, deployment credentials, routes, and streaming boundary verified",
+  "staging LLM edge sources, deployment credentials, routes, and passthrough verified",
 );

@@ -319,9 +319,10 @@ for command in sdk_install_commands:
 
 for page in [
     "Agent Events",
+    "Agent event types",
     "Webhook Subscriptions",
     "Webhook delivery",
-    "WebSocket Protocol",
+    "WebSocket frames",
     "WebSocket FULL Sync",
 ]:
     if page.lower() not in index.lower():
