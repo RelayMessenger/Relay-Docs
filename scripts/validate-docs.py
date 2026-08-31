@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import hashlib
 import re
 import sys
 from pathlib import Path
@@ -10,6 +11,16 @@ if config.get("name") != "Relay":
     raise SystemExit("site identity must be Relay")
 if config.get("description") != "Relay API v1 documentation.":
     raise SystemExit("site description must use the Relay identity")
+if config.get("favicon") != "/favicon-staging.png":
+    raise SystemExit("staging Docs must use the black Relay favicon")
+if hashlib.sha256((root / "favicon-staging.png").read_bytes()).hexdigest() != (
+    "4b3e4b9358f35c66cec564d7ae6806b8e948a2e4dc0e1fd2eb003887ee1120be"
+):
+    raise SystemExit("staging Docs favicon is not the canonical black Relay mark")
+if hashlib.sha256((root / "favicon.png").read_bytes()).hexdigest() != (
+    "e83ec179b9d84770947e5dff6a667e7ef904501a0bd4f1db091f7324dc0530cb"
+):
+    raise SystemExit("the production blue Docs favicon changed")
 if config.get("navbar", {}).get("primary") != {
     "type": "button",
     "label": "Console",

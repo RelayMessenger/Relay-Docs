@@ -4,7 +4,10 @@ import hashlib
 import json
 import re
 import secrets
+import struct
+import zlib
 from datetime import datetime, timezone
+from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlencode, urljoin
 from urllib.request import Request, urlopen
@@ -54,6 +57,115 @@ def sha256(body: bytes) -> str:
     return hashlib.sha256(body).hexdigest()
 
 
+def png_color_counts(body: bytes) -> dict:
+    if not body.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise SystemExit("generated favicon is not a PNG")
+    offset = 8
+    chunks = {}
+    idat = []
+    while offset < len(body):
+        length = struct.unpack(">I", body[offset : offset + 4])[0]
+        kind = body[offset + 4 : offset + 8]
+        data = body[offset + 8 : offset + 8 + length]
+        offset += 12 + length
+        if kind == b"IDAT":
+            idat.append(data)
+        else:
+            chunks[kind] = data
+        if kind == b"IEND":
+            break
+
+    width, height, bit_depth, color_type, _, _, interlace = struct.unpack(
+        ">IIBBBBB", chunks[b"IHDR"]
+    )
+    if bit_depth != 8 or interlace != 0 or color_type not in {2, 3, 6}:
+        raise SystemExit(
+            "generated favicon uses an unsupported PNG encoding "
+            f"(depth={bit_depth}, color={color_type}, interlace={interlace})"
+        )
+    channels = {2: 3, 3: 1, 6: 4}[color_type]
+    stride = width * channels
+    decoded = zlib.decompress(b"".join(idat))
+    previous = bytearray(stride)
+    rows = []
+    cursor = 0
+
+    def paeth(a, b, c):
+        estimate = a + b - c
+        distances = (abs(estimate - a), abs(estimate - b), abs(estimate - c))
+        return (a, b, c)[distances.index(min(distances))]
+
+    for _ in range(height):
+        filter_type = decoded[cursor]
+        cursor += 1
+        encoded = decoded[cursor : cursor + stride]
+        cursor += stride
+        row = bytearray(stride)
+        for index, value in enumerate(encoded):
+            left = row[index - channels] if index >= channels else 0
+            above = previous[index]
+            upper_left = previous[index - channels] if index >= channels else 0
+            if filter_type == 0:
+                predicted = 0
+            elif filter_type == 1:
+                predicted = left
+            elif filter_type == 2:
+                predicted = above
+            elif filter_type == 3:
+                predicted = (left + above) // 2
+            elif filter_type == 4:
+                predicted = paeth(left, above, upper_left)
+            else:
+                raise SystemExit(f"generated favicon uses PNG filter {filter_type}")
+            row[index] = (value + predicted) & 0xFF
+        rows.append(row)
+        previous = row
+
+    palette = chunks.get(b"PLTE", b"")
+    transparency = chunks.get(b"tRNS", b"")
+    counts = {"opaque": 0, "black": 0, "blue": 0, "white": 0}
+    for row in rows:
+        for index in range(0, len(row), channels):
+            if color_type == 3:
+                palette_index = row[index]
+                base = palette_index * 3
+                red, green, blue = palette[base : base + 3]
+                alpha = (
+                    transparency[palette_index]
+                    if palette_index < len(transparency)
+                    else 255
+                )
+            elif color_type == 2:
+                red, green, blue = row[index : index + 3]
+                alpha = 255
+            else:
+                red, green, blue, alpha = row[index : index + 4]
+            if alpha <= 16:
+                continue
+            counts["opaque"] += 1
+            if red < 32 and green < 32 and blue < 32:
+                counts["black"] += 1
+            if blue > 128 and blue > red * 1.4 and blue > green * 1.1:
+                counts["blue"] += 1
+            if red > 224 and green > 224 and blue > 224:
+                counts["white"] += 1
+    return counts
+
+
+class IconLinkParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.icons = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag != "link":
+            return
+        values = dict(attrs)
+        rel = set((values.get("rel") or "").split())
+        if "icon" in rel:
+            self.icons.append(values)
+
+
 def fetch(path: str, cache_busted: bool = False) -> dict:
     relative_url = path
     if cache_busted:
@@ -98,6 +210,7 @@ def fetch(path: str, cache_busted: bool = False) -> dict:
 
 
 pages = {}
+page_bodies = {}
 for path in canonical_paths:
     canonical = fetch(path)
     cache_busted = fetch(path, cache_busted=True)
@@ -118,6 +231,56 @@ for path in canonical_paths:
             key: value for key, value in cache_busted.items() if key != "body"
         },
     }
+    page_bodies["/" + path] = canonical["body"]
+
+staging_favicon = fetch("favicon-staging.png")
+expected_favicon_sha = (
+    "4b3e4b9358f35c66cec564d7ae6806b8e948a2e4dc0e1fd2eb003887ee1120be"
+)
+if staging_favicon["sha256"] != expected_favicon_sha:
+    raise SystemExit(
+        "hosted /favicon-staging.png is not the canonical black Relay mark"
+    )
+
+icon_parser = IconLinkParser()
+icon_parser.feed(page_bodies["/"].decode("utf-8"))
+generated = next(
+    (
+        icon
+        for icon in icon_parser.icons
+        if icon.get("sizes") == "192x192"
+        and icon.get("href", "").endswith(".png")
+    ),
+    None,
+)
+if generated is None:
+    raise SystemExit("hosted Docs root has no generated 192x192 favicon")
+generated_favicon = fetch(generated["href"])
+favicon_colors = png_color_counts(generated_favicon["body"])
+if (
+    favicon_colors["opaque"] == 0
+    or favicon_colors["black"] <= favicon_colors["blue"]
+    or favicon_colors["black"] / favicon_colors["opaque"] < 0.5
+):
+    raise SystemExit(
+        "hosted Docs generated favicon is not the black staging identity: "
+        + json.dumps(favicon_colors, sort_keys=True)
+    )
+brand = {
+    "source": {
+        key: value
+        for key, value in staging_favicon.items()
+        if key != "body"
+    },
+    "generated": {
+        **{
+            key: value
+            for key, value in generated_favicon.items()
+            if key != "body"
+        },
+        "colors": favicon_colors,
+    },
+}
 
 root_headers = pages["/"]["canonical"]["headers"]
 guides_headers = pages["/guides"]["canonical"]["headers"]
@@ -263,6 +426,7 @@ receipt = {
     "mintlify_deployment_version": root_version,
     "github_deployment": deployment,
     "deleted_wording": list(deleted_wording),
+    "staging_brand": brand,
     "pages": pages,
     "verdict": "passed",
 }
@@ -273,7 +437,8 @@ if args.receipt:
 
 print(
     "validated canonical root, /guides, llms.txt, and llms-full.txt; "
-    "bare and cache-busted bodies match and contain no deleted wording"
+    "bare and cache-busted bodies match, the favicon is black, and "
+    "deleted wording is absent"
 )
 if deployment:
     print(
