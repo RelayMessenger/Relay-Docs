@@ -80,6 +80,38 @@ def h2_headings(text):
     return re.findall(r"^## (.+)$", prose, re.M)
 
 
+def openapi_path_block(text, path):
+    marker = f"  {path}:"
+    start = text.index(marker)
+    ends = [
+        index
+        for index in [
+            text.find("\n  /v1/", start + len(marker)),
+            text.find("\ncomponents:", start + len(marker)),
+        ]
+        if index >= 0
+    ]
+    return text[start:min(ends) if ends else len(text)]
+
+
+def openapi_operation_block(text, path, method):
+    path_block = openapi_path_block(text, path)
+    operation = re.search(rf"^    {re.escape(method)}:$", path_block, re.M)
+    if not operation:
+        raise SystemExit(f"{method.upper()} {path} missing from OpenAPI")
+    following = re.search(
+        r"^    (?:get|post|put|patch|delete):$",
+        path_block[operation.end():],
+        re.M,
+    )
+    end = (
+        operation.end() + following.start()
+        if following
+        else len(path_block)
+    )
+    return path_block[operation.start():end]
+
+
 mdx_paths = sorted(root.rglob("*.mdx"))
 navigated_list = list(pages(config.get("navigation", {})))
 navigated = set(navigated_list)
@@ -909,18 +941,10 @@ for required_path in [
         raise SystemExit(f"canonical OpenAPI path missing: {required_path}")
 if "/v1/websocket-connections" in openapi_paths:
     raise SystemExit("stale WebSocket connection-credential endpoint returned")
-contact_request_start = openapi_text.index("  /v1/contact_requests:")
-contact_request_end = openapi_text.find(
-    "\n  /v1/",
-    contact_request_start + 2,
+contact_request_operation = openapi_path_block(
+    openapi_text,
+    "/v1/contact_requests",
 )
-contact_request_operation = openapi_text[
-    contact_request_start:
-    contact_request_end if contact_request_end >= 0 else openapi_text.index(
-        "\ncomponents:",
-        contact_request_start,
-    )
-]
 contact_request_methods = re.findall(
     r"^    (get|post|put|patch|delete):$",
     contact_request_operation,
@@ -931,6 +955,37 @@ if contact_request_methods != ["post"]:
         "public contact_requests must expose only the agent POST: "
         f"{contact_request_methods}"
     )
+for spec_name, spec_text in [
+    ("canonical", openapi_text),
+    ("Mintlify", mint_openapi_text),
+]:
+    add_request_parameters = re.findall(
+        r"^        - name: ([^\n]+)$",
+        openapi_operation_block(
+            spec_text,
+            "/v1/contact_requests",
+            "post",
+        ),
+        re.M,
+    )
+    if "Idempotency-Key" in add_request_parameters:
+        raise SystemExit(
+            f"{spec_name} Add request retained Idempotency-Key"
+        )
+    for send_path in [
+        "/v1/chats",
+        "/v1/messages",
+        "/v1/chats/{chatId}/messages",
+    ]:
+        send_parameters = re.findall(
+            r"^        - name: ([^\n]+)$",
+            openapi_operation_block(spec_text, send_path, "post"),
+            re.M,
+        )
+        if "Idempotency-Key" not in send_parameters:
+            raise SystemExit(
+                f"{spec_name} POST {send_path} lost Idempotency-Key"
+            )
 paths_text = openapi_text.split("\ncomponents:", 1)[0]
 operation_ids = re.findall(r"^      operationId: ([A-Za-z0-9]+)$", paths_text, re.M)
 leaked_private_operations = sorted(
@@ -1217,7 +1272,7 @@ print(
     "exact heading inventory, "
     "frontmatter, bodyless Contact Card sharing, exact delivery states and error pages, "
     "typing, exact OpenAPI event inventory, webhook retries, transport recovery, URL safety, "
-    "Add requests, private Contact and route exclusion, Agent Read authentication, "
+    "Add requests and exact idempotency scope, private Contact and route exclusion, Agent Read authentication, "
     "final automatic event paths, WebSocket disconnects, "
     "package identity, and stale-contract bans"
 )
