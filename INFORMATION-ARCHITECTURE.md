@@ -121,6 +121,19 @@ Platform
   Rate Limits
   Debugging
 
+Developer ecosystem
+  Developer ecosystem
+  Chat SDK adapter
+  Relay CLI
+  Relay MCP
+  Relay for OpenClaw
+  Relay channel for Claude Code
+  Relay for Hermes
+  Cloudflare Think starter
+  Relay Skills
+  Relay for Codex
+  Relay for Cursor
+
 Examples
   Examples
 ```
@@ -139,7 +152,8 @@ The sidebar teaches Relay in this sequence:
 5. send and read Messages;
 6. manage Chat content and membership;
 7. receive agent events;
-8. implement reliability and debugging.
+8. implement reliability and debugging;
+9. choose a maintained runtime, local tool, or coding-agent package.
 
 Pages follow task frequency rather than alphabetical order.
 
@@ -158,6 +172,8 @@ Current focused pages include:
 - Agent Events and the shared Event types catalog;
 - Webhooks, Webhook Subscriptions, and Webhook Delivery;
 - WebSocket, Frames, Acknowledgements, and FULL sync.
+- Chat SDK, CLI, MCP, supported agent channels, Think, and coding-agent
+  packages.
 
 Closely related operations stay together: webhook subscription CRUD, reaction
 add/remove, typing start/stop, and participant add/remove/leave.
@@ -354,6 +370,17 @@ Each Error Code page includes:
 | Idempotency | Retry commands without duplicate side effects |
 | Rate Limits | Design around current request and content limits |
 | Debugging | Use IDs, errors, and traces to diagnose requests |
+| Developer ecosystem | Choose a maintained Relay project |
+| Chat SDK adapter | Receive signed Webhooks through Vercel Chat SDK |
+| Relay CLI | Call Relay v1 resources and forward local events |
+| Relay MCP | Run local Relay messaging tools over MCP v2 stdio |
+| Relay for OpenClaw | Connect an OpenClaw gateway by acknowledged WebSocket |
+| Relay channel for Claude Code | Connect a running Claude Code session by acknowledged WebSocket |
+| Relay for Hermes | Connect Hermes as an always-on acknowledged WebSocket process |
+| Cloudflare Think starter | Run a serverless-friendly Think messenger through signed Webhooks |
+| Relay Skills | Install portable coding-agent guidance and docs search |
+| Relay for Codex | Install the generated Codex plugin |
+| Relay for Cursor | Install the generated Cursor plugin |
 
 ## 15. Validation sequence
 
@@ -430,14 +457,35 @@ the page's single job and update this inventory in the same commit.
 | Acknowledgements | `Frame` → `Safe order` → `Delivery meaning` → `Replay` → `Errors` → `Review with an agent` → `Related` |
 | FULL sync | `Normal reconnect` → `When Relay requires FULL sync` → `Commit the snapshot` → `Events during sync` → `Retention` → `Failure handling` → `Related` |
 
-### Platform, Examples, errors, and reference
+### Platform
 
 | Page | H2 order |
 | --- | --- |
 | Idempotency | `Supply a key` → `Retry behavior` → `Derive reply keys from events` → `Event idempotency` → `Related` |
 | Rate Limits | `Messages` → `Chats` → `Attachments` → `Agent events` → `Related` |
 | Debugging | `IDs to record` → `Error response` → `Safe logs` → `Event debugging` → `Related` |
-| Examples | `Agent backends` → `Messaging` → `Reliability` → `Related` |
+
+### Developer ecosystem
+
+| Page | H2 order |
+| --- | --- |
+| Developer ecosystem | `Choose by runtime` → `Choose local tools` → `Staging package status` → `Related` |
+| Chat SDK adapter | `Staging package` → `Use the adapter` → `Media boundary` → `Delivery behavior` → `Related` |
+| Relay CLI | `Staging package` → `Configure staging` → `Use local event forwarding` → `Related` |
+| Relay MCP | `Staging package` → `Configure a local client` → `Choose the MCP surface` → `Related` |
+| Relay for OpenClaw | `Staging package` → `Configure the channel` → `Delivery behavior` → `Related` |
+| Relay channel for Claude Code | `Install the plugin` → `Configure the channel` → `Delivery behavior` → `Related` |
+| Relay for Hermes | `Install the plugin` → `Configure staging` → `Delivery behavior` → `Related` |
+| Cloudflare Think starter | `Current source` → `Configure staging` → `Delivery behavior` → `Related` |
+| Relay Skills | `Install` → `Choose the docs MCP` → `Verify staging search` → `Related` |
+| Relay for Codex | `Install locally` → `Use the package` → `Verify staging search` → `Related` |
+| Relay for Cursor | `Install locally` → `Use the package` → `Verify staging search` → `Related` |
+
+### Examples, errors, and reference
+
+| Page | H2 order |
+| --- | --- |
+| Examples | `Choose an example` → `Package versions` → `Run locally` → `Related` |
 | Error Codes | `Error response` → `1xxx request errors` → `2xxx errors` → `3xxx server errors` → `Related` |
 | One error code | `Troubleshooting` → `Related` |
 | API Reference overview | `Endpoints` → `Conventions` → `Errors` → `Related` |
@@ -455,6 +503,7 @@ the page's single job and update this inventory in the same commit.
 | `guides/webhooks/*` | Webhooks | integrated |
 | `guides/websocket/*` | WebSocket | integrated |
 | `guides/platform/*` | Platform | integrated |
+| `ecosystem/*` | Developer ecosystem | integrated source-backed project guides |
 | `examples/index.mdx` | Examples | integrated |
 | `api-reference/*` | API Reference | generated from the current OpenAPI |
 | `error/*` | Error Codes | integrated one-code pages |

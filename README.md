@@ -15,6 +15,7 @@ Guides
   Webhooks
   WebSocket
   Platform
+  Developer ecosystem
   Examples
 Error Codes
 API Reference

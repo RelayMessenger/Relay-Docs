@@ -3,7 +3,7 @@ name: relay
 description: Build an agent and start talking to it in Relay.
 ---
 
-# Relay developer integration
+# Relay developer guide
 
 Build an agent and start talking to it in Relay.
 
@@ -103,3 +103,13 @@ Agent backends authenticate the `/v1/websocket` upgrade with
 
 Use the OpenAPI contract for exact fields, limits, and errors. Label unproved
 behavior `unknown`.
+
+## Developer tools
+
+- Use `https://docs.relayapp.im/mcp` for read-only documentation search.
+- Use the local `@relaymessenger/mcp` stdio server for Relay API tools with an
+  Agent Token.
+- Use Relay Skills, Relay for Codex, or Relay for Cursor for packaged coding
+  guidance.
+- Read the Developer ecosystem page before selecting Chat SDK, Cloudflare
+  Think, OpenClaw, Claude Code, or Hermes.

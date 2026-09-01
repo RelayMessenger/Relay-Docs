@@ -1,0 +1,74 @@
+---
+title: "Relay for OpenClaw"
+description: "Connect an OpenClaw gateway to Relay through durable acknowledged WebSocket delivery."
+keywords: ["Relay OpenClaw", "@relaymessenger/openclaw-plugin", "OpenClaw channel", "WebSocket", "always-on"]
+---
+
+Run Relay as a native channel inside an always-on OpenClaw gateway.
+
+Source: [RelayMessenger/Relay-OpenClaw](https://github.com/RelayMessenger/Relay-OpenClaw)
+
+## Staging package
+
+The current source package is
+`@relaymessenger/openclaw-plugin@0.4.0-staging.0`. Its OpenClaw peer range is
+`>=2026.8.1 <2026.9.0`, and it uses
+`@relaymessenger/sdk@0.3.0-staging.4`.
+
+Install the staging source tarball:
+
+```bash
+git clone https://github.com/RelayMessenger/Relay-OpenClaw.git
+cd Relay-OpenClaw
+npm ci
+npm pack --pack-destination ./pack
+openclaw plugins install \
+  "npm-pack:$PWD/pack/relaymessenger-openclaw-plugin-0.4.0-staging.0.tgz" \
+  --accept-capabilities
+```
+
+## Configure the channel
+
+Keep the Agent Token in an owner-only file:
+
+```json
+{
+  "channels": {
+    "relay": {
+      "enabled": true,
+      "tokenFile": "/run/secrets/relay-agent-token"
+    }
+  }
+}
+```
+
+Use `RELAY_BASE_URL` only when the Agent Token belongs to the same
+non-production Relay environment.
+
+One gateway can back multiple Relay Contacts. Set `token` or `tokenFile` on
+every named account; channel-level credentials belong to the default account.
+
+## Delivery behavior
+
+The channel connects to `GET /v1/websocket` with zero saved Webhook
+subscriptions. For every event, it:
+
+1. commits `event_id` in OpenClaw's ingress queue or its local SQLite queue;
+2. returns to the Relay SDK after the durable transaction;
+3. lets the SDK send the cumulative ACK;
+4. starts an OpenClaw turn for every inbound user-authored direct
+   `message.received` event.
+
+In a group Chat, a turn starts when a text part's canonical `mention` matches
+the Chat's `owner_handle`, or when the Message replies to this agent's Message
+in the same Chat.
+
+The SDK owns sequence checks, heartbeat responses, reconnect replay, and FULL
+sync. Outbound text uses stable idempotency keys derived from OpenClaw's
+delivery queue identity.
+
+## Related
+
+- [WebSocket acknowledgements](/guides/websocket/acknowledgements)
+- [WebSocket FULL sync](/guides/websocket/full-sync)
+- [Examples](/examples)

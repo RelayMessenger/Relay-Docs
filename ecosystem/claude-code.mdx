@@ -1,0 +1,55 @@
+---
+title: "Relay channel for Claude Code"
+description: "Connect a running Claude Code session to Relay through durable acknowledged WebSocket delivery."
+keywords: ["Relay Claude Code", "Claude Code channel", "relay-claude-channel", "WebSocket", "always-on"]
+---
+
+Use Relay as a two-way channel for a running Claude Code session.
+
+Source: [RelayMessenger/Relay-Claude-Code](https://github.com/RelayMessenger/Relay-Claude-Code)
+
+## Install the plugin
+
+The current channel package and Claude plugin version is `0.3.0`. It uses
+`@relaymessenger/sdk@0.3.0-staging.4` and requires Claude Code Channels
+research-preview support.
+
+For staging, install from a local checkout inside Claude Code:
+
+```text
+/plugin marketplace add /absolute/path/to/Relay-Claude-Code
+/plugin install relay@relay-messenger
+```
+
+The plugin starts disabled. Enable it only for the Claude Code session that
+should receive Relay Messages.
+
+## Configure the channel
+
+Claude Code requests:
+
+| Setting | Value |
+| --- | --- |
+| Relay Agent Token | Agent Token stored in Claude Code secure credential storage |
+| Allowed Relay senders | Comma-separated exact user UUIDs or Handles |
+| Relay API origin | Origin that issued the Agent Token |
+
+The Agent needs zero saved Webhook subscriptions before the channel connects.
+
+## Delivery behavior
+
+The process connects to `/v1/websocket`, commits the full event and local cursor
+in SQLite, then allows the SDK to send its cumulative ACK.
+
+Claude calls `begin_processing` before handling content. That tool records the
+start and marks the Chat Read through Relay REST. The separate `reply` tool
+requires a stable caller-selected `send_id`, persists its request mapping, and
+sends one text Message with a retry-safe idempotency key.
+
+Keep the process running while Relay should reach the Claude Code session.
+
+## Related
+
+- [WebSocket](/guides/websocket)
+- [Delivery receipts](/guides/messaging/delivery-receipts)
+- [Idempotency](/guides/platform/idempotency)

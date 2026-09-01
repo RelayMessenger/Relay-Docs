@@ -1,0 +1,64 @@
+---
+title: "Relay CLI"
+description: "Use Relay v1 resources, staging profiles, diagnostics, and local event forwarding from a terminal."
+keywords: ["Relay CLI", "@relaymessenger/cli", "relay doctor", "staging profile", "local forwarding"]
+---
+
+Use Relay API resources and inspect local configuration from the terminal.
+
+Source: [RelayMessenger/Relay-CLI](https://github.com/RelayMessenger/Relay-CLI)
+
+## Staging package
+
+The current source package is `@relaymessenger/cli@0.5.0-staging.0` and
+requires Node.js `22.22.3` or newer. Install the staging source tarball:
+
+```bash
+git clone https://github.com/RelayMessenger/Relay-CLI.git
+cd Relay-CLI
+npm ci
+npm pack --pack-destination ./pack
+npm install --global ./pack/relaymessenger-cli-0.5.0-staging.0.tgz
+relay --version
+```
+
+The `relaymessenger` executable remains an alias for `relay`.
+
+## Configure staging
+
+Create an isolated profile and provide the staging Agent Token through stdin:
+
+```bash
+relay profiles add staging --api-url https://api.staging.relayapp.im
+relay profiles use staging
+printf '%s' "$STAGING_RELAY_AGENT_TOKEN" |
+  relay auth login --profile staging --token-stdin
+relay doctor
+```
+
+Every resource command prints JSON. Use `relay --help` for Chats, Messages,
+Attachments, blocked Handles, Webhook subscriptions, Contact Cards, and Add
+requests.
+
+## Use local event forwarding
+
+`relay webhooks listen` is a local development bridge backed by Relay's
+acknowledged WebSocket:
+
+```bash
+relay webhooks listen --forward-to http://127.0.0.1:3000/relay-events
+```
+
+The loopback body carries the original Relay event envelope and
+`x-relay-dev-forwarded: 1`, without a Standard Webhooks signature. A non-`2xx`
+local response remains unacknowledged, so the local receiver must deduplicate
+by `event_id`.
+
+Use a public signed Webhook receiver for serverless testing. Use the listener
+for short local sessions whose state remains inside the development process.
+
+## Related
+
+- [Relay MCP](/ecosystem/mcp)
+- [Webhooks](/guides/webhooks)
+- [WebSocket](/guides/websocket)

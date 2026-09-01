@@ -138,6 +138,7 @@ expected_guide_groups = [
     "Webhooks",
     "WebSocket",
     "Platform",
+    "Developer ecosystem",
     "Examples",
 ]
 actual_guide_groups = [group["group"] for group in tabs[0]["groups"]]
@@ -199,6 +200,19 @@ expected_guide_pages = {
         "guides/platform/idempotency",
         "guides/platform/rate-limits",
         "guides/platform/debugging",
+    ],
+    "Developer ecosystem": [
+        "ecosystem/index",
+        "ecosystem/chat-sdk",
+        "ecosystem/cli",
+        "ecosystem/mcp",
+        "ecosystem/openclaw",
+        "ecosystem/claude-code",
+        "ecosystem/hermes",
+        "ecosystem/agent-starter",
+        "ecosystem/skills",
+        "ecosystem/codex",
+        "ecosystem/cursor",
     ],
     "Examples": ["examples/index"],
 }
@@ -337,6 +351,7 @@ for path in [
     root / "guides/chats/index.mdx",
     root / "guides/webhooks/index.mdx",
     root / "guides/websocket/index.mdx",
+    root / "ecosystem/index.mdx",
     root / "api-reference/overview.mdx",
 ]:
     if 'sidebarTitle: "Overview"' not in path.read_text():
@@ -361,6 +376,7 @@ for stale in [
     root / "guides/platform/errors.mdx",
     root / "guides/contacts/default-agents.mdx",
     root / "guides/contacts/agent-greetings.mdx",
+    root / "integrations",
     root / "error/codes/2xxx/2014.mdx",
 ]:
     if stale.exists():
@@ -372,6 +388,69 @@ if "--topology-only" in sys.argv:
         f"{len(expected_guide_groups)} ordered Guide groups"
     )
     raise SystemExit(0)
+
+ecosystem_paths = [
+    root / "ecosystem/index.mdx",
+    root / "ecosystem/chat-sdk.mdx",
+    root / "ecosystem/cli.mdx",
+    root / "ecosystem/mcp.mdx",
+    root / "ecosystem/openclaw.mdx",
+    root / "ecosystem/claude-code.mdx",
+    root / "ecosystem/hermes.mdx",
+    root / "ecosystem/agent-starter.mdx",
+    root / "ecosystem/skills.mdx",
+    root / "ecosystem/codex.mdx",
+    root / "ecosystem/cursor.mdx",
+    root / "examples/index.mdx",
+]
+ecosystem_text = "\n".join(path.read_text() for path in ecosystem_paths)
+for repository in [
+    "Relay-Chat-SDK",
+    "Relay-CLI",
+    "Relay-MCP",
+    "Relay-OpenClaw",
+    "Relay-Claude-Code",
+    "Relay-Hermes",
+    "Relay-Agent-Starter",
+    "Relay-Skills",
+    "Relay-Codex",
+    "Relay-Cursor",
+    "Relay-Examples",
+]:
+    expected = f"https://github.com/RelayMessenger/{repository}"
+    if expected not in ecosystem_text:
+        raise SystemExit(f"developer ecosystem lost branded source link: {expected}")
+for version in [
+    "@relaymessenger/sdk@0.3.0-staging.4",
+    "@relaymessenger/chat-sdk-adapter@0.3.0-staging.0",
+    "@relaymessenger/cli@0.5.0-staging.0",
+    "@relaymessenger/mcp@0.1.0-staging.0",
+    "@relaymessenger/openclaw-plugin@0.4.0-staging.0",
+    "relay-claude-channel@0.3.0",
+    "relay-hermes@1.0.0rc1",
+    "relay-agent-starter@0.1.0",
+]:
+    if version not in ecosystem_text:
+        raise SystemExit(f"developer ecosystem lost current source version: {version}")
+for marker in [
+    "serverless-friendly",
+    "Acknowledged WebSocket",
+    "Cloudflare Think messenger",
+    "Local Relay MCP",
+    "hosted docs MCP",
+]:
+    if marker not in ecosystem_text:
+        raise SystemExit(f"developer ecosystem lost runtime boundary: {marker}")
+chat_sdk_text = (root / "ecosystem/chat-sdk.mdx").read_text()
+for marker in [
+    "stable public HTTPS",
+    "@relaymessenger/sdk@0.3.0-staging.4",
+    "Retain the prepared Attachment identity",
+    "automatic local byte or file upload",
+    "ambiguous send",
+]:
+    if marker not in chat_sdk_text:
+        raise SystemExit(f"Chat SDK media boundary lost: {marker}")
 
 for path in mdx_paths:
     text = path.read_text()
@@ -843,6 +922,17 @@ for path in error_paths:
 
 openapi_text = (root / "api-reference/openapi.yaml").read_text()
 mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
+expected_openapi_sha256 = (
+    "f62f431fc0daa48500926bf87753f81c3fdda25ab463b130ca97f2896367e0a5"
+)
+actual_openapi_sha256 = hashlib.sha256(
+    (root / "api-reference/openapi.yaml").read_bytes()
+).hexdigest()
+if actual_openapi_sha256 != expected_openapi_sha256:
+    raise SystemExit(
+        "canonical OpenAPI changed: "
+        f"{actual_openapi_sha256} != {expected_openapi_sha256}"
+    )
 if "\n      x-mint:\n" in openapi_text:
     raise SystemExit("Mintlify presentation metadata entered the locked OpenAPI")
 if "2026-02-03" in openapi_text:
@@ -1139,6 +1229,14 @@ handwritten_text = "\n".join(path.read_text() for path in handwritten_paths)
 all_contract_text = handwritten_text + "\n" + openapi_text
 generated_paths = [root / "llms.txt", root / "llms-full.txt"]
 generated_text = "\n".join(path.read_text() for path in generated_paths)
+llms_index_text = (root / "llms.txt").read_text()
+for marker in [
+    "/v1/websocket",
+    "/v1/webhook-subscriptions",
+    "2026-08-30",
+]:
+    if marker not in llms_index_text:
+        raise SystemExit(f"llms.txt is missing staging MCP search marker: {marker}")
 published_contract_text = all_contract_text + "\n" + generated_text
 
 if "2026-02-03" in published_contract_text:
@@ -1232,6 +1330,10 @@ for name, pattern in {
     "Socket Mode product name": r"\bSocket Mode\b",
     "agent installation lifecycle": r"\bagent installation\b|\binstalled agents?\b|\binstall agents?\b",
     "agent share-link lifecycle": r"\bshare[- ]link\b",
+    "old ecosystem path": r"/integrations(?:/|\b)",
+    "old integrations vocabulary": r"\bintegrations?\b",
+    "old conversation vocabulary": r"\bconversations?\b",
+    "removed Message feature phrase": r"\bMessage " r"effects\b",
     "stale guide path": r"guides/(?:socket-mode|chats/install-agents|webhooks/choose-transport|platform/errors)",
     "old public status language": r"current-status|Current status|known contract residue|local proof|evidence app",
     "old WebSocket handshake": r"/v1/websocket-connections|relay_ticket_|relay\.v1\.json|\?ticket=",

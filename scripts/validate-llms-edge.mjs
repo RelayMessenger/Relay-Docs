@@ -20,6 +20,16 @@ assert.equal(vars.LLMS_FULL_VERSION, await sha256("llms-full.txt"));
 assert.equal(vars.MINTLIFY_ORIGIN, "https://relay-staging.mintlify.app");
 assert.match(llmsIndex, /\/guides\/agent-events\/events\.md/);
 assert.doesNotMatch(llmsIndex, /\/guides\/webhooks\/events\.md/);
+for (const marker of [
+  "/v1/websocket",
+  "/v1/webhook-subscriptions",
+  "2026-08-30",
+]) {
+  assert.ok(
+    llmsIndex.includes(marker),
+    `staging LLM index is missing MCP search marker ${marker}`,
+  );
+}
 assert.match(llmsFull, /"api_version": "v1"/);
 assert.match(llmsFull, /webhook_version": "2026-08-30"/);
 assert.doesNotMatch(llmsFull, /2026-02-03/);

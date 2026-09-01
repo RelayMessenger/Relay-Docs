@@ -1,0 +1,80 @@
+---
+title: "Chat SDK adapter"
+description: "Receive Relay Webhooks through Vercel Chat SDK and send retry-safe Relay Messages."
+keywords: ["Relay Chat SDK", "@relaymessenger/chat-sdk-adapter", "Vercel Chat SDK", "serverless webhook", "media URL"]
+---
+
+Add Relay to Vercel Chat SDK with the official Relay adapter.
+
+**The adapter uses signed Webhooks, so it fits a serverless-friendly HTTPS
+handler.**
+
+Source: [RelayMessenger/Relay-Chat-SDK](https://github.com/RelayMessenger/Relay-Chat-SDK)
+
+## Staging package
+
+The current source package is
+`@relaymessenger/chat-sdk-adapter@0.3.0-staging.0` and targets
+`chat@4.39.0`. This prerelease is installed from a source tarball on staging.
+
+Build the tarball in a Relay Chat SDK checkout:
+
+```bash
+npm ci
+npm pack --pack-destination ./pack
+```
+
+Install it in the Chat SDK app:
+
+```bash
+npm install chat@4.39.0 @chat-adapter/state-memory@4.39.0 \
+  /absolute/path/to/Relay-Chat-SDK/pack/relaymessenger-chat-sdk-adapter-0.3.0-staging.0.tgz
+```
+
+## Use the adapter
+
+Relay Chats map to stable Chat SDK thread IDs in the form
+`relay:<Chat UUID>`. Mount `chat.webhooks.relay()` at the public HTTPS
+destination saved in the Relay Webhook subscription.
+
+```typescript
+const relay = createRelayAdapter({
+  token: process.env.RELAY_AGENT_TOKEN,
+  webhookSecret: process.env.RELAY_WEBHOOK_SECRET,
+});
+```
+
+The adapter verifies the exact raw Webhook body. A
+`message.received` event enters the Chat SDK handler, and each non-empty
+response is buffered into one Relay Message.
+
+## Media boundary
+
+**Post a stable public HTTPS media URL through the adapter.**
+
+For local bytes or files:
+
+1. Allocate and upload the bytes with
+   `@relaymessenger/sdk@0.3.0-staging.4`.
+2. Retain the prepared Attachment identity for recovery.
+3. Pass its stable public HTTPS URL to the adapter.
+
+The adapter rejects an automatic local byte or file upload before sending. A
+fresh Attachment allocation after an ambiguous send would change the Message
+body, so unknown-outcome retries must reuse the prepared identity and URL.
+
+## Delivery behavior
+
+| Send source | Idempotency behavior |
+| --- | --- |
+| Inbound Webhook turn | `relay-chat-sdk:<event_id>:<send ordinal>` |
+| Think Action or another recovered task | Supply `idempotencyKeyResolver` with the stable Action or delivery identity |
+| Empty response | Local no-op, with no Relay Message |
+
+Disable adapter typing with `typing: false` when Think owns typing timing.
+
+## Related
+
+- [Cloudflare Think starter](/ecosystem/agent-starter)
+- [Attachments](/guides/messaging/attachments)
+- [Webhooks](/guides/webhooks)
