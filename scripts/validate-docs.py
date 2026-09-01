@@ -426,7 +426,7 @@ for version in [
     "@relaymessenger/cli@0.5.0-staging.0",
     "@relaymessenger/mcp@0.1.0-staging.0",
     "@relaymessenger/openclaw-plugin@0.4.0-staging.0",
-    "relay-claude-channel@0.3.0",
+    "relay-claude-channel@0.3.0-staging.0",
     "relay-hermes@1.0.0rc1",
     "relay-agent-starter@0.1.0",
 ]:
@@ -443,6 +443,11 @@ for marker in [
         raise SystemExit(f"developer ecosystem lost runtime boundary: {marker}")
 chat_sdk_text = (root / "ecosystem/chat-sdk.mdx").read_text()
 for marker in [
+    "npm install chat@4.39.0 @chat-adapter/state-memory@4.39.0",
+    "@relaymessenger/chat-sdk-adapter@staging",
+    "469a9c1aafed7e31cdc4e8581df4dd6a34c94e17",
+    "sha512-IuWa2VVv3hKArnQPO6SV4Ntq+/9pp7eEIzWgVSBgg6E5pWpVV+hxTFCwfwwBJvmhYjzVgOFxrrk6haL05ANquw==",
+    "Published by the staging workflow with npm provenance",
     "stable public HTTPS",
     "@relaymessenger/sdk@0.3.0-staging.4",
     "Retain the prepared Attachment identity",
@@ -451,6 +456,70 @@ for marker in [
 ]:
     if marker not in chat_sdk_text:
         raise SystemExit(f"Chat SDK media boundary lost: {marker}")
+
+for relative in [
+    "ecosystem/chat-sdk.mdx",
+    "ecosystem/agent-starter.mdx",
+    "examples/index.mdx",
+]:
+    text = (root / relative).read_text()
+    if re.search(r"\bsource[- ]only\b|\bsource tarball\b", text, re.I):
+        raise SystemExit(f"published Chat SDK is described as source-only: {relative}")
+
+cli_text = (root / "ecosystem/cli.mdx").read_text()
+for marker in [
+    "relay --profile staging events listen --acknowledge-events",
+    "requires an explicit non-production profile",
+    "dedicated Agent may advance its durable checkpoint",
+]:
+    if marker not in cli_text:
+        raise SystemExit(f"Relay CLI event-listener boundary lost: {marker}")
+if "relay webhooks listen" in cli_text:
+    raise SystemExit("stale Relay CLI event-listener command returned")
+
+claude_text = (root / "ecosystem/claude-code.mdx").read_text()
+claude_normalized = re.sub(r"\s+", " ", claude_text)
+for marker in [
+    "relay-claude-channel@0.3.0-staging.0",
+    "Only addressed group Messages start Claude turns",
+    "structured `parts[].mention`",
+    "`deliveries[]` row whose `contact.is_me` is `true`",
+    "authenticated origin of the active turn",
+    "same authenticated sender in the same Chat",
+]:
+    if marker not in claude_normalized:
+        raise SystemExit(f"Claude Code channel boundary lost: {marker}")
+
+for index, line in enumerate(ecosystem_text.splitlines()):
+    if not line.startswith("git clone"):
+        continue
+    command = line
+    if line.endswith("\\") and index + 1 < len(ecosystem_text.splitlines()):
+        command += " " + ecosystem_text.splitlines()[index + 1].strip()
+    if "https://github.com/RelayMessenger/" in command and "--branch staging" not in command:
+        raise SystemExit(f"public source clone is not pinned to staging: {command}")
+
+hosted_proof_text = "\n".join(
+    (root / relative).read_text()
+    for relative in [
+        "ecosystem/skills.mdx",
+        "ecosystem/codex.mdx",
+        "ecosystem/cursor.mdx",
+    ]
+)
+for marker in [
+    "## Prepare hosted proof",
+    "only after this docs candidate is pushed",
+    "Local Docs validation",
+]:
+    if marker not in hosted_proof_text:
+        raise SystemExit(f"hosted proof deferral lost: {marker}")
+for stale in [
+    "## Verify staging search",
+    "Staging search must return",
+]:
+    if stale in hosted_proof_text:
+        raise SystemExit(f"premature hosted proof claim returned: {stale}")
 
 for path in mdx_paths:
     text = path.read_text()
@@ -1236,7 +1305,7 @@ for marker in [
     "2026-08-30",
 ]:
     if marker not in llms_index_text:
-        raise SystemExit(f"llms.txt is missing staging MCP search marker: {marker}")
+        raise SystemExit(f"llms.txt is missing hosted-search source marker: {marker}")
 published_contract_text = all_contract_text + "\n" + generated_text
 
 if "2026-02-03" in published_contract_text:

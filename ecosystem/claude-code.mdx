@@ -10,11 +10,19 @@ Source: [RelayMessenger/Relay-Claude-Code](https://github.com/RelayMessenger/Rel
 
 ## Install the plugin
 
-The current channel package and Claude plugin version is `0.3.0`. It uses
-`@relaymessenger/sdk@0.3.0-staging.4` and requires Claude Code Channels
-research-preview support.
+The current channel package is
+`relay-claude-channel@0.3.0-staging.0`, and the bundled Claude plugin uses the
+same version. It uses `@relaymessenger/sdk@0.3.0-staging.4` and requires
+Claude Code Channels research-preview support.
 
-For staging, install from a local checkout inside Claude Code:
+Clone the staging branch:
+
+```bash
+git clone --branch staging \
+  https://github.com/RelayMessenger/Relay-Claude-Code.git
+```
+
+Then install its local marketplace inside Claude Code:
 
 ```text
 /plugin marketplace add /absolute/path/to/Relay-Claude-Code
@@ -41,10 +49,25 @@ The Agent needs zero saved Webhook subscriptions before the channel connects.
 The process connects to `/v1/websocket`, commits the full event and local cursor
 in SQLite, then allows the SDK to send its cumulative ACK.
 
-Claude calls `begin_processing` before handling content. That tool records the
-start and marks the Chat Read through Relay REST. The separate `reply` tool
-requires a stable caller-selected `send_id`, persists its request mapping, and
-sends one text Message with a retry-safe idempotency key.
+**Only addressed group Messages start Claude turns.** Direct Messages are
+eligible. A group Message is eligible when its structured `parts[].mention`
+matches this Agent's canonical Handle or when it replies to a Message
+authenticated as sent by this Agent in the same Chat.
+
+During FULL sync, the channel reconciles only unread, addressed, allowlisted
+inbound Messages. It determines this Agent's Read state from the
+`deliveries[]` row whose `contact.is_me` is `true`, never from aggregate
+top-level `read_at`.
+
+Claude calls `begin_processing` before handling content. That tool marks the
+Chat Read through Relay REST. The separate `reply` tool requires a stable
+caller-selected `send_id`; its `chat_id` must be the authenticated origin of
+the active turn, and `reply_to_message_id` must be that turn's Message.
+
+Permission requests are durably bound to the active delivery's Message, Chat,
+sender UUID, and exact Handle. Relay sends the permission card only to that
+Chat and accepts its verdict only from the same authenticated sender in the
+same Chat.
 
 Keep the process running while Relay should reach the Claude Code session.
 

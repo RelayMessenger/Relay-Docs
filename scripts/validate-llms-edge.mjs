@@ -27,7 +27,7 @@ for (const marker of [
 ]) {
   assert.ok(
     llmsIndex.includes(marker),
-    `staging LLM index is missing MCP search marker ${marker}`,
+    `local staging LLM source is missing hosted-search marker ${marker}`,
   );
 }
 assert.match(llmsFull, /"api_version": "v1"/);
@@ -48,6 +48,11 @@ assert.match(
 assert.match(llmsFull, /does\s+not show those labels in group Chats/);
 assert.doesNotMatch(llmsFull, /marks that agent recipient Delivered/i);
 assert.doesNotMatch(llmsFull, /marks the Message Delivered to the agent/i);
+assert.match(llmsFull, /Prepare hosted proof/);
+assert.match(
+  llmsFull,
+  /Local Docs validation (?:prepares these source markers|does not claim that hosted result)/,
+);
 assert.deepEqual(
   config.env.staging.routes,
   [
@@ -93,5 +98,5 @@ assert.doesNotMatch(workflow, /--env (?:production|prod)\b/);
 assert.doesNotMatch(workflow, /Wait for the matching Mintlify source/);
 
 console.log(
-  "staging LLM edge sources, deployment credentials, routes, and passthrough verified",
+  "local staging LLM sources, deployment credentials, routes, and passthrough verified",
 );

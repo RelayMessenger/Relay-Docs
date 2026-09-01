@@ -477,9 +477,9 @@ the page's single job and update this inventory in the same commit.
 | Relay channel for Claude Code | `Install the plugin` → `Configure the channel` → `Delivery behavior` → `Related` |
 | Relay for Hermes | `Install the plugin` → `Configure staging` → `Delivery behavior` → `Related` |
 | Cloudflare Think starter | `Current source` → `Configure staging` → `Delivery behavior` → `Related` |
-| Relay Skills | `Install` → `Choose the docs MCP` → `Verify staging search` → `Related` |
-| Relay for Codex | `Install locally` → `Use the package` → `Verify staging search` → `Related` |
-| Relay for Cursor | `Install locally` → `Use the package` → `Verify staging search` → `Related` |
+| Relay Skills | `Install` → `Choose the docs MCP` → `Prepare hosted proof` → `Related` |
+| Relay for Codex | `Install locally` → `Use the package` → `Prepare hosted proof` → `Related` |
+| Relay for Cursor | `Install locally` → `Use the package` → `Prepare hosted proof` → `Related` |
 
 ### Examples, errors, and reference
 
