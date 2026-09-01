@@ -188,6 +188,7 @@ expected_guide_pages = {
         "guides/messaging/message-parts",
         "guides/messaging/attachments",
         "guides/messaging/voice-memos",
+        "guides/messaging/receiving-media",
         "guides/messaging/rich-link-previews",
         "guides/messaging/replies",
         "guides/messaging/reactions",
