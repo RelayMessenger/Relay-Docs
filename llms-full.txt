@@ -1277,7 +1277,7 @@ Staging separates API requests from byte transfer:
 | --- | --- | --- | --- |
 | Allocate or refresh | `https://api.staging.relayapp.im` | `POST /v1/attachments` or `GET /v1/attachments/{id}` | Agent Token |
 | Upload | `https://uploads.staging.relayapp.im` | Raw `PUT` to the returned `upload_url` | Signed URL, valid for 15 minutes |
-| Download | `https://cdn.staging.relayapp.im` | `GET` or `HEAD` on the returned `download_url` | Signed bearer URL, valid for 15 minutes |
+| Download | `https://cdn.staging.relayapp.im` | `GET` or `HEAD` on the returned `download_url` | Signed bearer URL, valid for 60 minutes |
 
 **The `attachment_id` is permanent for the Attachment.** Store the ID and
 treat upload and download URLs as short-lived capabilities.
@@ -1367,7 +1367,7 @@ curl -sS \
 </CodeGroup>
 
 Each successful retrieval returns the same permanent ID and a fresh
-`download_url` that is valid for 15 minutes.
+`download_url` that is valid for 60 minutes.
 
 | Status | Meaning |
 | --- | --- |
@@ -1409,10 +1409,18 @@ curl -sS -X POST "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
 ## 5. Download or delete
 
 `retrieve` returns a signed `download_url` on
-`https://cdn.staging.relayapp.im`. The URL grants bearer access for 15
+`https://cdn.staging.relayapp.im`. The URL grants bearer access for 60
 minutes, so do not store it as the Attachment identity. Call
 `GET https://api.staging.relayapp.im/v1/attachments/{id}` with an Agent Token
-to replace an expired URL for an Attachment you allocated.
+for a fresh URL at any time.
+
+<Info>
+`GET /v1/attachments/{id}` answers the Contact that allocated the Attachment
+and every Contact whose Chat membership covers a Message carrying it. An Agent
+in the Chat can mint a fresh `download_url` for media a user sent, so you do
+not have to race the link or keep your own copy. `DELETE` stays with the owner
+and returns `404` to everyone else.
+</Info>
 
 Downloads support one byte range at a time for audio, video, and resumable
 file reads:
@@ -1671,19 +1679,18 @@ returns the complete file in one body.
 
 ## URL lifetime
 
-`url` is valid for 15 minutes from the moment Relay builds the event. Download
-the bytes inside that window, and store them yourself when you need the file
-after it.
-
-<Warning>
-An expired inbound `url` cannot be refreshed. `GET /v1/attachments/{id}`
-answers the Contact that allocated the Attachment, so it returns `404` for
-media a user sent to you. The copy you download is the copy you keep.
-</Warning>
+`url` is valid for 60 minutes from the moment Relay builds the event.
 
 Relay stores the event body once. A retried webhook delivery, a WebSocket
-replay, and a FULL sync all carry the same `url`, so the 15 minutes run from
+replay, and a FULL sync all carry the same `url`, so the 60 minutes run from
 the moment Relay built the event, not from the moment your receiver read it.
+
+<Info>
+`GET /v1/attachments/{id}` answers every Contact whose Chat membership covers a
+Message carrying the Attachment. Call it with your Agent Token at any time for
+a fresh `url`, so an expired link costs one request and never the file. Keep
+your own copy of the bytes only when your product wants one.
+</Info>
 
 ## Pass the file to a model
 
@@ -3038,8 +3045,9 @@ and a signed download URL:
 ```
 
 Store `parts[].id` as the Attachment identity. `parts[].url` is a signed
-download link that is valid for 15 minutes. Fetch it with no `Authorization`
-header, and store the bytes when you need the file after the link expires.
+download link that is valid for 60 minutes. Fetch it with no `Authorization`
+header. After it expires, call `GET /v1/attachments/{id}` with your Agent Token
+for a fresh link.
 
 Relay stores the event body once, so a retried delivery and a replay carry the
 same `url`. Read [Receiving Media](/guides/messaging/receiving-media) for the
