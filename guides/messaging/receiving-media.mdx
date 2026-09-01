@@ -1,0 +1,118 @@
+---
+title: "Receiving Media"
+description: "Read an inbound media part, download the bytes, and pass the file to a model."
+keywords: ["inbound media", "message.received", "signed URL", "download", "model input"]
+---
+
+A user sends an image, voice memo, video, or document as a `media` part on a
+`message.received` event. Download the bytes from the part's signed URL, then
+pass them to your model.
+
+## Inbound media parts
+
+Every inbound `media` part carries the Attachment identity, one signed download
+URL, and the file metadata:
+
+```json
+{
+  "type": "media",
+  "id": "01993d50-d263-7d6b-87ce-90aba89b7815",
+  "url": "https://cdn.staging.relayapp.im/attachments/<token>",
+  "filename": "report.pdf",
+  "mime_type": "application/pdf",
+  "size_bytes": 48291,
+  "reactions": null
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Permanent Attachment ID |
+| `url` | Signed link that returns the raw bytes |
+| `filename` | File name the sender supplied |
+| `mime_type` | IANA media type of the bytes |
+| `size_bytes` | Exact byte length |
+
+The full event envelope is on
+[Agent event types](/guides/agent-events/events#media-payload).
+
+## Download the bytes
+
+The signature inside `url` is the whole credential. Send the request with no
+`Authorization` header.
+
+<CodeGroup>
+```typescript TypeScript
+const part = event.data.parts.find((item) => item.type === "media");
+
+const response = await fetch(part.url);
+if (!response.ok) {
+  throw new Error(`Attachment download returned ${response.status}.`);
+}
+
+const bytes = new Uint8Array(await response.arrayBuffer());
+```
+
+```bash cURL
+curl -sS "$MEDIA_URL" --output inbound-media
+```
+</CodeGroup>
+
+The response carries the Attachment `Content-Type` and `Content-Length`, and
+returns the complete file in one body.
+
+## URL lifetime
+
+`url` is valid for 15 minutes from the moment Relay builds the event. Download
+the bytes inside that window, and store them yourself when you need the file
+after it.
+
+<Warning>
+An expired inbound `url` cannot be refreshed. `GET /v1/attachments/{id}`
+answers the Contact that allocated the Attachment, so it returns `404` for
+media a user sent to you. The copy you download is the copy you keep.
+</Warning>
+
+Relay stores the event body once. A retried webhook delivery, a WebSocket
+replay, and a FULL sync all carry the same `url`, so the 15 minutes run from
+the moment Relay built the event, not from the moment your receiver read it.
+
+## Pass the file to a model
+
+Relay carries the Message and never calls a model. Send the downloaded bytes to
+your own provider as a file part. This example uses the Vercel AI SDK:
+
+```typescript TypeScript
+import { generateText } from "ai";
+
+const result = await generateText({
+  model,
+  messages: [{
+    role: "user",
+    content: [
+      { type: "text", text: "Describe what the user sent." },
+      {
+        type: "file",
+        data: bytes,
+        mediaType: part.mime_type,
+        filename: part.filename,
+      },
+    ],
+  }],
+});
+```
+
+`mediaType` takes `mime_type` unchanged, and `data` accepts the `Uint8Array`
+you downloaded.
+
+A Relay Attachment runs to 100 MB, which can exceed the inline request limit of
+the model you call. Read the limit your provider publishes and upload larger
+files through that provider's own file API. Google's Gemini API accepts up to
+100 MB of inline data per request, and 50 MB for a PDF.
+
+## Related
+
+- [Agent event types](/guides/agent-events/events)
+- [Attachments](/guides/messaging/attachments)
+- [Message Parts](/guides/messaging/message-parts)
+- [Voice memos](/guides/messaging/voice-memos)

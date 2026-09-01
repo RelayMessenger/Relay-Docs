@@ -924,6 +924,7 @@ agent Delivered boundaries and the optional Read operation.
   <Card title="Sending Messages" href="/guides/messaging/sending-messages">Send text and multipart content.</Card>
   <Card title="Attachments" href="/guides/messaging/attachments">Upload and reuse files.</Card>
   <Card title="Voice memos" href="/guides/messaging/voice-memos">Send native audio messages.</Card>
+  <Card title="Receiving Media" href="/guides/messaging/receiving-media">Download inbound files and pass them to a model.</Card>
   <Card title="Rich link previews" href="/guides/messaging/rich-link-previews">Send a URL as a link part.</Card>
   <Card title="Mentions" href="/guides/messaging/mentions">Address a Contact in a group.</Card>
   <Card title="Replies" href="/guides/messaging/replies">Reply to an exact part.</Card>
@@ -1276,7 +1277,7 @@ Staging separates API requests from byte transfer:
 | --- | --- | --- | --- |
 | Allocate or refresh | `https://api.staging.relayapp.im` | `POST /v1/attachments` or `GET /v1/attachments/{id}` | Agent Token |
 | Upload | `https://uploads.staging.relayapp.im` | Raw `PUT` to the returned `upload_url` | Signed URL, valid for 15 minutes |
-| Download | `https://cdn.staging.relayapp.im` | `GET` or `HEAD` on the returned `download_url` | Signed bearer URL, valid for one hour |
+| Download | `https://cdn.staging.relayapp.im` | `GET` or `HEAD` on the returned `download_url` | Signed bearer URL, valid for 15 minutes |
 
 **The `attachment_id` is permanent for the Attachment.** Store the ID and
 treat upload and download URLs as short-lived capabilities.
@@ -1366,7 +1367,7 @@ curl -sS \
 </CodeGroup>
 
 Each successful retrieval returns the same permanent ID and a fresh
-`download_url` that is valid for one hour.
+`download_url` that is valid for 15 minutes.
 
 | Status | Meaning |
 | --- | --- |
@@ -1408,10 +1409,10 @@ curl -sS -X POST "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
 ## 5. Download or delete
 
 `retrieve` returns a signed `download_url` on
-`https://cdn.staging.relayapp.im`. The URL grants bearer access for one hour,
-so do not store it as the Attachment identity. Call
+`https://cdn.staging.relayapp.im`. The URL grants bearer access for 15
+minutes, so do not store it as the Attachment identity. Call
 `GET https://api.staging.relayapp.im/v1/attachments/{id}` with an Agent Token
-to replace an expired URL.
+to replace an expired URL for an Attachment you allocated.
 
 Downloads support one byte range at a time for audio, video, and resumable
 file reads:
@@ -1517,15 +1518,20 @@ SVG.
 | Action | Authorized Contact |
 | --- | --- |
 | Send or reuse | Contact that allocated the Attachment |
-| Retrieve metadata and refresh the download URL | Owner, or a Contact authorized to read a Chat Message containing the Attachment |
+| Retrieve metadata and refresh the download URL | Contact that allocated the Attachment |
 | Delete | Owner, while no Message or group photo references the Attachment |
 
-Relay returns `404` when the caller cannot read the Attachment. A signed
+Relay returns `404` when the caller does not own the Attachment. A signed
 transfer URL grants bearer access until it expires, so keep it out of logs and
 refresh it through the authenticated API rather than sharing a stored URL.
 
+Media a user sends to you belongs to that user, so its URL cannot be refreshed.
+Read [Receiving Media](/guides/messaging/receiving-media) for the inbound
+path.
+
 ## Related
 
+- [Receiving Media](/guides/messaging/receiving-media)
 - [Voice memos](/guides/messaging/voice-memos)
 - [Sending Messages](/guides/messaging/sending-messages)
 
@@ -1599,6 +1605,125 @@ audio metadata.
 
 - [Attachments](/guides/messaging/attachments)
 - [Message details](/guides/messaging/message-details)
+
+# Receiving Media
+
+> Read an inbound media part, download the bytes, and pass the file to a model.
+
+Source: https://docs.staging.relayapp.im/guides/messaging/receiving-media.md
+
+A user sends an image, voice memo, video, or document as a `media` part on a
+`message.received` event. Download the bytes from the part's signed URL, then
+pass them to your model.
+
+## Inbound media parts
+
+Every inbound `media` part carries the Attachment identity, one signed download
+URL, and the file metadata:
+
+```json
+{
+  "type": "media",
+  "id": "01993d50-d263-7d6b-87ce-90aba89b7815",
+  "url": "https://cdn.staging.relayapp.im/attachments/<token>",
+  "filename": "report.pdf",
+  "mime_type": "application/pdf",
+  "size_bytes": 48291,
+  "reactions": null
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Permanent Attachment ID |
+| `url` | Signed link that returns the raw bytes |
+| `filename` | File name the sender supplied |
+| `mime_type` | IANA media type of the bytes |
+| `size_bytes` | Exact byte length |
+
+The full event envelope is on
+[Agent event types](/guides/agent-events/events#media-payload).
+
+## Download the bytes
+
+The signature inside `url` is the whole credential. Send the request with no
+`Authorization` header.
+
+<CodeGroup>
+```typescript TypeScript
+const part = event.data.parts.find((item) => item.type === "media");
+
+const response = await fetch(part.url);
+if (!response.ok) {
+  throw new Error(`Attachment download returned ${response.status}.`);
+}
+
+const bytes = new Uint8Array(await response.arrayBuffer());
+```
+
+```bash cURL
+curl -sS "$MEDIA_URL" --output inbound-media
+```
+</CodeGroup>
+
+The response carries the Attachment `Content-Type` and `Content-Length`, and
+returns the complete file in one body.
+
+## URL lifetime
+
+`url` is valid for 15 minutes from the moment Relay builds the event. Download
+the bytes inside that window, and store them yourself when you need the file
+after it.
+
+<Warning>
+An expired inbound `url` cannot be refreshed. `GET /v1/attachments/{id}`
+answers the Contact that allocated the Attachment, so it returns `404` for
+media a user sent to you. The copy you download is the copy you keep.
+</Warning>
+
+Relay stores the event body once. A retried webhook delivery, a WebSocket
+replay, and a FULL sync all carry the same `url`, so the 15 minutes run from
+the moment Relay built the event, not from the moment your receiver read it.
+
+## Pass the file to a model
+
+Relay carries the Message and never calls a model. Send the downloaded bytes to
+your own provider as a file part. This example uses the Vercel AI SDK:
+
+```typescript TypeScript
+import { generateText } from "ai";
+
+const result = await generateText({
+  model,
+  messages: [{
+    role: "user",
+    content: [
+      { type: "text", text: "Describe what the user sent." },
+      {
+        type: "file",
+        data: bytes,
+        mediaType: part.mime_type,
+        filename: part.filename,
+      },
+    ],
+  }],
+});
+```
+
+`mediaType` takes `mime_type` unchanged, and `data` accepts the `Uint8Array`
+you downloaded.
+
+A Relay Attachment runs to 100 MB, which can exceed the inline request limit of
+the model you call. Read the limit your provider publishes and upload larger
+files through that provider's own file API. Google's Gemini API accepts up to
+100 MB of inline data per request, and 50 MB for a PDF.
+
+## Related
+
+- [Agent event types](/guides/agent-events/events)
+- [Attachments](/guides/messaging/attachments)
+- [Message Parts](/guides/messaging/message-parts)
+- [Voice memos](/guides/messaging/voice-memos)
 
 # Rich link previews
 
@@ -2868,7 +2993,7 @@ shape. Message `parts` contain text, media, or link response parts.
 ### Media payload
 
 A `message.received` event with media includes the permanent Attachment ID
-and a signed one-hour download URL:
+and a signed download URL:
 
 ```json
 {
@@ -2912,11 +3037,13 @@ and a signed one-hour download URL:
 }
 ```
 
-Store `parts[].id` as the Attachment identity. If `parts[].url` expires, an
-authorized Contact who can read the containing Chat Message can use an Agent
-Token to refresh it through `GET /v1/attachments/{id}` at
-`https://api.staging.relayapp.im`. The response includes a fresh one-hour URL
-on `https://cdn.staging.relayapp.im`.
+Store `parts[].id` as the Attachment identity. `parts[].url` is a signed
+download link that is valid for 15 minutes. Fetch it with no `Authorization`
+header, and store the bytes when you need the file after the link expires.
+
+Relay stores the event body once, so a retried delivery and a replay carry the
+same `url`. Read [Receiving Media](/guides/messaging/receiving-media) for the
+download and model-input path.
 
 ## Delivery paths
 
@@ -2928,6 +3055,7 @@ on `https://cdn.staging.relayapp.im`.
 ## Related
 
 - [Add requests](/guides/contacts/add-requests)
+- [Receiving Media](/guides/messaging/receiving-media)
 - [Agent events](/guides/agent-events)
 - [Webhooks](/guides/webhooks)
 - [Webhook subscriptions](/guides/webhooks/subscriptions)

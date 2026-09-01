@@ -12,7 +12,7 @@ Staging separates API requests from byte transfer:
 | --- | --- | --- | --- |
 | Allocate or refresh | `https://api.staging.relayapp.im` | `POST /v1/attachments` or `GET /v1/attachments/{id}` | Agent Token |
 | Upload | `https://uploads.staging.relayapp.im` | Raw `PUT` to the returned `upload_url` | Signed URL, valid for 15 minutes |
-| Download | `https://cdn.staging.relayapp.im` | `GET` or `HEAD` on the returned `download_url` | Signed bearer URL, valid for one hour |
+| Download | `https://cdn.staging.relayapp.im` | `GET` or `HEAD` on the returned `download_url` | Signed bearer URL, valid for 15 minutes |
 
 **The `attachment_id` is permanent for the Attachment.** Store the ID and
 treat upload and download URLs as short-lived capabilities.
@@ -102,7 +102,7 @@ curl -sS \
 </CodeGroup>
 
 Each successful retrieval returns the same permanent ID and a fresh
-`download_url` that is valid for one hour.
+`download_url` that is valid for 15 minutes.
 
 | Status | Meaning |
 | --- | --- |
@@ -144,10 +144,10 @@ curl -sS -X POST "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
 ## 5. Download or delete
 
 `retrieve` returns a signed `download_url` on
-`https://cdn.staging.relayapp.im`. The URL grants bearer access for one hour,
-so do not store it as the Attachment identity. Call
+`https://cdn.staging.relayapp.im`. The URL grants bearer access for 15
+minutes, so do not store it as the Attachment identity. Call
 `GET https://api.staging.relayapp.im/v1/attachments/{id}` with an Agent Token
-to replace an expired URL.
+to replace an expired URL for an Attachment you allocated.
 
 Downloads support one byte range at a time for audio, video, and resumable
 file reads:
@@ -253,14 +253,19 @@ SVG.
 | Action | Authorized Contact |
 | --- | --- |
 | Send or reuse | Contact that allocated the Attachment |
-| Retrieve metadata and refresh the download URL | Owner, or a Contact authorized to read a Chat Message containing the Attachment |
+| Retrieve metadata and refresh the download URL | Contact that allocated the Attachment |
 | Delete | Owner, while no Message or group photo references the Attachment |
 
-Relay returns `404` when the caller cannot read the Attachment. A signed
+Relay returns `404` when the caller does not own the Attachment. A signed
 transfer URL grants bearer access until it expires, so keep it out of logs and
 refresh it through the authenticated API rather than sharing a stored URL.
 
+Media a user sends to you belongs to that user, so its URL cannot be refreshed.
+Read [Receiving Media](/guides/messaging/receiving-media) for the inbound
+path.
+
 ## Related
 
+- [Receiving Media](/guides/messaging/receiving-media)
 - [Voice memos](/guides/messaging/voice-memos)
 - [Sending Messages](/guides/messaging/sending-messages)
