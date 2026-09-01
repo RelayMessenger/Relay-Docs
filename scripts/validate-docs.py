@@ -424,7 +424,7 @@ for version in [
     "@relaymessenger/sdk@0.3.0-staging.4",
     "@relaymessenger/chat-sdk-adapter@0.3.0-staging.0",
     "@relaymessenger/cli@0.5.0-staging.0",
-    "@relaymessenger/mcp@0.1.0-staging.0",
+    "@relaymessenger/mcp@0.1.0-staging.1",
     "@relaymessenger/openclaw-plugin@0.4.0-staging.0",
     "relay-claude-channel@0.3.0-staging.0",
     "relay-hermes@1.0.0rc1",
@@ -477,6 +477,16 @@ for marker in [
 if "relay webhooks listen" in cli_text:
     raise SystemExit("stale Relay CLI event-listener command returned")
 
+codex_text = (root / "ecosystem/codex.mdx").read_text()
+for marker in [
+    "Codex CLI",
+    "0.152.0",
+    "codex plugin marketplace add",
+    "codex plugin add relay@relay-plugin-marketplace",
+]:
+    if marker not in codex_text:
+        raise SystemExit(f"Codex staging install proof lost: {marker}")
+
 claude_text = (root / "ecosystem/claude-code.mdx").read_text()
 claude_normalized = re.sub(r"\s+", " ", claude_text)
 for marker in [
@@ -485,7 +495,10 @@ for marker in [
     "structured `parts[].mention`",
     "`deliveries[]` row whose `contact.is_me` is `true`",
     "authenticated origin of the active turn",
-    "same authenticated sender in the same Chat",
+    "`complete_processing`",
+    "never leave a Relay turn open",
+    "permission prompts remain local to Claude Code",
+    "supersession, expiry, shutdown, and restart",
 ]:
     if marker not in claude_normalized:
         raise SystemExit(f"Claude Code channel boundary lost: {marker}")
