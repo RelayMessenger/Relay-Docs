@@ -1789,17 +1789,17 @@ Agents can subscribe to:
 
 Source: https://docs.staging.relayapp.im/guides/messaging/delivery-receipts.md
 
-Every Message response includes aggregate state and one receipt row for each
-recipient.
+Every Message response includes `delivery_status`. Receipt timestamps and the
+per-recipient `deliveries` array are optional response fields.
 
 ## Response fields
 
-| Field | Meaning |
-| --- | --- |
-| `delivery_status` | Aggregate `sent`, `delivered`, or `read` state |
-| `delivered_at` | Time every recipient reached Delivered, or `null` |
-| `read_at` | Time every recipient reached Read, or `null` |
-| `deliveries` | Independent Delivered and Read times for each recipient |
+| Field | Contract | Meaning |
+| --- | --- | --- |
+| `delivery_status` | Required | Aggregate `sent`, `delivered`, or `read` state |
+| `delivered_at` | Optional, nullable | Time every recipient reached Delivered |
+| `read_at` | Optional, nullable | Time every recipient reached Read |
+| `deliveries` | Optional | Independent Delivered and Read times by recipient |
 
 ```json
 {
@@ -1811,8 +1811,12 @@ recipient.
       "contact": {
         "id": "01993d50-ef7b-7b37-886b-23fd80c7ec10",
         "handle": "alice",
+        "joined_at": "2026-08-29T06:19:00.000Z",
         "kind": "user",
-        "joined_at": "2026-08-29T06:19:00.000Z"
+        "display_name": "Alice",
+        "avatar_url": null,
+        "tagline": null,
+        "verified": false
       },
       "delivered_at": "2026-08-29T06:20:04.000Z",
       "read_at": null
@@ -1821,8 +1825,8 @@ recipient.
 }
 ```
 
-**The aggregate state advances when every recipient in the original audience
-reaches that state.** Read implies Delivered.
+**The aggregate state advances when every recipient reaches that state.** Read
+implies Delivered.
 
 ## Delivered boundaries
 
@@ -1837,7 +1841,7 @@ separately.
 
 ## Mark Read
 
-**Read is optional.** For an agent, the only operation that advances Read is
+**Read is optional.** For an Agent, the only operation that advances Read is
 `POST /v1/chats/{chatId}/read`.
 
 <CodeGroup>
@@ -1852,7 +1856,7 @@ curl -sS -X POST \
 ```
 </CodeGroup>
 
-Call the route when the agent actually reads the Chat's Messages. A transport
+Call the route when the Agent actually reads the Chat's Messages. A transport
 acknowledgement or reply does not mark them Read.
 
 ## Direct and group presentation
@@ -2745,21 +2749,21 @@ Relay delivers the same 15 event types through Webhooks and WebSocket.
 
 | Event | Fires when | Payload schema |
 | --- | --- | --- |
-| `message.sent` | An agent-authenticated Message commits | `MessageEvent` |
-| `message.received` | A user Message commits for the receiving agent | `MessageEvent` |
+| `message.sent` | An Agent-authenticated Message commits | `MessageEvent` |
+| `message.received` | A User Message commits for the receiving Agent | `MessageEvent` |
 | `message.delivered` | Every recipient reaches its recipient-specific Delivered boundary | `MessageEvent` |
 | `message.read` | Every recipient marks the Message Read | `MessageEvent` |
-| `reaction.added` | A Chat member adds or replaces a reaction | `ReactionEventBase` |
-| `reaction.removed` | A Chat member removes its matching reaction | `ReactionEventBase` |
+| `reaction.added` | A Contact adds or replaces a Reaction | `ReactionEventBase` |
+| `reaction.removed` | A Contact removes its matching Reaction | `ReactionEventBase` |
 | `participant.added` | A Handle is added to a group Chat | `ParticipantAddedEvent` |
 | `participant.removed` | A Handle is removed from a group Chat | `ParticipantRemovedEvent` |
-| `chat.created` | Relay creates a Chat for the receiving agent | `ChatCreatedEvent` |
+| `chat.created` | Relay creates a Chat for the receiving Agent | `ChatCreatedEvent` |
 | `chat.group_name_updated` | A group Chat name changes | `ChatGroupNameUpdatedEvent` |
 | `chat.group_icon_updated` | A group Chat icon changes | `ChatGroupIconUpdatedEvent` |
 | `chat.typing_indicator.started` | A Contact starts or refreshes typing | `ChatTypingIndicatorStartedEvent` |
 | `chat.typing_indicator.stopped` | A Contact stops typing | `ChatTypingIndicatorStoppedEvent` |
-| `contact.added` | A user adds the receiving agent | `ContactAddedEvent` |
-| `contact.removed` | A user removes or blocks the receiving agent | `ContactRemovedEvent` |
+| `contact.added` | A User adds the receiving Agent | `ContactAddedEvent` |
+| `contact.removed` | A User removes or blocks the receiving Agent | `ContactRemovedEvent` |
 
 List the supported names from the API:
 
@@ -2809,7 +2813,7 @@ Every event uses the same envelope. This example is a complete
 | `event_id` | Stable deduplication key |
 | `created_at` | Event creation time |
 | `trace_id` | Event correlation ID |
-| `agent_id` | Receiving agent Contact ID |
+| `agent_id` | Receiving Agent Contact ID |
 | `data` | Event-specific payload |
 
 **Every current event uses `webhook_version: "2026-08-30"`.** Subscriptions
@@ -2871,7 +2875,8 @@ and a signed one-hour download URL:
       "url":"https://cdn.staging.relayapp.im/attachments/<token>",
       "filename":"report.pdf",
       "mime_type":"application/pdf",
-      "size_bytes":48291
+      "size_bytes":48291,
+      "reactions":null
     }],
     "sent_at":"2026-08-29T06:20:00.000Z",
     "delivered_at":null,
@@ -5613,15 +5618,6 @@ paths:
         - Contacts
       security:
         - BearerAuth: []
-      parameters:
-        - name: Idempotency-Key
-          in: header
-          required: false
-          description: Optional 1–255 character key for safe retries.
-          schema:
-            type: string
-            minLength: 1
-            maxLength: 255
       requestBody:
         required: true
         content:
