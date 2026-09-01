@@ -42,6 +42,31 @@ if config.get("logo") != {
 }:
     raise SystemExit("Relay logo must link to https://relayapp.im")
 
+redirects = {
+    item.get("source"): item.get("destination")
+    for item in config.get("redirects", [])
+    if isinstance(item, dict) and item.get("permanent") is True
+}
+for source, destination in {
+    "/integrations": "/ecosystem",
+    "/integrations/agent-starter": "/ecosystem/agent-starter",
+    "/integrations/chat-sdk": "/ecosystem/chat-sdk",
+    "/integrations/claude-code": "/ecosystem/claude-code",
+    "/integrations/cli": "/ecosystem/cli",
+    "/integrations/cloudflare": "/ecosystem/agent-starter",
+    "/integrations/codex": "/ecosystem/codex",
+    "/integrations/cursor": "/ecosystem/cursor",
+    "/integrations/hermes": "/ecosystem/hermes",
+    "/integrations/hermes-plugin": "/ecosystem/hermes",
+    "/integrations/mcp": "/ecosystem/mcp",
+    "/integrations/openclaw": "/ecosystem/openclaw",
+    "/integrations/skills": "/ecosystem/skills",
+}.items():
+    if redirects.get(source) != destination:
+        raise SystemExit(
+            f"legacy ecosystem redirect lost: {source} -> {destination}"
+        )
+
 
 def pages(value):
     if isinstance(value, dict):
@@ -404,22 +429,52 @@ ecosystem_paths = [
     root / "examples/index.mdx",
 ]
 ecosystem_text = "\n".join(path.read_text() for path in ecosystem_paths)
-for repository in [
+canonical_ecosystem_sources = {
+    "ecosystem/chat-sdk.mdx": "packages/chat-sdk-adapter",
+    "ecosystem/cli.mdx": "packages/cli",
+    "ecosystem/mcp.mdx": "packages/mcp",
+    "ecosystem/openclaw.mdx": "packages/openclaw",
+    "ecosystem/claude-code.mdx": "packages/claude-code",
+    "ecosystem/agent-starter.mdx": "cookbook/cloudflare-think-agent",
+    "ecosystem/skills.mdx": "skills/relay",
+    "examples/index.mdx": "cookbook",
+}
+for relative, source_path in canonical_ecosystem_sources.items():
+    expected = (
+        "https://github.com/RelayMessenger/Relay-SDK/tree/staging/"
+        f"{source_path}"
+    )
+    if expected not in (root / relative).read_text():
+        raise SystemExit(
+            f"developer ecosystem lost canonical source link: {expected}"
+        )
+
+for relative, repository in {
+    "ecosystem/claude-code.mdx": "Relay-Claude-Code",
+    "ecosystem/codex.mdx": "Relay-Codex",
+    "ecosystem/cursor.mdx": "Relay-Cursor",
+}.items():
+    expected = f"https://github.com/RelayMessenger/{repository}"
+    if expected not in (root / relative).read_text():
+        raise SystemExit(f"developer ecosystem lost install mirror: {expected}")
+
+hermes_source = "https://github.com/RelayMessenger/Relay-Hermes"
+if hermes_source not in (root / "ecosystem/hermes.mdx").read_text():
+    raise SystemExit(f"developer ecosystem lost separate source: {hermes_source}")
+
+for stale_repository in [
     "Relay-Chat-SDK",
     "Relay-CLI",
     "Relay-MCP",
     "Relay-OpenClaw",
-    "Relay-Claude-Code",
-    "Relay-Hermes",
     "Relay-Agent-Starter",
     "Relay-Skills",
-    "Relay-Codex",
-    "Relay-Cursor",
     "Relay-Examples",
 ]:
-    expected = f"https://github.com/RelayMessenger/{repository}"
-    if expected not in ecosystem_text:
-        raise SystemExit(f"developer ecosystem lost branded source link: {expected}")
+    stale = f"https://github.com/RelayMessenger/{stale_repository}"
+    if stale in ecosystem_text:
+        raise SystemExit(f"standalone source link returned: {stale}")
+
 for version in [
     "@relaymessenger/sdk@0.3.0-staging.4",
     "@relaymessenger/chat-sdk-adapter@0.3.0-staging.0",
@@ -428,7 +483,7 @@ for version in [
     "@relaymessenger/openclaw-plugin@0.4.0-staging.0",
     "relay-claude-channel@0.3.0-staging.0",
     "relay-hermes@1.0.0rc1",
-    "relay-agent-starter@0.1.0",
+    "@relaymessenger/cookbook-cloudflare-think-agent@0.1.0",
 ]:
     if version not in ecosystem_text:
         raise SystemExit(f"developer ecosystem lost current source version: {version}")
@@ -441,6 +496,21 @@ for marker in [
 ]:
     if marker not in ecosystem_text:
         raise SystemExit(f"developer ecosystem lost runtime boundary: {marker}")
+
+ecosystem_index_text = (root / "ecosystem/index.mdx").read_text()
+for package in [
+    "@relaymessenger/sdk@0.3.0-staging.4",
+    "@relaymessenger/chat-sdk-adapter@0.3.0-staging.0",
+    "@relaymessenger/cli@0.5.0-staging.0",
+    "@relaymessenger/mcp@0.1.0-staging.1",
+    "@relaymessenger/openclaw-plugin@0.4.0-staging.0",
+    "relay-claude-channel@0.3.0-staging.0",
+]:
+    if f"| `{package}` | `latest` and `staging`" not in ecosystem_index_text:
+        raise SystemExit(f"live npm tag truth lost: {package}")
+if "All six live `latest` tags select the versions shown above." not in ecosystem_index_text:
+    raise SystemExit("six-package live npm latest truth lost")
+
 chat_sdk_text = (root / "ecosystem/chat-sdk.mdx").read_text()
 for marker in [
     "npm install chat@4.39.0 @chat-adapter/state-memory@4.39.0",
@@ -457,17 +527,12 @@ for marker in [
     if marker not in chat_sdk_text:
         raise SystemExit(f"Chat SDK media boundary lost: {marker}")
 
-for relative in [
-    "ecosystem/chat-sdk.mdx",
-    "ecosystem/agent-starter.mdx",
-    "examples/index.mdx",
-]:
-    text = (root / relative).read_text()
-    if re.search(r"\bsource[- ]only\b|\bsource tarball\b", text, re.I):
-        raise SystemExit(f"published Chat SDK is described as source-only: {relative}")
+if re.search(r"\bsource[- ]only\b|\bsource tarball\b", chat_sdk_text, re.I):
+    raise SystemExit("published Chat SDK is described as source-only")
 
 cli_text = (root / "ecosystem/cli.mdx").read_text()
 for marker in [
+    "npm install --global @relaymessenger/cli@staging",
     "relay --profile staging events listen --acknowledge-events",
     "requires an explicit non-production profile",
     "dedicated Agent may advance its durable checkpoint",
@@ -491,6 +556,8 @@ claude_text = (root / "ecosystem/claude-code.mdx").read_text()
 claude_normalized = re.sub(r"\s+", " ", claude_text)
 for marker in [
     "relay-claude-channel@0.3.0-staging.0",
+    "Both the `latest` and `staging` npm tags select this published channel version",
+    "Relay-Claude-Code",
     "Only addressed group Messages start Claude turns",
     "structured `parts[].mention`",
     "`deliveries[]` row whose `contact.is_me` is `true`",
@@ -502,6 +569,33 @@ for marker in [
 ]:
     if marker not in claude_normalized:
         raise SystemExit(f"Claude Code channel boundary lost: {marker}")
+
+hermes_text = re.sub(
+    r"\s+",
+    " ",
+    (root / "ecosystem" / "hermes.mdx").read_text(),
+)
+for marker in [
+    "slash-command Messages are ignored before Hermes dispatch",
+    "fails closed for `/update` and every other slash command",
+    "ordinary Contact chat continues",
+    "resolve inside the active Hermes profile",
+    "do not inherit another profile's Relay credentials or SQLite state",
+]:
+    if marker not in hermes_text:
+        raise SystemExit(f"Hermes profile/slash boundary lost: {marker}")
+
+examples_text = (root / "examples/index.mdx").read_text()
+for recipe in [
+    "cookbook/send-a-message",
+    "cookbook/send-an-image",
+    "cookbook/send-a-voice-memo",
+]:
+    if recipe not in examples_text:
+        raise SystemExit(f"Relay Cookbook taxonomy lost: {recipe}")
+retired_combined_recipe = "-and-".join(["messages", "attachments"])
+if retired_combined_recipe in ecosystem_text.lower():
+    raise SystemExit("retired combined Message and Attachment taxonomy returned")
 
 for index, line in enumerate(ecosystem_text.splitlines()):
     if not line.startswith("git clone"):
