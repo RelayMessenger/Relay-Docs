@@ -441,7 +441,7 @@ the page's single job and update this inventory in the same commit.
 | Sharing Contact Card | `Before sharing` → `Share the card` → `Keep configuration separate` → `Related` |
 | Message History | `Pagination` → `Group-history rows` → `Membership visibility` → `Agent recovery` → `Related` |
 | Add requests | `How Add works` → `Send an Add request` → `Read the response` → `Receive Contact events` → `Related` |
-| Contact Cards | `How Contact Cards work` → `Retrieve the card` → `Upsert the card` → `Update the card` → `Fields` → `Sharing is separate` → `Related` |
+| Contact Cards | `How Contact Cards work` → `Retrieve the card` → `Upsert the card` → `Update the card` → `Profile photo` → `Fields` → `Sharing is separate` → `Related` |
 | Blocked Handles | `Block` → `Behavior` → `List` → `Unblock` → `Related` |
 
 ### Webhooks and WebSocket
