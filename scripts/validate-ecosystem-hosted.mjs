@@ -48,12 +48,15 @@ for (const [repository, expected] of Object.entries(lock.repositories)) {
   }
 }
 
+// `latest` and `staging` may select different versions. Relay-SDK publishes
+// every merge to the `staging` tag and the owner promotes `latest` separately,
+// so the lock records one version and one integrity per tag.
 for (const [packageName, expected] of Object.entries(lock.npm)) {
   const metadata = await json(
     `https://registry.npmjs.org/${encodeURIComponent(packageName)}`,
   );
-  const versions = new Set(Object.values(expected.tags));
-  assert.equal(versions.size, 1, `${packageName} live tags do not select one version`);
+  assert.ok(expected.tags.latest, `${packageName} lock has no latest tag`);
+  assert.ok(expected.tags.staging, `${packageName} lock has no staging tag`);
 
   for (const [tag, version] of Object.entries(expected.tags)) {
     assert.equal(
@@ -62,16 +65,26 @@ for (const [packageName, expected] of Object.entries(lock.npm)) {
       `${packageName}@${tag} drifted`,
     );
     assert.ok(metadata.versions?.[version], `${packageName}@${version} is absent`);
+    assert.ok(
+      expected.integrity[version],
+      `${packageName}@${version} has no locked integrity`,
+    );
     assert.equal(
       metadata.versions[version].dist?.integrity,
-      expected.integrity,
+      expected.integrity[version],
       `${packageName}@${version} integrity drifted`,
     );
   }
 }
 
+const lockedTagCount = Object.values(lock.npm).reduce(
+  (total, entry) => total + Object.keys(entry.tags).length,
+  0,
+);
+
 console.log(
   `verified ${Object.keys(lock.repositories).length} hosted staging repositories, `
     + `${lockedPathCount} canonical paths, and `
-    + `${Object.keys(lock.npm).length} live npm latest/staging identities`,
+    + `${lockedTagCount} live npm tag identities across `
+    + `${Object.keys(lock.npm).length} packages`,
 );

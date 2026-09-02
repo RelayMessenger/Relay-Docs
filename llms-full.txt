@@ -4202,17 +4202,17 @@ sends a cumulative ACK, then send Messages through REST.
 | [Relay CLI](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/cli) | `@relaymessenger/cli@0.5.0-staging.0` | Terminal commands, profiles, diagnostics, and local event forwarding |
 | [Relay MCP](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/mcp) | `@relaymessenger/mcp@0.1.0-staging.1` | Local stdio tools for Relay Chats, Messages, reactions, Read state, Contact Cards, and Add requests |
 | [Relay Skill](https://github.com/RelayMessenger/Relay-SDK/tree/staging/skills/relay) | `1.0.0` | Portable Relay guidance and hosted docs MCP configuration |
-| [Relay Codex](https://github.com/RelayMessenger/Relay-Codex) | Generated mirror `1.0.0` | Codex plugin generated from the Relay Skill |
-| [Relay Cursor](https://github.com/RelayMessenger/Relay-Cursor) | Generated mirror `1.0.0` | Cursor plugin generated from the Relay Skill |
+| [Relay plugin for Codex and Cursor](https://github.com/RelayMessenger/Relay-SDK/tree/staging/plugins/relay) | Generated plugin `1.0.0` | One plugin tree generated from the Relay Skill, read by both hosts |
 | [Relay Cookbook](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook) | Six canonical recipes | Webhooks, WebSocket, Think, text, image, and voice memo examples |
 
 The local Relay MCP uses an Agent Token to call Relay API operations. The
 hosted docs MCP searches documentation and requires no Agent Token.
 
 Relay-SDK is the canonical source for the TypeScript packages, channels, Skill,
-generated-distribution tooling, and Cookbook. Relay-Claude-Code is the Claude
-plugin install mirror. Relay-Codex and Relay-Cursor are generated install
-mirrors. Relay-Hermes remains a separate Python plugin repository.
+generated-distribution tooling, plugins, and Cookbook. Codex, Cursor, and
+Claude Code each read a discovery manifest at the Relay-SDK repository root, so
+every coding-agent plugin installs from that one repository. Relay-Hermes
+remains a separate Python plugin repository.
 
 ## Staging package status
 
@@ -4524,33 +4524,33 @@ Use Relay as a two-way channel for a running Claude Code session.
 Canonical source:
 [Relay-SDK `packages/claude-code`](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/claude-code)
 
-Install mirror:
-[RelayMessenger/Relay-Claude-Code](https://github.com/RelayMessenger/Relay-Claude-Code)
+Claude Code discovery manifest:
+[Relay-SDK `.claude-plugin/marketplace.json`](https://github.com/RelayMessenger/Relay-SDK/blob/staging/.claude-plugin/marketplace.json)
 
 ## Install the plugin
 
 The current channel package is
-`relay-claude-channel@0.3.0-staging.0`, and the bundled Claude plugin uses the
-same version. It uses `@relaymessenger/sdk@0.3.0-staging.4` and requires
-Claude Code Channels research-preview support.
+`relay-claude-channel@0.3.0-staging.0`. The Claude plugin in the Relay-SDK
+staging catalog is version `0.3.0-staging.1`. It uses
+`@relaymessenger/sdk@0.3.0-staging.4` and requires Claude Code Channels
+research-preview support.
 
 **Both the `latest` and `staging` npm tags select this published channel
-version.** Install the Claude plugin from the exact public staging mirror
-through Claude Code's local marketplace.
+version.** Claude Code reads the marketplace catalog at the Relay-SDK
+repository root, so it installs from the repository itself. No separate
+packaging repository exists.
 
-Clone the staging branch:
-
-```bash
-git clone --branch staging \
-  https://github.com/RelayMessenger/Relay-Claude-Code.git
-```
-
-Then install its local marketplace inside Claude Code:
+Add the marketplace and install the plugin inside Claude Code:
 
 ```text
-/plugin marketplace add /absolute/path/to/Relay-Claude-Code
+/plugin marketplace add RelayMessenger/Relay-SDK@staging
 /plugin install relay@relay-messenger
 ```
+
+`@staging` is required. This docs candidate describes the Relay-SDK `staging`
+branch, and Claude Code reads the catalog from the ref you name.
+`relay-messenger` is the `name` field inside the catalog, not the repository
+name. If the install summary asks for it, run `/reload-plugins`.
 
 The plugin starts disabled. Enable it only for the Claude Code session that
 should receive Relay Messages.
@@ -4804,31 +4804,42 @@ hosted preview or MCP index.
 
 # Relay for Codex
 
-> Install the generated Relay Codex plugin with the Relay Skill, locked references, and docs MCP search.
+> Install the generated Relay plugin for Codex with the Relay Skill, locked references, and docs MCP search.
 
 Source: https://docs.staging.relayapp.im/ecosystem/codex.md
 
 Add Relay's generated skill, references, example, and docs search to Codex.
 
-Generated install mirror:
-[RelayMessenger/Relay-Codex](https://github.com/RelayMessenger/Relay-Codex)
+Codex discovery manifest:
+[Relay-SDK `.agents/plugins/marketplace.json`](https://github.com/RelayMessenger/Relay-SDK/blob/staging/.agents/plugins/marketplace.json)
+
+Generated plugin:
+[Relay-SDK `plugins/relay`](https://github.com/RelayMessenger/Relay-SDK/tree/staging/plugins/relay)
 
 Canonical source:
 [Relay-SDK `skills/relay`](https://github.com/RelayMessenger/Relay-SDK/tree/staging/skills/relay)
 
 ## Install locally
 
+Codex reads the marketplace catalog at the repository root, so it installs from
+a plain Relay-SDK checkout. No separate packaging repository exists.
+
 The current generated distribution version is `1.0.0`. Use Codex CLI
-`0.152.0` for this staging candidate, then install the staging source through
-its local marketplace:
+`0.152.0` for this staging candidate, then add Relay-SDK as a marketplace and
+install the plugin from it:
 
 ```bash
 npm install --global @openai/codex@0.152.0
-git clone --branch staging \
-  https://github.com/RelayMessenger/Relay-Codex.git
-codex plugin marketplace add /absolute/path/to/Relay-Codex
+codex plugin marketplace add \
+  https://github.com/RelayMessenger/Relay-SDK --ref staging
 codex plugin add relay@relay-plugin-marketplace
 ```
+
+`--ref staging` is required. This docs candidate describes the Relay-SDK
+`staging` branch, and Codex reads the catalog from the ref you name.
+
+`relay-plugin-marketplace` is the `name` field inside the catalog, not the
+repository name.
 
 Start a new Codex session after installation.
 
@@ -4843,7 +4854,7 @@ The package contains:
 
 The generated files come from the canonical Relay Skill and
 [distribution tooling](https://github.com/RelayMessenger/Relay-SDK/tree/staging/tooling/skills-distributions).
-Update the source Skill, then regenerate this mirror.
+Update the source Skill, then regenerate the plugin tree.
 
 ## Prepare hosted proof
 
@@ -4866,28 +4877,34 @@ Local Docs validation does not claim that hosted result.
 
 # Relay for Cursor
 
-> Install the generated Relay Cursor plugin with the Relay Skill, locked references, and docs MCP search.
+> Install the generated Relay plugin for Cursor with the Relay Skill, locked references, and docs MCP search.
 
 Source: https://docs.staging.relayapp.im/ecosystem/cursor.md
 
 Add Relay's generated skill, references, example, and docs search to Cursor.
 
-Generated install mirror:
-[RelayMessenger/Relay-Cursor](https://github.com/RelayMessenger/Relay-Cursor)
+Generated plugin:
+[Relay-SDK `plugins/relay`](https://github.com/RelayMessenger/Relay-SDK/tree/staging/plugins/relay)
+
+Team marketplace catalog:
+[Relay-SDK `.cursor-plugin/marketplace.json`](https://github.com/RelayMessenger/Relay-SDK/blob/staging/.cursor-plugin/marketplace.json)
 
 Canonical source:
 [Relay-SDK `skills/relay`](https://github.com/RelayMessenger/Relay-SDK/tree/staging/skills/relay)
 
 ## Install locally
 
-The current generated distribution version is `1.0.0`. Copy or link the
-staging source checkout to:
+The plugin ships inside Relay-SDK, so it installs from a plain checkout. No
+separate packaging repository exists.
+
+The current generated distribution version is `1.0.0`. Clone Relay-SDK, then
+link the plugin directory, not the repository root:
 
 ```bash
 git clone --branch staging \
-  https://github.com/RelayMessenger/Relay-Cursor.git
+  https://github.com/RelayMessenger/Relay-SDK.git
 
-ln -s /absolute/path/to/Relay-Cursor ~/.cursor/plugins/local/relay
+ln -s /absolute/path/to/Relay-SDK/plugins/relay ~/.cursor/plugins/local/relay
 ```
 
 The installed path is:
@@ -4898,6 +4915,10 @@ The installed path is:
 
 Reload Cursor, open **Customize**, and confirm that the Relay skill and docs
 MCP server are present.
+
+A Cursor team or enterprise administrator can instead import Relay-SDK from
+**Dashboard**, **Plugins**, **Team Marketplaces**, which reads the root
+catalog above.
 
 ## Use the package
 
@@ -4910,7 +4931,7 @@ The package contains:
 
 The generated files come from the canonical Relay Skill and
 [distribution tooling](https://github.com/RelayMessenger/Relay-SDK/tree/staging/tooling/skills-distributions).
-Update the source Skill, then regenerate this mirror.
+Update the source Skill, then regenerate the plugin tree.
 
 ## Prepare hosted proof
 
