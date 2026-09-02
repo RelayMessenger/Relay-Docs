@@ -1090,10 +1090,10 @@ for required in [
 
 group_text = (root / "guides/chats/group-chats.mdx").read_text()
 if (
-    "2 to 31 recipient Handles plus the sender" not in group_text
+    "2 to 7 recipient Handles plus the sender" not in group_text
     or "keep at least three active Contacts" not in group_text
 ):
-    raise SystemExit("Group Chat guide lost max-32 and minimum-three rules")
+    raise SystemExit("Group Chat guide lost max-8 and minimum-three rules")
 
 expected_error_codes = {
     1004, 1005, 2001, 2003, 2004, 2005, 2006,
