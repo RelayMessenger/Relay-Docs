@@ -939,10 +939,16 @@ if not all(term in attachments_text for term in [
 ]):
     raise SystemExit("Attachment guide lost URL import safety boundaries")
 if (
-    "WebP" not in attachments_text
-    or not re.search(r"\brejects\s+SVG\b", attachments_text)
+    not all(term in attachments_text for term in [
+        "any file type",
+        "application/octet-stream",
+        "nosniff",
+        "Content-Disposition",
+        "SVG",
+    ])
+    or re.search(r"\brejects\s+SVG\b", attachments_text)
 ):
-    raise SystemExit("Attachment guide lost the Relay WebP/SVG decision")
+    raise SystemExit("Attachment guide lost the any-file-type rule")
 for required in [
     "relay.attachments.retrieve",
     'attachment.status !== "complete"',
@@ -1144,7 +1150,7 @@ for path in error_paths:
 openapi_text = (root / "api-reference/openapi.yaml").read_text()
 mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 expected_openapi_sha256 = (
-    "622095a7990cfb43576f0d6b76f5ab4a358f0fd23483ce11e1f02a909d957abd"
+    "26a6bc047286e09df6ef95f3c6b09f0437260ecc94e12c5fb3ce1704910f8ba1"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()

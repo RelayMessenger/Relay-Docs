@@ -224,7 +224,7 @@ Message.
 | Redirects | Every hop is revalidated, with at most five redirects |
 | Response | Final response must succeed |
 | Size | Declared and actual body must each be 1 byte to 10 MB |
-| Content type | Response Content-Type must be supported |
+| Content type | Relay keeps the type the host declares, and stores `application/octet-stream` when the host declares none it can read |
 
 **Relay rejects credentials in the URL and blocks loopback, private,
 link-local, reserved, and internal destinations.** A redirect cannot bypass
@@ -242,10 +242,38 @@ these checks.
 
 Width and height must be supplied together.
 
-## Image formats
+## File types
 
-Relay accepts JPEG, PNG, GIF, HEIC, TIFF, BMP, and WebP images. It rejects
-SVG.
+`content_type` takes any file type. Relay stores the bytes unchanged and gives
+the reader the type you declared.
+
+| Rule | Value |
+| --- | --- |
+| Shape | `type/subtype`, spelled with the token characters RFC 2045 allows |
+| Length | Up to 255 characters |
+| Case | Relay lowercases the type, so one Attachment has one spelling |
+| A value outside that shape | [`400` with code `1005`](/error/codes/1xxx/1005) |
+
+A public URL import keeps the type its host declares, and stores
+`application/octet-stream` when the host declares none Relay can read.
+
+Every download carries `X-Content-Type-Options: nosniff` and
+`Content-Security-Policy: sandbox; default-src 'none'`, so a reader gets the
+type you declared, rendered inside a sandbox. SVG allocates, uploads, and
+downloads on those terms.
+
+| Type | `Content-Disposition` | Relay iOS app |
+| --- | --- | --- |
+| `image/*`, `audio/*`, `video/*`, `application/pdf` | `inline` | Previews in the Chat |
+| Every other type | `attachment` | Shows a file row that opens in QuickLook or the share sheet |
+
+<Note>
+A picture is drawn rather than downloaded, so profile photos and group photos
+take images. A [profile photo](/guides/contact-cards#profile-photo) address and
+the Attachment ID form of
+[`group_chat_icon`](/guides/chats/group-chats#set-a-group-photo) each answer
+[`422` with code `2006`](/error/codes/2xxx/2006) for anything else.
+</Note>
 
 ## Limits
 
