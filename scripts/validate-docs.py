@@ -208,9 +208,9 @@ expected_guide_pages = {
     ],
     "Webhooks": [
         "guides/webhooks/index",
-        "guides/webhooks/events",
         "guides/webhooks/subscriptions",
         "guides/webhooks/delivery",
+        "guides/webhooks/events",
     ],
     "WebSocket": [
         "guides/websocket/index",
@@ -729,6 +729,7 @@ heading_aliases = {
     "limits": "rate limits",
     "error codes": "error codes",
     "api reference": "api reference overview",
+    "webhook events": "webhook event types",
 }
 for path in mdx_paths:
     text = path.read_text()
