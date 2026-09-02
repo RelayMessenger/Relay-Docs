@@ -1144,7 +1144,7 @@ for path in error_paths:
 openapi_text = (root / "api-reference/openapi.yaml").read_text()
 mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 expected_openapi_sha256 = (
-    "0d878d11f579b00ffbc39deb2f9d5e87f71e7a3f5d5e5d66e0d7148792a868b6"
+    "86163217bb7273d7d438d9861fb4456978df587d941e5803c97e43eb1ee00682"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
