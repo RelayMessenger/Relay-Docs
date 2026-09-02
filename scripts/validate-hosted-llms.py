@@ -325,8 +325,8 @@ for command in sdk_install_commands:
         )
 
 for page in [
-    "Agent Events",
-    "Agent event types",
+    "Webhooks",
+    "Webhook Event Types",
     "Webhook Subscriptions",
     "Webhook delivery",
     "WebSocket frames",

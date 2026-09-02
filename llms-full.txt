@@ -42,7 +42,7 @@ To build an agent, you need:
 | Replies and reactions | Target an exact Message part |
 | Contact Cards | Configure an agent's name and photo, then share it into an existing Chat |
 | Delivery state | Track Sent, Delivered, and Read per recipient |
-| Agent events | Save a webhook subscription for signed HTTP delivery, or connect by WebSocket when none is saved |
+| Webhook events | Save a webhook subscription for signed HTTP delivery, or connect by WebSocket when none is saved |
 
 ## Authentication
 
@@ -590,7 +590,7 @@ advances only through `POST /v1/chats/{chatId}/read`.
 
 ## Events
 
-Saved webhook subscriptions determine agent event delivery:
+Saved webhook subscriptions determine event delivery:
 
 | Configuration | Path |
 | --- | --- |
@@ -611,7 +611,7 @@ body return the original Message. The same key with different content returns
 - [Messaging overview](/guides/messaging)
 - [Chats overview](/guides/chats)
 - [Add requests](/guides/contacts/add-requests)
-- [Agent event types](/guides/agent-events/events)
+- [Webhook Event Types](/guides/webhooks/events)
 
 # AI coding agents
 
@@ -660,7 +660,7 @@ Messages between the agent and other users.
 ## Start
 
 1. Read `https://docs.relayapp.im/llms.txt` and the current OpenAPI.
-2. Read the Agent Events guide and choose Webhooks or WebSocket.
+2. Read the Webhooks guide and choose Webhooks or WebSocket.
 3. Set `RELAY_API_URL` for the target environment and use an Agent Token from
    that environment.
 4. Store the Agent Token in server-side secret storage.
@@ -688,7 +688,7 @@ Messages between the agent and other users.
 - Replies and reactions target zero-based `part_index`.
 - Group membership controls which history a Contact can read.
 
-## Agent events
+## Webhook events
 
 | Path | Configuration | Transport acknowledgement |
 | --- | --- | --- |
@@ -745,7 +745,7 @@ Agent backends authenticate the `/v1/websocket` upgrade with
 - Treat registered Handles as public messaging addresses.
 - Treat every inbound `event_id` as at-least-once.
 - Recover current state with ordinary REST reads or WebSocket FULL sync.
-- Retain `trace_id` from API errors and agent events for debugging.
+- Retain `trace_id` from API errors and webhook events for debugging.
 - Use a staging API root and staging Agent Token together during staging tests.
 
 Use the OpenAPI contract for exact fields, limits, and errors. Label unproved
@@ -1650,7 +1650,7 @@ URL, and the file metadata:
 | `size_bytes` | Exact byte length |
 
 The full event envelope is on
-[Agent event types](/guides/agent-events/events#media-payload).
+[Webhook Event Types](/guides/webhooks/events#media-payload).
 
 ## Download the bytes
 
@@ -1727,7 +1727,7 @@ files through that provider's own file API. Google's Gemini API accepts up to
 
 ## Related
 
-- [Agent event types](/guides/agent-events/events)
+- [Webhook Event Types](/guides/webhooks/events)
 - [Attachments](/guides/messaging/attachments)
 - [Message Parts](/guides/messaging/message-parts)
 - [Voice memos](/guides/messaging/voice-memos)
@@ -1939,7 +1939,7 @@ Agents can subscribe to:
 
 ## Related
 
-- [Agent event types](/guides/agent-events/events)
+- [Webhook Event Types](/guides/webhooks/events)
 - [Replies](/guides/messaging/replies)
 
 # Delivery receipts
@@ -2288,7 +2288,7 @@ The same changes appear as ordered system Messages in visible Chat history.
 
 - [Group Chats](/guides/chats/group-chats)
 - [Message History](/guides/chats/message-history)
-- [Agent event types](/guides/agent-events/events)
+- [Webhook Event Types](/guides/webhooks/events)
 
 # Typing indicators
 
@@ -2376,7 +2376,7 @@ group, this Contact names the typer.
 ## Related
 
 - [Chats](/guides/chats)
-- [Agent event types](/guides/agent-events/events)
+- [Webhook Event Types](/guides/webhooks/events)
 - [WebSocket protocol](/guides/websocket/protocol)
 
 # Sharing Contact Card
@@ -2503,7 +2503,7 @@ Replies and reactions target regular Message rows.
 ## Agent recovery
 
 Read Chats and Messages after a restart or an uncertain REST response. Receive
-new agent events through webhooks or WebSocket.
+new webhook events through webhooks or WebSocket.
 
 ## Related
 
@@ -2599,13 +2599,13 @@ request. `contact.added` is the signal that the user added the agent.
 | `contact.added` | A user added the receiving agent | User Contact `id`, `handle`, and `display_name`, plus `chat_id` |
 | `contact.removed` | A user removed or blocked the receiving agent | User Contact `id`, `handle`, and `display_name` |
 
-These events use the agent's configured [event path](/guides/agent-events).
+These events use the agent's configured [event path](/guides/webhooks).
 
 ## Related
 
 - [Sending Messages](/guides/messaging/sending-messages)
-- [Agent event types](/guides/agent-events/events)
-- [Agent Events](/guides/agent-events)
+- [Webhook Event Types](/guides/webhooks/events)
+- [Webhooks](/guides/webhooks)
 - [Authentication](/getting-started/authentication)
 
 # Contact Cards
@@ -2800,285 +2800,16 @@ Unblocking restores direct messaging in an existing Chat.
 - [Add requests](/guides/contacts/add-requests)
 - [Error Codes](/error)
 
-# Agent Events
-
-> Receive agent events through webhooks or WebSocket.
-
-Source: https://docs.staging.relayapp.im/guides/agent-events/index.md
-
-Agent events notify an agent backend about Contacts, Messages, receipts,
-reactions, membership, Chat metadata, and typing.
-
-**See all 15 names and payloads in [Event types](/guides/agent-events/events).**
-
-## Choose a transport
-
-Relay chooses the path from the agent's saved configuration:
-
-| Saved configuration | Delivery path | Transport acknowledgement |
-| --- | --- | --- |
-| One or more webhook subscriptions | Matching active Webhooks | Durable commit, then HTTP `2xx` |
-| Zero webhook subscriptions and a connected backend | WebSocket | Durable commit, then cumulative ACK |
-| Zero webhook subscriptions while disconnected | Durable WebSocket queue | Acknowledgement begins when a backend connects |
-
-Webhook `2xx` responses and WebSocket ACKs acknowledge event transport only.
-They do not advance Message Delivered or Read state.
-
-## Shared envelope
-
-Webhooks and WebSocket carry the same event envelope:
-
-```json
-{
-  "api_version": "v1",
-  "webhook_version": "2026-08-30",
-  "event_type": "contact.removed",
-  "event_id": "01993d50-4133-7178-8e16-7c1455c91d43",
-  "created_at": "2026-08-29T06:20:00.000Z",
-  "trace_id": "b923d71e50be43ba9e0fe1e34a7676c2",
-  "agent_id": "01993d50-d2a8-7fe2-8b76-9eaf04816377",
-  "data": {
-    "contact": {
-      "id": "01993d50-4133-7178-8e16-7c1455c91d44",
-      "handle": "advait",
-      "display_name": "Advait"
-    }
-  }
-}
-```
-
-Store `event_id` under a unique constraint before acceptance. At-least-once
-delivery means a replay can contain the same ID and frozen body.
-
-## Switch transports
-
-Change the saved webhook subscriptions:
-
-| Change | Result |
-| --- | --- |
-| Create the first subscription | Relay closes connected agent sockets and moves matching pending events to active Webhooks |
-| Delete the last subscription | Relay drains pending events to WebSocket |
-| Delete the last subscription with no socket connected | Pending events continue waiting durably |
-
-Pending events keep the same `event_id` across a path change and remain
-available for 30 days. A WebSocket upgrade while any webhook subscription
-exists returns HTTP `409`.
-
-## Recovery
-
-Use ordinary Chat and Message reads for authoritative state after a gap.
-A stale WebSocket checkpoint uses the documented FULL sync flow.
-
-## Review with an agent
-
-**Audit one event transport and its durable acceptance boundary.** Copy this
-prompt into your coding agent.
-
-```text
-You are auditing a codebase that receives Relay agent events.
-
-This is read-only. Do not change code unless I ask.
-
-1. Read https://docs.relayapp.im/llms.txt, Agent Events, and the current Relay OpenAPI.
-2. List the agent's saved webhook subscriptions and determine the automatic path.
-3. Locate event_id deduplication, the durable inbox commit, 2xx or cumulative ACK, and reply idempotency.
-4. Prove active subscriptions cover every event type the agent needs.
-5. Prove the first subscription closes sockets, the last deletion enables socket delivery, and pending events keep event_id.
-6. Prove recovery uses Relay REST reads or the documented FULL sync flow.
-7. Report Check | Status | file:line evidence | Fix.
-8. Mark anything you cannot prove as unknown.
-```
-
-## Related
-
-- [Webhooks](/guides/webhooks)
-- [WebSocket](/guides/websocket)
-- [Agent event types](/guides/agent-events/events)
-- [Idempotency](/guides/platform/idempotency)
-
-# Agent event types
-
-> See every event delivered through Relay Webhooks and WebSocket.
-
-Source: https://docs.staging.relayapp.im/guides/agent-events/events.md
-
-Relay delivers the same 15 event types through Webhooks and WebSocket.
-
-## All event types
-
-| Event | Fires when | Payload schema |
-| --- | --- | --- |
-| `message.sent` | An Agent-authenticated Message commits | `MessageEvent` |
-| `message.received` | A User Message commits for the receiving Agent | `MessageEvent` |
-| `message.delivered` | Every recipient reaches its recipient-specific Delivered boundary | `MessageEvent` |
-| `message.read` | Every recipient marks the Message Read | `MessageEvent` |
-| `reaction.added` | A Contact adds or replaces a Reaction | `ReactionEventBase` |
-| `reaction.removed` | A Contact removes its matching Reaction | `ReactionEventBase` |
-| `participant.added` | A Handle is added to a group Chat | `ParticipantAddedEvent` |
-| `participant.removed` | A Handle is removed from a group Chat | `ParticipantRemovedEvent` |
-| `chat.created` | Relay creates a Chat for the receiving Agent | `ChatCreatedEvent` |
-| `chat.group_name_updated` | A group Chat name changes | `ChatGroupNameUpdatedEvent` |
-| `chat.group_icon_updated` | A group Chat icon changes | `ChatGroupIconUpdatedEvent` |
-| `chat.typing_indicator.started` | A Contact starts or refreshes typing | `ChatTypingIndicatorStartedEvent` |
-| `chat.typing_indicator.stopped` | A Contact stops typing | `ChatTypingIndicatorStoppedEvent` |
-| `contact.added` | A User adds the receiving Agent | `ContactAddedEvent` |
-| `contact.removed` | A User removes or blocks the receiving Agent | `ContactRemovedEvent` |
-
-List the supported names from the API:
-
-<CodeGroup>
-```typescript TypeScript SDK
-const { events } = await relay.webhookEvents.list();
-```
-
-```bash cURL
-curl -sS https://api.relayapp.im/v1/webhook-events \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-```
-</CodeGroup>
-
-## Envelope
-
-Every event uses the same envelope. This example is a complete
-`contact.added` event:
-
-```json
-{
-  "api_version": "v1",
-  "webhook_version": "2026-08-30",
-  "event_type": "contact.added",
-  "event_id": "00000000-0000-7000-8000-000000000010",
-  "created_at": "2026-08-31T06:00:00.000Z",
-  "trace_id": "0123456789abcdef0123456789abcdef",
-  "agent_id": "00000000-0000-7000-8000-000000000011",
-  "data": {
-    "contact": {
-      "id": "00000000-0000-7000-8000-000000000012",
-      "handle": "advait",
-      "display_name": "Advait"
-    },
-    "chat_id": "00000000-0000-7000-8000-000000000013"
-  }
-}
-```
-
-### Fields
-
-| Field | Meaning |
-| --- | --- |
-| `api_version` | Relay API version, currently `v1` |
-| `webhook_version` | Fixed payload version, `2026-08-30` |
-| `event_type` | Event name |
-| `event_id` | Stable deduplication key |
-| `created_at` | Event creation time |
-| `trace_id` | Event correlation ID |
-| `agent_id` | Receiving Agent Contact ID |
-| `data` | Event-specific payload |
-
-**Every current event uses `webhook_version: "2026-08-30"`.** Subscriptions
-use this fixed payload version. Routine deployments do not change it; Relay
-assigns a new date only when the payload contract changes.
-
-## Payload fields
-
-| Events | Required `data` fields | Optional `data` fields |
-| --- | --- | --- |
-| `message.*` | `chat.id`, `id`, `direction`, `sender_handle`, `parts` | `chat.is_group`, `chat.owner_handle`, `idempotency_key`, `sent_at`, `delivered_at`, `read_at`, `reply_to` |
-| `reaction.*` | `chat_id`, `from_handle`, `message_id`, `part_index`, `reaction_type`, `is_from_me`, `reacted_at` | `custom_emoji` |
-| `participant.added` | `chat_id`, `participant`, `added_at` | None |
-| `participant.removed` | `chat_id`, `participant`, `removed_at` | None |
-| `chat.created` | `id`, `display_name`, `handles`, `is_group`, `created_at`, `updated_at` | `group_chat_icon` |
-| `chat.group_name_updated` | `chat_id`, `updated_at` | `old_value`, `new_value`, `changed_by_handle` |
-| `chat.group_icon_updated` | `chat_id`, `updated_at` | `old_value`, `new_value`, `changed_by_handle` |
-| `chat.typing_indicator.*` | `chat_id`, `contact` | None |
-| `contact.added` | `contact`, `chat_id` | None |
-| `contact.removed` | `contact` | None |
-
-`sender_handle`, `from_handle`, and `participant` use the full `ChatHandle`
-shape. Message `parts` contain text, media, or link response parts.
-
-### Media payload
-
-A `message.received` event with media includes the permanent Attachment ID
-and a signed download URL:
-
-```json
-{
-  "api_version":"v1",
-  "webhook_version":"2026-08-30",
-  "event_type":"message.received",
-  "event_id":"01993d50-4133-7178-8e16-7c1455c91d43",
-  "created_at":"2026-08-29T06:20:00.000Z",
-  "trace_id":"b923d71e50be43ba9e0fe1e34a7676c2",
-  "agent_id":"01993d50-d2a8-7fe2-8b76-9eaf04816377",
-  "data":{
-    "chat":{
-      "id":"01993d50-7966-7ba2-8861-9bc81098c451",
-      "is_group":false
-    },
-    "id":"01993d50-b4ce-71e6-8e65-35d325d95ddb",
-    "direction":"inbound",
-    "sender_handle":{
-      "id":"01993d50-a23f-7f31-8672-69e69b6a2be8",
-      "handle":"alice",
-      "joined_at":"2026-08-29T06:00:00.000Z",
-      "kind":"user",
-      "display_name":"Alice",
-      "avatar_url":null,
-      "tagline":null,
-      "verified":false
-    },
-    "parts":[{
-      "type":"media",
-      "id":"01993d50-d263-7d6b-87ce-90aba89b7815",
-      "url":"https://cdn.staging.relayapp.im/attachments/<token>",
-      "filename":"report.pdf",
-      "mime_type":"application/pdf",
-      "size_bytes":48291,
-      "reactions":null
-    }],
-    "sent_at":"2026-08-29T06:20:00.000Z",
-    "delivered_at":null,
-    "read_at":null
-  }
-}
-```
-
-Store `parts[].id` as the Attachment identity. `parts[].url` is a signed
-download link that is valid for 60 minutes. Fetch it with no `Authorization`
-header. After it expires, call `GET /v1/attachments/{id}` with your Agent Token
-for a fresh link.
-
-Relay stores the event body once, so a retried delivery and a replay carry the
-same `url`. Read [Receiving Media](/guides/messaging/receiving-media) for the
-download and model-input path.
-
-## Delivery paths
-
-| Transport | Event location | Accept after |
-| --- | --- | --- |
-| Webhook | The envelope is the request body | Persisting `event_id`, then return `2xx` |
-| WebSocket | The envelope is inside an `event` frame | Persisting `event_id`, then send a cumulative ACK |
-
-## Related
-
-- [Add requests](/guides/contacts/add-requests)
-- [Receiving Media](/guides/messaging/receiving-media)
-- [Agent events](/guides/agent-events)
-- [Webhooks](/guides/webhooks)
-- [Webhook subscriptions](/guides/webhooks/subscriptions)
-- [WebSocket frames](/guides/websocket/protocol)
-
 # Webhooks
 
-> Receive signed agent events at an HTTPS endpoint.
+> Receive signed webhook events at an HTTPS endpoint.
 
 Source: https://docs.staging.relayapp.im/guides/webhooks/index.md
 
-Save a webhook subscription to deliver agent events to an HTTPS endpoint you
+Save a webhook subscription to deliver webhook events to an HTTPS endpoint you
 control.
 
-**See all 15 names and payloads in [Agent event types](/guides/agent-events/events).**
+**See all 15 names and payloads in [Webhook Event Types](/guides/webhooks/events).**
 
 <Note>
   With one or more saved subscriptions, Relay uses active Webhooks that include
@@ -3198,8 +2929,480 @@ This is read-only. Do not change code unless I ask.
 ## Related
 
 - [Subscriptions](/guides/webhooks/subscriptions)
-- [Agent event types](/guides/agent-events/events)
+- [Webhook Event Types](/guides/webhooks/events)
 - [Delivery and retries](/guides/webhooks/delivery)
+
+# Webhook Event Types
+
+> See every event type available to Relay webhook subscriptions, with a payload example for each.
+
+Source: https://docs.staging.relayapp.im/guides/webhooks/events.md
+
+Use this page to choose the event names for a Webhook subscription. Relay uses the same event envelope inside an acknowledged WebSocket `event` frame, while WebSocket connection and replay behavior lives in the [WebSocket guide](/guides/websocket).
+
+## All event types
+
+| Event | Fires when | Payload in `data` |
+| --- | --- | --- |
+| `message.sent` | An Agent Message is committed | `MessageEvent` |
+| `message.received` | A User Message is committed for the Agent | `MessageEvent` |
+| `message.delivered` | a Message reaches the recipient-specific Delivered boundary | `MessageEvent` |
+| `message.read` | a recipient marks a Message Read | `MessageEvent` |
+| `reaction.added` | a Contact adds a Reaction | `ReactionEventBase` |
+| `reaction.removed` | a Contact removes a Reaction | `ReactionEventBase` |
+| `participant.added` | a Contact joins a group Chat | `ParticipantAddedEvent` |
+| `participant.removed` | a Contact leaves or is removed from a group Chat | `ParticipantRemovedEvent` |
+| `chat.created` | Relay creates a Chat for the Agent | `ChatCreatedEvent` |
+| `chat.group_name_updated` | a group Chat name changes | `ChatGroupNameUpdatedEvent` |
+| `chat.group_icon_updated` | a group Chat icon changes | `ChatGroupIconUpdatedEvent` |
+| `chat.typing_indicator.started` | a Contact starts or refreshes typing | `ChatTypingIndicatorStartedEvent` |
+| `chat.typing_indicator.stopped` | a Contact stops typing | `ChatTypingIndicatorStoppedEvent` |
+| `contact.added` | a User adds the Agent | `ContactAddedEvent` |
+| `contact.removed` | a User removes or blocks the Agent | `ContactRemovedEvent` |
+
+## List event types
+
+The API returns the authoritative list of names accepted by `subscribed_events`.
+
+<CodeGroup>
+```typescript TypeScript SDK
+const { events } = await relay.webhookEvents.list();
+```
+
+```bash cURL
+curl -sS https://api.relayapp.im/v1/webhook-events \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+</CodeGroup>
+
+## Envelope
+
+Every Webhook request has the same top-level shape. The `event_type` selects the shape of `data`.
+
+Use this fixed payload version: `2026-08-30`.
+
+```json
+{
+  "api_version": "v1",
+  "webhook_version": "2026-08-30",
+  "event_type": "contact.added",
+  "event_id": "00000000-0000-7000-8000-000000000010",
+  "created_at": "2026-08-31T06:00:00.000Z",
+  "trace_id": "0123456789abcdef0123456789abcdef",
+  "agent_id": "00000000-0000-7000-8000-000000000011",
+  "data": {
+    "contact": {
+      "id": "00000000-0000-7000-8000-000000000012",
+      "handle": "advait",
+      "display_name": "Advait"
+    },
+    "chat_id": "00000000-0000-7000-8000-000000000013"
+  }
+}
+```
+
+Commit `event_id` under a uniqueness rule before returning the Webhook `2xx`. Relay may retry the same event with the same ID and body.
+
+## Event payload examples
+
+The following blocks show the event-specific `data` object. The top-level envelope stays the same for every event.
+
+### `message.sent`
+
+```json
+{
+  "chat": { "id": "00000000-0000-7000-8000-000000000101", "is_group": false },
+  "id": "00000000-0000-7000-8000-000000000102",
+  "idempotency_key": "reply-000000000102",
+  "direction": "outbound",
+  "sender_handle": {
+    "id": "00000000-0000-7000-8000-000000000103",
+    "handle": "relay",
+    "joined_at": "2026-08-31T06:00:00.000Z",
+    "kind": "agent",
+    "display_name": "Relay",
+    "avatar_url": null,
+    "tagline": "A Relay agent",
+    "verified": true
+  },
+  "parts": [{ "type": "text", "value": "Hello from Relay" }],
+  "sent_at": "2026-08-31T06:01:00.000Z",
+  "delivered_at": null,
+  "read_at": null,
+  "reply_to": null
+}
+```
+
+### `message.received`
+
+```json
+{
+  "chat": { "id": "00000000-0000-7000-8000-000000000111", "is_group": false },
+  "id": "00000000-0000-7000-8000-000000000112",
+  "idempotency_key": null,
+  "direction": "inbound",
+  "sender_handle": {
+    "id": "00000000-0000-7000-8000-000000000113",
+    "handle": "advait",
+    "joined_at": "2026-08-31T06:00:00.000Z",
+    "kind": "user",
+    "display_name": "Advait",
+    "avatar_url": null,
+    "tagline": null,
+    "verified": false
+  },
+  "parts": [{ "type": "text", "value": "Can you check this?" }],
+  "sent_at": "2026-08-31T06:02:00.000Z",
+  "delivered_at": null,
+  "read_at": null,
+  "reply_to": null
+}
+```
+
+### Media payload
+
+Use the `media` part fields when a Message contains an Attachment. The `url` is a signed Relay download URL.
+
+```json
+{
+  "chat": { "id": "00000000-0000-7000-8000-000000000115", "is_group": false },
+  "id": "00000000-0000-7000-8000-000000000116",
+  "idempotency_key": null,
+  "direction": "inbound",
+  "sender_handle": {
+    "id": "00000000-0000-7000-8000-000000000117",
+    "handle": "advait",
+    "joined_at": "2026-08-31T06:00:00.000Z",
+    "kind": "user",
+    "display_name": "Advait",
+    "avatar_url": null,
+    "tagline": null,
+    "verified": false
+  },
+  "parts": [{
+    "type": "media",
+    "id": "00000000-0000-7000-8000-000000000118",
+    "url": "https://cdn.relayapp.im/attachments/opaque-download-token",
+    "filename": "report.pdf",
+    "mime_type": "application/pdf",
+    "size_bytes": 48291
+  }],
+  "sent_at": "2026-08-31T06:02:00.000Z",
+  "delivered_at": null,
+  "read_at": null,
+  "reply_to": null
+}
+```
+
+### `message.delivered`
+
+```json
+{
+  "chat": { "id": "00000000-0000-7000-8000-000000000121", "is_group": false },
+  "id": "00000000-0000-7000-8000-000000000122",
+  "idempotency_key": "reply-000000000122",
+  "direction": "outbound",
+  "sender_handle": {
+    "id": "00000000-0000-7000-8000-000000000123",
+    "handle": "relay",
+    "joined_at": "2026-08-31T06:00:00.000Z",
+    "kind": "agent",
+    "display_name": "Relay",
+    "avatar_url": null,
+    "tagline": "A Relay agent",
+    "verified": true
+  },
+  "parts": [{ "type": "text", "value": "The result is ready." }],
+  "sent_at": "2026-08-31T06:03:00.000Z",
+  "delivered_at": "2026-08-31T06:03:01.000Z",
+  "read_at": null,
+  "reply_to": null
+}
+```
+
+### `message.read`
+
+```json
+{
+  "chat": { "id": "00000000-0000-7000-8000-000000000131", "is_group": false },
+  "id": "00000000-0000-7000-8000-000000000132",
+  "idempotency_key": "reply-000000000132",
+  "direction": "outbound",
+  "sender_handle": {
+    "id": "00000000-0000-7000-8000-000000000133",
+    "handle": "relay",
+    "joined_at": "2026-08-31T06:00:00.000Z",
+    "kind": "agent",
+    "display_name": "Relay",
+    "avatar_url": null,
+    "tagline": "A Relay agent",
+    "verified": true
+  },
+  "parts": [{ "type": "text", "value": "Thanks." }],
+  "sent_at": "2026-08-31T06:04:00.000Z",
+  "delivered_at": "2026-08-31T06:04:01.000Z",
+  "read_at": "2026-08-31T06:04:02.000Z",
+  "reply_to": null
+}
+```
+
+### `reaction.added`
+
+```json
+{
+  "chat_id": "00000000-0000-7000-8000-000000000141",
+  "from_handle": {
+    "id": "00000000-0000-7000-8000-000000000142",
+    "handle": "advait",
+    "joined_at": "2026-08-31T06:00:00.000Z",
+    "kind": "user",
+    "display_name": "Advait",
+    "avatar_url": null,
+    "tagline": null,
+    "verified": false
+  },
+  "message_id": "00000000-0000-7000-8000-000000000143",
+  "part_index": 0,
+  "reaction_type": "like",
+  "custom_emoji": null,
+  "is_from_me": false,
+  "reacted_at": "2026-08-31T06:05:00.000Z"
+}
+```
+
+### `reaction.removed`
+
+```json
+{
+  "chat_id": "00000000-0000-7000-8000-000000000151",
+  "from_handle": {
+    "id": "00000000-0000-7000-8000-000000000152",
+    "handle": "advait",
+    "joined_at": "2026-08-31T06:00:00.000Z",
+    "kind": "user",
+    "display_name": "Advait",
+    "avatar_url": null,
+    "tagline": null,
+    "verified": false
+  },
+  "message_id": "00000000-0000-7000-8000-000000000153",
+  "part_index": 0,
+  "reaction_type": "like",
+  "custom_emoji": null,
+  "is_from_me": false,
+  "reacted_at": "2026-08-31T06:06:00.000Z"
+}
+```
+
+### `participant.added`
+
+```json
+{
+  "chat_id": "00000000-0000-7000-8000-000000000161",
+  "participant": {
+    "id": "00000000-0000-7000-8000-000000000162",
+    "handle": "morgan",
+    "status": "active",
+    "joined_at": "2026-08-31T06:07:00.000Z",
+    "left_at": null,
+    "is_me": false,
+    "kind": "user",
+    "display_name": "Morgan",
+    "avatar_url": null,
+    "tagline": null,
+    "verified": false
+  },
+  "added_at": "2026-08-31T06:07:00.000Z"
+}
+```
+
+### `participant.removed`
+
+```json
+{
+  "chat_id": "00000000-0000-7000-8000-000000000171",
+  "participant": {
+    "id": "00000000-0000-7000-8000-000000000172",
+    "handle": "morgan",
+    "status": "removed",
+    "joined_at": "2026-08-31T06:07:00.000Z",
+    "left_at": "2026-08-31T06:08:00.000Z",
+    "is_me": false,
+    "kind": "user",
+    "display_name": "Morgan",
+    "avatar_url": null,
+    "tagline": null,
+    "verified": false
+  },
+  "removed_at": "2026-08-31T06:08:00.000Z"
+}
+```
+
+### `chat.created`
+
+```json
+{
+  "id": "00000000-0000-7000-8000-000000000181",
+  "display_name": "Relay, Advait",
+  "group_chat_icon": null,
+  "handles": [
+    {
+      "id": "00000000-0000-7000-8000-000000000182",
+      "handle": "relay",
+      "status": "active",
+      "joined_at": "2026-08-31T06:00:00.000Z",
+      "left_at": null,
+      "is_me": true,
+      "kind": "agent",
+      "display_name": "Relay",
+      "avatar_url": null,
+      "tagline": "A Relay agent",
+      "verified": true
+    },
+    {
+      "id": "00000000-0000-7000-8000-000000000183",
+      "handle": "advait",
+      "status": "active",
+      "joined_at": "2026-08-31T06:00:00.000Z",
+      "left_at": null,
+      "is_me": false,
+      "kind": "user",
+      "display_name": "Advait",
+      "avatar_url": null,
+      "tagline": null,
+      "verified": false
+    }
+  ],
+  "is_group": false,
+  "created_at": "2026-08-31T06:00:00.000Z",
+  "updated_at": "2026-08-31T06:00:00.000Z"
+}
+```
+
+### `chat.group_name_updated`
+
+```json
+{
+  "chat_id": "00000000-0000-7000-8000-000000000191",
+  "old_value": "Relay, Advait",
+  "new_value": "Launch team",
+  "changed_by_handle": {
+    "id": "00000000-0000-7000-8000-000000000192",
+    "handle": "advait",
+    "joined_at": "2026-08-31T06:00:00.000Z",
+    "kind": "user",
+    "display_name": "Advait",
+    "avatar_url": null,
+    "tagline": null,
+    "verified": false
+  },
+  "updated_at": "2026-08-31T06:09:00.000Z"
+}
+```
+
+### `chat.group_icon_updated`
+
+```json
+{
+  "chat_id": "00000000-0000-7000-8000-000000000201",
+  "old_value": null,
+  "new_value": "https://cdn.relayapp.im/chats/00000000-0000-7000-8000-000000000202.png",
+  "changed_by_handle": {
+    "id": "00000000-0000-7000-8000-000000000203",
+    "handle": "advait",
+    "joined_at": "2026-08-31T06:00:00.000Z",
+    "kind": "user",
+    "display_name": "Advait",
+    "avatar_url": null,
+    "tagline": null,
+    "verified": false
+  },
+  "updated_at": "2026-08-31T06:10:00.000Z"
+}
+```
+
+### `chat.typing_indicator.started`
+
+```json
+{
+  "chat_id": "00000000-0000-7000-8000-000000000211",
+  "contact": {
+    "id": "00000000-0000-7000-8000-000000000212",
+    "handle": "advait",
+    "kind": "user"
+  }
+}
+```
+
+### `chat.typing_indicator.stopped`
+
+```json
+{
+  "chat_id": "00000000-0000-7000-8000-000000000221",
+  "contact": {
+    "id": "00000000-0000-7000-8000-000000000222",
+    "handle": "advait",
+    "kind": "user"
+  }
+}
+```
+
+### `contact.added`
+
+```json
+{
+  "contact": {
+    "id": "00000000-0000-7000-8000-000000000231",
+    "handle": "advait",
+    "display_name": "Advait"
+  },
+  "chat_id": "00000000-0000-7000-8000-000000000232"
+}
+```
+
+### `contact.removed`
+
+```json
+{
+  "contact": {
+    "id": "00000000-0000-7000-8000-000000000241",
+    "handle": "advait",
+    "display_name": "Advait"
+  }
+}
+```
+
+## Payload fields
+
+| Field | Meaning |
+| --- | --- |
+| `api_version` | Relay API version, currently `v1` |
+| `webhook_version` | Payload version, currently `2026-08-30` |
+| `event_type` | Event name |
+| `event_id` | Stable deduplication key |
+| `created_at` | Event creation time |
+| `trace_id` | Event correlation ID |
+| `agent_id` | Receiving Agent Contact ID |
+| `data` | Event-specific payload |
+
+Message media parts include an Attachment ID and a signed download URL. If the URL expires, refresh it with `GET /v1/attachments/{attachmentId}`.
+
+## Delivery paths
+
+| Path | Event location | Accept after |
+| --- | --- | --- |
+| Webhook | The envelope is the HTTPS request body | Persisting `event_id`, then return `2xx` |
+| WebSocket | The envelope is inside an `event` frame | Persisting `event_id`, then send a cumulative ACK |
+
+Relay retains pending events for 30 days. Pending events keep the same `event_id` when delivery moves between Webhooks and WebSocket.
+
+## Related
+
+- [Webhooks](/guides/webhooks)
+- [Webhook subscriptions](/guides/webhooks/subscriptions)
+- [Webhook delivery](/guides/webhooks/delivery)
+- [WebSocket frames](/guides/websocket/protocol)
+- [Delivery receipts](/guides/messaging/delivery-receipts)
 
 # Webhook Subscriptions
 
@@ -3292,7 +3495,7 @@ remains available for 30 days.
 ## Related
 
 - [Webhooks](/guides/webhooks)
-- [Agent event types](/guides/agent-events/events)
+- [Webhook Event Types](/guides/webhooks/events)
 
 # Webhook delivery
 
@@ -3387,19 +3590,19 @@ This is read-only. Do not change code unless I ask.
 ## Related
 
 - [Webhooks](/guides/webhooks)
-- [Agent event types](/guides/agent-events/events)
+- [Webhook Event Types](/guides/webhooks/events)
 - [Idempotency](/guides/platform/idempotency)
 
 # WebSocket
 
-> Receive agent events over a durable WebSocket connection.
+> Receive webhook events over a durable WebSocket connection.
 
 Source: https://docs.staging.relayapp.im/guides/websocket/index.md
 
 Use WebSocket for an always-on agent backend with zero saved webhook
 subscriptions.
 
-**WebSocket carries all 15 [agent event types](/guides/agent-events/events).**
+**WebSocket carries all 15 [webhook event types](/guides/webhooks/events).**
 
 **A WebSocket connection requires zero saved webhook subscriptions.**
 
@@ -3501,7 +3704,7 @@ This is read-only. Do not change code unless I ask.
 
 # WebSocket frames
 
-> See every WebSocket frame and the complete agent event catalog.
+> See every WebSocket frame and the complete Webhook Event Types catalog.
 
 Source: https://docs.staging.relayapp.im/guides/websocket/protocol.md
 
@@ -3510,7 +3713,7 @@ Relay exchanges JSON text frames after the authenticated WebSocket upgrade.
 | Frame | Direction | Purpose |
 | --- | --- | --- |
 | `ready` | Relay to backend | Confirm the connection and current checkpoint |
-| `event` | Relay to backend | Deliver one sequenced [agent event](/guides/agent-events/events) |
+| `event` | Relay to backend | Deliver one sequenced [Webhook event](/guides/webhooks/events) |
 | `full_sync` | Relay to backend | Pause delivery and set the recovery boundary |
 | `error` | Relay to backend | Report a protocol or delivery failure |
 | `disconnect` | Relay to backend | State why Relay is closing the connection |
@@ -3574,8 +3777,8 @@ events oldest first. A replay can repeat an `event_id`. Read
 [WebSocket Acknowledgements](/guides/websocket/acknowledgements) before
 accepting an event.
 
-**An `event` frame can carry any of Relay's 15 agent event types.** See the
-[complete event table](/guides/agent-events/events#all-event-types).
+**An `event` frame can carry any of Relay's 15 webhook event types.** See the
+[complete event table](/guides/webhooks/events#all-event-types).
 
 ## Error frame
 
@@ -3652,7 +3855,7 @@ socket and moved matching pending events to active Webhooks.
 ## Related
 
 - [WebSocket](/guides/websocket)
-- [Agent event types](/guides/agent-events/events)
+- [Webhook Event Types](/guides/webhooks/events)
 - [WebSocket Acknowledgements](/guides/websocket/acknowledgements)
 - [WebSocket FULL Sync](/guides/websocket/full-sync)
 - [Best practices](/getting-started/best-practices)
@@ -3816,7 +4019,7 @@ snapshot and a later event.
 
 ## Retention
 
-Relay retains pending agent events for 30 days.
+Relay retains pending webhook events for 30 days.
 
 ## Failure handling
 
@@ -3923,7 +4126,7 @@ Validate these limits before sending a request.
 | HTTPS URL import | Up to 10 MB |
 | Upload ticket lifetime | Returned as `expires_at` |
 
-## Agent events
+## Webhook events
 
 | Limit | Value |
 | --- | ---: |
@@ -3952,8 +4155,8 @@ Capture Relay identifiers without logging credentials or signed URLs.
 
 | ID | Use |
 | --- | --- |
-| `trace_id` | Correlate one failed API request or agent event |
-| `event_id` | Deduplicate and trace one agent event |
+| `trace_id` | Correlate one failed API request or Webhook event |
+| `event_id` | Deduplicate and trace one Webhook event |
 | Chat ID | Identify the Chat |
 | Message ID | Identify one canonical send |
 | Attachment ID | Identify uploaded metadata |
@@ -4009,7 +4212,7 @@ delivery fits an always-on process.**
 
 ## Choose by runtime
 
-| Project | Current source | Runs as | Agent event path |
+| Project | Current source | Runs as | Delivery path |
 | --- | --- | --- | --- |
 | [Chat SDK adapter](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/chat-sdk-adapter) | `@relaymessenger/chat-sdk-adapter@0.3.0-staging.0` | Vercel Chat SDK adapter | Signed Webhooks |
 | [Cloudflare Think starter](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook/cloudflare-think-agent) | Cookbook recipe `0.1.0` | Cloudflare Think messenger | Signed Webhooks |
@@ -4058,7 +4261,7 @@ the Git-installed `relay-hermes@1.0.0rc1` release candidate.
 ## Related
 
 - [Client SDKs](/getting-started/sdks)
-- [Agent events](/guides/agent-events)
+- [Webhook events](/guides/webhooks)
 - [Examples](/examples)
 
 # Chat SDK adapter

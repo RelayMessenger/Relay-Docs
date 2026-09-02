@@ -11,7 +11,6 @@ Guides
   Messaging
   Chats
   Contacts
-  Agent events
   Webhooks
   WebSocket
   Platform

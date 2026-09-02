@@ -1,0 +1,472 @@
+---
+title: "Webhook Event Types"
+sidebarTitle: "Webhook Event Types"
+description: "See every event type available to Relay webhook subscriptions, with a payload example for each."
+keywords: ["webhooks", "webhook events", "event types", "message.received", "contact.added"]
+---
+
+Use this page to choose the event names for a Webhook subscription. Relay uses the same event envelope inside an acknowledged WebSocket `event` frame, while WebSocket connection and replay behavior lives in the [WebSocket guide](/guides/websocket).
+
+## All event types
+
+| Event | Fires when | Payload in `data` |
+| --- | --- | --- |
+| `message.sent` | An Agent Message is committed | `MessageEvent` |
+| `message.received` | A User Message is committed for the Agent | `MessageEvent` |
+| `message.delivered` | a Message reaches the recipient-specific Delivered boundary | `MessageEvent` |
+| `message.read` | a recipient marks a Message Read | `MessageEvent` |
+| `reaction.added` | a Contact adds a Reaction | `ReactionEventBase` |
+| `reaction.removed` | a Contact removes a Reaction | `ReactionEventBase` |
+| `participant.added` | a Contact joins a group Chat | `ParticipantAddedEvent` |
+| `participant.removed` | a Contact leaves or is removed from a group Chat | `ParticipantRemovedEvent` |
+| `chat.created` | Relay creates a Chat for the Agent | `ChatCreatedEvent` |
+| `chat.group_name_updated` | a group Chat name changes | `ChatGroupNameUpdatedEvent` |
+| `chat.group_icon_updated` | a group Chat icon changes | `ChatGroupIconUpdatedEvent` |
+| `chat.typing_indicator.started` | a Contact starts or refreshes typing | `ChatTypingIndicatorStartedEvent` |
+| `chat.typing_indicator.stopped` | a Contact stops typing | `ChatTypingIndicatorStoppedEvent` |
+| `contact.added` | a User adds the Agent | `ContactAddedEvent` |
+| `contact.removed` | a User removes or blocks the Agent | `ContactRemovedEvent` |
+
+## List event types
+
+The API returns the authoritative list of names accepted by `subscribed_events`.
+
+<CodeGroup>
+```typescript TypeScript SDK
+const { events } = await relay.webhookEvents.list();
+```
+
+```bash cURL
+curl -sS https://api.relayapp.im/v1/webhook-events \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+</CodeGroup>
+
+## Envelope
+
+Every Webhook request has the same top-level shape. The `event_type` selects the shape of `data`.
+
+Use this fixed payload version: `2026-08-30`.
+
+```json
+{
+  "api_version": "v1",
+  "webhook_version": "2026-08-30",
+  "event_type": "contact.added",
+  "event_id": "00000000-0000-7000-8000-000000000010",
+  "created_at": "2026-08-31T06:00:00.000Z",
+  "trace_id": "0123456789abcdef0123456789abcdef",
+  "agent_id": "00000000-0000-7000-8000-000000000011",
+  "data": {
+    "contact": {
+      "id": "00000000-0000-7000-8000-000000000012",
+      "handle": "advait",
+      "display_name": "Advait"
+    },
+    "chat_id": "00000000-0000-7000-8000-000000000013"
+  }
+}
+```
+
+Commit `event_id` under a uniqueness rule before returning the Webhook `2xx`. Relay may retry the same event with the same ID and body.
+
+## Event payload examples
+
+The following blocks show the event-specific `data` object. The top-level envelope stays the same for every event.
+
+### `message.sent`
+
+```json
+{
+  "chat": { "id": "00000000-0000-7000-8000-000000000101", "is_group": false },
+  "id": "00000000-0000-7000-8000-000000000102",
+  "idempotency_key": "reply-000000000102",
+  "direction": "outbound",
+  "sender_handle": {
+    "id": "00000000-0000-7000-8000-000000000103",
+    "handle": "relay",
+    "joined_at": "2026-08-31T06:00:00.000Z",
+    "kind": "agent",
+    "display_name": "Relay",
+    "avatar_url": null,
+    "tagline": "A Relay agent",
+    "verified": true
+  },
+  "parts": [{ "type": "text", "value": "Hello from Relay" }],
+  "sent_at": "2026-08-31T06:01:00.000Z",
+  "delivered_at": null,
+  "read_at": null,
+  "reply_to": null
+}
+```
+
+### `message.received`
+
+```json
+{
+  "chat": { "id": "00000000-0000-7000-8000-000000000111", "is_group": false },
+  "id": "00000000-0000-7000-8000-000000000112",
+  "idempotency_key": null,
+  "direction": "inbound",
+  "sender_handle": {
+    "id": "00000000-0000-7000-8000-000000000113",
+    "handle": "advait",
+    "joined_at": "2026-08-31T06:00:00.000Z",
+    "kind": "user",
+    "display_name": "Advait",
+    "avatar_url": null,
+    "tagline": null,
+    "verified": false
+  },
+  "parts": [{ "type": "text", "value": "Can you check this?" }],
+  "sent_at": "2026-08-31T06:02:00.000Z",
+  "delivered_at": null,
+  "read_at": null,
+  "reply_to": null
+}
+```
+
+### Media payload
+
+Use the `media` part fields when a Message contains an Attachment. The `url` is a signed Relay download URL.
+
+```json
+{
+  "chat": { "id": "00000000-0000-7000-8000-000000000115", "is_group": false },
+  "id": "00000000-0000-7000-8000-000000000116",
+  "idempotency_key": null,
+  "direction": "inbound",
+  "sender_handle": {
+    "id": "00000000-0000-7000-8000-000000000117",
+    "handle": "advait",
+    "joined_at": "2026-08-31T06:00:00.000Z",
+    "kind": "user",
+    "display_name": "Advait",
+    "avatar_url": null,
+    "tagline": null,
+    "verified": false
+  },
+  "parts": [{
+    "type": "media",
+    "id": "00000000-0000-7000-8000-000000000118",
+    "url": "https://cdn.relayapp.im/attachments/opaque-download-token",
+    "filename": "report.pdf",
+    "mime_type": "application/pdf",
+    "size_bytes": 48291
+  }],
+  "sent_at": "2026-08-31T06:02:00.000Z",
+  "delivered_at": null,
+  "read_at": null,
+  "reply_to": null
+}
+```
+
+### `message.delivered`
+
+```json
+{
+  "chat": { "id": "00000000-0000-7000-8000-000000000121", "is_group": false },
+  "id": "00000000-0000-7000-8000-000000000122",
+  "idempotency_key": "reply-000000000122",
+  "direction": "outbound",
+  "sender_handle": {
+    "id": "00000000-0000-7000-8000-000000000123",
+    "handle": "relay",
+    "joined_at": "2026-08-31T06:00:00.000Z",
+    "kind": "agent",
+    "display_name": "Relay",
+    "avatar_url": null,
+    "tagline": "A Relay agent",
+    "verified": true
+  },
+  "parts": [{ "type": "text", "value": "The result is ready." }],
+  "sent_at": "2026-08-31T06:03:00.000Z",
+  "delivered_at": "2026-08-31T06:03:01.000Z",
+  "read_at": null,
+  "reply_to": null
+}
+```
+
+### `message.read`
+
+```json
+{
+  "chat": { "id": "00000000-0000-7000-8000-000000000131", "is_group": false },
+  "id": "00000000-0000-7000-8000-000000000132",
+  "idempotency_key": "reply-000000000132",
+  "direction": "outbound",
+  "sender_handle": {
+    "id": "00000000-0000-7000-8000-000000000133",
+    "handle": "relay",
+    "joined_at": "2026-08-31T06:00:00.000Z",
+    "kind": "agent",
+    "display_name": "Relay",
+    "avatar_url": null,
+    "tagline": "A Relay agent",
+    "verified": true
+  },
+  "parts": [{ "type": "text", "value": "Thanks." }],
+  "sent_at": "2026-08-31T06:04:00.000Z",
+  "delivered_at": "2026-08-31T06:04:01.000Z",
+  "read_at": "2026-08-31T06:04:02.000Z",
+  "reply_to": null
+}
+```
+
+### `reaction.added`
+
+```json
+{
+  "chat_id": "00000000-0000-7000-8000-000000000141",
+  "from_handle": {
+    "id": "00000000-0000-7000-8000-000000000142",
+    "handle": "advait",
+    "joined_at": "2026-08-31T06:00:00.000Z",
+    "kind": "user",
+    "display_name": "Advait",
+    "avatar_url": null,
+    "tagline": null,
+    "verified": false
+  },
+  "message_id": "00000000-0000-7000-8000-000000000143",
+  "part_index": 0,
+  "reaction_type": "like",
+  "custom_emoji": null,
+  "is_from_me": false,
+  "reacted_at": "2026-08-31T06:05:00.000Z"
+}
+```
+
+### `reaction.removed`
+
+```json
+{
+  "chat_id": "00000000-0000-7000-8000-000000000151",
+  "from_handle": {
+    "id": "00000000-0000-7000-8000-000000000152",
+    "handle": "advait",
+    "joined_at": "2026-08-31T06:00:00.000Z",
+    "kind": "user",
+    "display_name": "Advait",
+    "avatar_url": null,
+    "tagline": null,
+    "verified": false
+  },
+  "message_id": "00000000-0000-7000-8000-000000000153",
+  "part_index": 0,
+  "reaction_type": "like",
+  "custom_emoji": null,
+  "is_from_me": false,
+  "reacted_at": "2026-08-31T06:06:00.000Z"
+}
+```
+
+### `participant.added`
+
+```json
+{
+  "chat_id": "00000000-0000-7000-8000-000000000161",
+  "participant": {
+    "id": "00000000-0000-7000-8000-000000000162",
+    "handle": "morgan",
+    "status": "active",
+    "joined_at": "2026-08-31T06:07:00.000Z",
+    "left_at": null,
+    "is_me": false,
+    "kind": "user",
+    "display_name": "Morgan",
+    "avatar_url": null,
+    "tagline": null,
+    "verified": false
+  },
+  "added_at": "2026-08-31T06:07:00.000Z"
+}
+```
+
+### `participant.removed`
+
+```json
+{
+  "chat_id": "00000000-0000-7000-8000-000000000171",
+  "participant": {
+    "id": "00000000-0000-7000-8000-000000000172",
+    "handle": "morgan",
+    "status": "removed",
+    "joined_at": "2026-08-31T06:07:00.000Z",
+    "left_at": "2026-08-31T06:08:00.000Z",
+    "is_me": false,
+    "kind": "user",
+    "display_name": "Morgan",
+    "avatar_url": null,
+    "tagline": null,
+    "verified": false
+  },
+  "removed_at": "2026-08-31T06:08:00.000Z"
+}
+```
+
+### `chat.created`
+
+```json
+{
+  "id": "00000000-0000-7000-8000-000000000181",
+  "display_name": "Relay, Advait",
+  "group_chat_icon": null,
+  "handles": [
+    {
+      "id": "00000000-0000-7000-8000-000000000182",
+      "handle": "relay",
+      "status": "active",
+      "joined_at": "2026-08-31T06:00:00.000Z",
+      "left_at": null,
+      "is_me": true,
+      "kind": "agent",
+      "display_name": "Relay",
+      "avatar_url": null,
+      "tagline": "A Relay agent",
+      "verified": true
+    },
+    {
+      "id": "00000000-0000-7000-8000-000000000183",
+      "handle": "advait",
+      "status": "active",
+      "joined_at": "2026-08-31T06:00:00.000Z",
+      "left_at": null,
+      "is_me": false,
+      "kind": "user",
+      "display_name": "Advait",
+      "avatar_url": null,
+      "tagline": null,
+      "verified": false
+    }
+  ],
+  "is_group": false,
+  "created_at": "2026-08-31T06:00:00.000Z",
+  "updated_at": "2026-08-31T06:00:00.000Z"
+}
+```
+
+### `chat.group_name_updated`
+
+```json
+{
+  "chat_id": "00000000-0000-7000-8000-000000000191",
+  "old_value": "Relay, Advait",
+  "new_value": "Launch team",
+  "changed_by_handle": {
+    "id": "00000000-0000-7000-8000-000000000192",
+    "handle": "advait",
+    "joined_at": "2026-08-31T06:00:00.000Z",
+    "kind": "user",
+    "display_name": "Advait",
+    "avatar_url": null,
+    "tagline": null,
+    "verified": false
+  },
+  "updated_at": "2026-08-31T06:09:00.000Z"
+}
+```
+
+### `chat.group_icon_updated`
+
+```json
+{
+  "chat_id": "00000000-0000-7000-8000-000000000201",
+  "old_value": null,
+  "new_value": "https://cdn.relayapp.im/chats/00000000-0000-7000-8000-000000000202.png",
+  "changed_by_handle": {
+    "id": "00000000-0000-7000-8000-000000000203",
+    "handle": "advait",
+    "joined_at": "2026-08-31T06:00:00.000Z",
+    "kind": "user",
+    "display_name": "Advait",
+    "avatar_url": null,
+    "tagline": null,
+    "verified": false
+  },
+  "updated_at": "2026-08-31T06:10:00.000Z"
+}
+```
+
+### `chat.typing_indicator.started`
+
+```json
+{
+  "chat_id": "00000000-0000-7000-8000-000000000211",
+  "contact": {
+    "id": "00000000-0000-7000-8000-000000000212",
+    "handle": "advait",
+    "kind": "user"
+  }
+}
+```
+
+### `chat.typing_indicator.stopped`
+
+```json
+{
+  "chat_id": "00000000-0000-7000-8000-000000000221",
+  "contact": {
+    "id": "00000000-0000-7000-8000-000000000222",
+    "handle": "advait",
+    "kind": "user"
+  }
+}
+```
+
+### `contact.added`
+
+```json
+{
+  "contact": {
+    "id": "00000000-0000-7000-8000-000000000231",
+    "handle": "advait",
+    "display_name": "Advait"
+  },
+  "chat_id": "00000000-0000-7000-8000-000000000232"
+}
+```
+
+### `contact.removed`
+
+```json
+{
+  "contact": {
+    "id": "00000000-0000-7000-8000-000000000241",
+    "handle": "advait",
+    "display_name": "Advait"
+  }
+}
+```
+
+## Payload fields
+
+| Field | Meaning |
+| --- | --- |
+| `api_version` | Relay API version, currently `v1` |
+| `webhook_version` | Payload version, currently `2026-08-30` |
+| `event_type` | Event name |
+| `event_id` | Stable deduplication key |
+| `created_at` | Event creation time |
+| `trace_id` | Event correlation ID |
+| `agent_id` | Receiving Agent Contact ID |
+| `data` | Event-specific payload |
+
+Message media parts include an Attachment ID and a signed download URL. If the URL expires, refresh it with `GET /v1/attachments/{attachmentId}`.
+
+## Delivery paths
+
+| Path | Event location | Accept after |
+| --- | --- | --- |
+| Webhook | The envelope is the HTTPS request body | Persisting `event_id`, then return `2xx` |
+| WebSocket | The envelope is inside an `event` frame | Persisting `event_id`, then send a cumulative ACK |
+
+Relay retains pending events for 30 days. Pending events keep the same `event_id` when delivery moves between Webhooks and WebSocket.
+
+## Related
+
+- [Webhooks](/guides/webhooks)
+- [Webhook subscriptions](/guides/webhooks/subscriptions)
+- [Webhook delivery](/guides/webhooks/delivery)
+- [WebSocket frames](/guides/websocket/protocol)
+- [Delivery receipts](/guides/messaging/delivery-receipts)

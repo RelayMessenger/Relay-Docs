@@ -26,8 +26,8 @@ Keep the three top-level tabs in this order:
 3. API Reference
 
 Within Guides, use the current `docs.json` order: Introduction, Getting
-started, Messaging, Chats, Contacts, Agent events, Webhooks, WebSocket,
-Platform, and Examples.
+started, Messaging, Chats, Contacts, Webhooks, WebSocket, Platform, and
+Examples.
 
 Keep pages at three navigation levels or fewer. Add a category only when a
 current, source-backed page requires it.

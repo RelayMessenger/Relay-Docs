@@ -18,8 +18,8 @@ const llmsFull = await readFile(new URL("llms-full.txt", root), "utf8");
 assert.equal(vars.LLMS_VERSION, await sha256("llms.txt"));
 assert.equal(vars.LLMS_FULL_VERSION, await sha256("llms-full.txt"));
 assert.equal(vars.MINTLIFY_ORIGIN, "https://relay-staging.mintlify.app");
-assert.match(llmsIndex, /\/guides\/agent-events\/events\.md/);
-assert.doesNotMatch(llmsIndex, /\/guides\/webhooks\/events\.md/);
+assert.match(llmsIndex, /\/guides\/webhooks\/events\.md/);
+assert.doesNotMatch(llmsIndex, /\/guides\/agent-events/);
 for (const marker of [
   "/v1/websocket",
   "/v1/webhook-subscriptions",

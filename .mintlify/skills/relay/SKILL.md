@@ -13,7 +13,7 @@ Messages between the agent and other users.
 ## Start
 
 1. Read `https://docs.relayapp.im/llms.txt` and the current OpenAPI.
-2. Read the Agent Events guide and choose Webhooks or WebSocket.
+2. Read the Webhooks guide and choose Webhooks or WebSocket.
 3. Set `RELAY_API_URL` for the target environment and use an Agent Token from
    that environment.
 4. Store the Agent Token in server-side secret storage.
@@ -41,7 +41,7 @@ Messages between the agent and other users.
 - Replies and reactions target zero-based `part_index`.
 - Group membership controls which history a Contact can read.
 
-## Agent events
+## Webhook events
 
 | Path | Configuration | Transport acknowledgement |
 | --- | --- | --- |
@@ -98,7 +98,7 @@ Agent backends authenticate the `/v1/websocket` upgrade with
 - Treat registered Handles as public messaging addresses.
 - Treat every inbound `event_id` as at-least-once.
 - Recover current state with ordinary REST reads or WebSocket FULL sync.
-- Retain `trace_id` from API errors and agent events for debugging.
+- Retain `trace_id` from API errors and webhook events for debugging.
 - Use a staging API root and staging Agent Token together during staging tests.
 
 Use the OpenAPI contract for exact fields, limits, and errors. Label unproved

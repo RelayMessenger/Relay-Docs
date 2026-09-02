@@ -159,7 +159,6 @@ expected_guide_groups = [
     "Messaging",
     "Chats",
     "Contacts",
-    "Agent events",
     "Webhooks",
     "WebSocket",
     "Platform",
@@ -207,12 +206,9 @@ expected_guide_pages = {
         "guides/contact-cards",
         "guides/chats/blocked-handles",
     ],
-    "Agent events": [
-        "guides/agent-events/index",
-        "guides/agent-events/events",
-    ],
     "Webhooks": [
         "guides/webhooks/index",
+        "guides/webhooks/events",
         "guides/webhooks/subscriptions",
         "guides/webhooks/delivery",
     ],
@@ -363,7 +359,7 @@ required_paths = [
     root / "guides/chats/typing-indicators.mdx",
     root / "guides/messaging/delivery-receipts.mdx",
     root / "guides/contacts/add-requests.mdx",
-    root / "guides/agent-events/events.mdx",
+    root / "guides/webhooks/events.mdx",
     root / "guides/websocket/index.mdx",
     root / "guides/websocket/protocol.mdx",
     root / "guides/websocket/full-sync.mdx",
@@ -384,7 +380,7 @@ for path in [
         raise SystemExit(f"overview sidebar label drifted: {path.relative_to(root)}")
 for relative, label in {
     "error/index.mdx": "All errors",
-    "guides/agent-events/events.mdx": "Event types",
+    "guides/webhooks/events.mdx": "Webhook Event Types",
     "guides/webhooks/subscriptions.mdx": "Subscriptions",
     "guides/webhooks/delivery.mdx": "Delivery",
     "guides/websocket/protocol.mdx": "Frames",
@@ -779,7 +775,7 @@ side_by_side_guides = [
     "guides/contacts/add-requests.mdx",
     "guides/webhooks/index.mdx",
     "guides/webhooks/subscriptions.mdx",
-    "guides/agent-events/events.mdx",
+    "guides/webhooks/events.mdx",
     "guides/websocket/index.mdx",
 ]
 for relative in side_by_side_guides:
@@ -855,7 +851,7 @@ delivery_surface_text = "\n".join(
     for relative in [
         "getting-started/key-concepts.mdx",
         "getting-started/quickstart.mdx",
-        "guides/agent-events/index.mdx",
+        "guides/webhooks/events.mdx",
         "guides/messaging/delivery-receipts.mdx",
         "guides/webhooks/index.mdx",
         "guides/webhooks/delivery.mdx",
@@ -908,7 +904,7 @@ for required in [
         raise SystemExit(f"Attachment lifecycle guide is missing: {required}")
 
 webhook_text = (root / "guides/webhooks/index.mdx").read_text()
-webhook_events_text = (root / "guides/agent-events/events.mdx").read_text()
+webhook_events_text = (root / "guides/webhooks/events.mdx").read_text()
 webhook_delivery_text = (root / "guides/webhooks/delivery.mdx").read_text()
 webhook_delivery_normalized = re.sub(r"\s+", " ", webhook_delivery_text)
 websocket_text = (root / "guides/websocket/index.mdx").read_text()
@@ -916,9 +912,8 @@ websocket_protocol_text = (root / "guides/websocket/protocol.mdx").read_text()
 websocket_recovery_text = (root / "guides/websocket/full-sync.mdx").read_text()
 typing_text = (root / "guides/chats/typing-indicators.mdx").read_text()
 typing_normalized = re.sub(r"\s+", " ", typing_text)
-agent_event_text = (root / "guides/agent-events/index.mdx").read_text()
 transport_text = "\n".join([
-    agent_event_text,
+    webhook_events_text,
     webhook_text,
     websocket_text,
     websocket_protocol_text,
@@ -946,7 +941,7 @@ for forbidden in [
         raise SystemExit(f"stale WebSocket setting returned: {forbidden}")
 if (
     '"webhook_version": "2026-08-30"' not in webhook_events_text
-    or "use this fixed payload version" not in webhook_events_text
+    or "use this fixed payload version" not in webhook_events_text.lower()
 ):
     raise SystemExit("webhook event guide lost the fixed payload version")
 for required in [
@@ -1005,7 +1000,7 @@ for required in [
     "full_sync_complete",
     "checkpoint_outside_retention",
     "same `event_id`",
-    "pending agent events for 30 days",
+    "pending webhook events for 30 days",
 ]:
     if required not in websocket_recovery_text:
         raise SystemExit(f"WebSocket recovery guide is missing: {required}")
@@ -1377,7 +1372,7 @@ documented_events = set(
 )
 if documented_events != contract_events:
     raise SystemExit(
-        "Agent event types page drifted from OpenAPI: "
+        "Webhook Event Types page drifted from OpenAPI: "
         f"{sorted(documented_events ^ contract_events)}"
     )
 share_path_start = openapi_text.index("  /v1/chats/{chatId}/share_contact_card:")

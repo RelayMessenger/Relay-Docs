@@ -45,7 +45,7 @@ Use Relay's current resource names consistently:
 | Message | One ordered set of parts in a Chat |
 | part | A text, media, or link unit inside a Message |
 | Attachment | Uploaded media referenced by a Message part |
-| Agent event | A versioned event delivered by Webhook or WebSocket |
+| Webhook event | A versioned event delivered by Webhook or WebSocket |
 
 Use `participants` for group membership operations and `participant.*` event
 names. Use Webhooks for signed HTTPS event delivery and WebSocket for a durable
@@ -101,9 +101,9 @@ Contacts
   Contact Cards
   Blocked Handles
 
-Agent events
-  Agent Events
-  Event types
+Webhooks
+  Webhooks
+  Webhook Event Types
 
 Webhooks
   Webhooks
@@ -151,7 +151,7 @@ The sidebar teaches Relay in this sequence:
 4. learn shared resources;
 5. send and read Messages;
 6. manage Chat content and membership;
-7. receive agent events;
+7. receive webhook events;
 8. implement reliability and debugging;
 9. choose a maintained runtime, local tool, or coding-agent package.
 
@@ -169,7 +169,7 @@ Current focused pages include:
 - Attachments, Voice Memos, and Rich Link Previews;
 - Group Chats, Participants, Typing Indicators, and Message History;
 - Add requests, Contact Card configuration, and Sharing Contact Card;
-- Agent Events and the shared Event types catalog;
+- Webhooks and the shared Event types catalog;
 - Webhooks, Webhook Subscriptions, and Webhook Delivery;
 - WebSocket, Frames, Acknowledgements, and FULL sync.
 - Chat SDK, CLI, MCP, supported agent channels, Think, and coding-agent
@@ -316,7 +316,7 @@ evidence, and reports unknown findings explicitly.
 
 Overview pages orient multiple child tasks and provide the shortest useful
 path through the category. Messaging, Chats, Webhooks, and WebSocket have
-category overviews. Agent Events connects the two supported agent event paths.
+category overviews. Webhooks documents signed HTTP delivery, and WebSocket documents acknowledged socket delivery.
 Contacts and Platform link directly to their task pages.
 
 ## 13. API Reference and errors
@@ -337,7 +337,7 @@ Each Error Code page includes:
 
 | Page | Developer job |
 | --- | --- |
-| Quickstart | Send a first Message and receive an agent event |
+| Quickstart | Send a first Message and receive a Webhook event |
 | Authentication | Store and send an Agent Token |
 | Client SDKs | Install and use `@relaymessenger/sdk` |
 | Key Concepts | Learn Contact, Handle, Chat, Message, part, and event |
@@ -358,10 +358,10 @@ Each Error Code page includes:
 | Add requests | Let users add an agent or request a Contact from a Premium Handle |
 | Contact Cards | Configure an agent's public card |
 | Blocked Handles | Block, list, and unblock Handles |
-| Agent Events | Select and operate an agent event path |
+| Webhooks | Choose Webhooks or WebSocket delivery |
 | Webhooks | Receive and verify signed HTTPS events |
 | Webhook Subscriptions | Configure event destinations and event filters |
-| Agent event types | Read every event delivered by Webhooks or WebSocket |
+| Webhook Event Types | Read every event delivered by Webhooks or WebSocket |
 | Webhook Delivery | Implement retries and terminal handling |
 | WebSocket | Connect an always-on agent backend |
 | WebSocket frames | Implement every frame, heartbeat, and close code |
@@ -444,14 +444,14 @@ the page's single job and update this inventory in the same commit.
 | Contact Cards | `How Contact Cards work` → `Retrieve the card` → `Upsert the card` → `Update the card` → `Fields` → `Sharing is separate` → `Related` |
 | Blocked Handles | `Block` → `Behavior` → `List` → `Unblock` → `Related` |
 
-### Agent events, Webhooks, and WebSocket
+### Webhooks and WebSocket
 
 | Page | H2 order |
 | --- | --- |
-| Agent Events | `Choose a transport` → `Shared envelope` → `Switch transports` → `Recovery` → `Review with an agent` → `Related` |
+| Webhooks | `Choose a transport` → `Shared envelope` → `Switch transports` → `Recovery` → `Review with an agent` → `Related` |
 | Webhooks | `Flow` → `Create a subscription` → `Verify the signature` → `Acknowledge safely` → `Review with an agent` → `Related` |
 | Webhook Subscriptions | `Create` → `Store the signing secret` → `List, retrieve, update, or delete` → `Related` |
-| Agent event types | `All event types` → `Envelope` → `Payload fields` → `Delivery paths` → `Related` |
+| Webhook Event Types | `All event types` → `List event types` → `Envelope` → `Event payload examples` → `Payload fields` → `Delivery paths` → `Related` |
 | Webhook Delivery | `Delivery policy` → `Retry classes` → `Receiver pattern` → `Delivered meaning` → `Terminal delivery` → `Review with an agent` → `Related` |
 | WebSocket | `Select WebSocket delivery` → `Connect` → `Review with an agent` → `Related` |
 | WebSocket frames | `Ready frame` → `Event frame` → `Error frame` → `Backpressure` → `Heartbeats` → `Disconnects` → `Related` |
@@ -463,7 +463,7 @@ the page's single job and update this inventory in the same commit.
 | Page | H2 order |
 | --- | --- |
 | Idempotency | `Supply a key` → `Retry behavior` → `Derive reply keys from events` → `Event idempotency` → `Related` |
-| Rate Limits | `Messages` → `Chats` → `Attachments` → `Agent events` → `Related` |
+| Rate Limits | `Messages` → `Chats` → `Attachments` → `Webhook events` → `Related` |
 | Debugging | `IDs to record` → `Error response` → `Safe logs` → `Event debugging` → `Related` |
 
 ### Developer ecosystem
@@ -500,7 +500,7 @@ the page's single job and update this inventory in the same commit.
 | `guides/messaging/*` | Messaging | integrated |
 | `guides/chats/index.mdx`, `group-chats.mdx`, `participants.mdx`, `typing-indicators.mdx`, `share-contact-card.mdx`, `message-history.mdx` | Chats | integrated |
 | `guides/contacts/add-requests.mdx`, `guides/contact-cards.mdx`, `guides/chats/blocked-handles.mdx` | Contacts | integrated |
-| `guides/agent-events/*` | Agent events | integrated comparison hub and shared event catalog |
+| `guides/webhooks/events.mdx` | Webhook Event Types | complete event catalog with payload examples |
 | `guides/webhooks/*` | Webhooks | integrated |
 | `guides/websocket/*` | WebSocket | integrated |
 | `guides/platform/*` | Platform | integrated |
