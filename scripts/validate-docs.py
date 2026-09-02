@@ -208,9 +208,9 @@ expected_guide_pages = {
     ],
     "Webhooks": [
         "guides/webhooks/index",
-        "guides/webhooks/events",
         "guides/webhooks/subscriptions",
         "guides/webhooks/delivery",
+        "guides/webhooks/events",
     ],
     "WebSocket": [
         "guides/websocket/index",
@@ -446,14 +446,36 @@ for relative, source_path in canonical_ecosystem_sources.items():
             f"developer ecosystem lost canonical source link: {expected}"
         )
 
-for relative, repository in {
-    "ecosystem/claude-code.mdx": "Relay-Claude-Code",
-    "ecosystem/codex.mdx": "Relay-Codex",
-    "ecosystem/cursor.mdx": "Relay-Cursor",
+# Each coding-agent host installs from a discovery manifest at the Relay-SDK
+# repository root. The pages must name the manifest their host reads, so a
+# reader can see what a plain clone of Relay-SDK offers that host.
+for relative, manifest in {
+    "ecosystem/claude-code.mdx": ".claude-plugin/marketplace.json",
+    "ecosystem/codex.mdx": ".agents/plugins/marketplace.json",
+    "ecosystem/cursor.mdx": ".cursor-plugin/marketplace.json",
 }.items():
-    expected = f"https://github.com/RelayMessenger/{repository}"
+    expected = (
+        "https://github.com/RelayMessenger/Relay-SDK/blob/staging/"
+        f"{manifest}"
+    )
     if expected not in (root / relative).read_text():
-        raise SystemExit(f"developer ecosystem lost install mirror: {expected}")
+        raise SystemExit(
+            f"developer ecosystem lost root discovery manifest: {expected}"
+        )
+
+hosted_lock = json.loads(
+    (root / "scripts/ecosystem-hosted-lock.json").read_text()
+)
+locked_sdk_paths = hosted_lock["repositories"]["Relay-SDK"]["paths"]
+for locked_path in [
+    ".agents/plugins/marketplace.json",
+    ".cursor-plugin/marketplace.json",
+    ".claude-plugin/marketplace.json",
+    "plugins/relay",
+    "packages/claude-code/plugin",
+]:
+    if locked_path not in locked_sdk_paths:
+        raise SystemExit(f"hosted lock lost root discovery path: {locked_path}")
 
 hermes_source = "https://github.com/RelayMessenger/Relay-Hermes"
 if hermes_source not in (root / "ecosystem/hermes.mdx").read_text():
@@ -471,6 +493,20 @@ for stale_repository in [
     stale = f"https://github.com/RelayMessenger/{stale_repository}"
     if stale in ecosystem_text:
         raise SystemExit(f"standalone source link returned: {stale}")
+
+# Relay-Codex, Relay-Cursor and Relay-Claude-Code were packaging mirrors, not
+# host requirements, and are archived. An archived repository stays readable,
+# so nothing breaks on its own; every published page and the hosted lock must
+# stop naming one anyway, or a reader installs bytes that never move again.
+lock_text = (root / "scripts/ecosystem-hosted-lock.json").read_text()
+published_text = "\n".join(path.read_text() for path in mdx_paths)
+for archived_mirror in ["Relay-Codex", "Relay-Cursor", "Relay-Claude-Code"]:
+    if archived_mirror in published_text:
+        raise SystemExit(f"archived install mirror returned: {archived_mirror}")
+    if archived_mirror in lock_text:
+        raise SystemExit(
+            f"archived install mirror returned to the hosted lock: {archived_mirror}"
+        )
 
 for version in [
     "@relaymessenger/sdk@0.3.0-staging.4",
@@ -544,17 +580,29 @@ for marker in [
     "Codex CLI",
     "0.152.0",
     "codex plugin marketplace add",
+    "https://github.com/RelayMessenger/Relay-SDK --ref staging",
     "codex plugin add relay@relay-plugin-marketplace",
 ]:
     if marker not in codex_text:
         raise SystemExit(f"Codex staging install proof lost: {marker}")
+
+# Cursor loads a local plugin from a directory holding a plugin manifest.
+# Relay-SDK's root has none, so the link must name the plugin subtree.
+cursor_text = (root / "ecosystem/cursor.mdx").read_text()
+for marker in [
+    "ln -s /absolute/path/to/Relay-SDK/plugins/relay ~/.cursor/plugins/local/relay",
+    "https://github.com/RelayMessenger/Relay-SDK.git",
+]:
+    if marker not in cursor_text:
+        raise SystemExit(f"Cursor staging install proof lost: {marker}")
 
 claude_text = (root / "ecosystem/claude-code.mdx").read_text()
 claude_normalized = re.sub(r"\s+", " ", claude_text)
 for marker in [
     "relay-claude-channel@0.3.0-staging.0",
     "Both the `latest` and `staging` npm tags select this published channel version",
-    "Relay-Claude-Code",
+    "/plugin marketplace add RelayMessenger/Relay-SDK@staging",
+    "/plugin install relay@relay-messenger",
     "Only addressed group Messages start Claude turns",
     "structured `parts[].mention`",
     "`deliveries[]` row whose `contact.is_me` is `true`",
@@ -729,6 +777,7 @@ heading_aliases = {
     "limits": "rate limits",
     "error codes": "error codes",
     "api reference": "api reference overview",
+    "webhook events": "webhook event types",
 }
 for path in mdx_paths:
     text = path.read_text()
