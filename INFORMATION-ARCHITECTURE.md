@@ -422,7 +422,7 @@ the page's single job and update this inventory in the same commit.
 | Mentions | `Mention a Contact` → `Choose the range` → `Validation rules` → `Related` |
 | Message Details | `Retrieve a Message` → `Read the response` → `Direction` → `List Chat history` → `Related` |
 | Message Parts | `Part types` → `Ordering and composition` → `Response-only parts` → `Related` |
-| Attachments | `1. Create an upload` → `2. Upload the raw bytes` → `3. Confirm the upload` → `4. Send the Attachment` → `5. Download or delete` → `Import a public media URL` → `Media metadata` → `Image formats` → `Limits` → `Ownership` → `Related` |
+| Attachments | `1. Create an upload` → `2. Upload the raw bytes` → `3. Confirm the upload` → `4. Send the Attachment` → `5. Download or delete` → `Import a public media URL` → `Media metadata` → `File types` → `Limits` → `Ownership` → `Related` |
 | Voice Memos | `Upload audio` → `Send the voice memo` → `Read the response` → `Related` |
 | Receiving Attachments | `Inbound attachments` → `Download the bytes` → `URL lifetime` → `Pass the file to a model` → `Related` |
 | Rich Link Previews | `Send a link part` → `Composition rules` → `Start a Chat with a link` → `Related` |

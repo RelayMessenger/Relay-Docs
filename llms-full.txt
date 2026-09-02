@@ -1489,7 +1489,7 @@ Message.
 | Redirects | Every hop is revalidated, with at most five redirects |
 | Response | Final response must succeed |
 | Size | Declared and actual body must each be 1 byte to 10 MB |
-| Content type | Response Content-Type must be supported |
+| Content type | Relay keeps the type the host declares, and stores `application/octet-stream` when the host declares none it can read |
 
 **Relay rejects credentials in the URL and blocks loopback, private,
 link-local, reserved, and internal destinations.** A redirect cannot bypass
@@ -1507,10 +1507,38 @@ these checks.
 
 Width and height must be supplied together.
 
-## Image formats
+## File types
 
-Relay accepts JPEG, PNG, GIF, HEIC, TIFF, BMP, and WebP images. It rejects
-SVG.
+`content_type` takes any file type. Relay stores the bytes unchanged and gives
+the reader the type you declared.
+
+| Rule | Value |
+| --- | --- |
+| Shape | `type/subtype`, spelled with the token characters RFC 2045 allows |
+| Length | Up to 255 characters |
+| Case | Relay lowercases the type, so one Attachment has one spelling |
+| A value outside that shape | [`400` with code `1005`](/error/codes/1xxx/1005) |
+
+A public URL import keeps the type its host declares, and stores
+`application/octet-stream` when the host declares none Relay can read.
+
+Every download carries `X-Content-Type-Options: nosniff` and
+`Content-Security-Policy: sandbox; default-src 'none'`, so a reader gets the
+type you declared, rendered inside a sandbox. SVG allocates, uploads, and
+downloads on those terms.
+
+| Type | `Content-Disposition` | Relay iOS app |
+| --- | --- | --- |
+| `image/*`, `audio/*`, `video/*`, `application/pdf` | `inline` | Previews in the Chat |
+| Every other type | `attachment` | Shows a file row that opens in QuickLook or the share sheet |
+
+<Note>
+A picture is drawn rather than downloaded, so profile photos and group photos
+take images. A [profile photo](/guides/contact-cards#profile-photo) address and
+the Attachment ID form of
+[`group_chat_icon`](/guides/chats/group-chats#set-a-group-photo) each answer
+[`422` with code `2006`](/error/codes/2xxx/2006) for anything else.
+</Note>
 
 ## Limits
 
@@ -1601,8 +1629,10 @@ curl -sS -X POST \
 Relay rejects non-audio Attachments on this route.
 
 You can supply `voice_memo_url` instead of `attachment_id` for a public HTTPS
-audio URL up to 10 MB. Relay applies the same public-network, redirect, size,
-and Content-Type checks as other [URL media](/guides/messaging/attachments#import-a-public-media-url).
+audio URL up to 10 MB. Relay applies the same public-network, redirect, and
+size checks as other
+[URL media](/guides/messaging/attachments#import-a-public-media-url), then
+requires the imported type to be `audio/*`.
 
 ## Read the response
 
@@ -2167,7 +2197,9 @@ curl -sS -X PUT "https://api.relayapp.im/v1/chats/$CHAT_ID" \
 | A completed image Attachment ID | Uses an image you already uploaded |
 | A publicly reachable HTTPS image address | Downloads it and serves a permanent copy of its own |
 
-Pass the ID of a completed image Attachment owned by the acting Contact:
+Pass the ID of a completed `image/*` Attachment owned by the acting Contact.
+Message Attachments take any file type, so a value that is not an image returns
+[`422` with code `2006`](/error/codes/2xxx/2006):
 
 <CodeGroup>
 ```typescript TypeScript SDK
@@ -6881,7 +6913,10 @@ components:
           type: string
           description: Original filename of the attachment
         content_type:
-          $ref: "#/components/schemas/SupportedContentType"
+          type: string
+          maxLength: 255
+          pattern: "^[A-Za-z0-9!#$%&'*+.^_`|~-]+/[A-Za-z0-9!#$%&'*+.^_`|~-]+$"
+          description: Declared MIME type, lowercased. Relay stores and returns the original bytes unchanged.
         size_bytes:
           type: integer
           format: int64
@@ -7620,7 +7655,8 @@ components:
           type: string
           format: uri
           description: Public HTTPS media URL. Relay blocks non-public networks and validates every redirect, response status,
-            declared and actual size, and supported Content-Type.
+            and declared and actual size. Any file type is accepted; a host that declares no usable Content-Type
+            is stored as application/octet-stream.
           pattern: ^https://
         attachment_id:
           type: string
@@ -8141,7 +8177,13 @@ components:
           minLength: 1
           maxLength: 255
         content_type:
-          $ref: "#/components/schemas/SupportedContentType"
+          type: string
+          maxLength: 255
+          pattern: "^[A-Za-z0-9!#$%&'*+.^_`|~-]+/[A-Za-z0-9!#$%&'*+.^_`|~-]+$"
+          description: >-
+            MIME type of the file, as `type/subtype`. Relay accepts any file
+            type and stores the bytes unchanged; the declared type is lowercased
+            and returned to the reader as sent.
         size_bytes:
           type: integer
           format: int64
@@ -8476,61 +8518,6 @@ components:
             - user
             - agent
           description: Whether the Contact is a user or an agent.
-    SupportedContentType:
-      type: string
-      description: Supported declared MIME types for uploaded Attachments and media URLs. Relay stores and returns the
-        original bytes unchanged. Relay accepts WebP and rejects SVG as an explicit content-safety decision.
-      enum:
-        - image/jpeg
-        - image/png
-        - image/gif
-        - image/heic
-        - image/heif
-        - image/tiff
-        - image/bmp
-        - image/webp
-        - image/x-icon
-        - video/mp4
-        - video/quicktime
-        - video/mpeg
-        - video/mpeg2
-        - video/x-m4v
-        - video/x-msvideo
-        - video/3gpp
-        - audio/mpeg
-        - audio/mp3
-        - audio/x-m4a
-        - audio/mp4
-        - audio/x-caf
-        - audio/x-wav
-        - audio/x-aiff
-        - audio/aiff
-        - audio/aac
-        - audio/midi
-        - audio/amr
-        - application/pdf
-        - application/vnd.apple.pkpass
-        - text/plain
-        - text/markdown
-        - text/vcard
-        - text/rtf
-        - text/csv
-        - text/html
-        - text/calendar
-        - application/msword
-        - application/vnd.openxmlformats-officedocument.wordprocessingml.document
-        - application/vnd.ms-excel
-        - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-        - application/vnd.ms-powerpoint
-        - application/vnd.openxmlformats-officedocument.presentationml.presentation
-        - application/x-iwork-pages-sffpages
-        - application/x-iwork-numbers-sffnumbers
-        - application/x-iwork-keynote-sffkey
-        - application/epub+zip
-        - text/xml
-        - application/json
-        - application/zip
-        - application/x-gzip
     SystemEvent:
       type: object
       additionalProperties: false
