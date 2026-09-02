@@ -424,11 +424,11 @@ the page's single job and update this inventory in the same commit.
 | Message Parts | `Part types` → `Ordering and composition` → `Response-only parts` → `Related` |
 | Attachments | `1. Create an upload` → `2. Upload the raw bytes` → `3. Confirm the upload` → `4. Send the Attachment` → `5. Download or delete` → `Import a public media URL` → `Media metadata` → `Image formats` → `Limits` → `Ownership` → `Related` |
 | Voice Memos | `Upload audio` → `Send the voice memo` → `Read the response` → `Related` |
-| Receiving Media | `Inbound media parts` → `Download the bytes` → `URL lifetime` → `Pass the file to a model` → `Related` |
+| Receiving Attachments | `Inbound attachments` → `Download the bytes` → `URL lifetime` → `Pass the file to a model` → `Related` |
 | Rich Link Previews | `Send a link part` → `Composition rules` → `Start a Chat with a link` → `Related` |
 | Replies | `Reply to a Message` → `Target a part` → `List a reply thread` → `Related` |
 | Reactions | `Add a reaction` → `Reaction types` → `Remove a reaction` → `Events` → `Related` |
-| Delivery Receipts | `Response fields` → `Delivered boundaries` → `Mark Read` → `Direct and group presentation` → `Related` |
+| Delivery Receipts | `Response fields` → `What Delivered means` → `Mark Read` → `What the app shows` → `Related` |
 
 ### Chats and Contacts
 
@@ -451,7 +451,7 @@ the page's single job and update this inventory in the same commit.
 | Webhooks | `Choose a transport` → `Shared envelope` → `Switch transports` → `Recovery` → `Review with an agent` → `Related` |
 | Webhooks | `Flow` → `Create a subscription` → `Verify the signature` → `Acknowledge safely` → `Review with an agent` → `Related` |
 | Webhook Subscriptions | `Create` → `Store the signing secret` → `List, retrieve, update, or delete` → `Related` |
-| Webhook Event Types | `All event types` → `List event types` → `Envelope` → `Event payload examples` → `Payload fields` → `Delivery paths` → `Related` |
+| Webhook Event Types | `Event types` → `List event types` → `Webhook envelope` → `Message events` → `Reaction events` → `Participant events` → `Chat events` → `Contact events` → `Delivery paths` → `Related` |
 | Webhook Delivery | `Delivery policy` → `Retry classes` → `Receiver pattern` → `Delivered meaning` → `Terminal delivery` → `Review with an agent` → `Related` |
 | WebSocket | `Select WebSocket delivery` → `Connect` → `Review with an agent` → `Related` |
 | WebSocket frames | `Ready frame` → `Event frame` → `Error frame` → `Backpressure` → `Heartbeats` → `Disconnects` → `Related` |

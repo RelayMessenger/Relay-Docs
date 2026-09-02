@@ -1362,8 +1362,8 @@ contract_events = {
     for value in re.findall(r"^        - (.+)$", event_type_block.group(1), re.M)
 }
 event_catalog_text = webhook_events_text.split(
-    "## All event types", 1
-)[1].split("## Envelope", 1)[0]
+    "## Event types", 1
+)[1].split("## List event types", 1)[0]
 documented_events = set(
     re.findall(
         r"`((?:message|reaction|participant|chat|contact)\.[a-z_.]+)`",

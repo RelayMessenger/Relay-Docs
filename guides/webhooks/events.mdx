@@ -1,5 +1,5 @@
 ---
-title: "Webhook Event Types"
+title: "Webhook Events"
 sidebarTitle: "Webhook Event Types"
 description: "See every event type available to Relay webhook subscriptions, with a payload example for each."
 keywords: ["webhooks", "webhook events", "event types", "message.received", "contact.added"]
@@ -7,9 +7,9 @@ keywords: ["webhooks", "webhook events", "event types", "message.received", "con
 
 Use this page to choose the event names for a Webhook subscription. Relay uses the same event envelope inside an acknowledged WebSocket `event` frame, while WebSocket connection and replay behavior lives in the [WebSocket guide](/guides/websocket).
 
-## All event types
+## Event types
 
-| Event | Fires when | Payload in `data` |
+| Event | Fires when | Data |
 | --- | --- | --- |
 | `message.sent` | An Agent Message is committed | `MessageEvent` |
 | `message.received` | A User Message is committed for the Agent | `MessageEvent` |
@@ -42,7 +42,7 @@ curl -sS https://api.relayapp.im/v1/webhook-events \
 ```
 </CodeGroup>
 
-## Envelope
+## Webhook envelope
 
 Every Webhook request has the same top-level shape. The `event_type` selects the shape of `data`.
 
@@ -53,37 +53,50 @@ Use this fixed payload version: `2026-08-30`.
   "api_version": "v1",
   "webhook_version": "2026-08-30",
   "event_type": "contact.added",
-  "event_id": "00000000-0000-7000-8000-000000000010",
+  "event_id": "01a05fa7-f231-7401-8408-6218205d7bc5",
   "created_at": "2026-08-31T06:00:00.000Z",
   "trace_id": "0123456789abcdef0123456789abcdef",
-  "agent_id": "00000000-0000-7000-8000-000000000011",
+  "agent_id": "01a05fa7-f232-7ffb-be9e-a70aa0807827",
   "data": {
     "contact": {
-      "id": "00000000-0000-7000-8000-000000000012",
+      "id": "01a05fa7-f233-760f-a29b-a2d28b3159e9",
       "handle": "advait",
       "display_name": "Advait"
     },
-    "chat_id": "00000000-0000-7000-8000-000000000013"
+    "chat_id": "01a05fa7-f234-72a5-b3f9-0197b1e8f596"
   }
 }
 ```
 
 Commit `event_id` under a uniqueness rule before returning the Webhook `2xx`. Relay may retry the same event with the same ID and body.
 
-## Event payload examples
-
 The following blocks show the event-specific `data` object. The top-level envelope stays the same for every event.
+
+| Field | Meaning |
+| --- | --- |
+| `api_version` | Relay API version, currently `v1` |
+| `webhook_version` | Payload version, currently `2026-08-30` |
+| `event_type` | Event name |
+| `event_id` | Stable deduplication key |
+| `created_at` | Event creation time |
+| `trace_id` | Event correlation ID |
+| `agent_id` | Receiving Agent Contact ID |
+| `data` | Event-specific data |
+
+## Message events
+
+A Message can contain text, media, or a link in its `parts` array. An Attachment appears as a `media` part. See [Attachments](/guides/messaging/attachments) for upload and download details.
 
 ### `message.sent`
 
 ```json
 {
-  "chat": { "id": "00000000-0000-7000-8000-000000000101", "is_group": false },
-  "id": "00000000-0000-7000-8000-000000000102",
+  "chat": { "id": "01a05fa7-f236-746e-a0f3-66884d18645d", "is_group": false },
+  "id": "01a05fa7-f237-7ae0-8a6e-ff45762eebfa",
   "idempotency_key": "reply-000000000102",
   "direction": "outbound",
   "sender_handle": {
-    "id": "00000000-0000-7000-8000-000000000103",
+    "id": "01a05fa7-f238-7daa-8ade-eccd8a25631d",
     "handle": "relay",
     "joined_at": "2026-08-31T06:00:00.000Z",
     "kind": "agent",
@@ -104,12 +117,12 @@ The following blocks show the event-specific `data` object. The top-level envelo
 
 ```json
 {
-  "chat": { "id": "00000000-0000-7000-8000-000000000111", "is_group": false },
-  "id": "00000000-0000-7000-8000-000000000112",
+  "chat": { "id": "01a05fa7-f239-7d41-9fd2-81b81470aa9d", "is_group": false },
+  "id": "01a05fa7-f23a-7ca7-bfa0-7ce90d77f062",
   "idempotency_key": null,
   "direction": "inbound",
   "sender_handle": {
-    "id": "00000000-0000-7000-8000-000000000113",
+    "id": "01a05fa7-f23b-75a3-a229-6bd8b45eeca9",
     "handle": "advait",
     "joined_at": "2026-08-31T06:00:00.000Z",
     "kind": "user",
@@ -126,51 +139,16 @@ The following blocks show the event-specific `data` object. The top-level envelo
 }
 ```
 
-### Media payload
-
-Use the `media` part fields when a Message contains an Attachment. The `url` is a signed Relay download URL.
-
-```json
-{
-  "chat": { "id": "00000000-0000-7000-8000-000000000115", "is_group": false },
-  "id": "00000000-0000-7000-8000-000000000116",
-  "idempotency_key": null,
-  "direction": "inbound",
-  "sender_handle": {
-    "id": "00000000-0000-7000-8000-000000000117",
-    "handle": "advait",
-    "joined_at": "2026-08-31T06:00:00.000Z",
-    "kind": "user",
-    "display_name": "Advait",
-    "image_url": null,
-    "tagline": null,
-    "verified": false
-  },
-  "parts": [{
-    "type": "media",
-    "id": "00000000-0000-7000-8000-000000000118",
-    "url": "https://cdn.relayapp.im/attachments/opaque-download-token",
-    "filename": "report.pdf",
-    "mime_type": "application/pdf",
-    "size_bytes": 48291
-  }],
-  "sent_at": "2026-08-31T06:02:00.000Z",
-  "delivered_at": null,
-  "read_at": null,
-  "reply_to": null
-}
-```
-
 ### `message.delivered`
 
 ```json
 {
-  "chat": { "id": "00000000-0000-7000-8000-000000000121", "is_group": false },
-  "id": "00000000-0000-7000-8000-000000000122",
+  "chat": { "id": "01a05fa7-f240-7db4-af39-005e79168311", "is_group": false },
+  "id": "01a05fa7-f241-7c00-ad30-d25b0abff8d6",
   "idempotency_key": "reply-000000000122",
   "direction": "outbound",
   "sender_handle": {
-    "id": "00000000-0000-7000-8000-000000000123",
+    "id": "01a05fa7-f242-7b24-861f-830e43ba2640",
     "handle": "relay",
     "joined_at": "2026-08-31T06:00:00.000Z",
     "kind": "agent",
@@ -191,12 +169,12 @@ Use the `media` part fields when a Message contains an Attachment. The `url` is 
 
 ```json
 {
-  "chat": { "id": "00000000-0000-7000-8000-000000000131", "is_group": false },
-  "id": "00000000-0000-7000-8000-000000000132",
+  "chat": { "id": "01a05fa7-f243-7bee-86b7-b89ab118228f", "is_group": false },
+  "id": "01a05fa7-f244-7a56-9927-905bf4f9a49c",
   "idempotency_key": "reply-000000000132",
   "direction": "outbound",
   "sender_handle": {
-    "id": "00000000-0000-7000-8000-000000000133",
+    "id": "01a05fa7-f245-72c7-a90c-b785e8b59d2a",
     "handle": "relay",
     "joined_at": "2026-08-31T06:00:00.000Z",
     "kind": "agent",
@@ -213,13 +191,15 @@ Use the `media` part fields when a Message contains an Attachment. The `url` is 
 }
 ```
 
+## Reaction events
+
 ### `reaction.added`
 
 ```json
 {
-  "chat_id": "00000000-0000-7000-8000-000000000141",
+  "chat_id": "01a05fa7-f246-7c22-a7dc-6f1f5b44ff77",
   "from_handle": {
-    "id": "00000000-0000-7000-8000-000000000142",
+    "id": "01a05fa7-f247-7e9a-b6b8-64e963d553f4",
     "handle": "advait",
     "joined_at": "2026-08-31T06:00:00.000Z",
     "kind": "user",
@@ -228,7 +208,7 @@ Use the `media` part fields when a Message contains an Attachment. The `url` is 
     "tagline": null,
     "verified": false
   },
-  "message_id": "00000000-0000-7000-8000-000000000143",
+  "message_id": "01a05fa7-f248-7d00-8e62-0a2522210473",
   "part_index": 0,
   "reaction_type": "like",
   "custom_emoji": null,
@@ -241,9 +221,9 @@ Use the `media` part fields when a Message contains an Attachment. The `url` is 
 
 ```json
 {
-  "chat_id": "00000000-0000-7000-8000-000000000151",
+  "chat_id": "01a05fa7-f249-7e54-85c3-4ec546cc63cc",
   "from_handle": {
-    "id": "00000000-0000-7000-8000-000000000152",
+    "id": "01a05fa7-f24a-7b69-8ace-88a159b77cd0",
     "handle": "advait",
     "joined_at": "2026-08-31T06:00:00.000Z",
     "kind": "user",
@@ -252,7 +232,7 @@ Use the `media` part fields when a Message contains an Attachment. The `url` is 
     "tagline": null,
     "verified": false
   },
-  "message_id": "00000000-0000-7000-8000-000000000153",
+  "message_id": "01a05fa7-f24b-78d2-9eca-5e5997d7c243",
   "part_index": 0,
   "reaction_type": "like",
   "custom_emoji": null,
@@ -261,13 +241,15 @@ Use the `media` part fields when a Message contains an Attachment. The `url` is 
 }
 ```
 
+## Participant events
+
 ### `participant.added`
 
 ```json
 {
-  "chat_id": "00000000-0000-7000-8000-000000000161",
+  "chat_id": "01a05fa7-f24c-7dea-ba98-afc1d489fa1d",
   "participant": {
-    "id": "00000000-0000-7000-8000-000000000162",
+    "id": "01a05fa7-f24d-7062-acfa-1379d99874cb",
     "handle": "morgan",
     "status": "active",
     "joined_at": "2026-08-31T06:07:00.000Z",
@@ -287,9 +269,9 @@ Use the `media` part fields when a Message contains an Attachment. The `url` is 
 
 ```json
 {
-  "chat_id": "00000000-0000-7000-8000-000000000171",
+  "chat_id": "01a05fa7-f24f-71fd-a48b-2e244b391168",
   "participant": {
-    "id": "00000000-0000-7000-8000-000000000172",
+    "id": "01a05fa7-f250-7eb0-85c2-9df1876bdbeb",
     "handle": "morgan",
     "status": "removed",
     "joined_at": "2026-08-31T06:07:00.000Z",
@@ -305,16 +287,18 @@ Use the `media` part fields when a Message contains an Attachment. The `url` is 
 }
 ```
 
+## Chat events
+
 ### `chat.created`
 
 ```json
 {
-  "id": "00000000-0000-7000-8000-000000000181",
+  "id": "01a05fa7-f251-76c5-b1a8-a31c3ad9b594",
   "display_name": "Relay, Advait",
   "group_chat_icon": null,
   "handles": [
     {
-      "id": "00000000-0000-7000-8000-000000000182",
+      "id": "01a05fa7-f252-7ac5-98f8-9df04438d681",
       "handle": "relay",
       "status": "active",
       "joined_at": "2026-08-31T06:00:00.000Z",
@@ -327,7 +311,7 @@ Use the `media` part fields when a Message contains an Attachment. The `url` is 
       "verified": true
     },
     {
-      "id": "00000000-0000-7000-8000-000000000183",
+      "id": "01a05fa7-f253-78a7-ad95-5d01c27f66f0",
       "handle": "advait",
       "status": "active",
       "joined_at": "2026-08-31T06:00:00.000Z",
@@ -350,11 +334,11 @@ Use the `media` part fields when a Message contains an Attachment. The `url` is 
 
 ```json
 {
-  "chat_id": "00000000-0000-7000-8000-000000000191",
+  "chat_id": "01a05fa7-f254-76f4-8c3d-ca733572c7c0",
   "old_value": "Relay, Advait",
   "new_value": "Launch team",
   "changed_by_handle": {
-    "id": "00000000-0000-7000-8000-000000000192",
+    "id": "01a05fa7-f255-72ad-9f13-5b44601fec04",
     "handle": "advait",
     "joined_at": "2026-08-31T06:00:00.000Z",
     "kind": "user",
@@ -371,11 +355,11 @@ Use the `media` part fields when a Message contains an Attachment. The `url` is 
 
 ```json
 {
-  "chat_id": "00000000-0000-7000-8000-000000000201",
+  "chat_id": "01a05fa7-f256-7786-a816-0096a5c653c5",
   "old_value": null,
-  "new_value": "https://cdn.relayapp.im/chats/00000000-0000-7000-8000-000000000202.png",
+  "new_value": "https://cdn.relayapp.im/chats/01a05fa7-f257-7578-b54c-2c4c42e2ae9d.png",
   "changed_by_handle": {
-    "id": "00000000-0000-7000-8000-000000000203",
+    "id": "01a05fa7-f258-76a2-af7e-99d751b2038a",
     "handle": "advait",
     "joined_at": "2026-08-31T06:00:00.000Z",
     "kind": "user",
@@ -392,9 +376,9 @@ Use the `media` part fields when a Message contains an Attachment. The `url` is 
 
 ```json
 {
-  "chat_id": "00000000-0000-7000-8000-000000000211",
+  "chat_id": "01a05fa7-f259-7804-8d06-135255dfd040",
   "contact": {
-    "id": "00000000-0000-7000-8000-000000000212",
+    "id": "01a05fa7-f25a-711b-8b56-6979ec68ce5f",
     "handle": "advait",
     "kind": "user"
   }
@@ -405,25 +389,27 @@ Use the `media` part fields when a Message contains an Attachment. The `url` is 
 
 ```json
 {
-  "chat_id": "00000000-0000-7000-8000-000000000221",
+  "chat_id": "01a05fa7-f25b-75d7-934f-6dff49670c85",
   "contact": {
-    "id": "00000000-0000-7000-8000-000000000222",
+    "id": "01a05fa7-f25c-7b62-ae5a-4502b0cb06e0",
     "handle": "advait",
     "kind": "user"
   }
 }
 ```
 
+## Contact events
+
 ### `contact.added`
 
 ```json
 {
   "contact": {
-    "id": "00000000-0000-7000-8000-000000000231",
+    "id": "01a05fa7-f25d-7910-857c-acb98232482f",
     "handle": "advait",
     "display_name": "Advait"
   },
-  "chat_id": "00000000-0000-7000-8000-000000000232"
+  "chat_id": "01a05fa7-f25e-7d13-909f-668e57d39e95"
 }
 ```
 
@@ -432,27 +418,12 @@ Use the `media` part fields when a Message contains an Attachment. The `url` is 
 ```json
 {
   "contact": {
-    "id": "00000000-0000-7000-8000-000000000241",
+    "id": "01a05fa7-f25f-7e6f-a22f-79ee35c3a3f9",
     "handle": "advait",
     "display_name": "Advait"
   }
 }
 ```
-
-## Payload fields
-
-| Field | Meaning |
-| --- | --- |
-| `api_version` | Relay API version, currently `v1` |
-| `webhook_version` | Payload version, currently `2026-08-30` |
-| `event_type` | Event name |
-| `event_id` | Stable deduplication key |
-| `created_at` | Event creation time |
-| `trace_id` | Event correlation ID |
-| `agent_id` | Receiving Agent Contact ID |
-| `data` | Event-specific payload |
-
-Message media parts include an Attachment ID and a signed download URL. If the URL expires, refresh it with `GET /v1/attachments/{attachmentId}`.
 
 ## Delivery paths
 
@@ -470,3 +441,4 @@ Relay retains pending events for 30 days. Pending events keep the same `event_id
 - [Webhook delivery](/guides/webhooks/delivery)
 - [WebSocket frames](/guides/websocket/protocol)
 - [Delivery receipts](/guides/messaging/delivery-receipts)
+- [Attachments](/guides/messaging/attachments)

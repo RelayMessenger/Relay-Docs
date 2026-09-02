@@ -3,8 +3,8 @@
 // Runtime types generated with workerd@1.20260828.1 2026-08-31 nodejs_compat
 interface __BaseEnv_Env {
 	MINTLIFY_ORIGIN: "https://relay-staging.mintlify.app";
-	LLMS_VERSION: "9a21dd242ba9e95b41399d9e993b2f73651bda0f20b73deb117951ec778fcdba";
-	LLMS_FULL_VERSION: "07903bc93e991d9d599b9b45fd436ef26b5e541471d7e0955fa951006eda5d7e";
+	LLMS_VERSION: "ed02f53486f82fdb51e3ff5345461183a8c06bc34eaae1cfabd5c757368c3aaa";
+	LLMS_FULL_VERSION: "9f5f0b8cde4fc522fc4b9da4b387ec4b6a7cfa52dd77a9ea68f616e7c16269d9";
 }
 declare namespace Cloudflare {
 	interface GlobalProps {

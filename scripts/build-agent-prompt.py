@@ -47,6 +47,30 @@ output = f"""(() => {{
     );
   }}
 
+  function iconElement(link) {{
+    return link.querySelector("svg");
+  }}
+
+  function setCopyIcon(link, copied) {{
+    const icon = iconElement(link);
+    if (!icon) return;
+
+    if (!icon.dataset.relayPromptOriginalMaskImage) {{
+      icon.dataset.relayPromptOriginalMaskImage = icon.style.maskImage;
+      icon.dataset.relayPromptOriginalWebkitMaskImage = icon.style.webkitMaskImage;
+    }}
+
+    const originalMaskImage = icon.dataset.relayPromptOriginalMaskImage;
+    const originalWebkitMaskImage = icon.dataset.relayPromptOriginalWebkitMaskImage;
+    if (copied) {{
+      icon.style.maskImage = originalMaskImage.replace(/copy\\.svg/g, "check.svg");
+      icon.style.webkitMaskImage = originalWebkitMaskImage.replace(/copy\\.svg/g, "check.svg");
+    }} else {{
+      icon.style.maskImage = originalMaskImage;
+      icon.style.webkitMaskImage = originalWebkitMaskImage;
+    }}
+  }}
+
   async function writePrompt() {{
     if (navigator.clipboard?.writeText) {{
       await navigator.clipboard.writeText(RELAY_AGENT_PROMPT);
@@ -79,10 +103,14 @@ output = f"""(() => {{
     const label = labelElement(link);
     const originalAriaLabel = link.getAttribute("aria-label");
     if (label) label.textContent = "Copied";
+    setCopyIcon(link, true);
     link.setAttribute("aria-label", "Copied agent prompt");
 
-    window.setTimeout(() => {{
+    if (link.__relayPromptCopyTimer) window.clearTimeout(link.__relayPromptCopyTimer);
+
+    link.__relayPromptCopyTimer = window.setTimeout(() => {{
       if (label) label.textContent = "Copy agent prompt";
+      setCopyIcon(link, false);
       if (originalAriaLabel === null) {{
         link.removeAttribute("aria-label");
       }} else {{
