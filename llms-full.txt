@@ -2160,7 +2160,14 @@ curl -sS -X PUT "https://api.relayapp.im/v1/chats/$CHAT_ID" \
 
 ## Set a group photo
 
-Upload an image Attachment, then pass its ID:
+`group_chat_icon` takes either form of image you have.
+
+| Value | What Relay does |
+| --- | --- |
+| A completed image Attachment ID | Uses an image you already uploaded |
+| A publicly reachable HTTPS image address | Downloads it and serves a permanent copy of its own |
+
+Pass the ID of a completed image Attachment owned by the acting Contact:
 
 <CodeGroup>
 ```typescript TypeScript SDK
@@ -2177,8 +2184,39 @@ curl -sS -X PUT "https://api.relayapp.im/v1/chats/$CHAT_ID" \
 ```
 </CodeGroup>
 
-Use a completed image Attachment owned by the acting Contact. The
-`group_chat_icon` response field contains its signed download URL.
+Or pass an address. The address you supply does not have to stay up, because
+Relay serves a copy of its own:
+
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.chats.update(chatId, {
+  group_chat_icon: "https://agent.example/weekend-plans.png",
+});
+```
+
+```bash cURL
+curl -sS -X PUT "https://api.relayapp.im/v1/chats/$CHAT_ID" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"group_chat_icon":"https://agent.example/weekend-plans.png"}'
+```
+</CodeGroup>
+
+Relay reads the value to tell the two forms apart. A UUID is an Attachment ID,
+and anything else is an address.
+
+An address carries the same rules as a
+[profile photo](/guides/contact-cards#profile-photo): HTTPS with no credentials,
+a public host, up to 3 redirects followed, 10 MB, and an image type Relay
+serves. A refused address leaves the group photo as it was.
+
+| Address | Response |
+| --- | --- |
+| Not HTTPS, or carrying credentials | [`400` with code `1005`](/error/codes/1xxx/1005) |
+| Unreachable, over 10 MB, or not an image type Relay serves | [`422` with code `2006`](/error/codes/2xxx/2006) |
+
+Either form returns a signed download URL in the `group_chat_icon` response
+field. Send `null` to clear the photo.
 
 ## Group metadata events
 
@@ -8679,8 +8717,12 @@ components:
           type:
             - string
             - "null"
-          format: uuid
-          description: Completed image Attachment ID to use as the group photo, or null to clear it.
+          description: >-
+            Group photo for the chat, in either of two forms. A completed image
+            Attachment ID uses an image you already uploaded. Any publicly
+            reachable HTTPS image address also works: Relay downloads it and
+            serves a permanent copy of its own, so the address you supply does
+            not have to stay up. Send null to clear the photo.
     UpdateContactCardRequest:
       type: object
       properties:
