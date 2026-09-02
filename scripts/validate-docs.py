@@ -1090,10 +1090,10 @@ for required in [
 
 group_text = (root / "guides/chats/group-chats.mdx").read_text()
 if (
-    "2 to 31 recipient Handles plus the sender" not in group_text
+    "2 to 7 recipient Handles plus the sender" not in group_text
     or "keep at least three active Contacts" not in group_text
 ):
-    raise SystemExit("Group Chat guide lost max-32 and minimum-three rules")
+    raise SystemExit("Group Chat guide lost max-8 and minimum-three rules")
 
 expected_error_codes = {
     1004, 1005, 2001, 2003, 2004, 2005, 2006,
@@ -1149,8 +1149,13 @@ for path in error_paths:
 
 openapi_text = (root / "api-reference/openapi.yaml").read_text()
 mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
+# api-reference/openapi.yaml is copied byte-for-byte from the Relay Server
+# contract, never hand-written. This pin records the exact bytes and the commit
+# they came from, so an edit made here instead of at the source fails the gate.
+# Source: Relay-Server contracts/developer/openapi.yaml at
+# 4506b8cb6f41da0b39f3e23a285daf3805fcf3a3 (server PR 145, group chat limit 8).
 expected_openapi_sha256 = (
-    "26a6bc047286e09df6ef95f3c6b09f0437260ecc94e12c5fb3ce1704910f8ba1"
+    "e58ffd5de05250a7a218735cb6bffd854d2d1198134f3f8876b2be109f606fde"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
