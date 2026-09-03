@@ -1,11 +1,11 @@
 ---
-name: docs-linq-style
-description: Apply the current Linq Partner API documentation patterns to messaging API guides. Use when a Relay page needs a clearer onboarding path, shared vocabulary, runnable multi-language examples, or concise messaging concepts. Do not use Linq as proof of Relay behavior.
+name: docs-partner-api-style
+description: Apply the documentation patterns of a mature partner messaging API to Relay API guides. Use when a Relay page needs a clearer onboarding path, shared vocabulary, runnable multi-language examples, or concise messaging concepts. Another API's behavior never proves Relay behavior.
 ---
 
-# Linq documentation style
+# Partner messaging API documentation style
 
-Use Linq for information structure, not wording or product claims.
+Use this pattern for information structure, not wording or product claims.
 
 ## Structure
 
@@ -38,9 +38,9 @@ idempotency essay.
 
 ## What to avoid
 
-- Linq’s quickstart was about 1,760 words on 2026-08-10. Do not copy that size.
+- A partner-API quickstart of about 1,760 words is too long for Relay. Do not copy that size.
 - Do not lead Relay readers through optional plugins before the first API call.
-- Do not copy Linq’s carrier, line-selection, SDK, or account model.
+- Do not copy a carrier, line-selection, SDK, or account model that Relay does not have.
 
 ## Verify
 
@@ -48,14 +48,3 @@ idempotency essay.
 - A new reader can name the main objects after one page.
 - Every failure path says whether to retry.
 - Relay claims still match its OpenAPI contract.
-
-## Sources
-
-- https://docs.linqapp.com/llms.txt
-- https://docs.linqapp.com/getting-started/quickstart/index.md
-- https://docs.linqapp.com/getting-started/key-concepts/index.md
-- https://docs.linqapp.com/guides/messaging/sending-messages/index.md
-- https://docs.linqapp.com/guides/webhooks/index.md
-- https://cdn.linqapp.com/openapi/linq-api-v3.yaml
-
-Sources checked on 2026-08-10.

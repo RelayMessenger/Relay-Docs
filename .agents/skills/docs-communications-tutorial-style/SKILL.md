@@ -1,11 +1,11 @@
 ---
-name: docs-twilio-style
-description: Apply selected Twilio documentation patterns to communications quickstarts, inbound webhooks, phone and message examples, and language-specific guides. Use when Relay needs a complete send-and-receive tutorial with clear credentials and test effects. Avoid Twilio’s catalogue depth.
+name: docs-communications-tutorial-style
+description: Apply communications-platform tutorial patterns to quickstarts, inbound webhooks, phone and message examples, and language-specific guides. Use when Relay needs a complete send-and-receive tutorial with clear credentials and test effects. Avoid catalogue depth.
 ---
 
-# Twilio documentation style
+# Communications tutorial style
 
-Use Twilio for complete communications tutorials and language switching.
+Use this pattern for complete communications tutorials and language switching.
 
 ## Structure
 
@@ -26,9 +26,9 @@ Use Twilio for complete communications tutorials and language switching.
 
 ## What to avoid
 
-- Twilio’s SMS quickstart was about 5,806 words on 2026-08-10.
+- A communications-platform SMS quickstart of about 5,806 words is too long for Relay.
 - Do not repeat install, environment, and server code for every language inline.
-- Do not mix multiple Twilio-like products into one Relay task.
+- Do not mix several messaging products into one Relay task.
 - Do not use marketing descriptions in technical steps.
 
 ## Verify
@@ -37,12 +37,3 @@ Use Twilio for complete communications tutorials and language switching.
 - Credentials appear before the first request.
 - The guide says what external action the example performs.
 - Advanced hosting and production hardening move to later pages.
-
-## Sources
-
-- https://www.twilio.com/docs/llms.txt
-- https://www.twilio.com/docs/messaging/quickstart.md
-- https://www.twilio.com/docs/messaging
-- https://www.twilio.com/docs/usage/webhooks
-
-Sources checked on 2026-08-10.

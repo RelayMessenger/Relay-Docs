@@ -1,11 +1,11 @@
 ---
-name: docs-telegram-style
-description: Apply selected Telegram Bot API patterns to compact event, method, object, and polling reference pages. Use when Relay needs precise field tables, stable update names, or a simple create-token-then-choose-transport model. Do not copy Telegram’s giant single-page reference.
+name: docs-bot-api-reference-style
+description: Apply bot-platform API reference patterns to compact event, method, object, and polling reference pages. Use when Relay needs precise field tables, stable update names, or a simple create-token-then-choose-transport model. Do not copy a giant single-page reference.
 ---
 
-# Telegram Bot API documentation style
+# Bot platform API reference style
 
-Use Telegram for a simple bot identity and transport model.
+Use this pattern for a simple bot identity and transport model.
 
 ## Structure
 
@@ -25,9 +25,9 @@ Use Telegram for a simple bot identity and transport model.
 
 ## What to avoid
 
-- The Bot API reference is one very large page.
+- These references usually put the whole API on one very large page.
 - Do not put Relay’s full event and endpoint catalogue on one page.
-- Do not copy Telegram’s chat, update, or file lifecycle.
+- Do not copy a chat, update, or file lifecycle that Relay does not have.
 - Do not treat omitted fields as obvious.
 
 ## Verify
@@ -36,11 +36,3 @@ Use Telegram for a simple bot identity and transport model.
 - Each method names required inputs and its return.
 - The receive-path choice appears once and links to deeper guides.
 - Relay-specific privacy and access rules remain explicit.
-
-## Sources
-
-- https://core.telegram.org/bots
-- https://core.telegram.org/bots/api
-- https://core.telegram.org/bots/webhooks
-
-Sources checked on 2026-08-10.

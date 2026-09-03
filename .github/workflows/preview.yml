@@ -1,6 +1,11 @@
 name: Preview docs
 
 on:
+  # A merge into staging must rebuild the hosted staging preview by itself.
+  # Before this trigger, only the llms proxy Worker redeployed on a staging
+  # push and the Mintlify site waited for someone to remember a manual run.
+  push:
+    branches: [staging]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -16,6 +21,7 @@ jobs:
   preview:
     name: Validate and preview
     if: >-
+      github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' ||
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: blacksmith-2vcpu-ubuntu-2404
@@ -24,8 +30,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: >-
-            ${{ github.event_name == 'workflow_dispatch' &&
-            inputs.branch || github.event.pull_request.head.sha }}
+            ${{ github.event_name == 'workflow_dispatch' && inputs.branch ||
+            github.event_name == 'push' && github.sha ||
+            github.event.pull_request.head.sha }}
 
       - uses: actions/setup-node@v6
         with:
@@ -54,8 +61,9 @@ jobs:
           MINTLIFY_API_KEY: ${{ secrets.MINTLIFY_API_KEY }}
           MINTLIFY_PROJECT_ID: ${{ vars.MINTLIFY_PROJECT_ID }}
           PREVIEW_BRANCH: >-
-            ${{ github.event_name == 'workflow_dispatch' &&
-            inputs.branch || github.head_ref }}
+            ${{ github.event_name == 'workflow_dispatch' && inputs.branch ||
+            github.event_name == 'push' && github.ref_name ||
+            github.head_ref }}
         run: |
           set -euo pipefail
           test -n "$MINTLIFY_API_KEY"
