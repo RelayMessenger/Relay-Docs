@@ -14,6 +14,7 @@
 
 import { readFile, writeFile } from "node:fs/promises";
 import { readdirSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
 
@@ -31,6 +32,12 @@ const NPM_PACKAGES = [
   "relay-claude-channel",
 ];
 const PYPI_PACKAGES = ["relay-hermes"];
+// The hosted lock pins one Relay-SDK commit. It drifts on every Relay-SDK
+// merge, exactly like the versions above, so it is read here instead of
+// typed by hand. Relay-Hermes is deliberately not refreshed: its pin names
+// the commit that published the release candidate, not a moving head.
+const PINNED_REPOSITORY = "Relay-SDK";
+
 const CLAUDE_PLUGIN_MANIFEST =
   "https://raw.githubusercontent.com/RelayMessenger/Relay-SDK/staging"
   + "/packages/claude-code/plugin/.claude-plugin/plugin.json";
@@ -123,6 +130,18 @@ async function npmSourceCommit(name, version) {
     }
   }
   return null;
+}
+
+function liveStagingHead(repository) {
+  const sha = execFileSync(
+    "gh",
+    ["api", `repos/RelayMessenger/${repository}/commits/staging`, "--jq", ".sha"],
+    { encoding: "utf8" },
+  ).trim();
+  if (!/^[0-9a-f]{40}$/.test(sha)) {
+    throw new Error(`gh returned no commit for ${repository} staging: ${sha}`);
+  }
+  return sha;
 }
 
 async function pypiVersion(name) {
@@ -233,12 +252,16 @@ function propagate(text, previous, next) {
   return output;
 }
 
-function refreshHostedLock(lock, next) {
+function refreshHostedLock(lock, next, stagingHead) {
   for (const [name, entry] of Object.entries(next.npm)) {
     if (!lock.npm[name]) continue;
     lock.npm[name].tags = { latest: entry.latest, staging: entry.staging };
     lock.npm[name].integrity = { ...entry.integrity };
   }
+  if (!lock.repositories[PINNED_REPOSITORY]) {
+    throw new Error(`the hosted lock no longer pins ${PINNED_REPOSITORY}`);
+  }
+  lock.repositories[PINNED_REPOSITORY].commit = stagingHead;
   return lock;
 }
 
@@ -279,9 +302,11 @@ async function main() {
     if (updated !== text) edits.push([file, updated]);
   }
 
+  const stagingHead = liveStagingHead(PINNED_REPOSITORY);
   const lock = refreshHostedLock(
     JSON.parse(await readFile(lockPath, "utf8")),
     next,
+    stagingHead,
   );
   const lockText = `${JSON.stringify(lock, null, 2)}\n`;
   const versionsText = `${JSON.stringify(next, null, 2)}\n`;
@@ -295,13 +320,24 @@ async function main() {
   ];
 
   if (checkOnly) {
+    const pinnedCommit =
+      JSON.parse(await readFile(lockPath, "utf8"))
+        .repositories[PINNED_REPOSITORY]?.commit;
+    if (pinnedCommit !== stagingHead) {
+      console.error(
+        `scripts/ecosystem-hosted-lock.json pins ${PINNED_REPOSITORY} at `
+        + `${pinnedCommit}, but its staging head is ${stagingHead}`,
+      );
+    }
     if (staleFiles.length > 0) {
       console.error(
-        `these files disagree with the live registries: ${staleFiles.join(", ")}`,
+        `these files disagree with the live sources: ${staleFiles.join(", ")}`,
       );
-      process.exit(1);
     }
-    console.log("every published version claim matches the live registries");
+    if (staleFiles.length > 0 || pinnedCommit !== stagingHead) process.exit(1);
+    console.log(
+      "every published version claim and the Relay-SDK pin match the live sources",
+    );
     return;
   }
 
@@ -311,8 +347,9 @@ async function main() {
 
   console.log(
     `refreshed ${Object.keys(next.npm).length} npm packages, `
-    + `${Object.keys(next.pypi).length} PyPI package, and the Claude Code plugin `
-    + `manifest into ${edits.length} files`,
+    + `${Object.keys(next.pypi).length} PyPI package, the Claude Code plugin `
+    + `manifest, and the ${PINNED_REPOSITORY} staging pin (${stagingHead}) `
+    + `into ${edits.length} files`,
   );
   for (const file of staleFiles) console.log(`  updated ${file}`);
 }
