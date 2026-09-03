@@ -1,11 +1,11 @@
 ---
-name: docs-photon-style
-description: Apply Photon’s current README-led SDK documentation patterns to messaging integration pages. Use when a Relay guide needs a compact feature map, fast install path, exact send-versus-observe semantics, or examples beside each capability. Do not treat Photon APIs as Relay APIs.
+name: docs-readme-led-sdk-style
+description: Apply README-led SDK documentation patterns to messaging integration pages. Use when a Relay guide needs a compact feature map, fast install path, exact send-versus-observe semantics, or examples beside each capability. Another SDK's API is never a Relay API.
 ---
 
-# Photon documentation style
+# README-led SDK documentation style
 
-Use Photon for compact SDK explanation and precise runtime boundaries.
+Use this pattern for compact SDK explanation and precise runtime boundaries.
 
 ## Structure
 
@@ -25,8 +25,9 @@ Use Photon for compact SDK explanation and precise runtime boundaries.
 - State what a successful call does not prove.
 - Put supported formats and bounds in tables or short lists.
 
-Photon is strongest when it says that a send result confirms one local action,
-not final delivery. Preserve that precision in Relay receipt documentation.
+The pattern is strongest when it says that a send result confirms one local
+action, not final delivery. Preserve that precision in Relay receipt
+documentation.
 
 ## What to adapt
 
@@ -38,9 +39,9 @@ not final delivery. Preserve that precision in Relay receipt documentation.
 
 ## What to avoid
 
-- Photon’s canonical material is split across repositories and long READMEs.
-- Do not copy its package-centric hierarchy into Relay’s HTTP API.
-- Do not imply that open-source iMessage behavior proves Relay production state.
+- README-led material is usually split across repositories and long READMEs.
+- Do not copy a package-centric hierarchy into Relay’s HTTP API.
+- Do not imply that an open-source messaging client proves Relay production state.
 
 ## Verify
 
@@ -48,12 +49,3 @@ not final delivery. Preserve that precision in Relay receipt documentation.
 - Success language names the exact confirmed state.
 - Permission and platform requirements appear before the first failing step.
 - The page stays useful without reading a source repository.
-
-## Sources
-
-- https://photon.codes
-- https://github.com/photon-hq/imessage-kit
-- https://github.com/photon-hq/advanced-imessage
-- `@photon-ai/imessage-kit` and `@photon-ai/advanced-imessage` README files
-
-Sources checked on 2026-08-10.

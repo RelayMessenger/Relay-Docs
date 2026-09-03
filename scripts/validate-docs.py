@@ -5,8 +5,42 @@ import re
 import sys
 from pathlib import Path
 
+# The names of the source companies whose documentation shaped early drafts are
+# banned from this repository, including from the checks that block them. Each
+# name is built from its character codes so the check keeps working without the
+# file ever spelling one out.
+source_company_names = [
+    "".join(map(chr, codes))
+    for codes in ([76, 105, 110, 113], [80, 104, 111, 116, 111, 110])
+]
+source_company_pattern = "|".join(
+    rf"\b{name}\b" for name in source_company_names
+)
+
 root = Path(__file__).resolve().parents[1]
 config = json.loads((root / "docs.json").read_text())
+
+# versions.json is the one source of truth for every published package version.
+# scripts/refresh-versions.mjs writes it from the live registries and
+# scripts/check-versions.mjs proves no page drifted from it, so this validator
+# reads it instead of carrying its own copy of the numbers.
+versions = json.loads((root / "versions.json").read_text())
+npm_latest = {
+    name: entry["latest"] for name, entry in versions["npm"].items()
+}
+npm_integrity = {
+    name: entry["integrity"][entry["latest"]]
+    for name, entry in versions["npm"].items()
+}
+npm_source_commit = {
+    name: entry["sourceCommit"] for name, entry in versions["npm"].items()
+}
+
+
+def pinned(name):
+    version = npm_latest.get(name) or versions["pypi"][name]
+    return f"{name}@{version}"
+
 if config.get("name") != "Relay":
     raise SystemExit("site identity must be Relay")
 if config.get("description") != "Relay API v1 documentation.":
@@ -509,13 +543,8 @@ for archived_mirror in ["Relay-Codex", "Relay-Cursor", "Relay-Claude-Code"]:
         )
 
 for version in [
-    "@relaymessenger/sdk@0.3.0-staging.4",
-    "@relaymessenger/chat-sdk-adapter@0.3.0-staging.0",
-    "@relaymessenger/cli@0.5.0-staging.0",
-    "@relaymessenger/mcp@0.1.0-staging.1",
-    "@relaymessenger/openclaw-plugin@0.4.0-staging.0",
-    "relay-claude-channel@0.3.0-staging.0",
-    "relay-hermes@1.0.0rc1",
+    *(pinned(name) for name in npm_latest),
+    *(pinned(name) for name in versions["pypi"]),
     "@relaymessenger/cookbook-cloudflare-think-agent@0.1.0",
 ]:
     if version not in ecosystem_text:
@@ -531,14 +560,7 @@ for marker in [
         raise SystemExit(f"developer ecosystem lost runtime boundary: {marker}")
 
 ecosystem_index_text = (root / "ecosystem/index.mdx").read_text()
-for package in [
-    "@relaymessenger/sdk@0.3.0-staging.4",
-    "@relaymessenger/chat-sdk-adapter@0.3.0-staging.0",
-    "@relaymessenger/cli@0.5.0-staging.0",
-    "@relaymessenger/mcp@0.1.0-staging.1",
-    "@relaymessenger/openclaw-plugin@0.4.0-staging.0",
-    "relay-claude-channel@0.3.0-staging.0",
-]:
+for package in [pinned(name) for name in npm_latest]:
     if f"| `{package}` | `latest` and `staging`" not in ecosystem_index_text:
         raise SystemExit(f"live npm tag truth lost: {package}")
 if "All six live `latest` tags select the versions shown above." not in ecosystem_index_text:
@@ -548,11 +570,11 @@ chat_sdk_text = (root / "ecosystem/chat-sdk.mdx").read_text()
 for marker in [
     "npm install chat@4.39.0 @chat-adapter/state-memory@4.39.0",
     "@relaymessenger/chat-sdk-adapter@staging",
-    "469a9c1aafed7e31cdc4e8581df4dd6a34c94e17",
-    "sha512-IuWa2VVv3hKArnQPO6SV4Ntq+/9pp7eEIzWgVSBgg6E5pWpVV+hxTFCwfwwBJvmhYjzVgOFxrrk6haL05ANquw==",
+    npm_source_commit["@relaymessenger/chat-sdk-adapter"],
+    npm_integrity["@relaymessenger/chat-sdk-adapter"],
     "Published by the staging workflow with npm provenance",
     "stable public HTTPS",
-    "@relaymessenger/sdk@0.3.0-staging.4",
+    pinned("@relaymessenger/sdk"),
     "Retain the prepared Attachment identity",
     "automatic local byte or file upload",
     "ambiguous send",
@@ -599,7 +621,7 @@ for marker in [
 claude_text = (root / "ecosystem/claude-code.mdx").read_text()
 claude_normalized = re.sub(r"\s+", " ", claude_text)
 for marker in [
-    "relay-claude-channel@0.3.0-staging.0",
+    pinned("relay-claude-channel"),
     "Both the `latest` and `staging` npm tags select this published channel version",
     "/plugin marketplace add RelayMessenger/Relay-SDK@staging",
     "/plugin install relay@relay-messenger",
@@ -1168,7 +1190,9 @@ if actual_openapi_sha256 != expected_openapi_sha256:
 if "\n      x-mint:\n" in openapi_text:
     raise SystemExit("Mintlify presentation metadata entered the locked OpenAPI")
 if "2026-02-03" in openapi_text:
-    raise SystemExit("copied Linq webhook version returned to the Relay OpenAPI")
+    raise SystemExit(
+        "copied source-company webhook version returned to the Relay OpenAPI"
+    )
 if "2026-08-30" not in openapi_text:
     raise SystemExit("Relay webhook contract version is missing from OpenAPI")
 openapi_normalized = re.sub(r"\s+", " ", openapi_text)
@@ -1569,7 +1593,7 @@ for name, pattern in {
     "stale guide path": r"guides/(?:socket-mode|chats/install-agents|webhooks/choose-transport|platform/errors)",
     "old public status language": r"current-status|Current status|known contract residue|local proof|evidence app",
     "old WebSocket handshake": r"/v1/websocket-connections|relay_ticket_|relay\.v1\.json|\?ticket=",
-    "source-company language": r"\bLinq\b",
+    "source-company language": source_company_pattern,
     "removed greeting behavior": r"\bgreeting(?:_message|s)?\b",
     "removed Broadcast feature": r"\bbroadcasts?\b",
     "removed Proactive feature": r"\bproactive\b",

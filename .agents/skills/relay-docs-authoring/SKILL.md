@@ -94,11 +94,11 @@ Code, JSON, tables, and exact error text do not count toward prose limits.
 
 ## Reference skills
 
-- `$docs-linq-style`: messaging object hierarchy and shared vocabulary.
-- `$docs-photon-style`: compact feature maps and exact send semantics.
+- `$docs-partner-api-style`: messaging object hierarchy and shared vocabulary.
+- `$docs-readme-led-sdk-style`: compact feature maps and exact send semantics.
 - `$docs-openclaw-style`: complex integration and troubleshooting structure.
 - `$docs-hermes-style`: command-first setup, messaging gateways, and repair.
 - `$docs-stripe-style`: task routing and resource reference.
-- `$docs-twilio-style`: complete communications tutorials.
+- `$docs-communications-tutorial-style`: complete communications tutorials.
 - `$docs-vercel-ai-sdk-style`: streams and typed framework examples.
-- `$docs-telegram-style`: compact events and method reference.
+- `$docs-bot-api-reference-style`: compact events and method reference.

@@ -31,8 +31,22 @@ npm run validate
 ```
 
 The validation sequence checks contract synchronization, rebuilds the Mintlify
-OpenAPI bundle, validates examples, checks links, validates the site, and runs
-Mintlify accessibility checks.
+OpenAPI bundle, checks every published package version against `versions.json`,
+validates examples, checks links, validates the site, and runs Mintlify
+accessibility checks.
+
+## Package versions
+
+`versions.json` is the one source of truth for every published package version,
+registry integrity, and published source commit. Refresh it, and every page that
+states one, from the live registries:
+
+```bash
+npm run refresh:versions
+```
+
+`npm run validate` fails when a page states a version `versions.json` does not
+carry, or states one with no package name beside it.
 
 Mintlify hosted previews generate `llms.txt`, `llms-full.txt`, and page
 Markdown. Validate those generated files with:
@@ -49,8 +63,9 @@ npm run dev
 
 ## Staging preview
 
-`.github/workflows/preview.yml` validates a pull request or the selected
-`staging` branch, then creates a Mintlify preview deployment.
+`.github/workflows/preview.yml` validates every push to `staging`, every pull
+request, and any branch chosen by a manual run, then creates a Mintlify preview
+deployment.
 
 Configure these GitHub values:
 
@@ -63,5 +78,6 @@ The workflow waits for the deployment, then validates the generated
 `llms.txt` and `llms-full.txt`. The Mintlify GitHub App supplies the selected
 repository branch. Preview authentication is configured in Mintlify.
 
-Use `workflow_dispatch` with `branch=staging` to rebuild the hosted staging
-preview.
+Every merge into `staging` rebuilds the hosted staging preview on its own. Use
+`workflow_dispatch` with `branch=staging` only to rebuild it without a new
+commit.
