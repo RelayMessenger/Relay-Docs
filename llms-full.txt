@@ -370,7 +370,7 @@ npm install @relaymessenger/sdk@staging
 ```
 
 The `latest` and `staging` npm tags both resolve to
-`@relaymessenger/sdk@0.3.0-staging.7`.
+`@relaymessenger/sdk@0.3.0-staging.8`.
 
 The supported runtime is Node.js `22.22.3` or newer.
 
@@ -410,7 +410,7 @@ const result = await relay.chats.messages.send(chatId, {
 | Chats | `create`, `retrieve`, `update`, `listChats`, `leaveChat`, `markAsRead`, `shareContactCard`, `startTyping`, `stopTyping`, `sendVoicememo` |
 | Chat Messages | `chats.messages.list`, `chats.messages.send` |
 | Participants | `chats.participants.add`, `chats.participants.remove` |
-| Messages | `create`, `retrieve`, `addReaction`, `listMessagesThread` |
+| Messages | `create`, `retrieve`, `edit`, `unsend`, `addReaction`, `listMessagesThread` |
 | Attachments | `create`, `upload`, `retrieve`, `delete` |
 | Contact Card | `create`, `retrieve`, `update` |
 | Blocked Handles | `list`, `block`, `unblock` |
@@ -1990,30 +1990,19 @@ back.
 - An Agent Token for the Contact that sent the Message.
 - The Message ID returned by the send, or read from a `message.sent` event.
 - A Message still inside its window: 15 minutes to edit, 2 minutes to unsend.
+- `@relaymessenger/sdk@0.3.0-staging.8` or newer for the TypeScript examples.
 
 ## Edit a text part
 
-`PATCH /v1/messages/{messageId}` replaces the text of one part. `part_index`
-is zero based and defaults to `0`.
+`relay.messages.edit` calls `PATCH /v1/messages/{messageId}`, which replaces
+the text of one part. `part_index` is zero based and defaults to `0`.
 
 <CodeGroup>
-```typescript TypeScript
-const response = await fetch(
-  `https://api.relayapp.im/v1/messages/${messageId}`,
-  {
-    method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${process.env.RELAY_AGENT_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      part_index: 0,
-      text: "The report is ready now.",
-    }),
-  },
-);
-
-const message = await response.json();
+```typescript TypeScript SDK
+const message = await relay.messages.edit(messageId, {
+  part_index: 0,
+  text: "The report is ready now.",
+});
 ```
 
 ```bash cURL
@@ -2025,8 +2014,8 @@ curl -sS -X PATCH \
 ```
 </CodeGroup>
 
-`200` returns the whole Message. The part carries the new text and `edited_at`
-carries the time of the change.
+`200` returns the whole Message, and `relay.messages.edit` resolves to it. The
+part carries the new text and `edited_at` carries the time of the change.
 
 ```json
 {
@@ -2053,20 +2042,13 @@ no edit.
 
 ## Unsend a Message
 
-`DELETE /v1/messages/{messageId}` unsends the whole Message and returns `204`
-with no body.
+`relay.messages.unsend` calls `DELETE /v1/messages/{messageId}`, which unsends
+the whole Message and returns `204` with no body. The method resolves with
+nothing.
 
 <CodeGroup>
-```typescript TypeScript
-const response = await fetch(
-  `https://api.relayapp.im/v1/messages/${messageId}`,
-  {
-    method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${process.env.RELAY_AGENT_TOKEN}`,
-    },
-  },
-);
+```typescript TypeScript SDK
+await relay.messages.unsend(messageId);
 ```
 
 ```bash cURL
@@ -2128,6 +2110,9 @@ two minutes have passed. An unsent Message can no longer be edited.
 | `422` | `2006` | `Only text parts can be edited.` | `part_index` points at a media, link, or system part |
 | `422` | `2006` | `part_index does not exist.` | The index is past the last part |
 | `422` | `2006` | `This Message was unsent.` | The Message was already unsent |
+
+The SDK throws `RelayAPIError` for every row above. Read `status` and `code`
+from it to pick the row.
 
 **Do not retry a `403` or a `422` unchanged.** Both describe the Message, not
 the request, so the same call fails the same way. Retry a `429` or a `5xx`
@@ -4624,7 +4609,7 @@ delivery fits an always-on process.**
 
 | Project | Current source | Runs as | Delivery path |
 | --- | --- | --- | --- |
-| [Chat SDK adapter](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/chat-sdk-adapter) | `@relaymessenger/chat-sdk-adapter@0.3.0-staging.5` | Vercel Chat SDK adapter | Signed Webhooks |
+| [Chat SDK adapter](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/chat-sdk-adapter) | `@relaymessenger/chat-sdk-adapter@0.3.0-staging.6` | Vercel Chat SDK adapter | Signed Webhooks |
 | [Cloudflare Think starter](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook/cloudflare-think-agent) | Cookbook recipe `0.1.0` | Cloudflare Think messenger | Signed Webhooks |
 | [OpenClaw channel](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/openclaw) | `@relaymessenger/openclaw-plugin@0.4.0-staging.3` | OpenClaw gateway channel | Acknowledged WebSocket |
 | [Claude Code channel](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/claude-code) | `relay-claude-channel@0.3.0-staging.4` | Claude Code channel process | Acknowledged WebSocket |
@@ -4638,7 +4623,7 @@ sends a cumulative ACK, then send Messages through REST.
 
 | Project | Current source | Use |
 | --- | --- | --- |
-| [Relay CLI](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/cli) | `@relaymessenger/cli@0.5.0-staging.3` | Terminal commands, profiles, diagnostics, and local event forwarding |
+| [Relay CLI](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/cli) | `@relaymessenger/cli@0.5.0-staging.4` | Terminal commands, profiles, diagnostics, and local event forwarding |
 | [Relay MCP](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/mcp) | `@relaymessenger/mcp@0.1.0-staging.4` | Local stdio tools for Relay Chats, Messages, reactions, Read state, Contact Cards, and Add requests |
 | [Relay Skill](https://github.com/RelayMessenger/Relay-SDK/tree/staging/skills/relay) | `1.0.0` | Portable Relay guidance and hosted docs MCP configuration |
 | [Relay plugin for Codex and Cursor](https://github.com/RelayMessenger/Relay-SDK/tree/staging/plugins/relay) | Generated plugin `1.0.0` | One plugin tree generated from the Relay Skill, read by both hosts |
@@ -4657,9 +4642,9 @@ remains a separate Python plugin repository.
 
 | Package | Current npm tags |
 | --- | --- |
-| `@relaymessenger/sdk@0.3.0-staging.7` | `latest` and `staging` |
-| `@relaymessenger/chat-sdk-adapter@0.3.0-staging.5` | `latest` and `staging`, with provenance |
-| `@relaymessenger/cli@0.5.0-staging.3` | `latest` and `staging`, with provenance |
+| `@relaymessenger/sdk@0.3.0-staging.8` | `latest` and `staging` |
+| `@relaymessenger/chat-sdk-adapter@0.3.0-staging.6` | `latest` and `staging`, with provenance |
+| `@relaymessenger/cli@0.5.0-staging.4` | `latest` and `staging`, with provenance |
 | `@relaymessenger/mcp@0.1.0-staging.4` | `latest` and `staging`, with provenance |
 | `@relaymessenger/openclaw-plugin@0.4.0-staging.3` | `latest` and `staging`, with provenance |
 | `relay-claude-channel@0.3.0-staging.4` | `latest` and `staging`, with provenance |
@@ -4691,7 +4676,7 @@ Source:
 ## Staging package
 
 The current published staging package is
-`@relaymessenger/chat-sdk-adapter@0.3.0-staging.5` and targets
+`@relaymessenger/chat-sdk-adapter@0.3.0-staging.6` and targets
 `chat@4.39.0`. Both the `latest` and `staging` npm tags select this version.
 
 ```bash
@@ -4702,8 +4687,8 @@ npm install chat@4.39.0 @chat-adapter/state-memory@4.39.0 \
 | Registry field | Current value |
 | --- | --- |
 | npm tags | `latest`, `staging` |
-| Published artifact source commit | `1ad2cf1cf70614bcd2d04cb6fb61ad5e5bfe7918` |
-| Integrity | `sha512-RdAAbdgxUogIfOY4/AUw4t6Okn57VIig3+VkBcFfwwR1s2mH/cjdIrjOz7uKz1h23Cwp87LyUVKSK7GrXYGRZA==` |
+| Published artifact source commit | `1bbcb486b4a91860ee3527ce95d015883e4cc1ae` |
+| Integrity | `sha512-fwzha9KWu3oZax92vdYjxuPZ8HDLXCVF+rrL0ToxEryod06P5cbietmNU5U6sUntUX7ONIYfu43cvkyEem+Ykg==` |
 | Provenance | Published by the staging workflow with npm provenance |
 
 ## Use the adapter
@@ -4730,7 +4715,7 @@ response is buffered into one Relay Message.
 For local bytes or files:
 
 1. Allocate and upload the bytes with
-   `@relaymessenger/sdk@0.3.0-staging.7`.
+   `@relaymessenger/sdk@0.3.0-staging.8`.
 2. Retain the prepared Attachment identity for recovery.
 3. Pass its stable public HTTPS URL to the adapter.
 
@@ -4767,7 +4752,7 @@ Source:
 
 ## Staging package
 
-The current package is `@relaymessenger/cli@0.5.0-staging.3` and requires
+The current package is `@relaymessenger/cli@0.5.0-staging.4` and requires
 Node.js `22.22.3` or newer. Both the `latest` and `staging` npm tags select
 this version. Install the published staging tag:
 
@@ -4897,7 +4882,7 @@ Source:
 The current package is
 `@relaymessenger/openclaw-plugin@0.4.0-staging.3`. Its OpenClaw peer range is
 `>=2026.8.1 <2026.9.0`, and it uses
-`@relaymessenger/sdk@0.3.0-staging.7`.
+`@relaymessenger/sdk@0.3.0-staging.8`.
 
 Both the `latest` and `staging` npm tags select this version. Install the
 published staging tag:
@@ -4971,7 +4956,7 @@ Claude Code discovery manifest:
 The current channel package is
 `relay-claude-channel@0.3.0-staging.4`, and the Relay plugin in the Relay-SDK
 staging catalog carries that same version. It uses
-`@relaymessenger/sdk@0.3.0-staging.7` and requires Claude Code Channels
+`@relaymessenger/sdk@0.3.0-staging.8` and requires Claude Code Channels
 research-preview support.
 
 **Both the `latest` and `staging` npm tags select this published channel
@@ -5126,8 +5111,8 @@ The public cookbook recipe is versioned as
 | Dependency | Version |
 | --- | --- |
 | `@cloudflare/think` | `0.17.0` |
-| `@relaymessenger/chat-sdk-adapter` | `0.3.0-staging.5` |
-| `@relaymessenger/sdk` | `0.3.0-staging.7` |
+| `@relaymessenger/chat-sdk-adapter` | `0.3.0-staging.6` |
+| `@relaymessenger/sdk` | `0.3.0-staging.8` |
 | `chat` | `4.39.0` |
 | `agents` | `0.22.0` |
 
@@ -5288,7 +5273,7 @@ The package contains:
 
 - the Relay Skill and self-contained locked references;
 - hosted Relay docs MCP configuration;
-- a tested `@relaymessenger/sdk@0.3.0-staging.7` Message-send example;
+- a tested `@relaymessenger/sdk@0.3.0-staging.8` Message-send example;
 - source and generated-file provenance from the Relay Skill.
 
 The generated files come from the canonical Relay Skill and
@@ -5365,7 +5350,7 @@ The package contains:
 
 - the Relay Skill and self-contained locked references;
 - hosted Relay docs MCP configuration;
-- a tested `@relaymessenger/sdk@0.3.0-staging.7` Message-send example;
+- a tested `@relaymessenger/sdk@0.3.0-staging.8` Message-send example;
 - source and generated-file provenance from the Relay Skill.
 
 The generated files come from the canonical Relay Skill and
@@ -5467,8 +5452,8 @@ The current recipes pin:
 
 | Package | Version |
 | --- | --- |
-| `@relaymessenger/sdk` | `0.3.0-staging.7` |
-| `@relaymessenger/chat-sdk-adapter` | `0.3.0-staging.5` |
+| `@relaymessenger/sdk` | `0.3.0-staging.8` |
+| `@relaymessenger/chat-sdk-adapter` | `0.3.0-staging.6` |
 | `@cloudflare/think` | `0.17.0` |
 | `chat` | `4.39.0` |
 

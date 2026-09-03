@@ -12,30 +12,19 @@ back.
 - An Agent Token for the Contact that sent the Message.
 - The Message ID returned by the send, or read from a `message.sent` event.
 - A Message still inside its window: 15 minutes to edit, 2 minutes to unsend.
+- `@relaymessenger/sdk@0.3.0-staging.8` or newer for the TypeScript examples.
 
 ## Edit a text part
 
-`PATCH /v1/messages/{messageId}` replaces the text of one part. `part_index`
-is zero based and defaults to `0`.
+`relay.messages.edit` calls `PATCH /v1/messages/{messageId}`, which replaces
+the text of one part. `part_index` is zero based and defaults to `0`.
 
 <CodeGroup>
-```typescript TypeScript
-const response = await fetch(
-  `https://api.relayapp.im/v1/messages/${messageId}`,
-  {
-    method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${process.env.RELAY_AGENT_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      part_index: 0,
-      text: "The report is ready now.",
-    }),
-  },
-);
-
-const message = await response.json();
+```typescript TypeScript SDK
+const message = await relay.messages.edit(messageId, {
+  part_index: 0,
+  text: "The report is ready now.",
+});
 ```
 
 ```bash cURL
@@ -47,8 +36,8 @@ curl -sS -X PATCH \
 ```
 </CodeGroup>
 
-`200` returns the whole Message. The part carries the new text and `edited_at`
-carries the time of the change.
+`200` returns the whole Message, and `relay.messages.edit` resolves to it. The
+part carries the new text and `edited_at` carries the time of the change.
 
 ```json
 {
@@ -75,20 +64,13 @@ no edit.
 
 ## Unsend a Message
 
-`DELETE /v1/messages/{messageId}` unsends the whole Message and returns `204`
-with no body.
+`relay.messages.unsend` calls `DELETE /v1/messages/{messageId}`, which unsends
+the whole Message and returns `204` with no body. The method resolves with
+nothing.
 
 <CodeGroup>
-```typescript TypeScript
-const response = await fetch(
-  `https://api.relayapp.im/v1/messages/${messageId}`,
-  {
-    method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${process.env.RELAY_AGENT_TOKEN}`,
-    },
-  },
-);
+```typescript TypeScript SDK
+await relay.messages.unsend(messageId);
 ```
 
 ```bash cURL
@@ -150,6 +132,9 @@ two minutes have passed. An unsent Message can no longer be edited.
 | `422` | `2006` | `Only text parts can be edited.` | `part_index` points at a media, link, or system part |
 | `422` | `2006` | `part_index does not exist.` | The index is past the last part |
 | `422` | `2006` | `This Message was unsent.` | The Message was already unsent |
+
+The SDK throws `RelayAPIError` for every row above. Read `status` and `code`
+from it to pick the row.
 
 **Do not retry a `403` or a `422` unchanged.** Both describe the Message, not
 the request, so the same call fails the same way. Retry a `429` or a `5xx`
