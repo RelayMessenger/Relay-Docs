@@ -35,7 +35,7 @@ assert.match(llmsFull, /webhook_version": "2026-08-30"/);
 assert.doesNotMatch(llmsFull, /2026-02-03/);
 assert.match(
   llmsFull,
-  /Agent \| Relay committed the Message and it is readable through the Relay API/,
+  /Delivered means Relay accepted and stored the Message/,
 );
 assert.match(
   llmsFull,

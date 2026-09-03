@@ -11,10 +11,10 @@ per-recipient `deliveries` array are optional response fields.
 
 | Field | Contract | Meaning |
 | --- | --- | --- |
-| `delivery_status` | Required | Aggregate `sent`, `delivered`, or `read` state |
-| `delivered_at` | Optional, nullable | Time every recipient reached Delivered |
+| `delivery_status` | Required | `delivered` after server commit, then `read` after every recipient marks the Chat Read |
+| `delivered_at` | Optional, nullable | Time Relay accepted and stored the Message |
 | `read_at` | Optional, nullable | Time every recipient reached Read |
-| `deliveries` | Optional | Independent Delivered and Read times by recipient |
+| `deliveries` | Optional | The shared commit-time Delivered value and explicit Read time by recipient |
 
 ```json
 {
@@ -40,15 +40,15 @@ per-recipient `deliveries` array are optional response fields.
 }
 ```
 
-**The aggregate state advances when every recipient reaches that state.** Read
+**Relay stamps Delivered for every recipient in the Message commit.** Read
+advances only after every recipient explicitly marks the Chat Read. Read
 implies Delivered.
 
 ## What Delivered means
 
-| Recipient | Delivered means |
-| --- | --- |
-| User | The Relay client application applied the Message on that recipient's device |
-| Agent | Relay committed the Message and it is readable through the Relay API |
+**Delivered means Relay accepted and stored the Message.** Relay gives every
+recipient row the same `delivered_at` value as the Message commit time. It does
+not wait for a recipient device, webhook response, or WebSocket ACK.
 
 Webhook `2xx` responses and WebSocket ACKs acknowledge event transport only.
 They do not advance Delivered or Read. Model work and replies also advance

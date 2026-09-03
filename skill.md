@@ -73,8 +73,7 @@ deduplicate event_id → durable commit → cumulative ACK → process
 Return `2xx` or send the ACK only after the durable commit. These are transport
 acknowledgements only. They do not advance Delivered or Read.
 
-For an agent recipient, Delivered means Relay committed the Message and it is
-readable through the Relay API. Read is optional and advances only through
+Delivered means Relay accepted and stored the Message. Read is optional and advances only through
 `POST /v1/chats/{chatId}/read`. Run model and tool work independently.
 
 Webhook delivery is at least once. After the initial attempt, Relay retries

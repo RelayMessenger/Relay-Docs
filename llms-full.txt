@@ -577,13 +577,12 @@ allocated it remains its owner.
 
 | State | Meaning |
 | --- | --- |
-| Sent | Relay committed the Message and delivery intent |
-| Delivered | Every snapshotted recipient reached its recipient-specific Delivered boundary |
+| Sent | The client handed the Message to Relay, a client-only state |
+| Delivered | Relay accepted and stored the Message |
 | Read | Every snapshotted recipient explicitly marked the Chat Read |
 
-A user recipient reaches Delivered when the Relay client application applies
-the Message on that recipient's device. An agent recipient reaches Delivered
-when Relay commits the Message and it is readable through the Relay API.
+Relay stamps every recipient Delivered at the Message commit time. Recipient
+devices and agent transports do not advance Delivered.
 
 Webhook `2xx` responses and WebSocket ACKs acknowledge event transport only.
 They do not advance Delivered or Read. For an agent, Read is optional and
@@ -721,8 +720,7 @@ deduplicate event_id → durable commit → cumulative ACK → process
 Return `2xx` or send the ACK only after the durable commit. These are transport
 acknowledgements only. They do not advance Delivered or Read.
 
-For an agent recipient, Delivered means Relay committed the Message and it is
-readable through the Relay API. Read is optional and advances only through
+Delivered means Relay accepted and stored the Message. Read is optional and advances only through
 `POST /v1/chats/{chatId}/read`. Run model and tool work independently.
 
 Webhook delivery is at least once. After the initial attempt, Relay retries
@@ -912,12 +910,12 @@ A Message has 1 to 100 parts. A `link` must be the only part in its Message.
 
 | State | Meaning |
 | --- | --- |
-| Sent | Relay committed the Message |
-| Delivered | Every recipient reached its recipient-specific Delivered boundary |
+| Sent | The client handed the Message to Relay, a client-only state |
+| Delivered | Relay accepted and stored the Message |
 | Read | Every recipient explicitly marked it Read |
 
-Read [Delivery receipts](/guides/messaging/delivery-receipts) for the user and
-agent Delivered boundaries and the optional Read operation.
+Read [Delivery receipts](/guides/messaging/delivery-receipts) for the server
+commit boundary and the optional Read operation.
 
 ## Next steps
 
@@ -2157,10 +2155,10 @@ per-recipient `deliveries` array are optional response fields.
 
 | Field | Contract | Meaning |
 | --- | --- | --- |
-| `delivery_status` | Required | Aggregate `sent`, `delivered`, or `read` state |
-| `delivered_at` | Optional, nullable | Time every recipient reached Delivered |
+| `delivery_status` | Required | `delivered` after server commit, then `read` after every recipient marks the Chat Read |
+| `delivered_at` | Optional, nullable | Time Relay accepted and stored the Message |
 | `read_at` | Optional, nullable | Time every recipient reached Read |
-| `deliveries` | Optional | Independent Delivered and Read times by recipient |
+| `deliveries` | Optional | The shared commit-time Delivered value and explicit Read time by recipient |
 
 ```json
 {
@@ -2186,15 +2184,15 @@ per-recipient `deliveries` array are optional response fields.
 }
 ```
 
-**The aggregate state advances when every recipient reaches that state.** Read
+**Relay stamps Delivered for every recipient in the Message commit.** Read
+advances only after every recipient explicitly marks the Chat Read. Read
 implies Delivered.
 
 ## What Delivered means
 
-| Recipient | Delivered means |
-| --- | --- |
-| User | The Relay client application applied the Message on that recipient's device |
-| Agent | Relay committed the Message and it is readable through the Relay API |
+**Delivered means Relay accepted and stored the Message.** Relay gives every
+recipient row the same `delivered_at` value as the Message commit time. It does
+not wait for a recipient device, webhook response, or WebSocket ACK.
 
 Webhook `2xx` responses and WebSocket ACKs acknowledge event transport only.
 They do not advance Delivered or Read. Model work and replies also advance
@@ -3181,8 +3179,7 @@ Verify the exact raw body before parsing JSON.
 </Steps>
 
 A successful response acknowledges webhook transport only. It does not advance
-Delivered or Read. An agent recipient reaches Delivered when Relay commits the
-Message and it is readable through the Relay API.
+Delivered or Read. Delivered means Relay accepted and stored the Message.
 
 `message.received` names the incoming event. Message state uses `sent`,
 `delivered`, or `read`.
@@ -3365,9 +3362,8 @@ duplicate without repeating model work, tools, or replies.
 
 ## Delivered meaning
 
-An agent recipient reaches Delivered when Relay commits the Message and it is
-readable through the Relay API. A webhook `2xx` acknowledges event transport
-only. It does not advance Delivered or Read.
+Delivered means Relay accepted and stored the Message. A webhook `2xx`
+acknowledges event transport only. It does not advance Delivered or Read.
 
 Commit the event durably before returning `2xx` so retries remain safe.
 
@@ -3423,7 +3419,7 @@ Use this page to choose the event names for a Webhook subscription. Relay uses t
 | --- | --- | --- |
 | `message.sent` | An Agent Message is committed | `MessageEvent` |
 | `message.received` | A User Message is committed for the Agent | `MessageEvent` |
-| `message.delivered` | a Message reaches the recipient-specific Delivered boundary | `MessageEvent` |
+| `message.delivered` | Relay accepts and stores an Agent's outgoing Message | `MessageEvent` |
 | `message.read` | a recipient marks a Message Read | `MessageEvent` |
 | `message.edited` | a sender replaces the text of one Message part | `MessageEditedEvent` |
 | `message.unsent` | a sender unsends a Message | `MessageUnsentEvent` |
@@ -4289,9 +4285,8 @@ Send the ACK after the durable commit shown above.
 
 ## Delivery meaning
 
-An agent recipient reaches Delivered when Relay commits the Message and it is
-readable through the Relay API. A WebSocket ACK acknowledges event transport
-only. It does not advance Delivered or Read.
+Delivered means Relay accepted and stored the Message. A WebSocket ACK
+acknowledges event transport only. It does not advance Delivered or Read.
 
 Model work and replies advance separately. Read is optional and advances only
 through `POST /v1/chats/{chatId}/read`.
@@ -7911,8 +7906,8 @@ components:
             $ref: "#/components/schemas/WebhookEventType"
     DeliveryStatus:
       type: string
-      description: Current aggregate receipt state. Sent means at least one recipient has not reached its delivery boundary;
-        Delivered means every recipient has; Read means every recipient explicitly marked the Message Read.
+      description: Current receipt state. Sent is a client-only handoff state. Delivered means Relay accepted and stored
+        the Message. Read means every recipient explicitly marked the Chat Read.
       enum:
         - sent
         - delivered
@@ -8244,7 +8239,8 @@ components:
             - string
             - "null"
           format: date-time
-          description: When the message was delivered
+          description: When Relay accepted and stored the Message. For a committed Message, this is the same instant as
+            created_at.
         read_at:
           type:
             - string
@@ -8316,15 +8312,14 @@ components:
       properties:
         contact:
           $ref: "#/components/schemas/ChatHandle"
-          description: Message recipient whose independent receipt state this row records.
+          description: Message recipient whose commit-time Delivered timestamp and explicit Read timestamp this row records.
         delivered_at:
           type:
             - string
             - "null"
           format: date-time
-          description: When this recipient reached Delivered. A user reaches Delivered when a Relay device durably applies
-            the Message. An agent reaches Delivered when Relay commits the Message and makes it available through the Agent
-            API.
+          description: When Relay accepted and stored the Message. Relay stamps the same Message commit time for every
+            recipient.
         read_at:
           type:
             - string
@@ -8404,7 +8399,7 @@ components:
             - string
             - "null"
           format: date-time
-          description: When the message was delivered. Null if not yet delivered.
+          description: When Relay accepted and stored the Message. Null only before server commit.
         read_at:
           type:
             - string
@@ -9097,7 +9092,7 @@ components:
             - string
             - "null"
           format: date-time
-          description: When the message was delivered
+          description: When Relay accepted and stored the Message.
         delivery_status:
           $ref: "#/components/schemas/DeliveryStatus"
         from_handle:
@@ -9991,7 +9986,7 @@ x-relay-webhooks:
         - 2026-08-30
       operationId: webhookMessageDeliveredV20260830
       summary: Message delivered
-      description: Every message recipient reached its Delivered boundary.
+      description: Relay accepted and stored an agent's outgoing Message.
       requestBody:
         required: true
         content:
