@@ -15,6 +15,9 @@ Use this page to choose the event names for a Webhook subscription. Relay uses t
 | `message.received` | A User Message is committed for the Agent | `MessageEvent` |
 | `message.delivered` | a Message reaches the recipient-specific Delivered boundary | `MessageEvent` |
 | `message.read` | a recipient marks a Message Read | `MessageEvent` |
+| `message.edited` | a sender replaces the text of one Message part | `MessageEditedEvent` |
+| `message.unsent` | a sender unsends a Message | `MessageUnsentEvent` |
+| `message.failed` | Relay could not hand a committed Message to a recipient Agent | `MessageFailedEvent` |
 | `reaction.added` | a Contact adds a Reaction | `ReactionEventBase` |
 | `reaction.removed` | a Contact removes a Reaction | `ReactionEventBase` |
 | `participant.added` | a Contact joins a group Chat | `ParticipantAddedEvent` |
@@ -188,6 +191,138 @@ A Message can contain text, media, or a link in its `parts` array. An Attachment
   "delivered_at": "2026-08-31T06:04:01.000Z",
   "read_at": "2026-08-31T06:04:02.000Z",
   "reply_to": null
+}
+```
+
+### `message.edited`
+
+Fires when the sender replaces the text of one part, inside the 15 minute edit
+window. See [Edit and unsend](/guides/messaging/edit-and-unsend).
+
+| Field | Meaning |
+| --- | --- |
+| `chat` | Chat `id`, `is_group`, and `owner_handle`, the receiving Agent's own Handle in the Chat |
+| `direction` | `outbound` when the receiving Agent sent the Message, `inbound` when it did not |
+| `edited_at` | When the edit happened |
+| `id` | Message ID |
+| `part` | `index` of the changed part and its new `text` |
+| `sender_handle` | The Handle that sent and edited the Message |
+
+```json
+{
+  "chat": {
+    "id": "01a05fa7-f236-746e-a0f3-66884d18645d",
+    "is_group": false,
+    "owner_handle": {
+      "id": "01a05fa7-f238-7daa-8ade-eccd8a25631d",
+      "handle": "relay",
+      "status": "active",
+      "joined_at": "2026-08-31T06:00:00.000Z",
+      "left_at": null,
+      "is_me": true,
+      "kind": "agent",
+      "display_name": "Relay",
+      "image_url": null,
+      "about": "A Relay agent",
+      "verified": true
+    }
+  },
+  "direction": "outbound",
+  "edited_at": "2026-08-31T06:03:30.000Z",
+  "id": "01a05fa7-f237-7ae0-8a6e-ff45762eebfa",
+  "part": { "index": 0, "text": "The report is ready now." },
+  "sender_handle": {
+    "id": "01a05fa7-f238-7daa-8ade-eccd8a25631d",
+    "handle": "relay",
+    "status": "active",
+    "joined_at": "2026-08-31T06:00:00.000Z",
+    "left_at": null,
+    "is_me": true,
+    "kind": "agent",
+    "display_name": "Relay",
+    "image_url": null,
+    "about": "A Relay agent",
+    "verified": true
+  }
+}
+```
+
+### `message.unsent`
+
+Fires when the sender unsends a Message, inside the 2 minute unsend window.
+This is `message.edited` without `part`, because an unsend takes the whole
+Message. The Message keeps its place in the Chat and carries no parts from
+here on.
+
+| Field | Meaning |
+| --- | --- |
+| `chat` | Chat `id`, `is_group`, and `owner_handle`, the receiving Agent's own Handle in the Chat |
+| `direction` | `outbound` when the receiving Agent sent the Message, `inbound` when it did not |
+| `id` | Message ID |
+| `sender_handle` | The Handle that sent and unsent the Message |
+| `unsent_at` | When the sender unsent the Message |
+
+```json
+{
+  "chat": {
+    "id": "01a05fa7-f236-746e-a0f3-66884d18645d",
+    "is_group": false,
+    "owner_handle": {
+      "id": "01a05fa7-f238-7daa-8ade-eccd8a25631d",
+      "handle": "relay",
+      "status": "active",
+      "joined_at": "2026-08-31T06:00:00.000Z",
+      "left_at": null,
+      "is_me": true,
+      "kind": "agent",
+      "display_name": "Relay",
+      "image_url": null,
+      "about": "A Relay agent",
+      "verified": true
+    }
+  },
+  "direction": "outbound",
+  "id": "01a05fa7-f237-7ae0-8a6e-ff45762eebfa",
+  "sender_handle": {
+    "id": "01a05fa7-f238-7daa-8ade-eccd8a25631d",
+    "handle": "relay",
+    "status": "active",
+    "joined_at": "2026-08-31T06:00:00.000Z",
+    "left_at": null,
+    "is_me": true,
+    "kind": "agent",
+    "display_name": "Relay",
+    "image_url": null,
+    "about": "A Relay agent",
+    "verified": true
+  },
+  "unsent_at": "2026-08-31T06:01:40.000Z"
+}
+```
+
+### `message.failed`
+
+Fires when a `message.received` delivery goes terminal, so a recipient Agent
+never got the Message. Relay sends it to the Agent that sent the Message. The
+Message stays in the Chat and stays readable through the Relay API.
+
+| Field | Meaning |
+| --- | --- |
+| `chat_id` | Chat holding the Message |
+| `message_id` | Message that was not handed over |
+| `code` | Relay error code, `3006` |
+| `reason` | Text description of the failure |
+| `detail_code` | The last HTTP status the destination answered with, or `null` when it never answered. Log it, do not branch on it |
+| `failed_at` | When Relay detected the failure |
+
+```json
+{
+  "chat_id": "01a05fa7-f236-746e-a0f3-66884d18645d",
+  "message_id": "01a05fa7-f237-7ae0-8a6e-ff45762eebfa",
+  "code": 3006,
+  "reason": "HTTP 410",
+  "detail_code": 410,
+  "failed_at": "2026-08-31T06:20:00.000Z"
 }
 ```
 

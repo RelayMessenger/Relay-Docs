@@ -225,6 +225,7 @@ expected_guide_pages = {
         "guides/messaging/rich-link-previews",
         "guides/messaging/replies",
         "guides/messaging/reactions",
+        "guides/messaging/edit-and-unsend",
         "guides/messaging/delivery-receipts",
     ],
     "Chats": [
@@ -322,6 +323,8 @@ expected_api_groups = [
             "GET /v1/messages/{messageId}/thread",
             "POST /v1/chats/{chatId}/voicememo",
             "GET /v1/messages/{messageId}",
+            "PATCH /v1/messages/{messageId}",
+            "DELETE /v1/messages/{messageId}",
             "POST /v1/messages/{messageId}/reactions",
         ],
     },
@@ -1175,9 +1178,10 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # contract, never hand-written. This pin records the exact bytes and the commit
 # they came from, so an edit made here instead of at the source fails the gate.
 # Source: Relay-Server contracts/developer/openapi.yaml at
-# 4506b8cb6f41da0b39f3e23a285daf3805fcf3a3 (server PR 145, group chat limit 8).
+# f14c368b3954397af414ef6d4d2f9e62db93351f (server PR 149, Message edit and
+# unsend, message.edited, message.unsent, and message.failed).
 expected_openapi_sha256 = (
-    "e58ffd5de05250a7a218735cb6bffd854d2d1198134f3f8876b2be109f606fde"
+    "067370af16135965ece42796ca81c7141071c8ab8b7926a3a506b35111e10b9a"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
@@ -1350,6 +1354,7 @@ expected_operation_ids = {
     "createWebhookSubscription",
     "deleteAttachment",
     "deleteWebhookSubscription",
+    "editMessage",
     "getAttachment",
     "getChat",
     "getContactCard",
@@ -1374,6 +1379,7 @@ expected_operation_ids = {
     "startTyping",
     "stopTyping",
     "unblockHandle",
+    "unsendMessage",
     "updateChat",
     "updateContactCard",
     "updateWebhookSubscription",
@@ -1612,8 +1618,6 @@ for name, pattern in {
     "human identity kind": r"\bkind\b.{0,30}\bhumans?\b|\bhumans?\b.{0,30}\bkind\b",
     "message parts table": r"\bmessage_parts?\b",
     "unsupported payments": r"\bpayments?\b",
-    "unsupported edits": r"\b(?:edited|editing|edits?)\b",
-    "unsupported unsend": r"\bunsend\b",
     "long polling": r"long[ -]poll",
     "noncanonical error URL": r"docs\.relayapp\.im/error/codes/\dxxx/\d{4}/",
     "carrier API residue": r"from-number|sending line|line flagging|S3 will|sandbox and production",

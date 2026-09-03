@@ -428,6 +428,7 @@ the page's single job and update this inventory in the same commit.
 | Rich Link Previews | `Send a link part` → `Composition rules` → `Start a Chat with a link` → `Related` |
 | Replies | `Reply to a Message` → `Target a part` → `List a reply thread` → `Related` |
 | Reactions | `Add a reaction` → `Reaction types` → `Remove a reaction` → `Events` → `Related` |
+| Edit and unsend | `Prerequisites` → `Edit a text part` → `Unsend a Message` → `Limits and errors` → `Events` → `Next steps` |
 | Delivery Receipts | `Response fields` → `What Delivered means` → `Mark Read` → `What the app shows` → `Related` |
 
 ### Chats and Contacts
