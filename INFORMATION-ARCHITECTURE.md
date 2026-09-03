@@ -486,7 +486,7 @@ the page's single job and update this inventory in the same commit.
 
 | Page | H2 order |
 | --- | --- |
-| Examples | `Choose an example` → `Package versions` → `Run locally` → `Related` |
+| Examples | `Agents` → `Recipes` → `Package versions` → `Run locally` → `Related` |
 | Error Codes | `Error response` → `1xxx request errors` → `2xxx errors` → `3xxx server errors` → `Related` |
 | One error code | `Troubleshooting` → `Related` |
 | API Reference overview | `Endpoints` → `Conventions` → `Errors` → `Related` |
