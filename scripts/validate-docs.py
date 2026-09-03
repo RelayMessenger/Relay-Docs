@@ -909,8 +909,8 @@ for required in [
         raise SystemExit(f"Delivery receipt rationale is missing: {required}")
 receipt_normalized = re.sub(r"\s+", " ", receipt_text)
 for required in [
-    "| User | The Relay client application applied the Message on that recipient's device |",
-    "| Agent | Relay committed the Message and it is readable through the Relay API |",
+    "**Delivered means Relay accepted and stored the Message.**",
+    "same `delivered_at` value as the Message commit time",
     "Webhook `2xx` responses and WebSocket ACKs acknowledge event transport only.",
     "**Read is optional.**",
     "the only operation that advances Read is `POST /v1/chats/{chatId}/read`",
@@ -936,7 +936,7 @@ delivery_surface_text = "\n".join(
 )
 delivery_surface_normalized = re.sub(r"\s+", " ", delivery_surface_text)
 for required in [
-    "An agent recipient reaches Delivered when Relay commits the Message and it is readable through the Relay API.",
+    "Delivered means Relay accepted and stored the Message.",
     "A webhook `2xx` acknowledges event transport only.",
     "A WebSocket ACK acknowledges event transport only.",
     "Read is optional",
@@ -950,6 +950,9 @@ for forbidden in [
     "marks the Message Delivered to the agent",
     "can advance their Delivered state",
     "message.received delivery advances only at the durable ACK boundary",
+    "Relay client application applied the Message",
+    "Relay device durably applies the Message",
+    "recipient-specific Delivered boundary",
 ]:
     if forbidden.lower() in delivery_surface_normalized.lower():
         raise SystemExit(f"stale delivery semantics returned: {forbidden}")
@@ -1178,10 +1181,10 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # contract, never hand-written. This pin records the exact bytes and the commit
 # they came from, so an edit made here instead of at the source fails the gate.
 # Source: Relay-Server contracts/developer/openapi.yaml at
-# f14c368b3954397af414ef6d4d2f9e62db93351f (server PR 149, Message edit and
-# unsend, message.edited, message.unsent, and message.failed).
+# f91f22ea55ac0485efa181bb650998848c973c6e (review-gated server-commit
+# Delivered lane, 2026-09-03).
 expected_openapi_sha256 = (
-    "067370af16135965ece42796ca81c7141071c8ab8b7926a3a506b35111e10b9a"
+    "bbcdc6988e09feeeac1ae28cf299904b59e220ac7b5f936009845ad07645ead2"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
@@ -1207,18 +1210,15 @@ for description in [
         "and WebSocket acknowledgements do not mark Messages Read."
     ),
     (
-        "Current aggregate receipt state. Sent means at least one recipient "
-        "has not reached its delivery boundary; Delivered means every "
-        "recipient has; Read means every recipient explicitly marked the "
-        "Message Read."
+        "Current receipt state. Sent is a client-only handoff state. Delivered "
+        "means Relay accepted and stored the Message. Read means every "
+        "recipient explicitly marked the Chat Read."
     ),
     (
-        "When this recipient reached Delivered. A user reaches Delivered when "
-        "a Relay device durably applies the Message. An agent reaches "
-        "Delivered when Relay commits the Message and makes it available "
-        "through the Agent API."
+        "When Relay accepted and stored the Message. Relay stamps the same "
+        "Message commit time for every recipient."
     ),
-    "Every message recipient reached its Delivered boundary.",
+    "Relay accepted and stored an agent's outgoing Message.",
 ]:
     if description not in openapi_normalized:
         raise SystemExit(
