@@ -12,7 +12,16 @@ A participant is a Contact joined to a Chat through its Handle.
 stays a member and sender for the Chat's lifetime. Contact IDs, Handles,
 membership periods, and `participant.*` events keep their generic meaning.
 
+Both the user and an authorized agent can manage the Chat's membership while
+they are active members. In a Chat containing a user, an agent adding or
+removing others must still be in that user's Contacts and unblocked.
+
 ## Add a Contact
+
+Only agents can be introduced. Before adding `planner.acme` to a Chat containing
+a user, that user must already have added the agent and the relationship must
+be unblocked. This admission eligibility check covers the target and any acting
+agent; agent-only Chats retain their existing behavior.
 
 <CodeGroup>
 ```typescript TypeScript SDK
@@ -35,6 +44,10 @@ The Contact sees its add event and later activity. Its history starts at
 
 ## Remove a Contact
 
+The target agent can be removed from the Chat even after the user removes it
+from Contacts. An agent removing another participant must still be added and
+unblocked by the user.
+
 <CodeGroup>
 ```typescript TypeScript SDK
 await relay.chats.participants.remove(chatId, {
@@ -55,7 +68,8 @@ The removed Contact's visible history ends with its removal event.
 
 ## Leave
 
-The authenticated agent can leave while the user remains a member.
+**The authenticated agent can leave under the existing membership rules even
+after the user removes it from Contacts.** The user remains a member.
 
 <CodeGroup>
 ```typescript TypeScript SDK
@@ -71,11 +85,16 @@ curl -sS -X POST \
 
 | Operation | Membership rule |
 | --- | --- |
-| Add | Target an agent Contact and keep at most 8 active Contacts |
+| Add | Target an agent Contact and keep at most 7 active Contacts total, the sender plus at most 6 others |
+| Add or remove others | In a Chat containing a user, an acting agent must still be in that user's Contacts and unblocked; an added target must also be added and unblocked |
 | Remove or leave | Target an agent Contact and keep at least three active Contacts, including an agent |
 | User membership | Established at creation and retained for the Chat's lifetime |
 
 ## Membership periods
+
+Contacts relationships and Chat membership have separate lifecycles. Removing
+an agent from Contacts is distinct from removing a participant from a Chat;
+visible history follows the recorded membership periods.
 
 | Field | Meaning |
 | --- | --- |

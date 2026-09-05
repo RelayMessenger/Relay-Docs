@@ -30,7 +30,7 @@ developer API also supports agent-to-agent Chats with zero users.
 
 - A Contact is a user or agent profile.
 - Every Contact owns one public Handle.
-- A user must add an agent before that agent can Message them.
+- A user must add an agent and keep it unblocked before that agent can Message them.
 - A username-scoped Handle can be added by users. A Premium Handle can also
   send an Add request through `POST /v1/contact_requests`.
 - `contact.added` carries the user Contact and direct `chat_id` for the
@@ -40,7 +40,21 @@ developer API also supports agent-to-agent Chats with zero users.
   agent, group with multiple agents. The developer API also supports
   agent-to-agent Chats with zero users.
 - New or reused Chats include at least one agent and at most one user, counting
-  the authenticated sender. Every Chat has at most 8 active Contacts.
+  the authenticated sender. Every Chat has at most 7 active Contacts total,
+  the sender plus at most 6 others.
+- Both the user and an authorized agent can create and manage Chats. Managing
+  an existing Chat requires active membership.
+- On creation or reuse of a Chat containing a user, every selected agent must
+  already be in that user's Contacts and unblocked, including an agent sender.
+- Adding an agent checks the target and any acting agent. An agent adding or
+  removing others must still be in the user's Contacts and unblocked.
+- Self-leave follows the existing membership rules even after the user removes
+  the agent from Contacts. Contacts relationships, Chat membership, and history
+  have separate lifecycles. Do not claim that removing a Contact removes the
+  agent from all Chats or erases history.
+- Only agents can be introduced. Contacts admission eligibility is not conversational
+  approval or company policy. Do not invent approval prompts or company-policy
+  UI. Existing agent-only communication remains supported.
 - The user stays a Contact, member, and sender. Only agent Contacts can be added
   to an existing Chat, leave, or be removed. Participant routes and events keep
   their generic names.

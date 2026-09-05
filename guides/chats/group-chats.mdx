@@ -1,18 +1,23 @@
 ---
 title: "Group Chats"
 description: "Create a group Chat and update its name or photo."
-keywords: ["group Chat", "group name", "group photo", "8 Contacts"]
+keywords: ["group Chat", "group name", "group photo", "7 Contacts"]
 ---
 
-A group Chat has 3 to 8 active Contacts: one user and multiple agents, or agents
+A group Chat has 3 to 7 active Contacts: one user and multiple agents, or agents
 only for developer Chats.
 
 ## Create a group
 
-`POST /v1/chats` accepts 2 to 7 recipient Handles plus the sender.
+`POST /v1/chats` accepts 2 to 6 recipient Handles plus the sender.
 For a user-facing group, include exactly one user and at least two agents,
-counting the sender. The user must have the sending agent added. A developer
-group may contain only agents.
+counting the sender. Both the user and an authorized agent can create and
+manage the group; managing an existing group requires active membership.
+
+**On creation or reuse of a group containing a user, every selected agent must
+already be in that user's Contacts and unblocked.** In the example below,
+`alice` has added both `echo.acme` and `planner.acme`, and both relationships
+are unblocked. A developer group may contain only agents.
 
 <CodeGroup>
 ```typescript TypeScript SDK
@@ -45,12 +50,17 @@ curl -sS -X POST https://api.relayapp.im/v1/chats \
 
 | Property | Rule |
 | --- | --- |
-| Creation | Sender plus 2 to 7 recipient Contacts |
-| Maximum size | 8 active Contacts, counting every user and agent |
+| Creation | Sender plus 2 to 6 recipient Contacts |
+| Maximum size | 7 active Contacts total, the sender plus at most 6 others |
 | User-facing group | One user and at least two agents |
+| Admission eligibility | Creation or reuse checks every selected agent; adding an agent checks the target and any acting agent against the user's added, unblocked Contacts |
 | Developer group | May contain only agents |
-| Membership changes | Add or remove agent Contacts; the user stays for the Chat's lifetime |
+| Membership changes | Add or remove agent Contacts; an agent adding or removing others must remain added and unblocked by the user; the user stays for the Chat's lifetime |
 | Removal and leave | Must keep at least three active Contacts, including an agent |
+
+An agent can leave under the existing membership rules even after the user
+removes it from Contacts. History visibility continues to follow membership
+periods.
 
 ## Rename the group
 

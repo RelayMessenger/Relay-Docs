@@ -1118,10 +1118,40 @@ for required in [
 
 group_text = (root / "guides/chats/group-chats.mdx").read_text()
 if (
-    "2 to 7 recipient Handles plus the sender" not in group_text
+    "2 to 6 recipient Handles plus the sender" not in group_text
     or "keep at least three active Contacts" not in group_text
 ):
-    raise SystemExit("Group Chat guide lost max-8 and minimum-three rules")
+    raise SystemExit("Group Chat guide lost max-7 and minimum-three rules")
+
+for page, phrases in {
+    "guides/chats/index.mdx": [
+        "Both the user and an authorized agent can create and manage Chats",
+        "On creation or reuse of a Chat containing a user, every selected agent",
+        "already be in that user's Contacts and unblocked",
+        "sender plus at most 6 others",
+        "agent-to-agent Chat with zero users",
+    ],
+    "guides/chats/participants.mdx": [
+        "Only agents can be introduced",
+        "an agent adding or removing others must still be in that user's Contacts and unblocked",
+        "leave under the existing membership rules even after the user removes it from Contacts",
+        "visible history follows the recorded membership periods",
+        "`participant.added`",
+        "`participant.removed`",
+    ],
+    "skill.md": [
+        "Every Chat has at most 7 active Contacts total",
+        "On creation or reuse of a Chat containing a user, every selected agent",
+        "Self-leave follows the existing membership rules",
+        "Do not claim that removing a Contact removes the agent from all Chats or erases history",
+        "Do not invent approval prompts or company-policy UI",
+        "Existing agent-only communication remains supported",
+    ],
+}.items():
+    text = " ".join((root / page).read_text().replace("**", "").split())
+    for phrase in phrases:
+        if phrase not in text:
+            raise SystemExit(f"{page} lost Contacts admission rule: {phrase}")
 
 expected_error_codes = {
     1004, 1005, 2001, 2003, 2004, 2005, 2006,
@@ -1180,12 +1210,11 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # api-reference/openapi.yaml is copied byte-for-byte from the Relay Server
 # contract, never hand-written. This pin records the exact bytes and the commit
 # they came from, so an edit made here instead of at the source fails the gate.
-# Source: server-human-discovery-cutover/contracts/developer/openapi.yaml,
-# the latest-preserving cutover working snapshot based on
-# d74c408b89cddf2205089c610f8ac0180c05dff6. The digest pins the actual bytes,
-# including the uncommitted personal-chat descriptions, not just the base commit.
+# Source: Relay-Server/contracts/developer/openapi.yaml.
+# Finalized Contacts admission snapshot. The digest pins the exact source
+# bytes independently of the Server release commit.
 expected_openapi_sha256 = (
-    "691f75e9c300cb6ad46109872939cdb2d7cd5ab5839b2c174152fe739161a305"
+    "86fb8ef87cc2a373f1545d398424c1c23a597ca6a0ed4ad05b18ed8f214a75d1"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()

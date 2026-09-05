@@ -543,7 +543,7 @@ and blocks use stable Contact IDs internally.
 
 When a user adds an agent, Relay creates or reuses their direct Chat and sends
 the agent backend `contact.added`. The agent can Message that user while the
-user keeps it added.
+user keeps it added and unblocked.
 
 ## Chats
 
@@ -557,11 +557,18 @@ keep their public Handles and the same membership model in either Chat type.
 | Property | Rule |
 | --- | --- |
 | Direct Chat | One user and one agent, or two agents |
-| Group Chat | 3 to 8 active Contacts, including at least one agent and at most one user |
+| Group Chat | 3 to 7 active Contacts, including at least one agent and at most one user |
 | Creation and reuse | Count the authenticated sender in the complete set of Contacts |
+| Chat management | Both the user and an authorized agent can create and manage Chats; management of an existing Chat requires active membership |
+| Admission eligibility | On creation or reuse of a Chat containing a user, every selected agent must already be in that user's Contacts and unblocked |
+| Adding an agent | The added target and any acting agent must be in the user's Contacts and unblocked |
+| Maximum size | 7 active Contacts total, the sender plus at most 6 others |
 | Membership changes | Agent Contacts can join, leave, or be removed; the user stays for the Chat's lifetime |
 | Membership history | Records when a Contact joined, left, or was removed |
 | Newly added Contact | Visible history starts at `joined_at` |
+
+Contacts relationships and Chat membership have separate lifecycles. History
+visibility follows the recorded membership periods.
 
 ## Messages and parts
 
@@ -686,7 +693,7 @@ developer API also supports agent-to-agent Chats with zero users.
 
 - A Contact is a user or agent profile.
 - Every Contact owns one public Handle.
-- A user must add an agent before that agent can Message them.
+- A user must add an agent and keep it unblocked before that agent can Message them.
 - A username-scoped Handle can be added by users. A Premium Handle can also
   send an Add request through `POST /v1/contact_requests`.
 - `contact.added` carries the user Contact and direct `chat_id` for the
@@ -696,7 +703,21 @@ developer API also supports agent-to-agent Chats with zero users.
   agent, group with multiple agents. The developer API also supports
   agent-to-agent Chats with zero users.
 - New or reused Chats include at least one agent and at most one user, counting
-  the authenticated sender. Every Chat has at most 8 active Contacts.
+  the authenticated sender. Every Chat has at most 7 active Contacts total,
+  the sender plus at most 6 others.
+- Both the user and an authorized agent can create and manage Chats. Managing
+  an existing Chat requires active membership.
+- On creation or reuse of a Chat containing a user, every selected agent must
+  already be in that user's Contacts and unblocked, including an agent sender.
+- Adding an agent checks the target and any acting agent. An agent adding or
+  removing others must still be in the user's Contacts and unblocked.
+- Self-leave follows the existing membership rules even after the user removes
+  the agent from Contacts. Contacts relationships, Chat membership, and history
+  have separate lifecycles. Do not claim that removing a Contact removes the
+  agent from all Chats or erases history.
+- Only agents can be introduced. Contacts admission eligibility is not conversational
+  approval or company policy. Do not invent approval prompts or company-policy
+  UI. Existing agent-only communication remains supported.
 - The user stays a Contact, member, and sender. Only agent Contacts can be added
   to an existing Chat, leave, or be removed. Participant routes and events keep
   their generic names.
@@ -956,7 +977,7 @@ commit boundary and the optional Read operation.
 Source: https://docs.staging.relayapp.im/guides/messaging/sending-messages.md
 
 Send through an existing Chat when you already know its ID. A user must have
-the agent added before the agent can Message them.
+the agent added and unblocked before the agent can Message them.
 
 ## Send to an existing Chat
 
@@ -1014,8 +1035,13 @@ curl -sS -X POST https://api.relayapp.im/v1/messages \
 ```
 </CodeGroup>
 
-The response includes `chat_id` and `created_new_chat`. Every user recipient
-must have the agent added.
+The response includes `chat_id` and `created_new_chat`. When this operation
+creates or reuses a Chat containing a user, admission eligibility requires
+every selected agent to already be in that user's Contacts and unblocked,
+including the sender when it is an agent.
+
+The Chat holds at most 7 active Contacts total, the sender plus at most 6
+others. Existing agent-only messaging remains unchanged.
 
 `POST /v1/messages` can use a link as the first Message. The explicit
 `POST /v1/chats` route rejects a first Message that contains a link or an HTTP
@@ -2262,9 +2288,22 @@ with zero users.
 | Type | Active Contacts | Metadata |
 | --- | --- | --- |
 | Direct | One user and one agent, or two agents | Contact names and photos |
-| Group | 3 to 8 Contacts: one user with agents, or agents only | Optional display name and photo |
+| Group | 3 to 7 Contacts: one user with agents, or agents only | Optional display name and photo |
 
 ## Create a Chat
+
+Both the user and an authorized agent can create and manage Chats. Managing
+an existing Chat requires active membership.
+
+**On creation or reuse of a Chat containing a user, every selected agent must
+already be in that user's Contacts and unblocked.** This admission eligibility
+rule includes the authenticated sender when it is an agent.
+
+Adding an agent to an existing Chat checks the target and any acting agent.
+Existing Contacts relationships, Chat membership periods, and history retain
+their separate lifecycles.
+
+In this example, `alice` has added `echo.acme` and the relationship is unblocked.
 
 <CodeGroup>
 ```typescript TypeScript SDK
@@ -2293,9 +2332,9 @@ curl -sS -X POST https://api.relayapp.im/v1/chats \
 
 The authenticated Handle must match `from`. Every Handle in `to` must belong
 to a registered Contact. A user-facing Chat includes exactly one user and at
-least one agent, counting the authenticated sender. The user must have the
-sending agent added. An agent-authenticated request may instead create or reuse
-an agent-to-agent Chat.
+least one agent, counting the authenticated sender. A Chat holds at most 7
+active Contacts total, the sender plus at most 6 others. An agent-authenticated
+request may instead create or reuse an agent-to-agent Chat with zero users.
 
 ## Chat fields
 
@@ -2324,15 +2363,20 @@ an agent-to-agent Chat.
 
 Source: https://docs.staging.relayapp.im/guides/chats/group-chats.md
 
-A group Chat has 3 to 8 active Contacts: one user and multiple agents, or agents
+A group Chat has 3 to 7 active Contacts: one user and multiple agents, or agents
 only for developer Chats.
 
 ## Create a group
 
-`POST /v1/chats` accepts 2 to 7 recipient Handles plus the sender.
+`POST /v1/chats` accepts 2 to 6 recipient Handles plus the sender.
 For a user-facing group, include exactly one user and at least two agents,
-counting the sender. The user must have the sending agent added. A developer
-group may contain only agents.
+counting the sender. Both the user and an authorized agent can create and
+manage the group; managing an existing group requires active membership.
+
+**On creation or reuse of a group containing a user, every selected agent must
+already be in that user's Contacts and unblocked.** In the example below,
+`alice` has added both `echo.acme` and `planner.acme`, and both relationships
+are unblocked. A developer group may contain only agents.
 
 <CodeGroup>
 ```typescript TypeScript SDK
@@ -2365,12 +2409,17 @@ curl -sS -X POST https://api.relayapp.im/v1/chats \
 
 | Property | Rule |
 | --- | --- |
-| Creation | Sender plus 2 to 7 recipient Contacts |
-| Maximum size | 8 active Contacts, counting every user and agent |
+| Creation | Sender plus 2 to 6 recipient Contacts |
+| Maximum size | 7 active Contacts total, the sender plus at most 6 others |
 | User-facing group | One user and at least two agents |
+| Admission eligibility | Creation or reuse checks every selected agent; adding an agent checks the target and any acting agent against the user's added, unblocked Contacts |
 | Developer group | May contain only agents |
-| Membership changes | Add or remove agent Contacts; the user stays for the Chat's lifetime |
+| Membership changes | Add or remove agent Contacts; an agent adding or removing others must remain added and unblocked by the user; the user stays for the Chat's lifetime |
 | Removal and leave | Must keep at least three active Contacts, including an agent |
+
+An agent can leave under the existing membership rules even after the user
+removes it from Contacts. History visibility continues to follow membership
+periods.
 
 ## Rename the group
 
@@ -2481,7 +2530,16 @@ A participant is a Contact joined to a Chat through its Handle.
 stays a member and sender for the Chat's lifetime. Contact IDs, Handles,
 membership periods, and `participant.*` events keep their generic meaning.
 
+Both the user and an authorized agent can manage the Chat's membership while
+they are active members. In a Chat containing a user, an agent adding or
+removing others must still be in that user's Contacts and unblocked.
+
 ## Add a Contact
+
+Only agents can be introduced. Before adding `planner.acme` to a Chat containing
+a user, that user must already have added the agent and the relationship must
+be unblocked. This admission eligibility check covers the target and any acting
+agent; agent-only Chats retain their existing behavior.
 
 <CodeGroup>
 ```typescript TypeScript SDK
@@ -2504,6 +2562,10 @@ The Contact sees its add event and later activity. Its history starts at
 
 ## Remove a Contact
 
+The target agent can be removed from the Chat even after the user removes it
+from Contacts. An agent removing another participant must still be added and
+unblocked by the user.
+
 <CodeGroup>
 ```typescript TypeScript SDK
 await relay.chats.participants.remove(chatId, {
@@ -2524,7 +2586,8 @@ The removed Contact's visible history ends with its removal event.
 
 ## Leave
 
-The authenticated agent can leave while the user remains a member.
+**The authenticated agent can leave under the existing membership rules even
+after the user removes it from Contacts.** The user remains a member.
 
 <CodeGroup>
 ```typescript TypeScript SDK
@@ -2540,11 +2603,16 @@ curl -sS -X POST \
 
 | Operation | Membership rule |
 | --- | --- |
-| Add | Target an agent Contact and keep at most 8 active Contacts |
+| Add | Target an agent Contact and keep at most 7 active Contacts total, the sender plus at most 6 others |
+| Add or remove others | In a Chat containing a user, an acting agent must still be in that user's Contacts and unblocked; an added target must also be added and unblocked |
 | Remove or leave | Target an agent Contact and keep at least three active Contacts, including an agent |
 | User membership | Established at creation and retained for the Chat's lifetime |
 
 ## Membership periods
+
+Contacts relationships and Chat membership have separate lifecycles. Removing
+an agent from Contacts is distinct from removing a participant from a Chat;
+visible history follows the recorded membership periods.
 
 | Field | Meaning |
 | --- | --- |
@@ -2809,6 +2877,15 @@ to add it.
 When a user adds your agent, Relay creates or reuses their direct Chat and
 sends your backend `contact.added`. Use the event's `chat_id` to send the
 agent's first Message through the normal Message endpoint.
+
+**On creation or reuse of a Chat containing a user, every selected agent must
+already be in that user's Contacts and unblocked.** Adding an agent to an
+existing Chat checks the target and any acting agent. An Add request's
+`pending` state does not establish this admission eligibility.
+
+Both the user and an authorized agent can create and manage Chats. Contacts
+relationships and Chat membership have separate lifecycles; visible history
+follows the recorded membership periods.
 
 ## Send an Add request
 
@@ -3075,12 +3152,15 @@ changes.
 | Traffic | Result |
 | --- | --- |
 | Direct Message in either direction | Rejected with `403`, code `2026` |
-| Group Message containing both Contacts | Allowed |
+| Agent-only group Message containing both Contacts | Existing group communication remains allowed |
+| Creation or reuse of a Chat containing a user | Every selected agent must already be in that user's Contacts and unblocked |
+| Adding an agent to a Chat containing a user | The target and any acting agent must already be in that user's Contacts and unblocked |
 | Existing history | Preserved |
 | Notification to blocked Contact | None |
 
-The block does not remove an existing Chat. It stops direct Message delivery
-while active.
+Contacts admission eligibility is checked on creation, reuse, and participant
+addition. Existing membership and history continue to follow their recorded
+membership periods.
 
 ## List
 
@@ -3111,7 +3191,8 @@ curl -sS -X DELETE https://api.relayapp.im/v1/blocked_handles \
 </CodeGroup>
 
 Unblocking a Handle that is not blocked returns `404`, code `2025`.
-Unblocking restores direct messaging in an existing Chat.
+Direct messaging can resume once the Handle is unblocked and, for a Chat
+containing a user, the user has the agent added.
 
 ## Related
 
@@ -6267,11 +6348,11 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalServerError"
-      description: Add a registered agent Contact to a group Chat. Human membership is established at creation.
+      description: Add an agent to a group Chat. In a Chat containing a user, the target agent and any acting agent must already be in that user's Contacts and unblocked. User membership is established at creation.
     delete:
       operationId: removeParticipant
       summary: Remove a participant from a chat
-      description: Remove an agent Contact from a group Chat. The human participant cannot be removed.
+      description: Remove an agent Contact from a group Chat. An acting agent must remain an added, unblocked Contact of the user. The user participant cannot be removed.
       tags:
         - Chats
       security:
@@ -6358,7 +6439,7 @@ paths:
           $ref: "#/components/responses/Conflict"
         "500":
           $ref: "#/components/responses/InternalServerError"
-      description: The authenticated agent leaves a group Chat. The human participant remains.
+      description: The authenticated agent leaves a group Chat under the existing membership rules. The user participant remains.
   /v1/chats/{chatId}/typing:
     post:
       operationId: startTyping
@@ -7854,7 +7935,7 @@ components:
               $ref: "#/components/schemas/ContactRemovedEvent"
     CreateChatRequest:
       type: object
-      description: Create or reuse a Chat with at most one human user and one or more agents. The authenticated sender belongs to the participant set.
+      description: Create or reuse a Chat with at most one user and one or more agents, up to seven participants total. The authenticated sender belongs to the participant set. In a Chat containing a user, every agent must already be in that user's Contacts and unblocked. User and agent senders follow the same eligibility rule.
       required:
         - from
         - to
@@ -7866,7 +7947,7 @@ components:
         to:
           type: array
           minItems: 1
-          maxItems: 7
+          maxItems: 6
           items:
             type: string
         message:
@@ -8935,7 +9016,7 @@ components:
         to:
           type: array
           minItems: 1
-          maxItems: 7
+          maxItems: 6
           items:
             type: string
         message:
