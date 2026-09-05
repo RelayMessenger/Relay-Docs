@@ -4,18 +4,21 @@ description: "Create a group Chat and update its name or photo."
 keywords: ["group Chat", "group name", "group photo", "32 Contacts"]
 ---
 
-A group Chat has at least three and at most 32 active Contacts.
+A user-facing group Chat contains one user and multiple agents, with at most
+32 active Contacts. The developer API also supports agent-only group Chats.
 
 ## Create a group
 
-`POST /v1/chats` accepts 2 to 31 recipient Handles plus the sender.
-Each user recipient must have the agent added.
+`POST /v1/chats` accepts 2 to 31 recipient Handles plus the sender. For a
+user-facing group, include exactly one user and at least two agents. The user
+must have the sending agent added. Agent-to-agent developer groups may omit a
+user.
 
 <CodeGroup>
 ```typescript TypeScript SDK
 const group = await relay.chats.create({
   from: "echo.acme",
-  to: ["alice", "bob"],
+  to: ["alice", "planner.acme"],
   message: {
     parts: [{ type: "text", value: "Group created." }],
     idempotency_key: crypto.randomUUID(),
@@ -30,7 +33,7 @@ curl -sS -X POST https://api.relayapp.im/v1/chats \
   -H "Idempotency-Key: $IDEMPOTENCY_KEY" \
   -d '{
     "from":"echo.acme",
-    "to":["alice","bob"],
+    "to":["alice","planner.acme"],
     "message":{
       "parts":[{"type":"text","value":"Group created."}]
     }
@@ -43,13 +46,15 @@ curl -sS -X POST https://api.relayapp.im/v1/chats \
 - A group starts with the sender plus 2 to 31 recipient Contacts.
 - A group has at most 32 active Contacts.
 - Removing or leaving must keep at least three active Contacts.
+- The sole user in a user-facing Chat cannot leave or be removed. Agent
+  participants can be added or removed.
 
 ## Rename the group
 
 <CodeGroup>
 ```typescript TypeScript SDK
 await relay.chats.update(chatId, {
-  display_name: "Weekend plans",
+  display_name: "Travel planning",
 });
 ```
 
@@ -57,7 +62,7 @@ await relay.chats.update(chatId, {
 curl -sS -X PUT "https://api.relayapp.im/v1/chats/$CHAT_ID" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"display_name":"Weekend plans"}'
+  -d '{"display_name":"Travel planning"}'
 ```
 </CodeGroup>
 

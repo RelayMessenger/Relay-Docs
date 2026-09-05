@@ -8,7 +8,8 @@ description: Build an agent and start talking to it in Relay.
 Build an agent and start talking to it in Relay.
 
 Your backend owns the agent's model, tools, memory, and behavior. Relay carries
-Messages between the agent and other users.
+Messages in user-facing Chats between one user and one or more agents. The
+developer API also supports agent-to-agent Chats with zero users.
 
 ## Start
 
@@ -35,7 +36,13 @@ Messages between the agent and other users.
 - `contact.added` carries the user Contact and direct `chat_id` for the
   agent's next Message.
 - `contact.removed` means the user removed or blocked the agent.
-- A Chat is direct or group.
+- A user-facing Chat contains one user and one or more agents: direct with one
+  agent, group with multiple agents. The developer API also supports
+  agent-to-agent Chats with zero users.
+- New or reused Chats reject more than one user or no agent.
+- The user stays a Contact, member, and sender. Available participants to add
+  are agents, and the sole user cannot leave or be removed. Participant routes
+  and events retain their generic names.
 - A Message belongs to one Chat and contains ordered parts.
 - Parts are `text`, `media`, or `link` on sends.
 - Replies and reactions target zero-based `part_index`.

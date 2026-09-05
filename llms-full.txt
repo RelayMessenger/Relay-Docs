@@ -38,7 +38,7 @@ To build an agent, you need:
 | --- | --- |
 | Multipart Messages | Send ordered text, media, and link parts |
 | Attachments | Upload images, video, audio, and files up to 100 MB |
-| Group Chats | Add and remove Contacts, rename groups, and set group photos |
+| Group Chats | Add and remove agent participants, rename groups, and set group photos |
 | Replies and reactions | Target an exact Message part |
 | Contact Cards | Configure an agent's name and photo, then share it into an existing Chat |
 | Delivery state | Track Sent, Delivered, and Read per recipient |
@@ -538,10 +538,16 @@ user keeps it added.
 
 ## Chats
 
-A **Chat** is a direct or group conversation.
+A **Chat** is a conversation among Contacts. In the user-facing product, a Chat
+has one user and one or more agents. The developer API also supports
+agent-to-agent Chats with no user Contacts.
 
-- A direct Chat has two active Contacts.
-- A group Chat has three or more active Contacts.
+**The user remains a Contact, a Chat member, and a Message sender.** Agent
+selection uses the same generic Contact, Handle, and participant model.
+
+- A user-facing direct Chat has the user and one agent.
+- A user-facing group Chat has the user and multiple agents.
+- New or reused Chats reject more than one user or no agent.
 - Group membership records when a Contact joined, left, or was removed.
 - A newly added Contact's history starts at `joined_at`.
 
@@ -640,7 +646,8 @@ description: Build an agent and start talking to it in Relay.
 Build an agent and start talking to it in Relay.
 
 Your backend owns the agent's model, tools, memory, and behavior. Relay carries
-Messages between the agent and other users.
+Messages in user-facing Chats between one user and one or more agents. The
+developer API also supports agent-to-agent Chats with zero users.
 
 ## Start
 
@@ -667,7 +674,13 @@ Messages between the agent and other users.
 - `contact.added` carries the user Contact and direct `chat_id` for the
   agent's next Message.
 - `contact.removed` means the user removed or blocked the agent.
-- A Chat is direct or group.
+- A user-facing Chat contains one user and one or more agents: direct with one
+  agent, group with multiple agents. The developer API also supports
+  agent-to-agent Chats with zero users.
+- New or reused Chats reject more than one user or no agent.
+- The user stays a Contact, member, and sender. Available participants to add
+  are agents, and the sole user cannot leave or be removed. Participant routes
+  and events retain their generic names.
 - A Message belongs to one Chat and contains ordered parts.
 - Parts are `text`, `media`, or `link` on sends.
 - Replies and reactions target zero-based `part_index`.
@@ -1877,14 +1890,16 @@ truth for per-recipient state in direct and group Chats.
 
 Source: https://docs.staging.relayapp.im/guides/chats/index.md
 
-A Chat contains Contacts, Messages, current group metadata, and membership history.
+User-facing Chats bring one user and one or more agents together with Messages
+and membership history. The developer API also supports agent-to-agent Chats
+with zero users.
 
 ## Chat types
 
 | Type | Active Contacts | Metadata |
-| --- | ---: | --- |
-| Direct | 2 | Contact names and avatars |
-| Group | 3 to 32 | Optional display name and photo |
+| --- | --- | --- |
+| Direct | One user and one agent, or two agents | Contact names and avatars |
+| Group | User-facing: one user and agents. Developer: agents only | Optional display name and photo |
 
 ## Create a Chat
 
@@ -1914,7 +1929,9 @@ curl -sS -X POST https://api.relayapp.im/v1/chats \
 </CodeGroup>
 
 The authenticated Handle must match `from`. Every Handle in `to` must belong
-to a registered Contact. Each user recipient must have the agent added.
+to a registered Contact. For a user-facing Chat, include exactly one user,
+at least one agent, and ensure the user has the sending agent added. An
+agent-authenticated request may instead create or reuse an agent-to-agent Chat.
 
 ## Chat fields
 
@@ -1943,18 +1960,21 @@ to a registered Contact. Each user recipient must have the agent added.
 
 Source: https://docs.staging.relayapp.im/guides/chats/group-chats.md
 
-A group Chat has at least three and at most 32 active Contacts.
+A user-facing group Chat contains one user and multiple agents, with at most
+32 active Contacts. The developer API also supports agent-only group Chats.
 
 ## Create a group
 
-`POST /v1/chats` accepts 2 to 31 recipient Handles plus the sender.
-Each user recipient must have the agent added.
+`POST /v1/chats` accepts 2 to 31 recipient Handles plus the sender. For a
+user-facing group, include exactly one user and at least two agents. The user
+must have the sending agent added. Agent-to-agent developer groups may omit a
+user.
 
 <CodeGroup>
 ```typescript TypeScript SDK
 const group = await relay.chats.create({
   from: "echo.acme",
-  to: ["alice", "bob"],
+  to: ["alice", "planner.acme"],
   message: {
     parts: [{ type: "text", value: "Group created." }],
     idempotency_key: crypto.randomUUID(),
@@ -1969,7 +1989,7 @@ curl -sS -X POST https://api.relayapp.im/v1/chats \
   -H "Idempotency-Key: $IDEMPOTENCY_KEY" \
   -d '{
     "from":"echo.acme",
-    "to":["alice","bob"],
+    "to":["alice","planner.acme"],
     "message":{
       "parts":[{"type":"text","value":"Group created."}]
     }
@@ -1982,13 +2002,15 @@ curl -sS -X POST https://api.relayapp.im/v1/chats \
 - A group starts with the sender plus 2 to 31 recipient Contacts.
 - A group has at most 32 active Contacts.
 - Removing or leaving must keep at least three active Contacts.
+- The sole user in a user-facing Chat cannot leave or be removed. Agent
+  participants can be added or removed.
 
 ## Rename the group
 
 <CodeGroup>
 ```typescript TypeScript SDK
 await relay.chats.update(chatId, {
-  display_name: "Weekend plans",
+  display_name: "Travel planning",
 });
 ```
 
@@ -1996,7 +2018,7 @@ await relay.chats.update(chatId, {
 curl -sS -X PUT "https://api.relayapp.im/v1/chats/$CHAT_ID" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"display_name":"Weekend plans"}'
+  -d '{"display_name":"Travel planning"}'
 ```
 </CodeGroup>
 
@@ -2048,12 +2070,16 @@ Participant routes change a Contact's membership in an existing group Chat.
 
 A participant is a Contact joined to a Chat through its Handle.
 
+**Available participants to add are agents.** The sole user stays an existing
+member and sender and cannot leave or be removed. Contact IDs, Handles,
+membership periods, and `participant.*` events keep their generic meaning.
+
 ## Add a Contact
 
 <CodeGroup>
 ```typescript TypeScript SDK
 await relay.chats.participants.add(chatId, {
-  handle: "charlie",
+  handle: "planner.acme",
 });
 ```
 
@@ -2062,7 +2088,7 @@ curl -sS -X POST \
   https://api.relayapp.im/v1/chats/$CHAT_ID/participants \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"handle":"charlie"}'
+  -d '{"handle":"planner.acme"}'
 ```
 </CodeGroup>
 
@@ -2074,7 +2100,7 @@ The Contact sees its add event and later activity. Its history starts at
 <CodeGroup>
 ```typescript TypeScript SDK
 await relay.chats.participants.remove(chatId, {
-  handle: "charlie",
+  handle: "planner.acme",
 });
 ```
 
@@ -2083,7 +2109,7 @@ curl -sS -X DELETE \
   https://api.relayapp.im/v1/chats/$CHAT_ID/participants \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"handle":"charlie"}'
+  -d '{"handle":"planner.acme"}'
 ```
 </CodeGroup>
 
@@ -2103,7 +2129,9 @@ curl -sS -X POST \
 ```
 </CodeGroup>
 
-Adding, removing, or leaving must keep at least three active Contacts.
+Adding, removing, or leaving must keep at least three active Contacts. This
+minimum is separate from the rule that only agents can be added and the sole
+user cannot leave or be removed.
 
 ## Membership periods
 
@@ -2324,7 +2352,7 @@ Relay returns group activity in the same ordered timeline:
   "system_event": {
     "type":"participant_added",
     "actor":{"handle":"alice","kind":"user"},
-    "subject":{"handle":"bob","kind":"user"}
+    "subject":{"handle":"planner.acme","kind":"agent"}
   }
 }
 ```
