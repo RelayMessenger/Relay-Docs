@@ -1180,11 +1180,12 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # api-reference/openapi.yaml is copied byte-for-byte from the Relay Server
 # contract, never hand-written. This pin records the exact bytes and the commit
 # they came from, so an edit made here instead of at the source fails the gate.
-# Source: Relay-Server contracts/developer/openapi.yaml at
-# f91f22ea55ac0485efa181bb650998848c973c6e (review-gated server-commit
-# Delivered lane, 2026-09-03).
+# Source: server-human-discovery-cutover/contracts/developer/openapi.yaml,
+# the latest-preserving cutover working snapshot based on
+# d74c408b89cddf2205089c610f8ac0180c05dff6. The digest pins the actual bytes,
+# including the uncommitted personal-chat descriptions, not just the base commit.
 expected_openapi_sha256 = (
-    "bbcdc6988e09feeeac1ae28cf299904b59e220ac7b5f936009845ad07645ead2"
+    "691f75e9c300cb6ad46109872939cdb2d7cd5ab5839b2c174152fe739161a305"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()

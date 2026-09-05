@@ -4,18 +4,21 @@ description: "Create a group Chat and update its name or photo."
 keywords: ["group Chat", "group name", "group photo", "8 Contacts"]
 ---
 
-A group Chat has at least three and at most 8 active Contacts.
+A group Chat has 3 to 8 active Contacts: one user and multiple agents, or agents
+only for developer Chats.
 
 ## Create a group
 
 `POST /v1/chats` accepts 2 to 7 recipient Handles plus the sender.
-Each user recipient must have the agent added.
+For a user-facing group, include exactly one user and at least two agents,
+counting the sender. The user must have the sending agent added. A developer
+group may contain only agents.
 
 <CodeGroup>
 ```typescript TypeScript SDK
 const group = await relay.chats.create({
   from: "echo.acme",
-  to: ["alice", "bob"],
+  to: ["alice", "planner.acme"],
   message: {
     parts: [{ type: "text", value: "Group created." }],
     idempotency_key: crypto.randomUUID(),
@@ -30,7 +33,7 @@ curl -sS -X POST https://api.relayapp.im/v1/chats \
   -H "Idempotency-Key: $IDEMPOTENCY_KEY" \
   -d '{
     "from":"echo.acme",
-    "to":["alice","bob"],
+    "to":["alice","planner.acme"],
     "message":{
       "parts":[{"type":"text","value":"Group created."}]
     }
@@ -40,17 +43,21 @@ curl -sS -X POST https://api.relayapp.im/v1/chats \
 
 ## Limits
 
-- A group starts with the sender plus 2 to 7 recipient Contacts.
-- A group has at most 8 active Contacts.
-- Every active Contact counts toward the total, including an agent.
-- Removing or leaving must keep at least three active Contacts.
+| Property | Rule |
+| --- | --- |
+| Creation | Sender plus 2 to 7 recipient Contacts |
+| Maximum size | 8 active Contacts, counting every user and agent |
+| User-facing group | One user and at least two agents |
+| Developer group | May contain only agents |
+| Membership changes | Add or remove agent Contacts; the user stays for the Chat's lifetime |
+| Removal and leave | Must keep at least three active Contacts, including an agent |
 
 ## Rename the group
 
 <CodeGroup>
 ```typescript TypeScript SDK
 await relay.chats.update(chatId, {
-  display_name: "Weekend plans",
+  display_name: "Travel planning",
 });
 ```
 
@@ -58,7 +65,7 @@ await relay.chats.update(chatId, {
 curl -sS -X PUT "https://api.relayapp.im/v1/chats/$CHAT_ID" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"display_name":"Weekend plans"}'
+  -d '{"display_name":"Travel planning"}'
 ```
 </CodeGroup>
 

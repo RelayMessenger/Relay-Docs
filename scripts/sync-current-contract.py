@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 OPENAPI_SOURCE = Path(os.environ.get(
     "RELAY_OPENAPI_SOURCE",
-    ROOT / "../_worktrees/Relay-Server-local/contracts/developer/openapi.yaml",
+    ROOT / "../server-human-discovery-cutover/contracts/developer/openapi.yaml",
 )).resolve()
 TARGET = ROOT / "api-reference/openapi.yaml"
 
