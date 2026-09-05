@@ -1211,10 +1211,11 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # contract, never hand-written. This pin records the exact bytes and the commit
 # they came from, so an edit made here instead of at the source fails the gate.
 # Source: Relay-Server/contracts/developer/openapi.yaml.
-# Finalized Contacts admission snapshot. The digest pins the exact source
-# bytes independently of the Server release commit.
+# Blocking behavior snapshot, Relay-Server pull requests 158 and 159. The
+# digest pins the exact source bytes independently of the Server release
+# commit.
 expected_openapi_sha256 = (
-    "86fb8ef87cc2a373f1545d398424c1c23a597ca6a0ed4ad05b18ed8f214a75d1"
+    "f9919ed4c63efd32197ea8861b3b879f6a9594645308e65ade25f6447b479bd9"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
