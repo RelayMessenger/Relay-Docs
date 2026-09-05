@@ -923,6 +923,10 @@ chat_handle = re.search(
 if not chat_handle:
     raise SystemExit("ChatHandle schema missing from OpenAPI")
 chat_handle_text = chat_handle.group(1)
+# Canonical proof: Relay-Server/contracts/developer/openapi.yaml ChatHandle;
+# server/src/projection.ts and server/test/images.test.ts use image_url.
+if "        image_url:\n" not in chat_handle_text or "avatar_url" in chat_handle_text:
+    raise SystemExit("ChatHandle must use the canonical image_url field")
 if "greeting_message" in chat_handle_text:
     raise SystemExit("removed greeting field returned to ChatHandle")
 openapi_paths = re.findall(r"^  (/[^:]+):$", openapi_text, re.M)
@@ -1136,6 +1140,10 @@ if disconnect_reasons != [
 
 handwritten_paths = [*mdx_paths, root / "skill.md", root / "README.md"]
 handwritten_text = "\n".join(path.read_text() for path in handwritten_paths)
+if "avatar_url" in handwritten_text:
+    raise SystemExit("current prose/examples must use image_url, not avatar_url")
+if re.search(r"https://agent\.example/(?:new-)?avatar\.png", contact_text):
+    raise SystemExit("Contact Card examples must use Relay-hosted image URLs")
 all_contract_text = handwritten_text + "\n" + openapi_text
 generated_paths = [root / "llms.txt", root / "llms-full.txt"]
 generated_text = "\n".join(path.read_text() for path in generated_paths)
