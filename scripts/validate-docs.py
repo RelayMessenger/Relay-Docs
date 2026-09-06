@@ -4,6 +4,7 @@ import hashlib
 import re
 import sys
 from pathlib import Path
+from api_navigation import validate_api_navigation, page_paths
 
 # The names of the source companies whose documentation shaped early drafts are
 # banned from this repository, including from the checks that block them. Each
@@ -293,87 +294,10 @@ if actual_error_groups != expected_error_groups:
 api_tab = tabs[2]
 if api_tab.get("openapi") != "api-reference/openapi.mint.yaml":
     raise SystemExit("generated API groups must sit directly under API Reference")
-expected_api_groups = [
-    {
-        "group": "API Reference",
-        "pages": ["api-reference/overview"],
-    },
-    {
-        "group": "Chats",
-        "pages": [
-            "POST /v1/chats",
-            "GET /v1/chats",
-            "GET /v1/chats/{chatId}",
-            "PUT /v1/chats/{chatId}",
-            "POST /v1/chats/{chatId}/participants",
-            "DELETE /v1/chats/{chatId}/participants",
-            "POST /v1/chats/{chatId}/leave",
-            "POST /v1/chats/{chatId}/typing",
-            "DELETE /v1/chats/{chatId}/typing",
-            "POST /v1/chats/{chatId}/read",
-            "POST /v1/chats/{chatId}/share_contact_card",
-        ],
-    },
-    {
-        "group": "Messages",
-        "pages": [
-            "POST /v1/messages",
-            "POST /v1/chats/{chatId}/messages",
-            "GET /v1/chats/{chatId}/messages",
-            "GET /v1/messages/{messageId}/thread",
-            "POST /v1/chats/{chatId}/voicememo",
-            "GET /v1/messages/{messageId}",
-            "PATCH /v1/messages/{messageId}",
-            "DELETE /v1/messages/{messageId}",
-            "POST /v1/messages/{messageId}/reactions",
-        ],
-    },
-    {
-        "group": "Attachments",
-        "pages": [
-            "POST /v1/attachments",
-            "GET /v1/attachments/{attachmentId}",
-            "DELETE /v1/attachments/{attachmentId}",
-        ],
-    },
-    {
-        "group": "Blocked Handles",
-        "pages": [
-            "GET /v1/blocked_handles",
-            "POST /v1/blocked_handles",
-            "DELETE /v1/blocked_handles",
-        ],
-    },
-    {
-        "group": "Webhooks",
-        "pages": [
-            "GET /v1/webhook-events",
-            "POST /v1/webhook-subscriptions",
-            "GET /v1/webhook-subscriptions",
-            "GET /v1/webhook-subscriptions/{subscriptionId}",
-            "PUT /v1/webhook-subscriptions/{subscriptionId}",
-            "DELETE /v1/webhook-subscriptions/{subscriptionId}",
-        ],
-    },
-    {
-        "group": "Contact Card",
-        "pages": [
-            "GET /v1/contact_card",
-            "POST /v1/contact_card",
-            "PATCH /v1/contact_card",
-        ],
-    },
-    {
-        "group": "WebSocket",
-        "pages": ["GET /v1/websocket"],
-    },
-    {
-        "group": "Contacts",
-        "pages": ["POST /v1/contact_requests"],
-    },
-]
-if api_tab.get("groups") != expected_api_groups:
-    raise SystemExit(f"API Reference operation order changed: {api_tab.get('groups')}")
+try:
+    configured_endpoint_refs = validate_api_navigation(config)
+except ValueError as error:
+    raise SystemExit(str(error)) from error
 if config.get("api") != {
     "playground": {"display": "simple"},
     "params": {"expanded": "closed"},
@@ -815,7 +739,11 @@ for path in mdx_paths:
         inventory_key = "one error code"
     else:
         inventory_key = heading_aliases.get(title, title)
-    expected_headings = documented_heading_rows.get(inventory_key)
+    expected_headings = (
+        ["Operations", "See also"]
+        if path.relative_to(root).as_posix().startswith("api-reference/resources/")
+        else documented_heading_rows.get(inventory_key)
+    )
     if expected_headings is None:
         raise SystemExit(
             f"heading inventory missing for {path.relative_to(root)}: {inventory_key}"
@@ -1433,11 +1361,6 @@ for path_match in re.finditer(
         re.M,
     ):
         contract_endpoint_refs.append(f"{method.upper()} {endpoint}")
-configured_endpoint_refs = [
-    page
-    for group in expected_api_groups[1:]
-    for page in group["pages"]
-]
 if (
     len(configured_endpoint_refs) != len(set(configured_endpoint_refs))
     or set(configured_endpoint_refs) != set(contract_endpoint_refs)
@@ -1470,6 +1393,14 @@ if re.search(
     re.M,
 ):
     raise SystemExit("Mintlify presentation metadata must preserve endpoint H1 titles")
+for operation_id, metadata in page_paths().items():
+    operation = re.search(
+        rf"^      operationId: {re.escape(operation_id)}\n(.*?)(?=^      summary:)",
+        mint_openapi_text, re.M | re.S,
+    )
+    if not operation or f"        href: {metadata['href']}\n" not in operation.group(1):
+        raise SystemExit(f"Stable endpoint page URL changed: {operation_id}")
+
 event_type_block = re.search(
     r"^    WebhookEventType:\n.*?^      enum:\n"
     r"((?:^        - [^\n]+\n)+)",

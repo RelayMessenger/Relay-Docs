@@ -3,6 +3,7 @@ import argparse
 import json
 import re
 from pathlib import Path
+from api_navigation import page_paths, walk_pages
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,9 +41,8 @@ def frontmatter(path: Path) -> tuple[str, str, str]:
 def navigation_entries(config: dict) -> list[tuple[str, str, str]]:
     entries = []
     for tab in config["navigation"]["tabs"]:
-        for group in tab["groups"]:
-            for page in group["pages"]:
-                entries.append((tab["tab"], group["group"], page))
+        for groups, page in walk_pages(tab["groups"]):
+            entries.append((tab["tab"], " / ".join(groups), page))
     return entries
 
 
@@ -143,16 +143,17 @@ def render_index(
         f"> {config['description']}",
         "",
     ]
+    endpoint_urls = {
+        entry["endpoint"]: entry["href"].lstrip("/")
+        for entry in page_paths().values()
+    }
     for _, group, page in entries:
         endpoint_match = ENDPOINT.fullmatch(page)
         if endpoint_match:
             operation = operations.get(page)
             if operation is None:
                 raise SystemExit(f"navigation endpoint missing from OpenAPI: {page}")
-            path = (
-                f"api-reference/{slug(group)}/"
-                f"{slug(operation['summary'])}.md"
-            )
+            path = f"{endpoint_urls[page]}.md"
             title = operation["summary"]
             description = operation["description"]
         else:
