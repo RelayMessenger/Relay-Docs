@@ -21,6 +21,25 @@ source_company_pattern = "|".join(
 root = Path(__file__).resolve().parents[1]
 config = json.loads((root / "docs.json").read_text())
 
+agent_instructions = (root / "skill.md").read_text()
+greeting_section = re.search(
+    r"^## Backend connection greeting\n(.*?)(?=^## |\Z)",
+    agent_instructions,
+    re.M | re.S,
+)
+if not greeting_section:
+    raise SystemExit("Agent instructions lost the backend connection greeting")
+greeting = greeting_section.group(1)
+if re.findall(r"```text\n(.*?)\n```", greeting, re.S) != ["Hello, I'm here"]:
+    raise SystemExit("Backend greeting must be exactly Hello, I'm here without end punctuation")
+for required in [
+    "When your agent backend connects to Relay",
+    "backend connecting to Relay, not the user adding the agent or a `contact.added`",
+    "Implement this in the agent backend's connection flow",
+]:
+    if required not in greeting:
+        raise SystemExit(f"Backend greeting instructions lost: {required}")
+
 # versions.json is the one source of truth for every published package version.
 # scripts/refresh-versions.mjs writes it from the live registries and
 # scripts/check-versions.mjs proves no page drifted from it, so this validator
@@ -1562,7 +1581,7 @@ for name, pattern in {
     "old public status language": r"current-status|Current status|known contract residue|local proof|evidence app",
     "old WebSocket handshake": r"/v1/websocket-connections|relay_ticket_|relay\.v1\.json|\?ticket=",
     "source-company language": source_company_pattern,
-    "removed greeting behavior": r"\bgreeting(?:_message|s)?\b",
+    "removed greeting field": r"\bgreeting_message\b",
     "removed Broadcast feature": r"\bbroadcasts?\b",
     "removed Proactive feature": r"\bproactive\b",
     "MFA surface": r"\bMFA\b",
