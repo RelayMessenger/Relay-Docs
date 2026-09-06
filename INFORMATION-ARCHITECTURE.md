@@ -410,7 +410,7 @@ the page's single job and update this inventory in the same commit.
 | Authentication | `Credentials` → `Agent Tokens` → `Pair the environment and token` → `WebSocket authentication` → `Errors` → `Related` |
 | Client SDKs | `Install` → `Create a client` → `Send a Message` → `Resources` → `Pagination` → `Retries and idempotency` → `Errors` → `Webhook verification` → `Browser limitation` → `Runnable examples` → `Related` |
 | Key Concepts | `Contacts and Handles` → `Chats` → `Messages and parts` → `Attachments` → `Delivery` → `Events` → `Idempotency` → `Related` |
-| AI coding agents | `Documentation files` → `Relay agent prompt` → `Build prompt` → `Audit prompt` → `Related` |
+| AI coding agents | `Documentation files` → `Minimal connection prompt` → `Relay agent prompt` → `Build prompt` → `Audit prompt` → `Related` |
 | Best Practices | `Accept events before processing` → `Make commands idempotent` → `Keep replies on REST` → `Treat IDs as opaque` → `Upload media before sending` → `Respect membership visibility` → `Handle duplicates` → `Related` |
 
 ### Messaging

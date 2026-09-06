@@ -142,6 +142,14 @@ def render_index(
         "",
         f"> {config['description']}",
         "",
+        "## Agent onboarding",
+        "",
+        "When asked to connect a Relay agent, follow these instructions before the page index.",
+        "",
+        onboarding_instructions(),
+        "",
+        "## Documentation index",
+        "",
     ]
     endpoint_urls = {
         entry["endpoint"]: entry["href"].lstrip("/")
@@ -172,6 +180,15 @@ def render_index(
         ]
     )
     return "\n".join(lines)
+
+
+def onboarding_instructions() -> str:
+    """Keep onboarding in the index identical to the canonical agent guidance."""
+    source = (ROOT / "skill.md").read_text()
+    start = source.index("## Start\n")
+    end = source.index("## Vocabulary\n", start)
+    # Nest the canonical sections under the index's onboarding heading.
+    return re.sub(r"^(#{2,}) ", r"#\1 ", source[start:end].strip(), flags=re.M)
 
 
 def render_full(

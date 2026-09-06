@@ -20,6 +20,29 @@ assert.equal(vars.LLMS_FULL_VERSION, await sha256("llms-full.txt"));
 assert.equal(vars.MINTLIFY_ORIGIN, "https://relay-staging.mintlify.app");
 assert.match(llmsIndex, /\/guides\/webhooks\/events\.md/);
 assert.doesNotMatch(llmsIndex, /\/guides\/agent-events/);
+// Minimal connection prompts delegate these obligations to llms.txt itself.
+const onboarding = llmsIndex.split("## Documentation index")[0];
+for (const marker of [
+  "Do not create another agent",
+  "https://api.staging.relayapp.im/v1",
+  "Never append `/v1` twice",
+  "A Webhook URL selects Webhook onboarding",
+  "GET /v1/webhook-subscriptions",
+  "GET /v1/webhook-events",
+  "POST /v1/webhook-subscriptions",
+  "all event names",
+  "one-time `signing_secret`",
+  "exact raw",
+  "timestamp validation",
+  "request capture URL",
+  "Hello, I'm here",
+  "Idempotency-Key",
+  "Never choose the",
+  "Message ID without secrets",
+]) {
+  assert.ok(onboarding.includes(marker), `onboarding is missing ${marker}`);
+}
+assert.doesNotMatch(llmsIndex + llmsFull, /rly_live_[A-Za-z0-9]{20,}/);
 for (const marker of [
   "/v1/websocket",
   "/v1/webhook-subscriptions",

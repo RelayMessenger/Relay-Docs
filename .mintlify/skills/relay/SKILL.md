@@ -15,11 +15,13 @@ developer API also supports agent-to-agent Chats with zero users.
 
 1. Read the target environment's current OpenAPI and matching local docs first.
    In a Relay workspace, use `Relay-Server/contracts/developer/openapi.yaml`.
-   Use `https://docs.staging.relayapp.im/llms.txt` as an index, not as authority over a
+   Use `https://docs.staging.relayapp.im/llms.txt` for setup instructions and the
+   page index, not as authority over a
    newer local contract. If the contract cannot be read, stop and report unknown.
 2. Pair `RELAY_API_URL` with an Agent Token created in that environment's
    Console. Staging and production credentials belong with their respective
-   API roots. Store the token in server-side secret storage, never logs.
+   API roots. Store the token in server-side secret storage, never source
+   control, logs, command output, or client-side code.
 3. Verify access with `GET /v1/chats?limit=1`. HTTP `200`, including an empty
    `chats` array, verifies this read. Do not require `/v1/agents/me` or invent
    an identity endpoint. This read does not select a greeting recipient.
@@ -33,6 +35,69 @@ developer API also supports agent-to-agent Chats with zero users.
    the workflow below. Do not wait for an inbound Message to send it.
 7. Optionally mark the Chat Read only through `POST /v1/chats/{chatId}/read`.
    Reply through `POST /v1/chats/{chatId}/messages` with a stable idempotency key.
+
+## Connect an existing agent
+
+When asked to connect an agent, use the supplied Agent Token for that existing
+agent. Do not create another agent. The supplied agent Handle identifies the
+agent to connect, not the user who should receive the greeting.
+
+Read the setup and greeting instructions here, then the matching runtime and
+transport guides before acting. If the docs or required runtime capabilities
+are unavailable, report the blocker instead of inventing setup commands.
+
+| Setup input | Rule |
+| --- | --- |
+| Agent Token | Load through trusted server-side secret storage. Never echo it, embed it in source, or print credential-bearing requests or responses. |
+| Environment | These docs default to `https://api.staging.relayapp.im/v1`. Use a token from staging. A supplied API base overrides the default only with matching environment docs and credentials. |
+| API URL format | `RELAY_API_URL` and the TypeScript SDK `baseURL` use the origin `https://api.staging.relayapp.im`; documented HTTP paths include `/v1`. Never append `/v1` twice. |
+| Connection method | Honor the supplied Webhook or WebSocket choice. A Webhook URL selects Webhook onboarding when no method is stated. Otherwise inspect the runtime and saved subscriptions before choosing a supported path. |
+| Webhook URL | Use the supplied HTTPS receiver. If absent, find a receiver in the user's backend or ask for deployment access. Do not invent a URL. |
+| Existing subscription | List saved subscriptions first, even when registration is not mentioned. Reuse the matching target URL rather than creating a duplicate. |
+
+### Webhook onboarding
+
+1. Follow the [Webhook subscriptions guide](https://docs.staging.relayapp.im/guides/webhooks/subscriptions.md)
+   and [receiver guide](https://docs.staging.relayapp.im/guides/webhooks/index.md).
+   With the supplied Agent Token, call `GET /v1/webhook-subscriptions` and
+   `GET /v1/webhook-events`. Onboarding subscribes to all event names returned
+   by the current catalog unless the user explicitly requests a narrower set.
+   Populate `subscribed_events` with the response's `events` array, not a `*`
+   wildcard.
+2. For a new target, call `POST /v1/webhook-subscriptions` with `target_url`
+   and `subscribed_events`. Capture the one-time `signing_secret` directly
+   into trusted secret storage without printing the response. Keep the
+   secret out of source control, logs, and client-side code.
+3. For a matching target, inspect its event coverage and active state. Use
+   `PUT /v1/webhook-subscriptions/{subscriptionId}` when the requested setup
+   requires updating its settings. Preserve unrelated subscriptions. Reuse
+   the stored signing secret; if unavailable, ask the user to provide it
+   through secure storage. Do not delete and recreate a subscription merely
+   to obtain a new secret.
+4. Configure Standard Webhooks signature verification over the exact raw
+   request bytes using the saved secret, including timestamp validation.
+   Prove invalid signatures are rejected and valid events are committed
+   durably with `event_id` deduplication before a `2xx` response. Run model
+   and tool work after acknowledgment; make outgoing replies idempotent.
+5. Verify that the supplied endpoint is a receiver you can configure, not
+   merely a request capture URL. If receiver code, secret storage, or runtime
+   access is missing, report what remains pending. Subscription creation or
+   an HTTP `2xx` alone does not prove signature verification or a working agent.
+
+### Runtime and completion
+
+Use the [ecosystem index](https://docs.staging.relayapp.im/ecosystem/index.md)
+to find the documented package for the actual runtime. A coding-agent
+skill or docs connection alone is not a running Relay event consumer.
+For WebSocket, follow the
+[WebSocket guide](https://docs.staging.relayapp.im/guides/websocket/index.md)
+and preserve existing subscriptions unless the user authorizes changing the
+event path. Do not silently switch a requested Webhook setup to WebSocket.
+
+Start the configured backend or runtime connection, verify its event path,
+then send the setup greeting below once. Report the connection result and
+Message ID without secrets. If only registration, code generation, or tests
+completed, say so and leave connection or greeting completion pending.
 
 ## Send the setup greeting once
 
