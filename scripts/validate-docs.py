@@ -4,6 +4,7 @@ import hashlib
 import re
 import sys
 from pathlib import Path
+from api_navigation import validate_api_navigation, page_paths
 
 # The names of the source companies whose documentation shaped early drafts are
 # banned from this repository, including from the checks that block them. Each
@@ -19,6 +20,24 @@ source_company_pattern = "|".join(
 
 root = Path(__file__).resolve().parents[1]
 config = json.loads((root / "docs.json").read_text())
+
+agent_instructions = (root / "skill.md").read_text()
+greeting_section = re.search(
+    r"^## Send the setup greeting once\n(.*?)(?=^## |\Z)",
+    agent_instructions,
+    re.M | re.S,
+)
+if not greeting_section:
+    raise SystemExit("Agent instructions lost the setup greeting")
+greeting = greeting_section.group(1)
+if re.findall(r"```text\n(.*?)\n```", greeting, re.S) != ["Hello, I'm here"]:
+    raise SystemExit("Setup greeting must be exactly Hello, I'm here without end punctuation")
+for required in [
+    "This is a setup-agent action, not a backend startup hook",
+    "Do not send another greeting on backend restarts",
+]:
+    if required not in greeting:
+        raise SystemExit(f"Setup greeting instructions lost: {required}")
 
 # versions.json is the one source of truth for every published package version.
 # scripts/refresh-versions.mjs writes it from the live registries and
@@ -58,7 +77,7 @@ if hashlib.sha256((root / "favicon.png").read_bytes()).hexdigest() != (
 if config.get("navbar", {}).get("primary") != {
     "type": "button",
     "label": "Console",
-    "href": "https://console.relayapp.im",
+    "href": "https://console.staging.relayapp.im",
 }:
     raise SystemExit("top-right docs action must open Relay Console")
 if config.get("navbar", {}).get("links") != [
@@ -293,87 +312,10 @@ if actual_error_groups != expected_error_groups:
 api_tab = tabs[2]
 if api_tab.get("openapi") != "api-reference/openapi.mint.yaml":
     raise SystemExit("generated API groups must sit directly under API Reference")
-expected_api_groups = [
-    {
-        "group": "API Reference",
-        "pages": ["api-reference/overview"],
-    },
-    {
-        "group": "Chats",
-        "pages": [
-            "POST /v1/chats",
-            "GET /v1/chats",
-            "GET /v1/chats/{chatId}",
-            "PUT /v1/chats/{chatId}",
-            "POST /v1/chats/{chatId}/participants",
-            "DELETE /v1/chats/{chatId}/participants",
-            "POST /v1/chats/{chatId}/leave",
-            "POST /v1/chats/{chatId}/typing",
-            "DELETE /v1/chats/{chatId}/typing",
-            "POST /v1/chats/{chatId}/read",
-            "POST /v1/chats/{chatId}/share_contact_card",
-        ],
-    },
-    {
-        "group": "Messages",
-        "pages": [
-            "POST /v1/messages",
-            "POST /v1/chats/{chatId}/messages",
-            "GET /v1/chats/{chatId}/messages",
-            "GET /v1/messages/{messageId}/thread",
-            "POST /v1/chats/{chatId}/voicememo",
-            "GET /v1/messages/{messageId}",
-            "PATCH /v1/messages/{messageId}",
-            "DELETE /v1/messages/{messageId}",
-            "POST /v1/messages/{messageId}/reactions",
-        ],
-    },
-    {
-        "group": "Attachments",
-        "pages": [
-            "POST /v1/attachments",
-            "GET /v1/attachments/{attachmentId}",
-            "DELETE /v1/attachments/{attachmentId}",
-        ],
-    },
-    {
-        "group": "Blocked Handles",
-        "pages": [
-            "GET /v1/blocked_handles",
-            "POST /v1/blocked_handles",
-            "DELETE /v1/blocked_handles",
-        ],
-    },
-    {
-        "group": "Webhooks",
-        "pages": [
-            "GET /v1/webhook-events",
-            "POST /v1/webhook-subscriptions",
-            "GET /v1/webhook-subscriptions",
-            "GET /v1/webhook-subscriptions/{subscriptionId}",
-            "PUT /v1/webhook-subscriptions/{subscriptionId}",
-            "DELETE /v1/webhook-subscriptions/{subscriptionId}",
-        ],
-    },
-    {
-        "group": "Contact Card",
-        "pages": [
-            "GET /v1/contact_card",
-            "POST /v1/contact_card",
-            "PATCH /v1/contact_card",
-        ],
-    },
-    {
-        "group": "WebSocket",
-        "pages": ["GET /v1/websocket"],
-    },
-    {
-        "group": "Contacts",
-        "pages": ["POST /v1/contact_requests"],
-    },
-]
-if api_tab.get("groups") != expected_api_groups:
-    raise SystemExit(f"API Reference operation order changed: {api_tab.get('groups')}")
+try:
+    configured_endpoint_refs = validate_api_navigation(config)
+except ValueError as error:
+    raise SystemExit(str(error)) from error
 if config.get("api") != {
     "playground": {"display": "simple"},
     "params": {"expanded": "closed"},
@@ -815,7 +757,11 @@ for path in mdx_paths:
         inventory_key = "one error code"
     else:
         inventory_key = heading_aliases.get(title, title)
-    expected_headings = documented_heading_rows.get(inventory_key)
+    expected_headings = (
+        ["Operations", "See also"]
+        if path.relative_to(root).as_posix().startswith("api-reference/resources/")
+        else documented_heading_rows.get(inventory_key)
+    )
     if expected_headings is None:
         raise SystemExit(
             f"heading inventory missing for {path.relative_to(root)}: {inventory_key}"
@@ -870,10 +816,10 @@ if not re.search(
     raise SystemExit("Contact Card sharing guide must state that the route is bodyless")
 
 contact_text = (root / "guides/contact-cards.mdx").read_text()
-if not re.search(r"\bPOST https://api\.relayapp\.im/v1/contact_card\b", contact_text):
+if not re.search(r"\bPOST https://api\.staging\.relayapp\.im/v1/contact_card\b", contact_text):
     raise SystemExit("Contact Card configuration guide lost POST /v1/contact_card")
 if not re.search(
-    r"\bPATCH\b[\s\S]{0,100}api\.relayapp\.im/v1/contact_card\?handle=",
+    r"\bPATCH\b[\s\S]{0,100}api\.staging\.relayapp\.im/v1/contact_card\?handle=",
     contact_text,
 ):
     raise SystemExit("Contact Card configuration guide lost its PATCH operation")
@@ -883,7 +829,7 @@ for required in [
     "Username-scoped Handle",
     "Premium Handle",
     "relay.contactRequests.create",
-    "POST https://api.relayapp.im/v1/contact_requests",
+    "POST https://api.staging.relayapp.im/v1/contact_requests",
     '"state": "pending"',
     "`402`",
     "`contact.added`",
@@ -1015,7 +961,7 @@ for required in [
         raise SystemExit(f"final event path decision is missing: {required}")
 for forbidden in [
     "relay.websocket.update",
-    "PUT https://api.relayapp.im/v1/websocket",
+    "PUT https://api.staging.relayapp.im/v1/websocket",
     '{"enabled":true}',
     '{"enabled":false}',
     "WebSocket is enabled",
@@ -1057,7 +1003,7 @@ if "`stale_connection`" not in websocket_protocol_text:
 if "A fatal error ends consumption" not in websocket_protocol_text:
     raise SystemExit("WebSocket protocol lost fatal error handling")
 for required in [
-    "wss://api.relayapp.im/v1/websocket",
+    "wss://api.staging.relayapp.im/v1/websocket",
     "Authorization: Bearer $RELAY_AGENT_TOKEN",
     "Agent Token",
     "multiple connected sockets",
@@ -1433,11 +1379,6 @@ for path_match in re.finditer(
         re.M,
     ):
         contract_endpoint_refs.append(f"{method.upper()} {endpoint}")
-configured_endpoint_refs = [
-    page
-    for group in expected_api_groups[1:]
-    for page in group["pages"]
-]
 if (
     len(configured_endpoint_refs) != len(set(configured_endpoint_refs))
     or set(configured_endpoint_refs) != set(contract_endpoint_refs)
@@ -1470,6 +1411,14 @@ if re.search(
     re.M,
 ):
     raise SystemExit("Mintlify presentation metadata must preserve endpoint H1 titles")
+for operation_id, metadata in page_paths().items():
+    operation = re.search(
+        rf"^      operationId: {re.escape(operation_id)}\n(.*?)(?=^      summary:)",
+        mint_openapi_text, re.M | re.S,
+    )
+    if not operation or f"        href: {metadata['href']}\n" not in operation.group(1):
+        raise SystemExit(f"Stable endpoint page URL changed: {operation_id}")
+
 event_type_block = re.search(
     r"^    WebhookEventType:\n.*?^      enum:\n"
     r"((?:^        - [^\n]+\n)+)",
@@ -1618,6 +1567,12 @@ for name, pattern in {
 }.items():
     if re.search(pattern, handwritten_text, re.I):
         raise SystemExit(f"stale {name}")
+
+if '"value":"Hello, I\'m here"' not in skill_text:
+    raise SystemExit("setup greeting must preserve its exact existing text")
+for stale_hook in ["Implement this in the agent backend's connection flow", "## Backend connection greeting"]:
+    if stale_hook in skill_text:
+        raise SystemExit("setup greeting must not become a backend connection hook")
 
 # Setup greetings are operator actions, not a restored product lifecycle.
 setup_greeting_pages = {

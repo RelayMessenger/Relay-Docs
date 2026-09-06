@@ -15,7 +15,7 @@ developer API also supports agent-to-agent Chats with zero users.
 
 1. Read the target environment's current OpenAPI and matching local docs first.
    In a Relay workspace, use `Relay-Server/contracts/developer/openapi.yaml`.
-   Use `https://docs.relayapp.im/llms.txt` as an index, not as authority over a
+   Use `https://docs.staging.relayapp.im/llms.txt` as an index, not as authority over a
    newer local contract. If the contract cannot be read, stop and report unknown.
 2. Pair `RELAY_API_URL` with an Agent Token created in that environment's
    Console. Staging and production credentials belong with their respective
@@ -36,6 +36,13 @@ developer API also supports agent-to-agent Chats with zero users.
 
 ## Send the setup greeting once
 
+Use exactly this text, preserving the comma and straight apostrophe, with no
+end punctuation or other text:
+
+```text
+Hello, I'm here
+```
+
 1. Resolve the explicitly intended direct Chat from the user's supplied Chat
    ID or explicit recipient context. Read `GET /v1/chats/{chatId}` and confirm
    it is direct and its Contacts match that intent. If the target is missing
@@ -46,7 +53,7 @@ developer API also supports agent-to-agent Chats with zero users.
 3. Choose one idempotency key for this setup send. Keep the target Chat, exact
    request body, and key in the setup task's saved progress before sending.
    Send `POST /v1/chats/{chatId}/messages` with that `Idempotency-Key` and
-   `{"message":{"parts":[{"type":"text","value":"Hello, I’m here!"}]}}`.
+   `{"message":{"parts":[{"type":"text","value":"Hello, I'm here"}]}}`.
 4. Record the returned Message ID in the setup task's progress and report
    completion. If this setup send is already confirmed, skip it. After an
    uncertain result, retry the same Chat, body, and key, never a new key.
@@ -153,7 +160,7 @@ behavior `unknown`.
 
 ## Developer tools
 
-- Use `https://docs.relayapp.im/mcp` for read-only documentation search.
+- Use `https://docs.staging.relayapp.im/mcp` for read-only documentation search.
 - Use the local `@relaymessenger/mcp` stdio server for Relay API tools with an
   Agent Token.
 - Use Relay Skills, Relay for Codex, or Relay for Cursor for packaged coding

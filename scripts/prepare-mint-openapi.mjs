@@ -4,6 +4,7 @@ import { readFile, writeFile } from "node:fs/promises";
 
 const path = new URL("../api-reference/openapi.mint.yaml", import.meta.url);
 const input = await readFile(path, "utf8");
+const pagePaths = JSON.parse(await readFile(new URL("./api-page-paths.json", import.meta.url), "utf8"));
 let output = input;
 const webhooks = output.search(/^webhooks:\s*$/m);
 const components = output.search(/^components:\s*$/m);
@@ -20,29 +21,29 @@ const sidebarTitles = {
   listChats: "List",
   getChat: "Retrieve",
   updateChat: "Update",
-  addParticipant: "Add participant",
-  removeParticipant: "Remove participant",
+  addParticipant: "Add",
+  removeParticipant: "Remove",
   leaveChat: "Leave",
-  startTyping: "Start typing",
-  stopTyping: "Stop typing",
+  startTyping: "Start",
+  stopTyping: "Stop",
   markChatAsRead: "Mark read",
   shareContactWithChat: "Share contact card",
   sendMessage: "Send",
-  sendMessageToChat: "Send to chat",
+  sendMessageToChat: "Send",
   getMessages: "List",
-  getMessageThread: "List thread",
+  getMessageThread: "List",
   sendVoiceMemoToChat: "Send voice memo",
   getMessage: "Retrieve",
   editMessage: "Edit",
   unsendMessage: "Unsend",
-  sendReaction: "Update reaction",
-  requestUpload: "Create upload",
+  sendReaction: "Update",
+  requestUpload: "Create",
   getAttachment: "Retrieve",
   deleteAttachment: "Delete",
   listBlockedHandles: "List",
   blockHandle: "Block",
   unblockHandle: "Unblock",
-  listWebhookEvents: "Event types",
+  listWebhookEvents: "List",
   createWebhookSubscription: "Create",
   listWebhookSubscriptions: "List",
   getWebhookSubscription: "Retrieve",
@@ -62,12 +63,16 @@ for (const [operationId, sidebarTitle] of Object.entries(sidebarTitles)) {
   if (matches !== 1) {
     throw new Error(`Expected one ${operationId} operation, found ${matches}.`);
   }
+  if (!pagePaths[operationId]?.href) {
+    throw new Error(`Missing stable page URL for ${operationId}.`);
+  }
   output = output.replace(
     markerPattern,
     `${marker}
       x-mint:
         metadata:
-          sidebarTitle: ${sidebarTitle}`,
+          sidebarTitle: ${sidebarTitle}
+        href: ${pagePaths[operationId].href}`,
   );
 }
 

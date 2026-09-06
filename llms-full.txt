@@ -19,7 +19,7 @@ backend, or call the same `/v1` operations over HTTPS.
 
 To build an agent, you need:
 
-- An agent and Agent Token from [Relay Console](https://console.relayapp.im)
+- An agent and Agent Token from [Relay Console](https://console.staging.relayapp.im)
 - A durable database or queue for incoming events
 - A public HTTPS endpoint for a saved webhook subscription, or an always-on
   process that connects when no subscription is saved
@@ -70,7 +70,7 @@ await relay.chats.messages.send(chatId, {
 ```
 
 ```bash cURL
-curl -sS -X POST https://api.relayapp.im/v1/chats/$CHAT_ID/messages \
+curl -sS -X POST https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: reply-$EVENT_ID" \
@@ -115,7 +115,7 @@ Connect an agent backend, send one setup greeting to the intended direct Chat, a
 
 ## Prerequisites
 
-- An agent created in [Relay Console](https://console.relayapp.im)
+- An agent created in [Relay Console](https://console.staging.relayapp.im)
 - The Agent Token shown when you create it
 - An always-on backend for WebSocket, or a public HTTPS endpoint for Webhooks
 - A durable database or queue for incoming events
@@ -123,14 +123,15 @@ Connect an agent backend, send one setup greeting to the intended direct Chat, a
 ## 1. Set your credentials
 
 ```bash
-export RELAY_API_URL="https://api.relayapp.im"
+export RELAY_API_URL="https://api.staging.relayapp.im"
 export RELAY_AGENT_TOKEN="<agent-token>"
 ```
 
 **Pair the API root with an Agent Token from that environment's Console.**
-For staging, replace the production root above with your staging API root and
-use its staging token. Read the matching local docs and current Server
-`contracts/developer/openapi.yaml` when integrating a staging checkout.
+The root above is staging; use a staging token. For production, replace it
+with the production API root and use its production token. Read the matching
+local docs and current Server `contracts/developer/openapi.yaml` when
+integrating a staging checkout.
 
 Verify access with a small read:
 
@@ -156,7 +157,7 @@ environment/token pair and token validity before continuing.
 
     const relay = new Relay({
       apiKey: process.env.RELAY_AGENT_TOKEN!,
-      baseURL: process.env.RELAY_API_URL!,
+      baseURL: process.env.RELAY_API_URL ?? "https://api.staging.relayapp.im",
     });
     ```
   </Tab>
@@ -242,6 +243,7 @@ The SDK verifies and unwraps the unmodified body:
 ```typescript
 const relay = new Relay({
   apiKey: process.env.RELAY_AGENT_TOKEN!,
+  baseURL: process.env.RELAY_API_URL ?? "https://api.staging.relayapp.im",
   webhookSecret: process.env.RELAY_WEBHOOK_SECRET!,
 });
 
@@ -305,7 +307,7 @@ JSON
 ```text Audit a Relay webhook receiver
 Audit this Relay webhook receiver without changing code.
 
-1. Read https://docs.relayapp.im/llms.txt and the current Relay OpenAPI first.
+1. Read https://docs.staging.relayapp.im/llms.txt and the current Relay OpenAPI first.
 2. Locate Agent Token authentication and the webhook receiver.
 3. Prove the signature is verified against the raw body.
 4. Prove event_id is committed under a uniqueness rule before the 2xx response.
@@ -437,13 +439,13 @@ import Relay from "@relaymessenger/sdk";
 
 const relay = new Relay({
   apiKey: process.env.RELAY_AGENT_TOKEN!,
-  baseURL: process.env.RELAY_API_URL ?? "https://api.relayapp.im",
+  baseURL: process.env.RELAY_API_URL ?? "https://api.staging.relayapp.im",
 });
 ```
 
-The default API origin is `https://api.relayapp.im`.
-Set `RELAY_API_URL` to the matching staging origin during staging tests. Use a
-token created in the same environment.
+**These staging examples explicitly use `https://api.staging.relayapp.im`.**
+The SDK itself defaults to `https://api.relayapp.im` when `baseURL` is omitted.
+Use a token created in the same environment as the selected API origin.
 
 **Keep the Agent Token in trusted server infrastructure.** Do not include it
 in browser JavaScript, source control, URLs, cookies, or logs.
@@ -502,6 +504,7 @@ the operation is safe:
 ```typescript
 const relay = new Relay({
   apiKey: process.env.RELAY_AGENT_TOKEN!,
+  baseURL: process.env.RELAY_API_URL ?? "https://api.staging.relayapp.im",
   timeout: 15_000,
   maxRetries: 2,
 });
@@ -539,6 +542,7 @@ Configure the signing secret and pass the unmodified request body:
 ```typescript
 const relay = new Relay({
   apiKey: process.env.RELAY_AGENT_TOKEN!,
+  baseURL: process.env.RELAY_API_URL ?? "https://api.staging.relayapp.im",
   webhookSecret: process.env.RELAY_WEBHOOK_SECRET!,
 });
 
@@ -698,9 +702,9 @@ Relay agent backend.
 
 | File | Use |
 | --- | --- |
-| `https://docs.relayapp.im/llms.txt` | Concise page index |
-| `https://docs.relayapp.im/llms-full.txt` | Complete documentation in one file |
-| `https://docs.relayapp.im/mcp` | Hosted read-only docs search |
+| `https://docs.staging.relayapp.im/llms.txt` | Concise page index |
+| `https://docs.staging.relayapp.im/llms-full.txt` | Complete documentation in one file |
+| `https://docs.staging.relayapp.im/mcp` | Hosted read-only docs search |
 | [OpenAPI Reference](/api-reference/overview) | Exact paths, fields, limits, and errors |
 
 Start with `llms.txt` and the pages needed for the task. Use `llms-full.txt`
@@ -734,7 +738,7 @@ developer API also supports agent-to-agent Chats with zero users.
 
 1. Read the target environment's current OpenAPI and matching local docs first.
    In a Relay workspace, use `Relay-Server/contracts/developer/openapi.yaml`.
-   Use `https://docs.relayapp.im/llms.txt` as an index, not as authority over a
+   Use `https://docs.staging.relayapp.im/llms.txt` as an index, not as authority over a
    newer local contract. If the contract cannot be read, stop and report unknown.
 2. Pair `RELAY_API_URL` with an Agent Token created in that environment's
    Console. Staging and production credentials belong with their respective
@@ -755,6 +759,13 @@ developer API also supports agent-to-agent Chats with zero users.
 
 ## Send the setup greeting once
 
+Use exactly this text, preserving the comma and straight apostrophe, with no
+end punctuation or other text:
+
+```text
+Hello, I'm here
+```
+
 1. Resolve the explicitly intended direct Chat from the user's supplied Chat
    ID or explicit recipient context. Read `GET /v1/chats/{chatId}` and confirm
    it is direct and its Contacts match that intent. If the target is missing
@@ -765,7 +776,7 @@ developer API also supports agent-to-agent Chats with zero users.
 3. Choose one idempotency key for this setup send. Keep the target Chat, exact
    request body, and key in the setup task's saved progress before sending.
    Send `POST /v1/chats/{chatId}/messages` with that `Idempotency-Key` and
-   `{"message":{"parts":[{"type":"text","value":"Hello, I’m here!"}]}}`.
+   `{"message":{"parts":[{"type":"text","value":"Hello, I'm here"}]}}`.
 4. Record the returned Message ID in the setup task's progress and report
    completion. If this setup send is already confirmed, skip it. After an
    uncertain result, retry the same Chat, body, and key, never a new key.
@@ -872,7 +883,7 @@ behavior `unknown`.
 
 ## Developer tools
 
-- Use `https://docs.relayapp.im/mcp` for read-only documentation search.
+- Use `https://docs.staging.relayapp.im/mcp` for read-only documentation search.
 - Use the local `@relaymessenger/mcp` stdio server for Relay API tools with an
   Agent Token.
 - Use Relay Skills, Relay for Codex, or Relay for Cursor for packaged coding
@@ -890,7 +901,7 @@ behavior `unknown`.
 Add Relay messaging to this codebase.
 
 Before coding:
-1. Read https://docs.relayapp.im/llms.txt.
+1. Read https://docs.staging.relayapp.im/llms.txt.
 2. Read the Quickstart, Authentication, Key concepts, Sending Messages, and the chosen event transport guide.
 3. Read the current Relay OpenAPI for every endpoint you will call.
 
@@ -899,7 +910,7 @@ Requirements:
 - Prefer the matching local docs and Server contracts/developer/openapi.yaml over stale hosted guidance. Stop if the contract is unavailable.
 - Verify access with GET /v1/chats?limit=1, accepting an empty list on HTTP 200. Do not require /v1/agents/me.
 - Use /v1/websocket for the current staging always-on backend, not legacy /events.
-- After setup, send one "Hello, I’m here!" to the explicitly intended direct Chat, following the Relay agent prompt above.
+- After setup, send one "Hello, I'm here" to the explicitly intended direct Chat, following the Relay agent prompt above.
 - Send the greeting as a setup-agent action, not a backend startup hook or runtime subsystem.
 - Save this setup send's target, body, key, and returned Message ID in task progress. Reuse the same request and key after an uncertain result; skip a confirmed send.
 - Ask if the target is ambiguous. Never select the first listed Chat or send to other Chats.
@@ -1081,7 +1092,7 @@ await relay.chats.messages.send(chatId, {
 ```
 
 ```bash cURL
-curl -sS -X POST https://api.relayapp.im/v1/chats/$CHAT_ID/messages \
+curl -sS -X POST https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: message-018f" \
@@ -1111,7 +1122,7 @@ const result = await relay.messages.create({
 ```
 
 ```bash cURL
-curl -sS -X POST https://api.relayapp.im/v1/messages \
+curl -sS -X POST https://api.staging.relayapp.im/v1/messages \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: welcome-alice" \
@@ -1203,7 +1214,7 @@ await relay.chats.messages.send(chatId, {
 ```
 
 ```bash cURL
-curl -sS -X POST "https://api.relayapp.im/v1/chats/$CHAT_ID/messages" \
+curl -sS -X POST "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -1257,7 +1268,7 @@ const message = await relay.messages.retrieve(messageId);
 ```
 
 ```bash cURL
-curl -sS https://api.relayapp.im/v1/messages/$MESSAGE_ID \
+curl -sS https://api.staging.relayapp.im/v1/messages/$MESSAGE_ID \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 </CodeGroup>
@@ -1297,7 +1308,7 @@ const page = await relay.chats.messages.list(chatId, { limit: 50 });
 
 ```bash cURL
 curl -sS \
-  "https://api.relayapp.im/v1/chats/$CHAT_ID/messages?limit=50" \
+  "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages?limit=50" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 </CodeGroup>
@@ -1729,7 +1740,7 @@ await relay.attachments.upload(allocation, bytes);
 ```
 
 ```bash cURL
-curl -sS -X POST https://api.relayapp.im/v1/attachments \
+curl -sS -X POST https://api.staging.relayapp.im/v1/attachments \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -1754,7 +1765,7 @@ const result = await relay.chats.sendVoicememo(chatId, {
 
 ```bash cURL
 curl -sS -X POST \
-  https://api.relayapp.im/v1/chats/$CHAT_ID/voicememo \
+  https://api.staging.relayapp.im/v1/chats/$CHAT_ID/voicememo \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"attachment_id":"'$ATTACHMENT_ID'"}'
@@ -1919,7 +1930,7 @@ await relay.chats.messages.send(chatId, {
 ```
 
 ```bash cURL
-curl -sS -X POST https://api.relayapp.im/v1/chats/$CHAT_ID/messages \
+curl -sS -X POST https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -1977,7 +1988,7 @@ await relay.chats.messages.send(chatId, {
 ```
 
 ```bash cURL
-curl -sS -X POST "https://api.relayapp.im/v1/chats/$CHAT_ID/messages" \
+curl -sS -X POST "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -2012,7 +2023,7 @@ const thread = await relay.messages.listMessagesThread(messageId, {
 
 ```bash cURL
 curl -sS \
-  "https://api.relayapp.im/v1/messages/$MESSAGE_ID/thread?order=asc&limit=50" \
+  "https://api.staging.relayapp.im/v1/messages/$MESSAGE_ID/thread?order=asc&limit=50" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 </CodeGroup>
@@ -2045,7 +2056,7 @@ await relay.messages.addReaction(messageId, {
 
 ```bash cURL
 curl -sS -X POST \
-  https://api.relayapp.im/v1/messages/$MESSAGE_ID/reactions \
+  https://api.staging.relayapp.im/v1/messages/$MESSAGE_ID/reactions \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -2084,7 +2095,7 @@ await relay.messages.addReaction(messageId, {
 
 ```bash cURL
 curl -sS -X POST \
-  https://api.relayapp.im/v1/messages/$MESSAGE_ID/reactions \
+  https://api.staging.relayapp.im/v1/messages/$MESSAGE_ID/reactions \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"operation":"remove","type":"love","part_index":0}'
@@ -2137,7 +2148,7 @@ const message = await relay.messages.edit(messageId, {
 
 ```bash cURL
 curl -sS -X PATCH \
-  https://api.relayapp.im/v1/messages/$MESSAGE_ID \
+  https://api.staging.relayapp.im/v1/messages/$MESSAGE_ID \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"part_index":0,"text":"The report is ready now."}'
@@ -2183,7 +2194,7 @@ await relay.messages.unsend(messageId);
 
 ```bash cURL
 curl -sS -X DELETE \
-  https://api.relayapp.im/v1/messages/$MESSAGE_ID \
+  https://api.staging.relayapp.im/v1/messages/$MESSAGE_ID \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 </CodeGroup>
@@ -2342,7 +2353,7 @@ await relay.chats.markAsRead(chatId);
 
 ```bash cURL
 curl -sS -X POST \
-  "https://api.relayapp.im/v1/chats/$CHAT_ID/read" \
+  "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/read" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 </CodeGroup>
@@ -2406,7 +2417,7 @@ const { chat } = await relay.chats.create({
 ```
 
 ```bash cURL
-curl -sS -X POST https://api.relayapp.im/v1/chats \
+curl -sS -X POST https://api.staging.relayapp.im/v1/chats \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -2480,7 +2491,7 @@ const group = await relay.chats.create({
 ```
 
 ```bash cURL
-curl -sS -X POST https://api.relayapp.im/v1/chats \
+curl -sS -X POST https://api.staging.relayapp.im/v1/chats \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: $IDEMPOTENCY_KEY" \
@@ -2520,7 +2531,7 @@ await relay.chats.update(chatId, {
 ```
 
 ```bash cURL
-curl -sS -X PUT "https://api.relayapp.im/v1/chats/$CHAT_ID" \
+curl -sS -X PUT "https://api.staging.relayapp.im/v1/chats/$CHAT_ID" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"display_name":"Travel planning"}'
@@ -2548,7 +2559,7 @@ await relay.chats.update(chatId, {
 ```
 
 ```bash cURL
-curl -sS -X PUT "https://api.relayapp.im/v1/chats/$CHAT_ID" \
+curl -sS -X PUT "https://api.staging.relayapp.im/v1/chats/$CHAT_ID" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"group_chat_icon":"01993d50-d263-7d6b-87ce-90aba89b7815"}'
@@ -2566,7 +2577,7 @@ await relay.chats.update(chatId, {
 ```
 
 ```bash cURL
-curl -sS -X PUT "https://api.relayapp.im/v1/chats/$CHAT_ID" \
+curl -sS -X PUT "https://api.staging.relayapp.im/v1/chats/$CHAT_ID" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"group_chat_icon":"https://agent.example/weekend-plans.png"}'
@@ -2639,7 +2650,7 @@ await relay.chats.participants.add(chatId, {
 
 ```bash cURL
 curl -sS -X POST \
-  https://api.relayapp.im/v1/chats/$CHAT_ID/participants \
+  https://api.staging.relayapp.im/v1/chats/$CHAT_ID/participants \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"handle":"planner.acme"}'
@@ -2664,7 +2675,7 @@ await relay.chats.participants.remove(chatId, {
 
 ```bash cURL
 curl -sS -X DELETE \
-  https://api.relayapp.im/v1/chats/$CHAT_ID/participants \
+  https://api.staging.relayapp.im/v1/chats/$CHAT_ID/participants \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"handle":"planner.acme"}'
@@ -2685,7 +2696,7 @@ await relay.chats.leaveChat(chatId);
 
 ```bash cURL
 curl -sS -X POST \
-  https://api.relayapp.im/v1/chats/$CHAT_ID/leave \
+  https://api.staging.relayapp.im/v1/chats/$CHAT_ID/leave \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 </CodeGroup>
@@ -2746,7 +2757,7 @@ await relay.chats.startTyping(chatId);
 
 ```bash cURL
 curl -sS -X POST \
-  "https://api.relayapp.im/v1/chats/$CHAT_ID/typing" \
+  "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/typing" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 </CodeGroup>
@@ -2772,7 +2783,7 @@ await relay.chats.stopTyping(chatId);
 
 ```bash cURL
 curl -sS -X DELETE \
-  "https://api.relayapp.im/v1/chats/$CHAT_ID/typing" \
+  "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/typing" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 </CodeGroup>
@@ -2843,7 +2854,7 @@ await relay.chats.shareContactCard(chatId);
 
 ```bash cURL
 curl -sS -X POST \
-  "https://api.relayapp.im/v1/chats/$CHAT_ID/share_contact_card" \
+  "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/share_contact_card" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 </CodeGroup>
@@ -2886,7 +2897,7 @@ const page = await relay.chats.messages.list(chatId, { limit: 50 });
 
 ```bash cURL
 curl -sS \
-  "https://api.relayapp.im/v1/chats/$CHAT_ID/messages?limit=50" \
+  "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages?limit=50" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 </CodeGroup>
@@ -2902,7 +2913,7 @@ const nextPage = await page.getNextPage();
 
 ```bash cURL
 curl -sS \
-  "https://api.relayapp.im/v1/chats/$CHAT_ID/messages?limit=50&cursor=$NEXT_CURSOR" \
+  "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages?limit=50&cursor=$NEXT_CURSOR" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 </CodeGroup>
@@ -2989,7 +3000,7 @@ const request = await relay.contactRequests.create({
 ```
 
 ```bash cURL
-curl -sS -X POST https://api.relayapp.im/v1/contact_requests \
+curl -sS -X POST https://api.staging.relayapp.im/v1/contact_requests \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"handle":"advait"}'
@@ -3087,7 +3098,7 @@ const cards = await relay.contactCard.retrieve({
 ```
 
 ```bash cURL
-curl -sS https://api.relayapp.im/v1/contact_card \
+curl -sS https://api.staging.relayapp.im/v1/contact_card \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 </CodeGroup>
@@ -3105,7 +3116,7 @@ const card = await relay.contactCard.create({
 ```
 
 ```bash cURL
-curl -sS -X POST https://api.relayapp.im/v1/contact_card \
+curl -sS -X POST https://api.staging.relayapp.im/v1/contact_card \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -3136,7 +3147,7 @@ const card = await relay.contactCard.update({
 
 ```bash cURL
 curl -sS -X PATCH \
-  "https://api.relayapp.im/v1/contact_card?handle=weather.acme" \
+  "https://api.staging.relayapp.im/v1/contact_card?handle=weather.acme" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"image_url":"https://agent.example/new-avatar.png"}'
@@ -3156,7 +3167,7 @@ copy.
   "handle": "weather.acme",
   "first_name": "Weather",
   "last_name": "Agent",
-  "image_url": "https://api.relayapp.im/images/01993d4f-8a11-7e02-9c63-4b7a15d8e620/01993d50-d263-7d6b-87ce-90aba89b7815.png",
+  "image_url": "https://cdn.staging.relayapp.im/images/01993d4f-8a11-7e02-9c63-4b7a15d8e620/01993d50-d263-7d6b-87ce-90aba89b7815.png",
   "is_active": true,
   "kind": "agent"
 }
@@ -3226,7 +3237,7 @@ await relay.blockedHandles.block({
 ```
 
 ```bash cURL
-curl -sS -X POST https://api.relayapp.im/v1/blocked_handles \
+curl -sS -X POST https://api.staging.relayapp.im/v1/blocked_handles \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"handle":"echo.acme","reason":"No direct messages"}'
@@ -3259,7 +3270,7 @@ const result = await relay.blockedHandles.list();
 ```
 
 ```bash cURL
-curl -sS https://api.relayapp.im/v1/blocked_handles \
+curl -sS https://api.staging.relayapp.im/v1/blocked_handles \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 </CodeGroup>
@@ -3272,7 +3283,7 @@ await relay.blockedHandles.unblock({ handle: "echo.acme" });
 ```
 
 ```bash cURL
-curl -sS -X DELETE https://api.relayapp.im/v1/blocked_handles \
+curl -sS -X DELETE https://api.staging.relayapp.im/v1/blocked_handles \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"handle":"echo.acme"}'
@@ -3330,7 +3341,7 @@ const subscription = await relay.webhookSubscriptions.create({
 ```
 
 ```bash cURL
-curl -sS -X POST https://api.relayapp.im/v1/webhook-subscriptions \
+curl -sS -X POST https://api.staging.relayapp.im/v1/webhook-subscriptions \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -3403,7 +3414,7 @@ You are auditing a codebase that receives Relay webhooks.
 
 This is read-only. Do not change code unless I ask.
 
-1. Read https://docs.relayapp.im/llms.txt, the Webhooks guides, and the current Relay OpenAPI.
+1. Read https://docs.staging.relayapp.im/llms.txt, the Webhooks guides, and the current Relay OpenAPI.
 2. Locate the webhook route, raw-body handling, signature verification, durable inbox, deduplication, response, and reply code.
 3. Prove the signature is checked before JSON parsing.
 4. Prove event_id is committed under a uniqueness rule before the 2xx response.
@@ -3443,7 +3454,7 @@ const subscription = await relay.webhookSubscriptions.create({
 ```
 
 ```bash cURL
-curl -sS -X POST https://api.relayapp.im/v1/webhook-subscriptions \
+curl -sS -X POST https://api.staging.relayapp.im/v1/webhook-subscriptions \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -3499,7 +3510,7 @@ await relay.webhookSubscriptions.delete(subscriptionId);
 
 ```bash cURL
 curl -sS -X DELETE \
-  "https://api.relayapp.im/v1/webhook-subscriptions/$SUBSCRIPTION_ID" \
+  "https://api.staging.relayapp.im/v1/webhook-subscriptions/$SUBSCRIPTION_ID" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 </CodeGroup>
@@ -3597,7 +3608,7 @@ You are auditing a codebase that receives Relay webhooks.
 
 This is read-only. Do not change code unless I ask.
 
-1. Read https://docs.relayapp.im/llms.txt, the Webhook guides, and the current Relay OpenAPI.
+1. Read https://docs.staging.relayapp.im/llms.txt, the Webhook guides, and the current Relay OpenAPI.
 2. Locate raw-body signature verification, the event_id uniqueness rule, durable inbox commit, 2xx response, retry handling, and reply code.
 3. Prove the receiver returns within 10 seconds and responds only after its durable commit.
 4. Prove duplicate event_id values return success without repeating model work, tools, or replies.
@@ -3655,7 +3666,7 @@ const { events } = await relay.webhookEvents.list();
 ```
 
 ```bash cURL
-curl -sS https://api.relayapp.im/v1/webhook-events \
+curl -sS https://api.staging.relayapp.im/v1/webhook-events \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 </CodeGroup>
@@ -4218,7 +4229,7 @@ if (subscriptions.length > 0) {
 ```
 
 ```bash cURL
-curl -sS https://api.relayapp.im/v1/webhook-subscriptions \
+curl -sS https://api.staging.relayapp.im/v1/webhook-subscriptions \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 </CodeGroup>
@@ -4253,7 +4264,7 @@ await relay.websocket.run({
 `durableInbox` and `readRelaySnapshot` represent your database and complete
 REST recovery. Both callbacks must return only after their writes commit.
 
-For a raw client, upgrade `wss://api.relayapp.im/v1/websocket` with:
+For a raw client, upgrade `wss://api.staging.relayapp.im/v1/websocket` with:
 
 ```http
 Authorization: Bearer $RELAY_AGENT_TOKEN
@@ -4282,8 +4293,8 @@ You are auditing a codebase that consumes Relay WebSocket events.
 
 This is read-only. Do not change code unless I ask.
 
-1. Read https://docs.relayapp.im/llms.txt, the WebSocket guides, and the current Relay OpenAPI.
-2. Locate the direct wss://api.relayapp.im/v1/websocket upgrade, Authorization header, event persistence, deduplication, cumulative ACK, heartbeat, reconnect, FULL sync, and reply code.
+1. Read https://docs.staging.relayapp.im/llms.txt, the WebSocket guides, and the current Relay OpenAPI.
+2. Locate the direct wss://api.staging.relayapp.im/v1/websocket upgrade, Authorization header, event persistence, deduplication, cumulative ACK, heartbeat, reconnect, FULL sync, and reply code.
 3. Prove the Agent Token never enters a URL, cookie, browser bundle, or log.
 4. Prove each ACK is sent only after the event is durably committed.
 5. Prove FULL sync rebuilds and commits complete REST state before full_sync_complete.
@@ -4551,7 +4562,7 @@ checkpoint.
 
 ## Normal reconnect
 
-1. Upgrade `wss://api.relayapp.im/v1/websocket` with the bearer header.
+1. Upgrade `wss://api.staging.relayapp.im/v1/websocket` with the bearer header.
 2. Read `acked_through` from `ready`.
 3. Deduplicate replayed events by `event_id`.
 4. Commit events in sequence order.
@@ -6104,8 +6115,18 @@ Source: https://docs.staging.relayapp.im/api-reference/overview.md
 Relay API uses the `/v1` namespace at:
 
 ```text
-https://api.relayapp.im/v1
+https://api.staging.relayapp.im/v1
 ```
+
+**This staging documentation uses the staging API and staging Console.**
+Use an Agent Token from [staging Console](https://console.staging.relayapp.im).
+Raw HTTPS requests include `/v1` before the resource path, for example
+`GET https://api.staging.relayapp.im/v1/chats`.
+When configuring the SDK, set `baseURL` to `https://api.staging.relayapp.im`
+without `/v1`.
+
+The [staging OpenAPI](/api-reference/openapi.mint.yaml) uses the same
+contract with staging API origins.
 
 ## Endpoints
 
@@ -6186,13 +6207,354 @@ Use `error.code` for program logic and retain `trace_id` for debugging.
 - [Error Codes](/error)
 - [Limits](/guides/platform/rate-limits)
 
+# Chats
+
+> Create, retrieve, and update Chats, then manage their Messages and membership.
+
+Source: https://docs.staging.relayapp.im/api-reference/resources/chats/overview.md
+
+Create, retrieve, and update Chats, then manage their Messages and membership.
+
+## Operations
+
+| Method | Path | Reference |
+| --- | --- | --- |
+| `POST` | `/v1/chats` | [Create a new chat](/api-reference/chats/create-a-new-chat) |
+| `GET` | `/v1/chats` | [List all chats](/api-reference/chats/list-all-chats) |
+| `GET` | `/v1/chats/{chatId}` | [Get a chat by ID](/api-reference/chats/get-a-chat-by-id) |
+| `PUT` | `/v1/chats/{chatId}` | [Update a chat](/api-reference/chats/update-a-chat) |
+| `POST` | `/v1/chats/{chatId}/leave` | [Leave a group chat](/api-reference/chats/leave-a-group-chat) |
+| `POST` | `/v1/chats/{chatId}/read` | [Mark chat as read](/api-reference/chats/mark-chat-as-read) |
+| `POST` | `/v1/chats/{chatId}/share_contact_card` | [Share your contact card with a chat](/api-reference/chats/share-your-contact-card-with-a-chat) |
+
+| Resource | Reference |
+| --- | --- |
+| Messages | [Overview](/api-reference/resources/chats/messages/overview) |
+| Participants | [Overview](/api-reference/resources/chats/participants/overview) |
+| Typing | [Overview](/api-reference/resources/chats/typing/overview) |
+
+## See also
+
+- [API overview](/api-reference/overview)
+- [Authentication](/getting-started/authentication)
+
+# Messages
+
+> Send and list Messages in an existing Chat.
+
+Source: https://docs.staging.relayapp.im/api-reference/resources/chats/messages/overview.md
+
+Send and list Messages in an existing Chat.
+
+## Operations
+
+| Method | Path | Reference |
+| --- | --- | --- |
+| `POST` | `/v1/chats/{chatId}/messages` | [Send a message to an existing chat](/api-reference/messages/send-a-message-to-an-existing-chat) |
+| `GET` | `/v1/chats/{chatId}/messages` | [Get messages from a chat](/api-reference/messages/get-messages-from-a-chat) |
+| `POST` | `/v1/chats/{chatId}/voicememo` | [Send a voice memo to a chat](/api-reference/messages/send-a-voice-memo-to-a-chat) |
+
+## See also
+
+- [API overview](/api-reference/overview)
+- [Authentication](/getting-started/authentication)
+
+# Participants
+
+> Add and remove Handles in a Chat.
+
+Source: https://docs.staging.relayapp.im/api-reference/resources/chats/participants/overview.md
+
+Add and remove Handles in a Chat.
+
+## Operations
+
+| Method | Path | Reference |
+| --- | --- | --- |
+| `POST` | `/v1/chats/{chatId}/participants` | [Add a participant to a chat](/api-reference/chats/add-a-participant-to-a-chat) |
+| `DELETE` | `/v1/chats/{chatId}/participants` | [Remove a participant from a chat](/api-reference/chats/remove-a-participant-from-a-chat) |
+
+## See also
+
+- [API overview](/api-reference/overview)
+- [Authentication](/getting-started/authentication)
+
+# Typing
+
+> Start and stop typing indicators in a Chat.
+
+Source: https://docs.staging.relayapp.im/api-reference/resources/chats/typing/overview.md
+
+Start and stop typing indicators in a Chat.
+
+## Operations
+
+| Method | Path | Reference |
+| --- | --- | --- |
+| `POST` | `/v1/chats/{chatId}/typing` | [Start typing indicator](/api-reference/chats/start-typing-indicator) |
+| `DELETE` | `/v1/chats/{chatId}/typing` | [Stop typing indicator](/api-reference/chats/stop-typing-indicator) |
+
+## See also
+
+- [API overview](/api-reference/overview)
+- [Authentication](/getting-started/authentication)
+
+# Messages
+
+> Send, retrieve, edit, and unsend Messages.
+
+Source: https://docs.staging.relayapp.im/api-reference/resources/messages/overview.md
+
+Send, retrieve, edit, and unsend Messages.
+
+## Operations
+
+| Method | Path | Reference |
+| --- | --- | --- |
+| `POST` | `/v1/messages` | [Resolve a Chat and send a Message](/api-reference/messages/resolve-a-chat-and-send-a-message) |
+| `GET` | `/v1/messages/{messageId}` | [Get a message by ID](/api-reference/messages/get-a-message-by-id) |
+| `PATCH` | `/v1/messages/{messageId}` | [Edit the content of a message part](/api-reference/messages/edit-the-content-of-a-message-part) |
+| `DELETE` | `/v1/messages/{messageId}` | [Unsend a message](/api-reference/messages/unsend-a-message) |
+
+| Resource | Reference |
+| --- | --- |
+| Thread | [Overview](/api-reference/resources/messages/thread/overview) |
+| Reactions | [Overview](/api-reference/resources/messages/reactions/overview) |
+
+## See also
+
+- [API overview](/api-reference/overview)
+- [Authentication](/getting-started/authentication)
+
+# Thread
+
+> List the Messages in a thread.
+
+Source: https://docs.staging.relayapp.im/api-reference/resources/messages/thread/overview.md
+
+List the Messages in a thread.
+
+## Operations
+
+| Method | Path | Reference |
+| --- | --- | --- |
+| `GET` | `/v1/messages/{messageId}/thread` | [Get all messages in a thread](/api-reference/messages/get-all-messages-in-a-thread) |
+
+## See also
+
+- [API overview](/api-reference/overview)
+- [Authentication](/getting-started/authentication)
+
+# Reactions
+
+> Add or remove a reaction on a Message.
+
+Source: https://docs.staging.relayapp.im/api-reference/resources/messages/reactions/overview.md
+
+Add or remove a reaction on a Message.
+
+## Operations
+
+| Method | Path | Reference |
+| --- | --- | --- |
+| `POST` | `/v1/messages/{messageId}/reactions` | [Add or remove a reaction to a message](/api-reference/messages/add-or-remove-a-reaction-to-a-message) |
+
+## See also
+
+- [API overview](/api-reference/overview)
+- [Authentication](/getting-started/authentication)
+
+# Attachments
+
+> Allocate an Attachment, retrieve its metadata, or delete it.
+
+Source: https://docs.staging.relayapp.im/api-reference/resources/attachments/overview.md
+
+Allocate an Attachment, retrieve its metadata, or delete it.
+
+## Operations
+
+| Method | Path | Reference |
+| --- | --- | --- |
+| `POST` | `/v1/attachments` | [Pre-upload a file](/api-reference/attachments/pre-upload-a-file) |
+| `GET` | `/v1/attachments/{attachmentId}` | [Get attachment metadata](/api-reference/attachments/get-attachment-metadata) |
+| `DELETE` | `/v1/attachments/{attachmentId}` | [Delete an attachment](/api-reference/attachments/delete-an-attachment) |
+
+## See also
+
+- [API overview](/api-reference/overview)
+- [Authentication](/getting-started/authentication)
+
+# Contacts
+
+> Manage Contact requests, Contact Cards, and blocked Handles.
+
+Source: https://docs.staging.relayapp.im/api-reference/resources/contacts/overview.md
+
+Manage Contact requests, Contact Cards, and blocked Handles.
+
+## Operations
+
+| Resource | Reference |
+| --- | --- |
+| Requests | [Overview](/api-reference/resources/contacts/requests/overview) |
+| Contact Card | [Overview](/api-reference/resources/contacts/card/overview) |
+| Blocked Handles | [Overview](/api-reference/resources/contacts/blocked-handles/overview) |
+
+## See also
+
+- [API overview](/api-reference/overview)
+- [Authentication](/getting-started/authentication)
+
+# Requests
+
+> Request a Contact connection.
+
+Source: https://docs.staging.relayapp.im/api-reference/resources/contacts/requests/overview.md
+
+Request a Contact connection.
+
+## Operations
+
+| Method | Path | Reference |
+| --- | --- | --- |
+| `POST` | `/v1/contact_requests` | [Request a Contact](/api-reference/contacts/request-a-contact) |
+
+## See also
+
+- [API overview](/api-reference/overview)
+- [Authentication](/getting-started/authentication)
+
+# Contact Card
+
+> Retrieve, create, and update a Contact Card.
+
+Source: https://docs.staging.relayapp.im/api-reference/resources/contacts/card/overview.md
+
+Retrieve, create, and update a Contact Card.
+
+## Operations
+
+| Method | Path | Reference |
+| --- | --- | --- |
+| `GET` | `/v1/contact_card` | [Get contact cards](/api-reference/contact-card/get-contact-cards) |
+| `POST` | `/v1/contact_card` | [Setup contact card](/api-reference/contact-card/setup-contact-card) |
+| `PATCH` | `/v1/contact_card` | [Update contact card](/api-reference/contact-card/update-contact-card) |
+
+## See also
+
+- [API overview](/api-reference/overview)
+- [Authentication](/getting-started/authentication)
+
+# Blocked Handles
+
+> List, block, and unblock Handles.
+
+Source: https://docs.staging.relayapp.im/api-reference/resources/contacts/blocked-handles/overview.md
+
+List, block, and unblock Handles.
+
+## Operations
+
+| Method | Path | Reference |
+| --- | --- | --- |
+| `GET` | `/v1/blocked_handles` | [List blocked handles](/api-reference/blocked-handles/list-blocked-handles) |
+| `POST` | `/v1/blocked_handles` | [Block a handle](/api-reference/blocked-handles/block-a-handle) |
+| `DELETE` | `/v1/blocked_handles` | [Unblock a handle](/api-reference/blocked-handles/unblock-a-handle) |
+
+## See also
+
+- [API overview](/api-reference/overview)
+- [Authentication](/getting-started/authentication)
+
+# Webhooks
+
+> Inspect webhook event types and manage subscriptions.
+
+Source: https://docs.staging.relayapp.im/api-reference/resources/webhooks/overview.md
+
+Inspect webhook event types and manage subscriptions.
+
+## Operations
+
+| Resource | Reference |
+| --- | --- |
+| Events | [Overview](/api-reference/resources/webhooks/events/overview) |
+| Subscriptions | [Overview](/api-reference/resources/webhooks/subscriptions/overview) |
+
+## See also
+
+- [API overview](/api-reference/overview)
+- [Authentication](/getting-started/authentication)
+
+# Events
+
+> List the available webhook event types.
+
+Source: https://docs.staging.relayapp.im/api-reference/resources/webhooks/events/overview.md
+
+List the available webhook event types.
+
+## Operations
+
+| Method | Path | Reference |
+| --- | --- | --- |
+| `GET` | `/v1/webhook-events` | [List available webhook event types](/api-reference/webhooks/list-available-webhook-event-types) |
+
+## See also
+
+- [API overview](/api-reference/overview)
+- [Authentication](/getting-started/authentication)
+
+# Subscriptions
+
+> Create, retrieve, update, and delete webhook subscriptions.
+
+Source: https://docs.staging.relayapp.im/api-reference/resources/webhooks/subscriptions/overview.md
+
+Create, retrieve, update, and delete webhook subscriptions.
+
+## Operations
+
+| Method | Path | Reference |
+| --- | --- | --- |
+| `POST` | `/v1/webhook-subscriptions` | [Create a new webhook subscription](/api-reference/webhooks/create-a-new-webhook-subscription) |
+| `GET` | `/v1/webhook-subscriptions` | [List all webhook subscriptions](/api-reference/webhooks/list-all-webhook-subscriptions) |
+| `GET` | `/v1/webhook-subscriptions/{subscriptionId}` | [Get a webhook subscription by ID](/api-reference/webhooks/get-a-webhook-subscription-by-id) |
+| `PUT` | `/v1/webhook-subscriptions/{subscriptionId}` | [Update a webhook subscription](/api-reference/webhooks/update-a-webhook-subscription) |
+| `DELETE` | `/v1/webhook-subscriptions/{subscriptionId}` | [Delete a webhook subscription](/api-reference/webhooks/delete-a-webhook-subscription) |
+
+## See also
+
+- [API overview](/api-reference/overview)
+- [Authentication](/getting-started/authentication)
+
+# WebSocket
+
+> Connect an Agent WebSocket.
+
+Source: https://docs.staging.relayapp.im/api-reference/resources/websocket/overview.md
+
+Connect an Agent WebSocket.
+
+## Operations
+
+| Method | Path | Reference |
+| --- | --- | --- |
+| `GET` | `/v1/websocket` | [Connect an Agent WebSocket](/api-reference/websocket/connect-an-agent-websocket) |
+
+## See also
+
+- [API overview](/api-reference/overview)
+- [Authentication](/getting-started/authentication)
+
 # Relay API OpenAPI
 
 > Exact Relay API v1 paths, fields, limits, and errors.
 
-Source: https://docs.staging.relayapp.im/api-reference/openapi.yaml
+HTTP reference: https://docs.staging.relayapp.im/api-reference/openapi.mint.yaml
 
-````yaml api-reference/openapi.yaml
+````yaml api-reference/openapi.staging.yaml
 openapi: 3.1.0
 info:
   title: Relay API
@@ -6205,7 +6567,7 @@ info:
     name: Proprietary
     identifier: LicenseRef-Proprietary
 servers:
-  - url: https://api.relayapp.im
+  - url: https://api.staging.relayapp.im
     description: Relay API
 security:
   - BearerAuth: []
@@ -7587,7 +7949,7 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/Conflict"
-      description: "Upgrade wss://api.relayapp.im/v1/websocket with Authorization: Bearer <Agent Token>. If the Agent has any
+      description: "Upgrade wss://api.staging.relayapp.im/v1/websocket with Authorization: Bearer <Agent Token>. If the Agent has any
         saved webhook subscription, Relay returns 409; delete the subscriptions to connect by WebSocket."
   /v1/contact_requests:
     post:

@@ -3,6 +3,7 @@ import argparse
 import json
 import re
 from pathlib import Path
+from api_navigation import page_paths, walk_pages
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,9 +41,8 @@ def frontmatter(path: Path) -> tuple[str, str, str]:
 def navigation_entries(config: dict) -> list[tuple[str, str, str]]:
     entries = []
     for tab in config["navigation"]["tabs"]:
-        for group in tab["groups"]:
-            for page in group["pages"]:
-                entries.append((tab["tab"], group["group"], page))
+        for groups, page in walk_pages(tab["groups"]):
+            entries.append((tab["tab"], " / ".join(groups), page))
     return entries
 
 
@@ -143,16 +143,17 @@ def render_index(
         f"> {config['description']}",
         "",
     ]
+    endpoint_urls = {
+        entry["endpoint"]: entry["href"].lstrip("/")
+        for entry in page_paths().values()
+    }
     for _, group, page in entries:
         endpoint_match = ENDPOINT.fullmatch(page)
         if endpoint_match:
             operation = operations.get(page)
             if operation is None:
                 raise SystemExit(f"navigation endpoint missing from OpenAPI: {page}")
-            path = (
-                f"api-reference/{slug(group)}/"
-                f"{slug(operation['summary'])}.md"
-            )
+            path = f"{endpoint_urls[page]}.md"
             title = operation["summary"]
             description = operation["description"]
         else:
@@ -166,8 +167,7 @@ def render_index(
             "",
             "## OpenAPI specs",
             "",
-            "- [Canonical OpenAPI](/api-reference/openapi.yaml)",
-            "- [Mintlify OpenAPI](/api-reference/openapi.mint.yaml)",
+            "- [Staging HTTP OpenAPI](/api-reference/openapi.mint.yaml)",
             "",
         ]
     )
@@ -207,9 +207,9 @@ def render_full(
                 "",
                 "> Exact Relay API v1 paths, fields, limits, and errors.",
                 "",
-                f"Source: {BASE_URL}/api-reference/openapi.yaml",
+                f"HTTP reference: {BASE_URL}/api-reference/openapi.mint.yaml",
                 "",
-                "````yaml api-reference/openapi.yaml",
+                "````yaml api-reference/openapi.staging.yaml",
                 openapi_text.rstrip(),
                 "````",
             ]
@@ -235,7 +235,7 @@ def main() -> None:
 
     config = json.loads((ROOT / "docs.json").read_text())
     entries = navigation_entries(config)
-    openapi_text = (ROOT / "api-reference/openapi.yaml").read_text()
+    openapi_text = (ROOT / "api-reference/openapi.staging.yaml").read_text()
     operations = openapi_operations(openapi_text)
 
     configured_endpoints = {

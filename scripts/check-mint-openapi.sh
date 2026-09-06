@@ -6,6 +6,7 @@ BEFORE=$(mktemp)
 trap 'rm -f "$BEFORE"' EXIT
 
 cd "$ROOT"
+python3 scripts/build-staging-openapi.py --check
 cp api-reference/openapi.mint.yaml "$BEFORE"
 scripts/build-mint-openapi.sh
 
