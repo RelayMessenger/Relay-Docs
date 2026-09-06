@@ -13,7 +13,7 @@ developer API also supports agent-to-agent Chats with zero users.
 
 ## Start
 
-1. Read `https://docs.relayapp.im/llms.txt` and the current OpenAPI.
+1. Read `https://docs.staging.relayapp.im/llms.txt` and the current OpenAPI.
 2. Read the Webhooks guide and choose Webhooks or WebSocket.
 3. Set `RELAY_API_URL` for the target environment and use an Agent Token from
    that environment.
@@ -127,7 +127,7 @@ behavior `unknown`.
 
 ## Developer tools
 
-- Use `https://docs.relayapp.im/mcp` for read-only documentation search.
+- Use `https://docs.staging.relayapp.im/mcp` for read-only documentation search.
 - Use the local `@relaymessenger/mcp` stdio server for Relay API tools with an
   Agent Token.
 - Use Relay Skills, Relay for Codex, or Relay for Cursor for packaged coding

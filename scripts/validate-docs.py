@@ -58,7 +58,7 @@ if hashlib.sha256((root / "favicon.png").read_bytes()).hexdigest() != (
 if config.get("navbar", {}).get("primary") != {
     "type": "button",
     "label": "Console",
-    "href": "https://console.relayapp.im",
+    "href": "https://console.staging.relayapp.im",
 }:
     raise SystemExit("top-right docs action must open Relay Console")
 if config.get("navbar", {}).get("links") != [
@@ -870,10 +870,10 @@ if not re.search(
     raise SystemExit("Contact Card sharing guide must state that the route is bodyless")
 
 contact_text = (root / "guides/contact-cards.mdx").read_text()
-if not re.search(r"\bPOST https://api\.relayapp\.im/v1/contact_card\b", contact_text):
+if not re.search(r"\bPOST https://api\.staging\.relayapp\.im/v1/contact_card\b", contact_text):
     raise SystemExit("Contact Card configuration guide lost POST /v1/contact_card")
 if not re.search(
-    r"\bPATCH\b[\s\S]{0,100}api\.relayapp\.im/v1/contact_card\?handle=",
+    r"\bPATCH\b[\s\S]{0,100}api\.staging\.relayapp\.im/v1/contact_card\?handle=",
     contact_text,
 ):
     raise SystemExit("Contact Card configuration guide lost its PATCH operation")
@@ -883,7 +883,7 @@ for required in [
     "Username-scoped Handle",
     "Premium Handle",
     "relay.contactRequests.create",
-    "POST https://api.relayapp.im/v1/contact_requests",
+    "POST https://api.staging.relayapp.im/v1/contact_requests",
     '"state": "pending"',
     "`402`",
     "`contact.added`",
@@ -1015,7 +1015,7 @@ for required in [
         raise SystemExit(f"final event path decision is missing: {required}")
 for forbidden in [
     "relay.websocket.update",
-    "PUT https://api.relayapp.im/v1/websocket",
+    "PUT https://api.staging.relayapp.im/v1/websocket",
     '{"enabled":true}',
     '{"enabled":false}',
     "WebSocket is enabled",
@@ -1057,7 +1057,7 @@ if "`stale_connection`" not in websocket_protocol_text:
 if "A fatal error ends consumption" not in websocket_protocol_text:
     raise SystemExit("WebSocket protocol lost fatal error handling")
 for required in [
-    "wss://api.relayapp.im/v1/websocket",
+    "wss://api.staging.relayapp.im/v1/websocket",
     "Authorization: Bearer $RELAY_AGENT_TOKEN",
     "Agent Token",
     "multiple connected sockets",

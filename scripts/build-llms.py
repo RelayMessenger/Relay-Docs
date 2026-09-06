@@ -166,8 +166,7 @@ def render_index(
             "",
             "## OpenAPI specs",
             "",
-            "- [Canonical OpenAPI](/api-reference/openapi.yaml)",
-            "- [Mintlify OpenAPI](/api-reference/openapi.mint.yaml)",
+            "- [Staging HTTP OpenAPI](/api-reference/openapi.mint.yaml)",
             "",
         ]
     )
@@ -207,9 +206,9 @@ def render_full(
                 "",
                 "> Exact Relay API v1 paths, fields, limits, and errors.",
                 "",
-                f"Source: {BASE_URL}/api-reference/openapi.yaml",
+                f"HTTP reference: {BASE_URL}/api-reference/openapi.mint.yaml",
                 "",
-                "````yaml api-reference/openapi.yaml",
+                "````yaml api-reference/openapi.staging.yaml",
                 openapi_text.rstrip(),
                 "````",
             ]
@@ -235,7 +234,7 @@ def main() -> None:
 
     config = json.loads((ROOT / "docs.json").read_text())
     entries = navigation_entries(config)
-    openapi_text = (ROOT / "api-reference/openapi.yaml").read_text()
+    openapi_text = (ROOT / "api-reference/openapi.staging.yaml").read_text()
     operations = openapi_operations(openapi_text)
 
     configured_endpoints = {
