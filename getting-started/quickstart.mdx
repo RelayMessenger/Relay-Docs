@@ -1,16 +1,16 @@
 ---
 title: "Quickstart"
-description: "Receive one user Message through a webhook and send one reply."
+description: "Connect an agent backend, send one setup greeting, and reply to Messages."
 keywords: ["quickstart", "Agent Token", "webhook", "reply"]
 ---
 
-Connect an agent backend, receive one user Message, and send one reply.
+Connect an agent backend, send one setup greeting to the intended direct Chat, and reply to Messages.
 
 ## Prerequisites
 
 - An agent created in [Relay Console](https://console.relayapp.im)
 - The Agent Token shown when you create it
-- A public HTTPS endpoint
+- An always-on backend for WebSocket, or a public HTTPS endpoint for Webhooks
 - A durable database or queue for incoming events
 
 ## 1. Set your credentials
@@ -19,6 +19,22 @@ Connect an agent backend, receive one user Message, and send one reply.
 export RELAY_API_URL="https://api.relayapp.im"
 export RELAY_AGENT_TOKEN="<agent-token>"
 ```
+
+**Pair the API root with an Agent Token from that environment's Console.**
+For staging, replace the production root above with your staging API root and
+use its staging token. Read the matching local docs and current Server
+`contracts/developer/openapi.yaml` when integrating a staging checkout.
+
+Verify access with a small read:
+
+```bash
+curl -sS --fail-with-body "$RELAY_API_URL/v1/chats?limit=1" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+HTTP `200` verifies this read even if `chats` is empty. Select the greeting's
+recipient separately with the setup prompt in step 5. For `401`, check the
+environment/token pair and token validity before continuing.
 
 ## 2. Choose the SDK or HTTPS
 
@@ -33,6 +49,7 @@ export RELAY_AGENT_TOKEN="<agent-token>"
 
     const relay = new Relay({
       apiKey: process.env.RELAY_AGENT_TOKEN!,
+      baseURL: process.env.RELAY_API_URL!,
     });
     ```
   </Tab>
@@ -41,7 +58,14 @@ export RELAY_AGENT_TOKEN="<agent-token>"
   </Tab>
 </Tabs>
 
-## 3. Create a webhook subscription
+## 3. Connect the event path
+
+For an always-on backend, follow the [WebSocket guide](/guides/websocket) to
+connect to `/v1/websocket` on the configured API host using `wss://` and the
+bearer header. The saved webhook subscription list must be empty. Finish the
+guide's durable inbox, ACK, and recovery setup, then continue at step 5.
+
+For a public HTTPS receiver, create a webhook subscription and follow step 4:
 
 <CodeGroup>
 ```typescript TypeScript SDK
@@ -122,7 +146,13 @@ await inbox.insertOnce(event.event_id, event);
 return new Response(null, { status: 204 });
 ```
 
-## 5. Mark Read and reply
+## 5. Finish setup with your coding agent
+
+Use the [Relay agent prompt](/getting-started/ai-agents#relay-agent-prompt)
+to finish setup and send one greeting to your intended direct Chat. The
+setup agent performs this step once; your backend handles incoming Messages.
+
+## 6. Mark Read and reply
 
 Read is optional. It advances only through
 `POST /v1/chats/{chatId}/read`. Call that route when the agent reads the

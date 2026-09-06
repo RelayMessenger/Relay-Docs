@@ -13,18 +13,44 @@ developer API also supports agent-to-agent Chats with zero users.
 
 ## Start
 
-1. Read `https://docs.relayapp.im/llms.txt` and the current OpenAPI.
-2. Read the Webhooks guide and choose Webhooks or WebSocket.
-3. Set `RELAY_API_URL` for the target environment and use an Agent Token from
-   that environment.
-4. Store the Agent Token in server-side secret storage.
-5. Configure the selected event path.
-6. Commit each `event_id` once in durable storage before sending a Webhook
-   `2xx` or WebSocket ACK.
-7. Run model and tool work after acknowledgment.
-8. Optionally mark the Chat Read only through
-   `POST /v1/chats/{chatId}/read`.
-9. Reply through `POST /v1/chats/{chatId}/messages` with a stable idempotency key.
+1. Read the target environment's current OpenAPI and matching local docs first.
+   In a Relay workspace, use `Relay-Server/contracts/developer/openapi.yaml`.
+   Use `https://docs.relayapp.im/llms.txt` as an index, not as authority over a
+   newer local contract. If the contract cannot be read, stop and report unknown.
+2. Pair `RELAY_API_URL` with an Agent Token created in that environment's
+   Console. Staging and production credentials belong with their respective
+   API roots. Store the token in server-side secret storage, never logs.
+3. Verify access with `GET /v1/chats?limit=1`. HTTP `200`, including an empty
+   `chats` array, verifies this read. Do not require `/v1/agents/me` or invent
+   an identity endpoint. This read does not select a greeting recipient.
+4. Read the matching WebSocket or Webhooks guide. For the current staging
+   always-on backend, use `/v1/websocket`, not legacy `/events` guidance.
+   WebSocket requires zero saved webhook subscriptions; do not create a
+   subscription as a WebSocket setup step or delete existing ones silently.
+5. Commit each `event_id` once in durable storage before sending a Webhook
+   `2xx` or WebSocket ACK. Run model and tool work after acknowledgment.
+6. After the backend and event path are ready, send one setup greeting using
+   the workflow below. Do not wait for an inbound Message to send it.
+7. Optionally mark the Chat Read only through `POST /v1/chats/{chatId}/read`.
+   Reply through `POST /v1/chats/{chatId}/messages` with a stable idempotency key.
+
+## Send the setup greeting once
+
+1. Resolve the explicitly intended direct Chat from the user's supplied Chat
+   ID or explicit recipient context. Read `GET /v1/chats/{chatId}` and confirm
+   it is direct and its Contacts match that intent. If the target is missing
+   or ambiguous, ask for it and leave the greeting pending. Never choose the
+   first or most recent Chat, a group, or every Chat returned by a list call.
+2. This is a setup-agent action, not a backend startup hook. Do not add an
+   automatic greeting feature or a runtime greeting subsystem.
+3. Choose one idempotency key for this setup send. Keep the target Chat, exact
+   request body, and key in the setup task's saved progress before sending.
+   Send `POST /v1/chats/{chatId}/messages` with that `Idempotency-Key` and
+   `{"message":{"parts":[{"type":"text","value":"Hello, I’m here!"}]}}`.
+4. Record the returned Message ID in the setup task's progress and report
+   completion. If this setup send is already confirmed, skip it. After an
+   uncertain result, retry the same Chat, body, and key, never a new key.
+   Do not send another greeting on backend restarts or send it to other Chats.
 
 ## Vocabulary
 

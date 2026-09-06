@@ -1619,6 +1619,26 @@ for name, pattern in {
     if re.search(pattern, handwritten_text, re.I):
         raise SystemExit(f"stale {name}")
 
+# Setup greetings are operator actions, not a restored product lifecycle.
+setup_greeting_pages = {
+    "skill.md", ".mintlify/skills/relay/SKILL.md",
+    "getting-started/quickstart.mdx", "getting-started/authentication.mdx",
+    "getting-started/ai-agents.mdx",
+}
+for path in handwritten_paths:
+    if (path.relative_to(root).as_posix() not in setup_greeting_pages
+            and re.search(r"\bgreeting(?:s)?\b", path.read_text(), re.I)):
+        raise SystemExit(f"greeting behavior outside setup: {path.relative_to(root)}")
+for required in [
+    "GET /v1/chats?limit=1", "Do not require `/v1/agents/me`",
+    "not a backend startup hook", "setup task's saved progress",
+    "retry the same Chat, body, and key", "explicitly intended direct Chat",
+]:
+    if required not in skill_text:
+        raise SystemExit(f"setup prompt lost safety guidance: {required}")
+if "setup agent performs this step once" not in (root / "getting-started/quickstart.mdx").read_text():
+    raise SystemExit("Quickstart lost setup-agent greeting ownership")
+
 for name, pattern in {
     "Socket Mode product name": r"\bSocket Mode\b",
     "agent installation lifecycle": r"\bagent installation\b|\binstalled agents?\b|\binstall agents?\b",
@@ -1631,7 +1651,7 @@ for name, pattern in {
     "old public status language": r"current-status|Current status|known contract residue|local proof|evidence app",
     "old WebSocket handshake": r"/v1/websocket-connections|relay_ticket_|relay\.v1\.json|\?ticket=",
     "source-company language": source_company_pattern,
-    "removed greeting behavior": r"\bgreeting(?:_message|s)?\b",
+    "removed greeting field": r"\bgreeting_message\b",
     "removed Broadcast feature": r"\bbroadcasts?\b",
     "removed Proactive feature": r"\bproactive\b",
     "MFA surface": r"\bMFA\b",

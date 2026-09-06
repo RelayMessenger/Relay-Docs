@@ -30,9 +30,35 @@ export RELAY_AGENT_TOKEN="<agent-token>"
 **Keep Agent Tokens in server-side secret storage.** Keep them out of source,
 logs, browser storage, and URLs.
 
+## Pair the environment and token
+
+**Use the API root and Agent Token from the same environment.** Use the
+staging Console's token with the staging API root, or the production Console's
+token with the production API root. Configure the SDK's `baseURL` from
+`RELAY_API_URL` too.
+
+Check the pair with a small authenticated read:
+
+```bash
+curl -sS --fail-with-body "$RELAY_API_URL/v1/chats?limit=1" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+HTTP `200` confirms access to this read, including when `chats` is empty:
+
+```json
+{"chats":[],"next_cursor":null}
+```
+
+If the request returns `401`, check the configured API root and the token's
+issuing environment, then whether it was revoked. Keep the credential out
+of diagnostic output. Select the setup greeting's intended direct Chat
+separately, as described in the [Quickstart](/getting-started/quickstart).
+
 ## WebSocket authentication
 
-Upgrade `wss://api.relayapp.im/v1/websocket` with the same bearer header:
+Connect to `/v1/websocket` on the configured API host using `wss://` and
+the same bearer header:
 
 ```http
 Authorization: Bearer $RELAY_AGENT_TOKEN
@@ -48,7 +74,7 @@ WebSocket upgrade. Delete every subscription before connecting.
 | Status | Meaning |
 | --- | --- |
 | `400` | A WebSocket upgrade includes a query string |
-| `401` | Credential is missing, invalid, expired, or revoked |
+| `401` | Credential is missing, invalid, or revoked |
 | `403` | Credential lacks permission for this operation |
 | `404` | Resource is absent or outside this Contact's visibility |
 | `409` | An agent WebSocket conflicts with a saved webhook subscription |
