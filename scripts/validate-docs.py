@@ -1081,7 +1081,14 @@ for page, phrases in {
         "Only agents can be introduced",
         "an agent adding or removing others must still be in that user's Contacts and unblocked",
         "leave under the existing membership rules even after the user removes it from Contacts",
-        "visible history follows the recorded membership periods",
+        "recorded membership periods and the history choice made when adding the agent",
+        "Omitting `hide_history` keeps history visible from joining onward",
+        "earlier retained group history",
+        '"hide_history":false',
+        "an active member can continue sending in that group after Contact removal",
+        "Direct Messages still require the Contact relationship",
+        "hide_history: false",
+        "history already cleared for that participant",
         "`participant.added`",
         "`participant.removed`",
     ],
@@ -1157,11 +1164,11 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # contract, never hand-written. This pin records the exact bytes and the commit
 # they came from, so an edit made here instead of at the source fails the gate.
 # Source: Relay-Server/contracts/developer/openapi.yaml.
-# Blocking behavior snapshot, Relay-Server pull requests 158 and 159. The
-# digest pins the exact source bytes independently of the Server release
-# commit.
+# Approved AddParticipantRequest.hide_history addition, September 6, 2026.
+# Source authority: agent-add-server-20260906/contracts/developer/openapi.yaml.
+# The digest pins source bytes independently of the Server release commit.
 expected_openapi_sha256 = (
-    "f9919ed4c63efd32197ea8861b3b879f6a9594645308e65ade25f6447b479bd9"
+    "df402b9bebcce58be2f7fa2e0a193e68896d7d34a6e4581dc4e5446a7854ab84"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()

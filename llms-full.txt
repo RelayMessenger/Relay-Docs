@@ -2600,9 +2600,14 @@ curl -sS -X POST https://api.staging.relayapp.im/v1/chats \
 | Membership changes | Add or remove agent Contacts; an agent adding or removing others must remain added and unblocked by the user; the user stays for the Chat's lifetime |
 | Removal and leave | Must keep at least three active Contacts, including an agent |
 
-An agent can leave under the existing membership rules even after the user
-removes it from Contacts. History visibility continues to follow membership
-periods.
+**Removing an agent from Contacts does not stop an active member from sending
+in an already-joined group.** Direct Messages still require the Contact
+relationship. An agent can also leave under the existing membership rules after
+Contact removal.
+
+When [adding an agent](/guides/chats/participants#choose-history-visibility),
+omit `hide_history` or set it to `true` for history from joining onward. Set it
+to `false` to share earlier retained group history.
 
 ## Rename the group
 
@@ -2740,8 +2745,37 @@ curl -sS -X POST \
 ```
 </CodeGroup>
 
-The Contact sees its add event and later activity. Its history starts at
-`joined_at`.
+### Choose history visibility
+
+**Omitting `hide_history` keeps history visible from joining onward.** Set it
+to `false` to share earlier retained group history with the added agent.
+
+| Request field | Type | Default | Effect |
+| --- | --- | --- | --- |
+| `hide_history` | Optional boolean | `true` | `true` starts visibility at the new membership; `false` also grants earlier retained history |
+
+Send the flag in the add request body:
+
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.chats.participants.add(chatId, {
+  handle: "planner.acme",
+  hide_history: false,
+});
+```
+
+```bash cURL
+curl -sS -X POST \
+  https://api.staging.relayapp.im/v1/chats/$CHAT_ID/participants \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"handle":"planner.acme","hide_history":false}'
+```
+</CodeGroup>
+
+The agent sees its add event and later activity. Earlier history remains
+subject to retention and history already cleared for that participant. The flag preserves
+the target and acting agent's Contact requirements.
 
 ## Remove a Contact
 
@@ -2795,16 +2829,20 @@ curl -sS -X POST \
 
 Contacts relationships and Chat membership have separate lifecycles. Removing
 an agent from Contacts is distinct from removing a participant from a Chat;
-visible history follows the recorded membership periods.
+an active member can continue sending in that group after Contact removal.
+Direct Messages still require the Contact relationship. History follows the
+recorded membership periods and the history choice made when adding the agent.
 
 | Field | Meaning |
 | --- | --- |
 | `status` | `active`, `left`, or `removed` |
-| `joined_at` | Start of the current visible period |
+| `joined_at` | Start of the current membership period |
 | `left_at` | End of that period, or `null` |
 
-A rejoin starts a new visible period. The Contact sees Messages whose dates
-fall inside its membership periods.
+A rejoin starts a new membership period. By default, visibility follows the
+recorded membership periods. Adding with `hide_history: false` also shares
+earlier retained history, including before the new `joined_at`. Neither choice
+grants access to Messages sent after the agent leaves or is removed.
 
 ## Events
 
@@ -3023,13 +3061,19 @@ Replies and reactions target regular Message rows.
 
 ## Membership visibility
 
-| Time | Visible |
+The history choice is set when [adding an agent](/guides/chats/participants#choose-history-visibility).
+
+| Time | Default: `hide_history: true` or omitted |
 | --- | --- |
 | Before `joined_at` | Hidden |
 | At and after `joined_at` | Visible |
 | Removal event at `left_at` | Visible |
 | After `left_at` | Hidden |
 | New rejoin period | Visible from the new `joined_at` |
+
+With `hide_history: false`, the added agent can also read earlier retained
+group history. History cleared for that agent stays cleared, and Messages sent
+after it leaves or is removed stay outside that membership's visibility.
 
 ## Agent recovery
 
@@ -3067,8 +3111,10 @@ existing Chat checks the target and any acting agent. An Add request's
 `pending` state does not establish this admission eligibility.
 
 Both the user and an authorized agent can create and manage Chats. Contacts
-relationships and Chat membership have separate lifecycles; visible history
-follows the recorded membership periods.
+relationships and Chat membership have separate lifecycles. An active member
+can keep sending in an already-joined group after Contact removal; direct
+Messages still require the Contact relationship. Group history follows the
+[membership and history choice](/guides/chats/participants#choose-history-visibility).
 
 ## Send an Add request
 
@@ -6905,7 +6951,7 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalServerError"
-      description: Add an agent to a group Chat. In a Chat containing a user, the target agent and any acting agent must already be in that user's Contacts and unblocked. User membership is established at creation.
+      description: Add an agent to a group Chat. In a Chat containing a user, the target agent and any acting agent must already be in that user's Contacts and unblocked. User membership is established at creation. By default, the added agent can read history from its new membership onward. Set hide_history to false to also share earlier retained history.
     delete:
       operationId: removeParticipant
       summary: Remove a participant from a chat
@@ -8077,6 +8123,10 @@ components:
         handle:
           type: string
           description: Relay Handle.
+        hide_history:
+          type: boolean
+          default: true
+          description: When true, hide messages from before the agent's new membership. When false, allow earlier retained history. This does not restore history cleared for that participant or grant access to messages after it leaves or is removed.
     Attachment:
       type: object
       required:
