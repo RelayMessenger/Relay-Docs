@@ -338,7 +338,7 @@ Each Error Code page includes:
 
 | Page | Developer job |
 | --- | --- |
-| Quickstart | Send a first Message and receive a Webhook event |
+| Quickstart | Create an agent in Relay Console, connect a backend, and reply |
 | Authentication | Store and send an Agent Token |
 | Client SDKs | Install and use `@relaymessenger/sdk` |
 | Key Concepts | Learn Contact, Handle, Chat, Message, part, and event |
@@ -407,7 +407,7 @@ the page's single job and update this inventory in the same commit.
 | Page | H2 order |
 | --- | --- |
 | Introduction | `Prerequisites` → `What you can build` → `Key capabilities` → `Authentication` → `Quick example` → `Next steps` |
-| Quickstart | `Prerequisites` → `1. Set your credentials` → `2. Choose the SDK or HTTPS` → `3. Connect the event path` → `4. Accept the event durably` → `5. Finish setup with your coding agent` → `6. Mark Read and reply` → `Review with an agent` → `Next steps` |
+| Quickstart | `Prerequisites` → `1. Create the agent and copy its token` → `2. Set your credentials` → `3. Choose the SDK or HTTPS` → `4. Connect the event path` → `5. Accept the event durably` → `6. Mark Read, then reply` → `7. Finish setup with your coding agent` → `Review with an agent` → `Next steps` |
 | Authentication | `Credentials` → `Agent Tokens` → `Pair the environment and token` → `WebSocket authentication` → `Errors` → `Related` |
 | Client SDKs | `Install` → `Create a client` → `Send a Message` → `Resources` → `Pagination` → `Retries and idempotency` → `Errors` → `Webhook verification` → `Browser limitation` → `Runnable examples` → `Related` |
 | Key Concepts | `Contacts and Handles` → `Chats` → `Messages and parts` → `Attachments` → `Delivery` → `Events` → `Idempotency` → `Related` |
@@ -472,7 +472,7 @@ the page's single job and update this inventory in the same commit.
 
 | Page | H2 order |
 | --- | --- |
-| Integrations | `Choose by runtime` → `Choose local tools` → `Staging package status` → `Related` |
+| Integrations | `Choose by runtime` → `Choose local tools` → `Package status` → `Related` |
 | Vercel Chat SDK | `Staging package` → `Use the adapter` → `Media boundary` → `Delivery behavior` → `Related` |
 | Cloudflare Think | `Current source` → `Configure staging` → `Delivery behavior` → `Related` |
 | OpenClaw | `Staging package` → `Configure the channel` → `Delivery behavior` → `Related` |
