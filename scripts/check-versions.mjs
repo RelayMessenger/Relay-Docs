@@ -40,7 +40,6 @@ const SCAN_FILES = [
   "scripts/validate-examples.py",
   "scripts/build-llms.py",
   "scripts/build-agent-prompt.py",
-  "scripts/validate-llms-edge.mjs",
   "scripts/validate-hosted-llms.py",
   "scripts/validate-ecosystem-hosted.mjs",
 ];
