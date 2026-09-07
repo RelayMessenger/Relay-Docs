@@ -28,6 +28,26 @@ the canonical contract and its checksum remain unchanged. The Mintlify playgroun
 and LLM files consume that staging projection. Guides and SDK constructors must
 explicitly use the staging API, and Console actions must open staging Console.
 
+## Branches
+
+`staging` is the authored branch and the only branch to edit. It speaks staging
+origins and publishes the staging docs site.
+
+`main` is generated; never edit it by hand. Production is never updated by a
+push to `staging`. A person runs `.github/workflows/promote-to-production.yml`
+(GitHub Actions, "Promote docs to production") on a chosen staging commit; it
+runs `scripts/derive-production.py`, which rewrites every staging origin to its
+production twin, drops every `@staging` npm dist-tag and `-staging.N` version
+from package references (the tables live in `scripts/origins.py`),
+regenerates the presented OpenAPI, Mintlify bundle, agent prompt, and llms
+files, validates in production mode, and opens a pull request against `main`.
+Merging that pull request publishes docs.relayapp.im. `main` therefore always
+equals "a promoted staging commit with production origins".
+
+`.docs-target` records which environment a checkout describes (`staging` or
+`production`); every validator and generator reads it, and `--production`
+overrides it.
+
 ## Validate
 
 ```bash
