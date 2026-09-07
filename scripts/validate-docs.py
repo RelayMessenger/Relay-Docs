@@ -5,6 +5,12 @@ import re
 import sys
 from pathlib import Path
 from api_navigation import validate_api_navigation, page_paths
+from origins import origin, production_text, target
+
+
+def spec(text: str) -> str:
+    """A staging-spelled expectation, as this checkout must state it."""
+    return production_text(text) if target() == "production" else text
 
 # The names of the source companies whose documentation shaped early drafts are
 # banned from this repository, including from the checks that block them. Each
@@ -58,14 +64,14 @@ npm_source_commit = {
 
 def pinned(name):
     version = npm_latest.get(name) or versions["pypi"][name]
-    return f"{name}@{version}"
+    return spec(f"{name}@{version}")
 
 if config.get("name") != "Relay":
     raise SystemExit("site identity must be Relay")
 if config.get("description") != "Relay API v1 documentation.":
     raise SystemExit("site description must use the Relay identity")
-if config.get("favicon") != "/favicon-staging.png":
-    raise SystemExit("staging Docs must use the black Relay favicon")
+if config.get("favicon") != origin("/favicon-staging.png"):
+    raise SystemExit(f"{target()} Docs must use the {target()} Relay favicon")
 if hashlib.sha256((root / "favicon-staging.png").read_bytes()).hexdigest() != (
     "4b3e4b9358f35c66cec564d7ae6806b8e948a2e4dc0e1fd2eb003887ee1120be"
 ):
@@ -77,7 +83,7 @@ if hashlib.sha256((root / "favicon.png").read_bytes()).hexdigest() != (
 if config.get("navbar", {}).get("primary") != {
     "type": "button",
     "label": "Console",
-    "href": "https://console.staging.relayapp.im",
+    "href": f"https://{origin('console.staging.relayapp.im')}",
 }:
     raise SystemExit("top-right docs action must open Relay Console")
 if config.get("navbar", {}).get("links") != [
@@ -515,7 +521,7 @@ if "All six live `latest` tags select the versions shown above." not in ecosyste
 chat_sdk_text = (root / "integrations/chat-sdk.mdx").read_text()
 for marker in [
     "npm install chat@4.39.0 @chat-adapter/state-memory@4.39.0",
-    "@relaymessenger/chat-sdk-adapter@staging",
+    spec("@relaymessenger/chat-sdk-adapter@staging"),
     npm_source_commit["@relaymessenger/chat-sdk-adapter"],
     npm_integrity["@relaymessenger/chat-sdk-adapter"],
     "Published by the staging workflow with npm provenance",
@@ -533,7 +539,7 @@ if re.search(r"\bsource[- ]only\b|\bsource tarball\b", chat_sdk_text, re.I):
 
 cli_text = (root / "integrations/cli.mdx").read_text()
 for marker in [
-    "npm install --global @relaymessenger/cli@staging",
+    spec("npm install --global @relaymessenger/cli@staging"),
     "relay --profile staging events listen --acknowledge-events",
     "requires an explicit non-production profile",
     "dedicated Agent may advance its durable checkpoint",
@@ -817,10 +823,10 @@ if not re.search(
     raise SystemExit("Contact Card sharing guide must state that the route is bodyless")
 
 contact_text = (root / "guides/contact-cards.mdx").read_text()
-if not re.search(r"\bPOST https://api\.staging\.relayapp\.im/v1/contact_card\b", contact_text):
+if not re.search(rf"\bPOST https://{re.escape(origin('api.staging.relayapp.im'))}/v1/contact_card\b", contact_text):
     raise SystemExit("Contact Card configuration guide lost POST /v1/contact_card")
 if not re.search(
-    r"\bPATCH\b[\s\S]{0,100}api\.staging\.relayapp\.im/v1/contact_card\?handle=",
+    rf"\bPATCH\b[\s\S]{{0,100}}{re.escape(origin('api.staging.relayapp.im'))}/v1/contact_card\?handle=",
     contact_text,
 ):
     raise SystemExit("Contact Card configuration guide lost its PATCH operation")
@@ -830,7 +836,7 @@ for required in [
     "Username-scoped Handle",
     "Premium Handle",
     "relay.contactRequests.create",
-    "POST https://api.staging.relayapp.im/v1/contact_requests",
+    f"POST https://{origin('api.staging.relayapp.im')}/v1/contact_requests",
     '"state": "pending"',
     "`402`",
     "`contact.added`",
@@ -962,7 +968,7 @@ for required in [
         raise SystemExit(f"final event path decision is missing: {required}")
 for forbidden in [
     "relay.websocket.update",
-    "PUT https://api.staging.relayapp.im/v1/websocket",
+    f"PUT https://{origin('api.staging.relayapp.im')}/v1/websocket",
     '{"enabled":true}',
     '{"enabled":false}',
     "WebSocket is enabled",
@@ -1004,7 +1010,7 @@ if "`stale_connection`" not in websocket_protocol_text:
 if "A fatal error ends consumption" not in websocket_protocol_text:
     raise SystemExit("WebSocket protocol lost fatal error handling")
 for required in [
-    "wss://api.staging.relayapp.im/v1/websocket",
+    f"wss://{origin('api.staging.relayapp.im')}/v1/websocket",
     "Authorization: Bearer $RELAY_AGENT_TOKEN",
     "Agent Token",
     "multiple connected sockets",
@@ -1560,9 +1566,9 @@ for command in sdk_install_commands:
     package_tokens = [
         token for token in command.split() if token.startswith("@relaymessenger/sdk")
     ]
-    if package_tokens != ["@relaymessenger/sdk@staging"]:
+    if package_tokens != [spec("@relaymessenger/sdk@staging")]:
         raise SystemExit(
-            "staging SDK install commands must use @relaymessenger/sdk@staging: "
+            f"SDK install commands must use {spec('@relaymessenger/sdk@staging')}: "
             f"{command}"
         )
 

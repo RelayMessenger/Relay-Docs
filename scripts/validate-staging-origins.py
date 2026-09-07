@@ -1,24 +1,39 @@
 #!/usr/bin/env python3
-"""Keep staging examples, SDK clients, and generated API targets consistent."""
+"""Keep examples, SDK clients, and generated API targets on this checkout's origins.
+
+Staging (the authored branch) must show only staging origins in runnable
+examples. Production (`main`, derived by scripts/derive-production.py) must
+show only production origins and carry no staging origin anywhere. Pass
+`--production` or record `production` in `.docs-target` to select the mode.
+"""
 import json
 import re
 import unittest
 from pathlib import Path
+from origins import STAGING_HOSTS, STAGING_PACKAGE_REFERENCE, ROOT, origin, target
 
-ROOT = Path(__file__).resolve().parents[1]
 PRODUCTION = re.compile(r"(?:https|wss)://(?:api|console)\.relayapp\.im")
+STAGING = re.compile(
+    "|".join([*(re.escape(host) for host in STAGING_HOSTS), STAGING_PACKAGE_REFERENCE.pattern])
+)
+CONTENT_SUFFIXES = {".mdx", ".md", ".json", ".yaml", ".yml", ".txt", ".js", ".mjs"}
+# The tooling that knows both spellings is exempt from the production sweep,
+# and so is versions.json, the mirror of what the registries actually publish.
+SWEEP_EXEMPT = {".github", "node_modules", "scripts", ".git", "versions.json"}
 
 
-def example_errors(text: str) -> list[str]:
+def example_errors(text: str, mode: str = "staging") -> list[str]:
     errors = []
     # Match Markdown fences including four-backtick LLM sections.
     for match in re.finditer(r"^(`{3,})[^\n]*\n(.*?)^\1[ \t]*$", text, re.M | re.S):
         block = match[2]
-        if PRODUCTION.search(block):
+        if mode == "staging" and PRODUCTION.search(block):
             errors.append("production API or Console URL in a runnable example")
         for constructor in re.finditer(r"new Relay\(\{(.*?)\}\)", block, re.S):
             if not re.search(r"\bbaseURL\s*:", constructor[1]):
                 errors.append("SDK constructor omits explicit baseURL")
+    if mode == "production" and STAGING.search(text):
+        errors.append("staging origin in production content")
     return errors
 
 
@@ -41,25 +56,73 @@ class RegressionTests(unittest.TestCase):
     def test_sdk_default_explanation_is_allowed(self):
         self.assertFalse(example_errors("The SDK defaults to https://api.relayapp.im."))
 
+    def test_production_mode_accepts_production_curl(self):
+        self.assertFalse(example_errors(
+            "```bash\ncurl https://api.relayapp.im/v1/chats\n```\n", "production"
+        ))
+
+    def test_production_mode_rejects_every_staging_host(self):
+        for host in STAGING_HOSTS:
+            with self.subTest(host=host):
+                self.assertEqual(
+                    example_errors(f"Read https://{host}/llms.txt first.", "production"),
+                    ["staging origin in production content"],
+                )
+
+    def test_production_mode_rejects_staging_package_references(self):
+        for reference in (
+            "npm install @relaymessenger/sdk@staging",
+            "npm install --global @relaymessenger/cli@staging",
+            "`relay-claude-channel@0.3.0-staging.4`",
+            "| `@relaymessenger/sdk` | `0.3.0-staging.8` |",
+        ):
+            with self.subTest(reference=reference):
+                self.assertEqual(
+                    example_errors(reference, "production"),
+                    ["staging origin in production content"],
+                )
+
+    def test_production_mode_accepts_plain_package_references(self):
+        self.assertFalse(example_errors(
+            "npm install @relaymessenger/sdk\n`@relaymessenger/cli` is `latest`\n"
+            "/plugin marketplace add RelayMessenger/Relay-SDK@staging\n", "production"
+        ))
+
+    def test_production_mode_still_requires_explicit_base_url(self):
+        self.assertTrue(example_errors(
+            "```typescript\nnew Relay({ apiKey: token })\n```\n", "production"
+        ))
+
 
 def validate() -> None:
+    mode = target()
+    api = origin("api.staging.relayapp.im")
     config = json.loads((ROOT / "docs.json").read_text())
-    assert config["navbar"]["primary"]["href"] == "https://console.staging.relayapp.im"
+    assert config["navbar"]["primary"]["href"] == f"https://{origin('console.staging.relayapp.im')}"
     failures = []
     for path in ROOT.rglob("*.mdx"):
         if "node_modules" in path.parts:
             continue
-        for error in example_errors(path.read_text()):
+        for error in example_errors(path.read_text(), mode):
             failures.append(f"{path.relative_to(ROOT)}: {error}")
+    if mode == "production":
+        for path in sorted(ROOT.rglob("*")):
+            relative = path.relative_to(ROOT)
+            if not path.is_file() or path.suffix not in CONTENT_SUFFIXES:
+                continue
+            if SWEEP_EXEMPT & set(relative.parts) or path.suffix == ".mdx":
+                continue
+            if STAGING.search(path.read_text()):
+                failures.append(f"{relative}: staging origin in production content")
     for name in ("openapi.staging.yaml", "openapi.mint.yaml"):
         text = (ROOT / "api-reference" / name).read_text()
-        if PRODUCTION.search(text):
+        if mode == "staging" and PRODUCTION.search(text):
             failures.append(f"{name}: production target in staging API presentation")
-        if "url: https://api.staging.relayapp.im\n" not in text:
-            failures.append(f"{name}: missing staging server origin")
+        if f"url: https://{api}\n" not in text:
+            failures.append(f"{name}: missing {mode} server origin")
     if failures:
         raise SystemExit("\n".join(failures))
-    print("Staging API targets, Console links, and explicit SDK baseURL verified")
+    print(f"{mode.capitalize()} API targets, Console links, and explicit SDK baseURL verified")
 
 
 if __name__ == "__main__":

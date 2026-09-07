@@ -1,0 +1,101 @@
+name: Promote docs to production
+
+# `main` is a generated branch: staging content with every staging origin and
+# package reference rewritten to its production twin (scripts/origins.py).
+# Mintlify publishes docs.relayapp.im from `main` as-is. Production is never
+# updated by a push to staging (owner ruling, 2026-09-07): a person runs this
+# workflow, it derives the production tree from the chosen staging commit and
+# opens a pull request against `main`; a person merges it. Nothing here pushes
+# `main`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Staging commit or branch to promote
+        required: true
+        default: staging
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: promote-to-production
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Derive production content and open the PR
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Self-test the derivation
+        run: python3 scripts/derive-production.py --test
+
+      - name: Derive the production tree
+        run: python3 scripts/derive-production.py
+
+      - name: Prove the derivation is idempotent
+        run: |
+          set -euo pipefail
+          git add -A
+          before=$(git write-tree)
+          python3 scripts/derive-production.py
+          git add -A
+          after=$(git write-tree)
+          test "$before" = "$after"
+
+      - name: No staging origin or package reference may remain
+        run: |
+          set -euo pipefail
+          if grep -rIE 'staging\.relayapp\.im|relay-staging\.mintlify|(@relaymessenger/[a-z-]+|relay-claude-channel)@staging\b|[0-9]+\.[0-9]+\.[0-9]+-staging\.[0-9]+' \
+               --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=scripts \
+               --exclude-dir=.github --exclude=versions.json . ; then
+            echo "::error::A staging reference survived the derivation."
+            exit 1
+          fi
+          test "$(cat .docs-target)" = production
+
+      - name: Validate in production mode
+        run: npm run validate
+
+      - name: Open the pull request against main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          source_sha=$(git rev-parse HEAD)
+          branch="promote/main-${source_sha:0:12}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if [ "$(git write-tree)" = "$(git rev-parse origin/main^{tree})" ]; then
+            echo "main already equals the derived tree; nothing to promote" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git checkout -q -b "$branch"
+          git commit -q -m "Promote docs to production from staging ${source_sha:0:12}" \
+            -m "Derived by .github/workflows/promote-to-production.yml; main is generated, never edit it by hand."
+          git push --force origin "HEAD:$branch"
+          existing=$(gh pr list --head "$branch" --base main --state open --json url --jq '.[0].url // empty')
+          if [ -n "$existing" ]; then
+            echo "- Pull request: $existing" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          url=$(gh pr create --base main --head "$branch" \
+            --title "Promote docs to production from staging ${source_sha:0:12}" \
+            --body "Derived from \`$SOURCE_REF\` at $source_sha by the Promote docs to production workflow. Every staging origin and npm package reference is rewritten to its production twin and the tree passed \`npm run validate\` in production mode. Merge to publish docs.relayapp.im.")
+          echo "- Pull request: $url" >> "$GITHUB_STEP_SUMMARY"

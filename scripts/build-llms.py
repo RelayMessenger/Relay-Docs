@@ -4,10 +4,11 @@ import json
 import re
 from pathlib import Path
 from api_navigation import page_paths, walk_pages
+from origins import origin
 
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE_URL = "https://docs.staging.relayapp.im"
+BASE_URL = f"https://{origin('docs.staging.relayapp.im')}"
 ENDPOINT = re.compile(
     r"^(GET|POST|PUT|PATCH|DELETE) (/v1/[^\s]+)$"
 )
