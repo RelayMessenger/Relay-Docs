@@ -29,7 +29,7 @@ export default {
         headers: {
           "Cache-Control": "no-store, max-age=0",
           "Content-Type": "text/plain; charset=utf-8",
-          "X-Relay-Docs-Proxy": "cloudflare-staging",
+          "X-Relay-Docs-Proxy": env.PROXY_TAG,
           "X-Relay-Docs-Source": document.version,
         },
       });
@@ -41,7 +41,7 @@ export default {
     );
     const response = await fetch(new Request(upstream, request));
     const headers = new Headers(response.headers);
-    headers.set("X-Relay-Docs-Proxy", "cloudflare-staging");
+    headers.set("X-Relay-Docs-Proxy", env.PROXY_TAG);
     headers.delete("Set-Cookie");
     return new Response(
       request.method === "HEAD" ? null : response.body,
