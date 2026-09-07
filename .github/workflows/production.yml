@@ -138,7 +138,7 @@ jobs:
             --outdir .wrangler/dry-run-production
 
       - name: Stop here on a dry run
-        if: ${{ inputs.dry_run }}
+        if: env.DRY_RUN == 'true'
         run: |
           set -euo pipefail
           {
@@ -149,7 +149,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Refuse a hostname that belongs to another Worker
-        if: ${{ !inputs.dry_run }}
+        if: env.DRY_RUN != 'true'
         run: |
           set -euo pipefail
           # docs.relayapp.im is a CNAME to Mintlify until the hostname moves to
@@ -172,7 +172,7 @@ jobs:
           fi
 
       - name: Deploy the production LLM edge
-        if: ${{ !inputs.dry_run }}
+        if: env.DRY_RUN != 'true'
         run: |
           set -euo pipefail
           npx wrangler deploy \
@@ -181,7 +181,7 @@ jobs:
             --message "GitHub $RELEASE_SHA"
 
       - name: Deploy the Mintlify production project
-        if: ${{ !inputs.dry_run }}
+        if: env.DRY_RUN != 'true'
         env:
           MINTLIFY_API_KEY: ${{ secrets.MINTLIFY_API_KEY }}
           MINTLIFY_PRODUCTION_PROJECT_ID: ${{ vars.MINTLIFY_PRODUCTION_PROJECT_ID }}
@@ -225,7 +225,7 @@ jobs:
           printf 'MINTLIFY_STATUS_ID=%s\n' "$status_id" >> "$GITHUB_ENV"
 
       - name: Verify the canonical production files
-        if: ${{ !inputs.dry_run }}
+        if: env.DRY_RUN != 'true'
         run: |
           set -euo pipefail
           expected="$(sha256sum llms-full.txt | cut -d' ' -f1)"
@@ -245,7 +245,7 @@ jobs:
           grep -Fqi "x-relay-docs-proxy: cloudflare-production" "$root_headers"
 
       - name: Record what was published
-        if: ${{ !inputs.dry_run }}
+        if: env.DRY_RUN != 'true'
         run: |
           set -euo pipefail
           {
