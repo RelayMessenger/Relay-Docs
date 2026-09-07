@@ -116,23 +116,24 @@ WebSocket
   Acknowledgements
   FULL sync
 
+Integrations
+  Integrations
+  Vercel Chat SDK
+  Cloudflare Think
+  OpenClaw
+  Hermes
+  Claude Code
+  Codex
+  Cursor
+  CLI
+  MCP
+  Skills
+
 Platform
   Idempotency
   Rate Limits
   Debugging
 
-Developer ecosystem
-  Developer ecosystem
-  Chat SDK adapter
-  Relay CLI
-  Relay MCP
-  Relay for OpenClaw
-  Relay channel for Claude Code
-  Relay for Hermes
-  Cloudflare Think starter
-  Relay Skills
-  Relay for Codex
-  Relay for Cursor
 
 Examples
   Examples
@@ -370,17 +371,17 @@ Each Error Code page includes:
 | Idempotency | Retry commands without duplicate side effects |
 | Rate Limits | Design around current request and content limits |
 | Debugging | Use IDs, errors, and traces to diagnose requests |
-| Developer ecosystem | Choose a maintained Relay project |
-| Chat SDK adapter | Receive signed Webhooks through Vercel Chat SDK |
-| Relay CLI | Call Relay v1 resources and forward local events |
-| Relay MCP | Run local Relay messaging tools over MCP v2 stdio |
-| Relay for OpenClaw | Connect an OpenClaw gateway by acknowledged WebSocket |
-| Relay channel for Claude Code | Connect a running Claude Code session by acknowledged WebSocket |
-| Relay for Hermes | Connect Hermes as an always-on acknowledged WebSocket process |
-| Cloudflare Think starter | Run a serverless-friendly Think messenger through signed Webhooks |
-| Relay Skills | Install portable coding-agent guidance and docs search |
-| Relay for Codex | Install the generated Codex plugin |
-| Relay for Cursor | Install the generated Cursor plugin |
+| Integrations | Add Relay to the tool you already use |
+| Vercel Chat SDK | Receive signed Webhooks through Vercel Chat SDK |
+| Cloudflare Think | Run a serverless-friendly Think messenger through signed Webhooks |
+| OpenClaw | Connect an OpenClaw gateway by acknowledged WebSocket |
+| Hermes | Connect Hermes as an always-on acknowledged WebSocket process |
+| Claude Code | Connect a running Claude Code session by acknowledged WebSocket |
+| Codex | Install the generated Codex plugin |
+| Cursor | Install the generated Cursor plugin |
+| CLI | Call Relay v1 resources and forward local events |
+| MCP | Run local Relay messaging tools over MCP v2 stdio |
+| Skills | Install portable coding-agent guidance and docs search |
 
 ## 15. Validation sequence
 
@@ -467,21 +468,21 @@ the page's single job and update this inventory in the same commit.
 | Rate Limits | `Messages` → `Chats` → `Attachments` → `Webhook events` → `Related` |
 | Debugging | `IDs to record` → `Error response` → `Safe logs` → `Event debugging` → `Related` |
 
-### Developer ecosystem
+### Integrations
 
 | Page | H2 order |
 | --- | --- |
-| Developer ecosystem | `Choose by runtime` → `Choose local tools` → `Staging package status` → `Related` |
-| Chat SDK adapter | `Staging package` → `Use the adapter` → `Media boundary` → `Delivery behavior` → `Related` |
-| Relay CLI | `Staging package` → `Configure staging` → `Use local event forwarding` → `Related` |
-| Relay MCP | `Staging package` → `Configure a local client` → `Choose the MCP surface` → `Related` |
-| Relay for OpenClaw | `Staging package` → `Configure the channel` → `Delivery behavior` → `Related` |
-| Relay channel for Claude Code | `Install the plugin` → `Configure the channel` → `Delivery behavior` → `Related` |
-| Relay for Hermes | `Install the plugin` → `Configure staging` → `Delivery behavior` → `Related` |
-| Cloudflare Think starter | `Current source` → `Configure staging` → `Delivery behavior` → `Related` |
-| Relay Skills | `Install` → `Choose the docs MCP` → `Prepare hosted proof` → `Related` |
-| Relay for Codex | `Install locally` → `Use the package` → `Prepare hosted proof` → `Related` |
-| Relay for Cursor | `Install locally` → `Use the package` → `Prepare hosted proof` → `Related` |
+| Integrations | `Choose by runtime` → `Choose local tools` → `Staging package status` → `Related` |
+| Vercel Chat SDK | `Staging package` → `Use the adapter` → `Media boundary` → `Delivery behavior` → `Related` |
+| Cloudflare Think | `Current source` → `Configure staging` → `Delivery behavior` → `Related` |
+| OpenClaw | `Staging package` → `Configure the channel` → `Delivery behavior` → `Related` |
+| Hermes | `Install the plugin` → `Configure staging` → `Delivery behavior` → `Related` |
+| Claude Code | `Install the plugin` → `Configure the channel` → `Delivery behavior` → `Related` |
+| Codex | `Install locally` → `Use the package` → `Prepare hosted proof` → `Related` |
+| Cursor | `Install locally` → `Use the package` → `Prepare hosted proof` → `Related` |
+| CLI | `Staging package` → `Configure staging` → `Use local event forwarding` → `Related` |
+| MCP | `Staging package` → `Configure a local client` → `Choose the MCP surface` → `Related` |
+| Skills | `Install` → `Choose the docs MCP` → `Prepare hosted proof` → `Related` |
 
 ### Examples, errors, and reference
 
@@ -505,7 +506,7 @@ the page's single job and update this inventory in the same commit.
 | `guides/webhooks/*` | Webhooks | integrated |
 | `guides/websocket/*` | WebSocket | integrated |
 | `guides/platform/*` | Platform | integrated |
-| `ecosystem/*` | Developer ecosystem | integrated source-backed project guides |
+| `integrations/*` | Integrations | integrated source-backed project guides |
 | `examples/index.mdx` | Examples | integrated |
 | `api-reference/*` | API Reference | generated from the current OpenAPI |
 | `error/*` | Error Codes | integrated one-code pages |

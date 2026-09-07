@@ -45,7 +45,7 @@ const CLAUDE_PLUGIN_MANIFEST =
 // Text this repository authors. Generated files (llms.txt, llms-full.txt,
 // package-lock.json) are rebuilt from these, so they are never edited here.
 const SCAN_DIRECTORIES = [
-  "ecosystem",
+  "integrations",
   "examples",
   "getting-started",
   "guides",
@@ -281,7 +281,7 @@ async function main() {
   const manifest = await json(CLAUDE_PLUGIN_MANIFEST, "Claude Code plugin manifest");
   next.claudeCodePluginManifest = manifest.version;
 
-  // ecosystem/claude-code.mdx states that the catalog plugin carries the same
+  // integrations/claude-code.mdx states that the catalog plugin carries the same
   // version as the published channel package. That sentence is only true while
   // the two agree, so the refresh proves it instead of assuming it.
   const channelVersion = next.npm["relay-claude-channel"].latest;
@@ -289,7 +289,7 @@ async function main() {
     throw new Error(
       "the Relay-SDK Claude Code plugin manifest "
       + `(${next.claudeCodePluginManifest}) no longer matches `
-      + `relay-claude-channel@${channelVersion}; ecosystem/claude-code.mdx must `
+      + `relay-claude-channel@${channelVersion}; integrations/claude-code.mdx must `
       + "state the two versions separately before this refresh can pass",
     );
   }

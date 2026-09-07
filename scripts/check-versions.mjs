@@ -19,7 +19,7 @@ const root = path.resolve(import.meta.dirname, "..");
 // live registry by npm run validate:ecosystem-hosted, so neither is scanned
 // here.
 const SCAN_DIRECTORIES = [
-  "ecosystem",
+  "integrations",
   "examples",
   "getting-started",
   "guides",
@@ -128,7 +128,7 @@ if (versions.claudeCodePluginManifest
     "versions.json says the Relay-SDK Claude Code plugin manifest "
     + `(${versions.claudeCodePluginManifest}) differs from `
     + `relay-claude-channel@${versions.npm["relay-claude-channel"]?.latest}, but `
-    + "ecosystem/claude-code.mdx tells readers the two carry the same version",
+    + "integrations/claude-code.mdx tells readers the two carry the same version",
   );
 }
 
