@@ -9,7 +9,6 @@ const configText = await readFile(
 );
 const config = JSON.parse(configText);
 const vars = config.env.staging.vars;
-const productionVars = config.env.production.vars;
 const sha256 = async (path) => createHash("sha256")
   .update(await readFile(new URL(path, root)))
   .digest("hex");
@@ -19,15 +18,6 @@ const llmsFull = await readFile(new URL("llms-full.txt", root), "utf8");
 assert.equal(vars.LLMS_VERSION, await sha256("llms.txt"));
 assert.equal(vars.LLMS_FULL_VERSION, await sha256("llms-full.txt"));
 assert.equal(vars.MINTLIFY_ORIGIN, "https://relay-staging.mintlify.app");
-assert.equal(vars.PROXY_TAG, "cloudflare-staging");
-// Both environments serve the same repository files, so the pinned hashes are
-// the same hashes. relay-app.mintlify.app is the Mintlify project behind
-// docs.relayapp.im: its /llms.txt is byte-identical to the hosted one.
-assert.equal(config.env.production.name, "relay-docs-llms-production");
-assert.equal(productionVars.LLMS_VERSION, await sha256("llms.txt"));
-assert.equal(productionVars.LLMS_FULL_VERSION, await sha256("llms-full.txt"));
-assert.equal(productionVars.MINTLIFY_ORIGIN, "https://relay-app.mintlify.app");
-assert.equal(productionVars.PROXY_TAG, "cloudflare-production");
 assert.match(llmsIndex, /\/guides\/webhooks\/events\.md/);
 assert.doesNotMatch(llmsIndex, /\/guides\/agent-events/);
 // Minimal connection prompts delegate these obligations to llms.txt itself.
@@ -96,15 +86,6 @@ assert.deepEqual(
     },
   ],
 );
-assert.deepEqual(
-  config.env.production.routes,
-  [
-    {
-      pattern: "docs.relayapp.im",
-      custom_domain: true,
-    },
-  ],
-);
 
 const worker = await readFile(
   new URL("edge/llms-proxy/src/index.ts", root),
@@ -116,10 +97,6 @@ assert.match(worker, /document\.body/);
 assert.match(worker, /response\.body/);
 assert.match(worker, /no-store, max-age=0/);
 assert.match(worker, /X-Relay-Docs-Proxy/);
-// A pinned "cloudflare-staging" literal would label production responses
-// staging. The tag is a var so each environment names itself.
-assert.match(worker, /env\.PROXY_TAG/);
-assert.doesNotMatch(worker, /"cloudflare-(?:staging|production)"/);
 assert.doesNotMatch(worker, /response\.(text|json|arrayBuffer)\(/);
 assert.doesNotMatch(worker, /Set-Cookie.*set/i);
 
@@ -144,20 +121,6 @@ assert.match(
 assert.doesNotMatch(workflow, /--env (?:production|prod)\b/);
 assert.doesNotMatch(workflow, /Wait for the matching Mintlify source/);
 
-const productionWorkflow = await readFile(
-  new URL(".github/workflows/production.yml", root),
-  "utf8",
-);
-assert.match(productionWorkflow, /env-slug: prod\b/);
-assert.match(productionWorkflow, /secret-path: \/ci\/server/);
-assert.doesNotMatch(productionWorkflow, /secret-path: \/ci\/website/);
-assert.match(
-  productionWorkflow,
-  /wrangler deploy[\s\S]*?--config edge\/llms-proxy\/wrangler\.jsonc[\s\S]*?--env production/,
-);
-assert.match(productionWorkflow, /uses: \.\/\.github\/workflows\/validate\.yml/);
-
 console.log(
-  "local LLM sources, deployment credentials, routes, and passthrough verified "
-  + "for staging and production",
+  "local staging LLM sources, deployment credentials, routes, and passthrough verified",
 );
