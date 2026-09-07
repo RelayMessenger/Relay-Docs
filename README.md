@@ -40,7 +40,9 @@ production") on a chosen staging commit; that dispatch is the review gate. The
 workflow runs `scripts/derive-production.py`, which rewrites every staging
 origin to its production twin, drops every `@staging` npm dist-tag and
 `-staging.N` version from package references (the tables live in
-`scripts/origins.py`), regenerates the presented OpenAPI, Mintlify bundle,
+`scripts/origins.py`), selects `main` for Relay-SDK source installs and links,
+and pairs production token instructions with production origins. It preserves
+the canonical contract and registry snapshot as inputs, regenerates the presented OpenAPI, Mintlify bundle,
 agent prompt, and llms files, validates in production mode, and then pushes
 `main` itself: one commit whose tree is the derived tree and whose message
 names the source staging commit and the run. Mintlify publishes
@@ -94,9 +96,12 @@ npm run dev
 
 ## Staging preview
 
-`.github/workflows/preview.yml` validates every push to `staging`, every pull
-request, and any branch chosen by a manual run, then creates a Mintlify preview
+`.github/workflows/preview.yml` validates every push to `staging`, every ready
+pull request, and any branch chosen by a manual run, then creates a Mintlify preview
 deployment.
+
+Draft pull requests skip both validation workflows and their hosted preview step. Run
+their checks in Daytona before requesting review.
 
 Configure these GitHub values:
 
