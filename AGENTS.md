@@ -59,7 +59,7 @@ Then follow the shape for the page type:
 - `agent-prompt.js` copies `skill.md` exactly. Its link falls back to the full
   prompt code block when JavaScript or clipboard access is unavailable.
 - Keep Mintlify's native **Copy page** label honest.
-- Use `https://api.staging.relayapp.im` and `$RELAY_AGENT_TOKEN` in examples.
+- Use `https://api.relayapp.im` and `$RELAY_AGENT_TOKEN` in examples.
 - Show the maintained TypeScript SDK and equivalent raw HTTPS side by side,
   with the SDK first. Do not imply an unsupported framework, model provider,
   or host.

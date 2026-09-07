@@ -15,7 +15,7 @@ developer API also supports agent-to-agent Chats with zero users.
 
 1. Read the target environment's current OpenAPI and matching local docs first.
    In a Relay workspace, use `Relay-Server/contracts/developer/openapi.yaml`.
-   Use `https://docs.staging.relayapp.im/llms.txt` for setup instructions and the
+   Use `https://docs.relayapp.im/llms.txt` for setup instructions and the
    page index, not as authority over a
    newer local contract. If the contract cannot be read, stop and report unknown.
 2. Pair `RELAY_API_URL` with an Agent Token created in that environment's
@@ -49,16 +49,16 @@ are unavailable, report the blocker instead of inventing setup commands.
 | Setup input | Rule |
 | --- | --- |
 | Agent Token | Load through trusted server-side secret storage. Never echo it, embed it in source, or print credential-bearing requests or responses. |
-| Environment | These docs default to `https://api.staging.relayapp.im/v1`. Use a token from staging. A supplied API base overrides the default only with matching environment docs and credentials. |
-| API URL format | `RELAY_API_URL` and the TypeScript SDK `baseURL` use the origin `https://api.staging.relayapp.im`; documented HTTP paths include `/v1`. Never append `/v1` twice. |
+| Environment | These docs default to `https://api.relayapp.im/v1`. Use a token from staging. A supplied API base overrides the default only with matching environment docs and credentials. |
+| API URL format | `RELAY_API_URL` and the TypeScript SDK `baseURL` use the origin `https://api.relayapp.im`; documented HTTP paths include `/v1`. Never append `/v1` twice. |
 | Connection method | Honor the supplied Webhook or WebSocket choice. A Webhook URL selects Webhook onboarding when no method is stated. Otherwise inspect the runtime and saved subscriptions before choosing a supported path. |
 | Webhook URL | Use the supplied HTTPS receiver. If absent or set to `Find the webhook URL for me.`, find a receiver in the user's backend or ask for deployment access. Do not invent a URL. |
 | Existing subscription | List saved subscriptions first, even when registration is not mentioned. Reuse the matching target URL rather than creating a duplicate. |
 
 ### Webhook onboarding
 
-1. Follow the [Webhook subscriptions guide](https://docs.staging.relayapp.im/guides/webhooks/subscriptions.md)
-   and [receiver guide](https://docs.staging.relayapp.im/guides/webhooks/index.md).
+1. Follow the [Webhook subscriptions guide](https://docs.relayapp.im/guides/webhooks/subscriptions.md)
+   and [receiver guide](https://docs.relayapp.im/guides/webhooks/index.md).
    With the supplied Agent Token, call `GET /v1/webhook-subscriptions` and
    `GET /v1/webhook-events`. Onboarding subscribes to all event names returned
    by the current catalog unless the user explicitly requests a narrower set.
@@ -86,11 +86,11 @@ are unavailable, report the blocker instead of inventing setup commands.
 
 ### Runtime and completion
 
-Use the [Integrations overview](https://docs.staging.relayapp.im/integrations/index.md)
+Use the [Integrations overview](https://docs.relayapp.im/integrations/index.md)
 to find the documented package for the actual runtime. A coding-agent
 skill or docs connection alone is not a running Relay event consumer.
 For WebSocket, follow the
-[WebSocket guide](https://docs.staging.relayapp.im/guides/websocket/index.md)
+[WebSocket guide](https://docs.relayapp.im/guides/websocket/index.md)
 and preserve existing subscriptions unless the user authorizes changing the
 event path. Do not silently switch a requested Webhook setup to WebSocket.
 
@@ -225,7 +225,7 @@ behavior `unknown`.
 
 ## Developer tools
 
-- Use `https://docs.staging.relayapp.im/mcp` for read-only documentation search.
+- Use `https://docs.relayapp.im/mcp` for read-only documentation search.
 - Use the local `@relaymessenger/mcp` stdio server for Relay API tools with an
   Agent Token.
 - Use the Skills, Codex, or Cursor integrations for packaged coding guidance.
