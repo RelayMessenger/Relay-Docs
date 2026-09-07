@@ -184,7 +184,13 @@ function scanPaths() {
       }
     })
     .filter((file) => file !== path.join(root, "scripts/refresh-versions.mjs"))
-    .filter((file) => file !== path.join(root, "scripts/check-versions.mjs"));
+    .filter((file) => file !== path.join(root, "scripts/check-versions.mjs"))
+    // These two carry staging-spelled FIXTURES that prove a staging reference
+    // is rewritten or rejected. Propagating a plain release into them turned
+    // the fixtures into non-staging strings and made their tests vacuous
+    // (2026-09-07), so they are shapes, not version claims, and stay as-is.
+    .filter((file) => file !== path.join(root, "scripts/derive-production.py"))
+    .filter((file) => file !== path.join(root, "scripts/validate-staging-origins.py"));
 }
 
 function escapeRegExp(value) {
@@ -281,16 +287,18 @@ async function main() {
   const manifest = await json(CLAUDE_PLUGIN_MANIFEST, "Claude Code plugin manifest");
   next.claudeCodePluginManifest = manifest.version;
 
-  // integrations/claude-code.mdx states that the catalog plugin carries the same
-  // version as the published channel package. That sentence is only true while
-  // the two agree, so the refresh proves it instead of assuming it.
-  const channelVersion = next.npm["relay-claude-channel"].latest;
+  // The manifest is read from the Relay-SDK staging branch, so it carries the
+  // version the `staging` dist-tag publishes, not `latest` (the two diverged
+  // on 2026-09-07 when latest became the plain 0.3.0 release).
+  // integrations/claude-code.mdx states that the staging catalog carries the
+  // staging train, so the refresh proves it instead of assuming it.
+  const channelVersion = next.npm["relay-claude-channel"].staging;
   if (next.claudeCodePluginManifest !== channelVersion) {
     throw new Error(
       "the Relay-SDK Claude Code plugin manifest "
-      + `(${next.claudeCodePluginManifest}) no longer matches `
+      + `(${next.claudeCodePluginManifest}) no longer matches the staging tag `
       + `relay-claude-channel@${channelVersion}; integrations/claude-code.mdx must `
-      + "state the two versions separately before this refresh can pass",
+      + "state what the staging catalog carries before this refresh can pass",
     );
   }
 
