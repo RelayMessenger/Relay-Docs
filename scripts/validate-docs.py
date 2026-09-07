@@ -1186,11 +1186,11 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # contract, never hand-written. This pin records the exact bytes and the commit
 # they came from, so an edit made here instead of at the source fails the gate.
 # Source: Relay-Server/contracts/developer/openapi.yaml.
-# Additive getMessages `order` query parameter, September 7, 2026.
-# Source authority: server-messages-desc-20260907/contracts/developer/openapi.yaml.
+# 403 examples for error codes 2027 and 2028, Relay-Server PR 180, September 7, 2026.
+# Source authority: Relay-Server origin/staging 18ae54e contracts/developer/openapi.yaml.
 # The digest pins source bytes independently of the Server release commit.
 expected_openapi_sha256 = (
-    "4753be48ccd5491c935a6fd0ad6505e972082e6abe0f1853a1b44cf557ce33f4"
+    "cf83012c6b241e60323543adb7059b49954fbf3d59d4d1fd1817bbfa19d32cdd"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
