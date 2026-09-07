@@ -86,7 +86,7 @@ are unavailable, report the blocker instead of inventing setup commands.
 
 ### Runtime and completion
 
-Use the [ecosystem index](https://docs.staging.relayapp.im/ecosystem/index.md)
+Use the [Integrations overview](https://docs.staging.relayapp.im/integrations/index.md)
 to find the documented package for the actual runtime. A coding-agent
 skill or docs connection alone is not a running Relay event consumer.
 For WebSocket, follow the
@@ -228,7 +228,6 @@ behavior `unknown`.
 - Use `https://docs.staging.relayapp.im/mcp` for read-only documentation search.
 - Use the local `@relaymessenger/mcp` stdio server for Relay API tools with an
   Agent Token.
-- Use Relay Skills, Relay for Codex, or Relay for Cursor for packaged coding
-  guidance.
-- Read the Developer ecosystem page before selecting Chat SDK, Cloudflare
+- Use the Skills, Codex, or Cursor integrations for packaged coding guidance.
+- Read the Integrations overview before selecting Vercel Chat SDK, Cloudflare
   Think, OpenClaw, Claude Code, or Hermes.

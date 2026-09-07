@@ -13,8 +13,8 @@ Guides
   Contacts
   Webhooks
   WebSocket
+  Integrations
   Platform
-  Developer ecosystem
   Examples
 Error Codes
 API Reference

@@ -101,23 +101,24 @@ redirects = {
     if isinstance(item, dict) and item.get("permanent") is True
 }
 for source, destination in {
-    "/integrations": "/ecosystem",
-    "/integrations/agent-starter": "/ecosystem/agent-starter",
-    "/integrations/chat-sdk": "/ecosystem/chat-sdk",
-    "/integrations/claude-code": "/ecosystem/claude-code",
-    "/integrations/cli": "/ecosystem/cli",
-    "/integrations/cloudflare": "/ecosystem/agent-starter",
-    "/integrations/codex": "/ecosystem/codex",
-    "/integrations/cursor": "/ecosystem/cursor",
-    "/integrations/hermes": "/ecosystem/hermes",
-    "/integrations/hermes-plugin": "/ecosystem/hermes",
-    "/integrations/mcp": "/ecosystem/mcp",
-    "/integrations/openclaw": "/ecosystem/openclaw",
-    "/integrations/skills": "/ecosystem/skills",
+    "/ecosystem": "/integrations",
+    "/ecosystem/agent-starter": "/integrations/cloudflare-think",
+    "/ecosystem/chat-sdk": "/integrations/chat-sdk",
+    "/ecosystem/claude-code": "/integrations/claude-code",
+    "/ecosystem/cli": "/integrations/cli",
+    "/ecosystem/codex": "/integrations/codex",
+    "/ecosystem/cursor": "/integrations/cursor",
+    "/ecosystem/hermes": "/integrations/hermes",
+    "/ecosystem/mcp": "/integrations/mcp",
+    "/ecosystem/openclaw": "/integrations/openclaw",
+    "/ecosystem/skills": "/integrations/skills",
+    "/integrations/agent-starter": "/integrations/cloudflare-think",
+    "/integrations/cloudflare": "/integrations/cloudflare-think",
+    "/integrations/hermes-plugin": "/integrations/hermes",
 }.items():
     if redirects.get(source) != destination:
         raise SystemExit(
-            f"legacy ecosystem redirect lost: {source} -> {destination}"
+            f"legacy integrations redirect lost: {source} -> {destination}"
         )
 
 
@@ -214,8 +215,8 @@ expected_guide_groups = [
     "Contacts",
     "Webhooks",
     "WebSocket",
+    "Integrations",
     "Platform",
-    "Developer ecosystem",
     "Examples",
 ]
 actual_guide_groups = [group["group"] for group in tabs[0]["groups"]]
@@ -277,18 +278,18 @@ expected_guide_pages = {
         "guides/platform/rate-limits",
         "guides/platform/debugging",
     ],
-    "Developer ecosystem": [
-        "ecosystem/index",
-        "ecosystem/chat-sdk",
-        "ecosystem/cli",
-        "ecosystem/mcp",
-        "ecosystem/openclaw",
-        "ecosystem/claude-code",
-        "ecosystem/hermes",
-        "ecosystem/agent-starter",
-        "ecosystem/skills",
-        "ecosystem/codex",
-        "ecosystem/cursor",
+    "Integrations": [
+        "integrations/index",
+        "integrations/chat-sdk",
+        "integrations/cloudflare-think",
+        "integrations/openclaw",
+        "integrations/hermes",
+        "integrations/claude-code",
+        "integrations/codex",
+        "integrations/cursor",
+        "integrations/cli",
+        "integrations/mcp",
+        "integrations/skills",
     ],
     "Examples": ["examples/index"],
 }
@@ -352,7 +353,7 @@ for path in [
     root / "guides/chats/index.mdx",
     root / "guides/webhooks/index.mdx",
     root / "guides/websocket/index.mdx",
-    root / "ecosystem/index.mdx",
+    root / "integrations/index.mdx",
     root / "api-reference/overview.mdx",
 ]:
     if 'sidebarTitle: "Overview"' not in path.read_text():
@@ -377,7 +378,7 @@ for stale in [
     root / "guides/platform/errors.mdx",
     root / "guides/contacts/default-agents.mdx",
     root / "guides/contacts/agent-greetings.mdx",
-    root / "integrations",
+    root / "ecosystem",
     root / "error/codes/2xxx/2014.mdx",
 ]:
     if stale.exists():
@@ -391,28 +392,28 @@ if "--topology-only" in sys.argv:
     raise SystemExit(0)
 
 ecosystem_paths = [
-    root / "ecosystem/index.mdx",
-    root / "ecosystem/chat-sdk.mdx",
-    root / "ecosystem/cli.mdx",
-    root / "ecosystem/mcp.mdx",
-    root / "ecosystem/openclaw.mdx",
-    root / "ecosystem/claude-code.mdx",
-    root / "ecosystem/hermes.mdx",
-    root / "ecosystem/agent-starter.mdx",
-    root / "ecosystem/skills.mdx",
-    root / "ecosystem/codex.mdx",
-    root / "ecosystem/cursor.mdx",
+    root / "integrations/index.mdx",
+    root / "integrations/chat-sdk.mdx",
+    root / "integrations/cli.mdx",
+    root / "integrations/mcp.mdx",
+    root / "integrations/openclaw.mdx",
+    root / "integrations/claude-code.mdx",
+    root / "integrations/hermes.mdx",
+    root / "integrations/cloudflare-think.mdx",
+    root / "integrations/skills.mdx",
+    root / "integrations/codex.mdx",
+    root / "integrations/cursor.mdx",
     root / "examples/index.mdx",
 ]
 ecosystem_text = "\n".join(path.read_text() for path in ecosystem_paths)
 canonical_ecosystem_sources = {
-    "ecosystem/chat-sdk.mdx": "packages/chat-sdk-adapter",
-    "ecosystem/cli.mdx": "packages/cli",
-    "ecosystem/mcp.mdx": "packages/mcp",
-    "ecosystem/openclaw.mdx": "packages/openclaw",
-    "ecosystem/claude-code.mdx": "packages/claude-code",
-    "ecosystem/agent-starter.mdx": "cookbook/cloudflare-think-agent",
-    "ecosystem/skills.mdx": "skills/relay",
+    "integrations/chat-sdk.mdx": "packages/chat-sdk-adapter",
+    "integrations/cli.mdx": "packages/cli",
+    "integrations/mcp.mdx": "packages/mcp",
+    "integrations/openclaw.mdx": "packages/openclaw",
+    "integrations/claude-code.mdx": "packages/claude-code",
+    "integrations/cloudflare-think.mdx": "cookbook/cloudflare-think-agent",
+    "integrations/skills.mdx": "skills/relay",
     "examples/index.mdx": "cookbook",
 }
 for relative, source_path in canonical_ecosystem_sources.items():
@@ -422,16 +423,16 @@ for relative, source_path in canonical_ecosystem_sources.items():
     )
     if expected not in (root / relative).read_text():
         raise SystemExit(
-            f"developer ecosystem lost canonical source link: {expected}"
+            f"integrations lost canonical source link: {expected}"
         )
 
 # Each coding-agent host installs from a discovery manifest at the Relay-SDK
 # repository root. The pages must name the manifest their host reads, so a
 # reader can see what a plain clone of Relay-SDK offers that host.
 for relative, manifest in {
-    "ecosystem/claude-code.mdx": ".claude-plugin/marketplace.json",
-    "ecosystem/codex.mdx": ".agents/plugins/marketplace.json",
-    "ecosystem/cursor.mdx": ".cursor-plugin/marketplace.json",
+    "integrations/claude-code.mdx": ".claude-plugin/marketplace.json",
+    "integrations/codex.mdx": ".agents/plugins/marketplace.json",
+    "integrations/cursor.mdx": ".cursor-plugin/marketplace.json",
 }.items():
     expected = (
         "https://github.com/RelayMessenger/Relay-SDK/blob/staging/"
@@ -439,7 +440,7 @@ for relative, manifest in {
     )
     if expected not in (root / relative).read_text():
         raise SystemExit(
-            f"developer ecosystem lost root discovery manifest: {expected}"
+            f"integrations lost root discovery manifest: {expected}"
         )
 
 hosted_lock = json.loads(
@@ -457,8 +458,8 @@ for locked_path in [
         raise SystemExit(f"hosted lock lost root discovery path: {locked_path}")
 
 hermes_source = "https://github.com/RelayMessenger/Relay-Hermes"
-if hermes_source not in (root / "ecosystem/hermes.mdx").read_text():
-    raise SystemExit(f"developer ecosystem lost separate source: {hermes_source}")
+if hermes_source not in (root / "integrations/hermes.mdx").read_text():
+    raise SystemExit(f"integrations lost separate source: {hermes_source}")
 
 for stale_repository in [
     "Relay-Chat-SDK",
@@ -493,7 +494,7 @@ for version in [
     "@relaymessenger/cookbook-cloudflare-think-agent@0.1.0",
 ]:
     if version not in ecosystem_text:
-        raise SystemExit(f"developer ecosystem lost current source version: {version}")
+        raise SystemExit(f"integrations lost current source version: {version}")
 for marker in [
     "serverless-friendly",
     "Acknowledged WebSocket",
@@ -502,16 +503,16 @@ for marker in [
     "hosted docs MCP",
 ]:
     if marker not in ecosystem_text:
-        raise SystemExit(f"developer ecosystem lost runtime boundary: {marker}")
+        raise SystemExit(f"integrations lost runtime boundary: {marker}")
 
-ecosystem_index_text = (root / "ecosystem/index.mdx").read_text()
+ecosystem_index_text = (root / "integrations/index.mdx").read_text()
 for package in [pinned(name) for name in npm_latest]:
     if f"| `{package}` | `latest` and `staging`" not in ecosystem_index_text:
         raise SystemExit(f"live npm tag truth lost: {package}")
 if "All six live `latest` tags select the versions shown above." not in ecosystem_index_text:
     raise SystemExit("six-package live npm latest truth lost")
 
-chat_sdk_text = (root / "ecosystem/chat-sdk.mdx").read_text()
+chat_sdk_text = (root / "integrations/chat-sdk.mdx").read_text()
 for marker in [
     "npm install chat@4.39.0 @chat-adapter/state-memory@4.39.0",
     "@relaymessenger/chat-sdk-adapter@staging",
@@ -530,7 +531,7 @@ for marker in [
 if re.search(r"\bsource[- ]only\b|\bsource tarball\b", chat_sdk_text, re.I):
     raise SystemExit("published Chat SDK is described as source-only")
 
-cli_text = (root / "ecosystem/cli.mdx").read_text()
+cli_text = (root / "integrations/cli.mdx").read_text()
 for marker in [
     "npm install --global @relaymessenger/cli@staging",
     "relay --profile staging events listen --acknowledge-events",
@@ -542,7 +543,7 @@ for marker in [
 if "relay webhooks listen" in cli_text:
     raise SystemExit("stale Relay CLI event-listener command returned")
 
-codex_text = (root / "ecosystem/codex.mdx").read_text()
+codex_text = (root / "integrations/codex.mdx").read_text()
 for marker in [
     "Codex CLI",
     "0.152.0",
@@ -555,7 +556,7 @@ for marker in [
 
 # Cursor loads a local plugin from a directory holding a plugin manifest.
 # Relay-SDK's root has none, so the link must name the plugin subtree.
-cursor_text = (root / "ecosystem/cursor.mdx").read_text()
+cursor_text = (root / "integrations/cursor.mdx").read_text()
 for marker in [
     "ln -s /absolute/path/to/Relay-SDK/plugins/relay ~/.cursor/plugins/local/relay",
     "https://github.com/RelayMessenger/Relay-SDK.git",
@@ -563,7 +564,7 @@ for marker in [
     if marker not in cursor_text:
         raise SystemExit(f"Cursor staging install proof lost: {marker}")
 
-claude_text = (root / "ecosystem/claude-code.mdx").read_text()
+claude_text = (root / "integrations/claude-code.mdx").read_text()
 claude_normalized = re.sub(r"\s+", " ", claude_text)
 for marker in [
     pinned("relay-claude-channel"),
@@ -585,7 +586,7 @@ for marker in [
 hermes_text = re.sub(
     r"\s+",
     " ",
-    (root / "ecosystem" / "hermes.mdx").read_text(),
+    (root / "integrations" / "hermes.mdx").read_text(),
 )
 for marker in [
     "slash-command Messages are ignored before Hermes dispatch",
@@ -621,9 +622,9 @@ for index, line in enumerate(ecosystem_text.splitlines()):
 hosted_proof_text = "\n".join(
     (root / relative).read_text()
     for relative in [
-        "ecosystem/skills.mdx",
-        "ecosystem/codex.mdx",
-        "ecosystem/cursor.mdx",
+        "integrations/skills.mdx",
+        "integrations/codex.mdx",
+        "integrations/cursor.mdx",
     ]
 )
 for marker in [
@@ -1605,8 +1606,8 @@ for name, pattern in {
     "Socket Mode product name": r"\bSocket Mode\b",
     "agent installation lifecycle": r"\bagent installation\b|\binstalled agents?\b|\binstall agents?\b",
     "agent share-link lifecycle": r"\bshare[- ]link\b",
-    "old ecosystem path": r"/integrations(?:/|\b)",
-    "old integrations vocabulary": r"\bintegrations?\b",
+    "old ecosystem path": r"/ecosystem(?:/|\b)",
+    "old ecosystem vocabulary": r"\becosystem\b|\bRelay for \b|\bRelay channel for\b",
     "old conversation vocabulary": r"\bconversations?\b",
     "removed Message feature phrase": r"\bMessage " r"effects\b",
     "stale guide path": r"guides/(?:socket-mode|chats/install-agents|webhooks/choose-transport|platform/errors)",
