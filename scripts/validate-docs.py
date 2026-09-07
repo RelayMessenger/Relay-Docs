@@ -1186,11 +1186,11 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # contract, never hand-written. This pin records the exact bytes and the commit
 # they came from, so an edit made here instead of at the source fails the gate.
 # Source: Relay-Server/contracts/developer/openapi.yaml.
-# Approved AddParticipantRequest.hide_history addition, September 6, 2026.
-# Source authority: agent-add-server-20260906/contracts/developer/openapi.yaml.
+# Additive getMessages `order` query parameter, September 7, 2026.
+# Source authority: server-messages-desc-20260907/contracts/developer/openapi.yaml.
 # The digest pins source bytes independently of the Server release commit.
 expected_openapi_sha256 = (
-    "df402b9bebcce58be2f7fa2e0a193e68896d7d34a6e4581dc4e5446a7854ab84"
+    "4753be48ccd5491c935a6fd0ad6505e972082e6abe0f1853a1b44cf557ce33f4"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
