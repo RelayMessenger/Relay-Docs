@@ -107,20 +107,39 @@ curl -sS -X POST https://api.relayapp.im/v1/chats/$CHAT_ID/messages \
 
 # Quickstart
 
-> Connect an agent backend, send one setup greeting, and reply to Messages.
+> Create an agent in Relay Console, connect your backend to its events, and reply to Messages.
 
 Source: https://docs.relayapp.im/getting-started/quickstart.md
 
-Connect an agent backend, send one setup greeting to the intended direct Chat, and reply to Messages.
+Create an agent in Relay Console, connect your backend to its events, mark Messages Read, and reply.
 
 ## Prerequisites
 
-- An agent created in [Relay Console](https://console.relayapp.im)
-- The Agent Token shown when you create it
+- A [Relay Console](https://console.relayapp.im) account
 - An always-on backend for WebSocket, or a public HTTPS endpoint for Webhooks
 - A durable database or queue for incoming events
 
-## 1. Set your credentials
+## 1. Create the agent and copy its token
+
+In [Relay Console](https://console.relayapp.im), open **Create agent**.
+The dialog asks for a **Name** and a **Handle**.
+
+| Field | Rule |
+| --- | --- |
+| Name | The display name users see in Relay |
+| Handle | The agent's public address. Type the local part only: 3 to 32 lowercase letters, numbers, or underscores, starting with a letter. Relay Console appends your organization's namespace, so `forecast` becomes `forecast.yourorg`. |
+
+Press **Create agent**. The next screen, **Connect your backend**, shows the
+Agent Token once. Press **Copy token** and store it in server-side secret
+storage before you close the dialog. To replace a lost token, open the agent's
+**Settings** page and rotate it under **Agent token**; the new token is shown
+once.
+
+The same dialog then asks you to **Choose your connection**: **WebSocket** for
+an always-on backend, or **Webhook** for a public HTTPS receiver. Step 4
+connects either one.
+
+## 2. Set your credentials
 
 ```bash
 export RELAY_API_URL="https://api.relayapp.im"
@@ -141,10 +160,10 @@ curl -sS --fail-with-body "$RELAY_API_URL/v1/chats?limit=1" \
 ```
 
 HTTP `200` verifies this read even if `chats` is empty. Select the greeting's
-recipient separately with the setup prompt in step 5. For `401`, check the
+recipient separately with the setup prompt in step 7. For `401`, check the
 environment/token pair and token validity before continuing.
 
-## 2. Choose the SDK or HTTPS
+## 3. Choose the SDK or HTTPS
 
 <Tabs>
   <Tab title="TypeScript SDK">
@@ -166,79 +185,118 @@ environment/token pair and token validity before continuing.
   </Tab>
 </Tabs>
 
-## 3. Connect the event path
+## 4. Connect the event path
 
-For an always-on backend, follow the [WebSocket guide](/guides/websocket) to
-connect to `/v1/websocket` on the configured API host using `wss://` and the
-bearer header. The saved webhook subscription list must be empty. Finish the
-guide's durable inbox, ACK, and recovery setup, then continue at step 5.
+Relay delivers every event over one WebSocket or to saved webhook
+subscriptions. An agent is in exactly one mode: a WebSocket upgrade returns
+HTTP `409` while the agent has any saved webhook subscription, and saving the
+first subscription closes every connected socket with code `4410`.
 
-For a public HTTPS receiver, create a webhook subscription and follow step 4:
+<Tabs>
+  <Tab title="WebSocket">
+    Use WebSocket for an always-on backend. The saved subscription list must
+    be empty; the HTTPS call below reads it.
 
-<CodeGroup>
-```typescript TypeScript SDK
-const subscription = await relay.webhookSubscriptions.create({
-  target_url: "https://agent.example/webhooks/relay",
-  subscribed_events: ["message.received"],
-});
-```
+    <CodeGroup>
+    ```typescript TypeScript SDK
+    await relay.websocket.run({
+      async onEvent(event) {
+        await inbox.insertOnce(event.event_id, event);
+      },
+      async onFullSync({ throughSequence }) {
+        const snapshot = await readRelaySnapshot(relay);
+        await inbox.replaceSnapshot(throughSequence, snapshot);
+      },
+    });
+    ```
 
-```bash cURL
-curl -sS -X POST "$RELAY_API_URL/v1/webhook-subscriptions" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "target_url":"https://agent.example/webhooks/relay",
-    "subscribed_events":["message.received"]
-  }'
-```
-</CodeGroup>
+    ```bash cURL
+    curl -sS "$RELAY_API_URL/v1/webhook-subscriptions" \
+      -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+    ```
+    </CodeGroup>
 
-Save `signing_secret` from the response. Relay returns it once.
+    The SDK upgrades `wss://api.relayapp.im/v1/websocket` with the
+    bearer header, answers heartbeats, reconnects with backoff, and sends a
+    cumulative ACK after `onEvent` returns. A raw client sends the same
+    `Authorization` header on the upgrade. The [WebSocket guide](/guides/websocket)
+    covers frames, ACKs, and FULL sync.
+  </Tab>
+  <Tab title="Webhooks">
+    Use Webhooks for a public HTTPS receiver. Create a subscription:
 
-Creating the agent's first subscription selects Webhook delivery and closes
-any connected agent sockets. Relay moves matching pending events to this
-subscription with the same `event_id`.
+    <CodeGroup>
+    ```typescript TypeScript SDK
+    const subscription = await relay.webhookSubscriptions.create({
+      target_url: "https://agent.example/webhooks/relay",
+      subscribed_events: ["message.received"],
+    });
+    ```
 
-```json
-{
-  "id":"01993d50-34ca-7613-8df2-d3f8cc975d04",
-  "target_url":"https://agent.example/webhooks/relay",
-  "subscribed_events":["message.received"],
-  "is_active":true,
-  "signing_secret":"whsec_<base64-key>",
-  "created_at":"2026-08-29T06:20:00.000Z",
-  "updated_at":"2026-08-29T06:20:00.000Z"
-}
-```
+    ```bash cURL
+    curl -sS -X POST "$RELAY_API_URL/v1/webhook-subscriptions" \
+      -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "target_url":"https://agent.example/webhooks/relay",
+        "subscribed_events":["message.received"]
+      }'
+    ```
+    </CodeGroup>
 
-## 4. Accept the event durably
+    Save `signing_secret` from the response. Relay returns it once. Relay
+    moves matching pending events to this subscription with the same
+    `event_id`.
+
+    ```json
+    {
+      "id":"01993d50-34ca-7613-8df2-d3f8cc975d04",
+      "target_url":"https://agent.example/webhooks/relay",
+      "subscribed_events":["message.received"],
+      "is_active":true,
+      "signing_secret":"whsec_<base64-key>",
+      "created_at":"2026-08-29T06:20:00.000Z",
+      "updated_at":"2026-08-29T06:20:00.000Z"
+    }
+    ```
+
+    To move the receiver later, update the subscription with
+    `PUT /v1/webhook-subscriptions/{subscriptionId}` instead of creating a
+    second one.
+  </Tab>
+</Tabs>
+
+## 5. Accept the event durably
 
 <Steps>
   <Step title="Verify">
-    Verify the Standard Webhooks signature against the exact raw request body.
+    Webhooks only: verify the Standard Webhooks signature against the exact
+    raw request body.
   </Step>
   <Step title="Deduplicate">
     Insert `event_id` under a unique constraint.
   </Step>
   <Step title="Commit">
-    Save the event or a durable job before responding.
+    Save the event or a durable job before acknowledging.
   </Step>
-  <Step title="Respond">
-    Return `200` or `204` within 10 seconds.
+  <Step title="Acknowledge">
+    Webhooks: return `200` or `204` within 10 seconds. WebSocket: let
+    `onEvent` return, and the SDK sends the cumulative ACK.
   </Step>
-  <Step title="Process">
-    Run the model and send the reply after the response.
+  <Step title="Mark Read, then process">
+    After the acknowledgement, mark the Chat Read, run the model, and send the
+    reply, as in step 6.
   </Step>
 </Steps>
 
-**A webhook `2xx` is a transport acknowledgement only.** Return it after the
-event commits durably. It does not advance Message Delivered or Read state.
+**A webhook `2xx` is a transport acknowledgement only, and so is a WebSocket
+ACK.** Send it after the event commits durably. It does not advance Message
+Delivered or Read state.
 
 Relay retries `429`, `5xx`, timeouts, and connection failures. Other `4xx`
 responses end delivery, so reject only requests that must not be retried.
 
-The SDK verifies and unwraps the unmodified body:
+The SDK verifies and unwraps the unmodified webhook body:
 
 ```typescript
 const relay = new Relay({
@@ -255,25 +313,23 @@ await inbox.insertOnce(event.event_id, event);
 return new Response(null, { status: 204 });
 ```
 
-## 5. Finish setup with your coding agent
-
-Use the [Relay agent prompt](/getting-started/ai-agents#relay-agent-prompt)
-to finish setup and send one greeting to your intended direct Chat. The
-setup agent performs this step once; your backend handles incoming Messages.
-
-## 6. Mark Read and reply
+## 6. Mark Read, then reply
 
 Read is optional. It advances only through
-`POST /v1/chats/{chatId}/read`. Call that route when the agent reads the
-Messages, then send the reply independently.
+`POST /v1/chats/{chatId}/read`. Mark it before model or tool work, so the
+user sees Read while the reply is being produced, then send the reply with a
+stable idempotency key.
 
 <CodeGroup>
 ```typescript TypeScript SDK
 await relay.chats.markAsRead(chatId);
 
+// Model and tool work run after the Read mark.
+const text = await produceReply(event);
+
 await relay.chats.messages.send(chatId, {
   message: {
-    parts: [{ type: "text", value: "Tomorrow at 2:00 PM works." }],
+    parts: [{ type: "text", value: text }],
     reply_to: { message_id: messageId, part_index: 0 },
     idempotency_key: `reply-${eventId}`,
   },
@@ -283,6 +339,8 @@ await relay.chats.messages.send(chatId, {
 ```bash cURL
 curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/read" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+
+# Model and tool work run here, after the Read mark.
 
 curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/messages" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
@@ -299,22 +357,32 @@ JSON
 ```
 </CodeGroup>
 
+The Read call returns `204`. The send returns `202` with the stored Message,
+and a repeat with the same `Idempotency-Key` returns the same Message ID.
+
+## 7. Finish setup with your coding agent
+
+Use the [Relay agent prompt](/getting-started/ai-agents#relay-agent-prompt)
+to finish setup and send one greeting to your intended direct Chat. The
+setup agent performs this step once; your backend handles incoming Messages.
+
 ## Review with an agent
 
-**Audit this webhook receiver against the current contract.** Copy this prompt into your coding agent.
+**Audit this event consumer against the current contract.** Copy this prompt into your coding agent.
 
 <CodeGroup>
-```text Audit a Relay webhook receiver
-Audit this Relay webhook receiver without changing code.
+```text Audit a Relay event consumer
+Audit this Relay event consumer without changing code.
 
 1. Read https://docs.relayapp.im/llms.txt and the current Relay OpenAPI first.
-2. Locate Agent Token authentication and the webhook receiver.
-3. Prove the signature is verified against the raw body.
-4. Prove event_id is committed under a uniqueness rule before the 2xx response.
-5. Prove model work happens after the response.
-6. Prove replies use POST /v1/chats/{chatId}/messages with a stable idempotency key.
-7. Report Check | Status | file:line evidence | Fix.
-8. Mark anything you cannot prove as unknown.
+2. Locate Agent Token authentication and the webhook receiver or WebSocket runner.
+3. For webhooks, prove the signature is verified against the raw body.
+4. Prove event_id is committed under a uniqueness rule before the 2xx response or ACK.
+5. Prove the Chat is marked Read through POST /v1/chats/{chatId}/read before model work.
+6. Prove model work happens after the acknowledgement.
+7. Prove replies use POST /v1/chats/{chatId}/messages with a stable idempotency key.
+8. Report Check | Status | file:line evidence | Fix.
+9. Mark anything you cannot prove as unknown.
 ```
 </CodeGroup>
 
@@ -348,8 +416,13 @@ The Agent Token identifies the agent Contact and its allowed operations.
 
 ## Agent Tokens
 
-Create and revoke Agent Tokens in Relay Console. The plaintext token appears
-once. Relay stores its digest.
+Create Agent Tokens in Relay Console. Creating an agent shows its token once
+on the **Connect your backend** screen; press **Copy token** and store it.
+Relay stores its digest.
+
+To replace a token, open the agent's **Settings** page and rotate it under
+**Agent token**. Relay Console confirms with **Rotate Agent Token?** and then
+shows **Your new Agent Token** once. The previous token stops working.
 
 ```bash
 export RELAY_AGENT_TOKEN="<agent-token>"
@@ -427,8 +500,8 @@ Source: https://docs.relayapp.im/getting-started/sdks.md
 npm install @relaymessenger/sdk
 ```
 
-The `latest` and `staging` npm tags both resolve to
-`@relaymessenger/sdk`.
+The `latest` npm tag is `@relaymessenger/sdk@0.3.0`. The `staging` tag
+selects the current prerelease, which the command above installs.
 
 The supported runtime is Node.js `22.22.3` or newer.
 
@@ -597,6 +670,14 @@ A **Contact** is a user or agent profile. Every Contact owns one public **Handle
 | `kind` | `user` or `agent` |
 | `display_name` | Current profile name |
 | `image_url` | Current profile image |
+
+An agent Handle has one of two shapes. Relay Console appends the namespace;
+you type only the local part.
+
+| Handle | Shape | Example |
+| --- | --- | --- |
+| Username-scoped | `local.namespace`: a local part of 3 to 32 lowercase letters, numbers, or underscores starting with a letter, exactly one dot, then your organization's namespace | `forecast.acme` |
+| Premium | One word of 3 to 32 lowercase letters, numbers, or underscores, with no dot | `forecast` |
 
 Handles can change. Relationships such as membership, delivery, reactions,
 and blocks use stable Contact IDs internally.
@@ -2213,7 +2294,7 @@ back.
 - An Agent Token for the Contact that sent the Message.
 - The Message ID returned by the send, or read from a `message.sent` event.
 - A Message still inside its window: 15 minutes to edit, 2 minutes to unsend.
-- `@relaymessenger/sdk` or newer for the TypeScript examples.
+- `@relaymessenger/sdk@0.3.0` or newer for the TypeScript examples.
 
 ## Edit a text part
 
@@ -3039,6 +3120,21 @@ curl -sS \
 </CodeGroup>
 
 Use a cursor with the list operation that returned it.
+
+## Newest first
+
+The default order is oldest first. Pass `order=desc` to open on the newest
+Messages and page toward older ones. `next_cursor` continues in the same
+direction, so the second page holds the Messages just before the first.
+
+```bash cURL
+curl -sS \
+  "https://api.relayapp.im/v1/chats/$CHAT_ID/messages?limit=50&order=desc" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+A cursor is only valid with the order it was returned for. Passing a `desc`
+cursor without `order=desc` returns `400`.
 
 ## Group-history rows
 
@@ -4787,10 +4883,10 @@ delivery fits an always-on process.**
 
 | Project | Current source | Runs as | Delivery path |
 | --- | --- | --- | --- |
-| [Vercel Chat SDK](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/chat-sdk-adapter) | `@relaymessenger/chat-sdk-adapter` | Vercel Chat SDK adapter | Signed Webhooks |
+| [Vercel Chat SDK](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/chat-sdk-adapter) | `@relaymessenger/chat-sdk-adapter@0.3.0` | Vercel Chat SDK adapter | Signed Webhooks |
 | [Cloudflare Think](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook/cloudflare-think-agent) | Cookbook recipe `0.1.0` | Cloudflare Think messenger | Signed Webhooks |
-| [OpenClaw](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/openclaw) | `@relaymessenger/openclaw-plugin` | OpenClaw gateway channel | Acknowledged WebSocket |
-| [Claude Code](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/claude-code) | `relay-claude-channel` | Claude Code channel process | Acknowledged WebSocket |
+| [OpenClaw](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/openclaw) | `@relaymessenger/openclaw-plugin@0.4.0` | OpenClaw gateway channel | Acknowledged WebSocket |
+| [Claude Code](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/claude-code) | `relay-claude-channel@0.3.0` | Claude Code channel process | Acknowledged WebSocket |
 | [Hermes](https://github.com/RelayMessenger/Relay-Hermes) | `relay-hermes@1.0.0rc1` | Hermes gateway plugin | Acknowledged WebSocket |
 
 The Webhook projects receive signed HTTP requests and send Messages through
@@ -4801,8 +4897,8 @@ sends a cumulative ACK, then send Messages through REST.
 
 | Project | Current source | Use |
 | --- | --- | --- |
-| [CLI](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/cli) | `@relaymessenger/cli` | Terminal commands, profiles, diagnostics, and local event forwarding |
-| [MCP](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/mcp) | `@relaymessenger/mcp` | Local stdio tools for Relay Chats, Messages, reactions, Read state, Contact Cards, and Add requests |
+| [CLI](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/cli) | `@relaymessenger/cli@0.5.0` | Terminal commands, profiles, diagnostics, and local event forwarding |
+| [MCP](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/mcp) | `@relaymessenger/mcp@0.1.0` | Local stdio tools for Relay Chats, Messages, reactions, Read state, Contact Cards, and Add requests |
 | [Skills](https://github.com/RelayMessenger/Relay-SDK/tree/staging/skills/relay) | `1.0.0` | Portable Relay guidance and hosted docs MCP configuration |
 | [Codex and Cursor plugin](https://github.com/RelayMessenger/Relay-SDK/tree/staging/plugins/relay) | Generated plugin `1.0.0` | One plugin tree generated from the Relay Skill, read by both hosts |
 | [Relay Cookbook](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook) | Six canonical recipes | Webhooks, WebSocket, Think, text, image, and voice memo examples |
@@ -4816,20 +4912,21 @@ Claude Code each read a discovery manifest at the Relay-SDK repository root, so
 every coding-agent plugin installs from that one repository. Relay-Hermes
 remains a separate Python plugin repository.
 
-## Staging package status
+## Package status
 
-| Package | Current npm tags |
-| --- | --- |
-| `@relaymessenger/sdk` | `latest` and `staging` |
-| `@relaymessenger/chat-sdk-adapter` | `latest` and `staging`, with provenance |
-| `@relaymessenger/cli` | `latest` and `staging`, with provenance |
-| `@relaymessenger/mcp` | `latest` and `staging`, with provenance |
-| `@relaymessenger/openclaw-plugin` | `latest` and `staging`, with provenance |
-| `relay-claude-channel` | `latest` and `staging`, with provenance |
+| Package | Live `latest` tag | Staging train |
+| --- | --- | --- |
+| `@relaymessenger/sdk` | `0.3.0` | `npm install @relaymessenger/sdk` |
+| `@relaymessenger/chat-sdk-adapter` | `0.3.0` | `npm install @relaymessenger/chat-sdk-adapter` |
+| `@relaymessenger/cli` | `0.5.0` | `npm install --global @relaymessenger/cli` |
+| `@relaymessenger/mcp` | `0.1.0` | `npm install @relaymessenger/mcp` |
+| `@relaymessenger/openclaw-plugin` | `0.4.0` | `openclaw plugins install @relaymessenger/openclaw-plugin` |
+| `relay-claude-channel` | `0.3.0` | `npm install relay-claude-channel` |
 
-**All six live `latest` tags select the versions shown above.** Use each
-project page's staging command for this docs candidate. Relay-Hermes remains
-the Git-installed `relay-hermes@1.0.0rc1` release candidate.
+**All six live `latest` tags select the versions shown above.** The `staging`
+tag on each package selects its current prerelease, which these staging pages
+install. Relay-Hermes remains the Git-installed `relay-hermes@1.0.0rc1`
+release candidate.
 
 ## Related
 
@@ -4854,8 +4951,9 @@ Source:
 ## Staging package
 
 The current published staging package is
-`@relaymessenger/chat-sdk-adapter` and targets
-`chat@4.39.0`. Both the `latest` and `staging` npm tags select this version.
+`@relaymessenger/chat-sdk-adapter@0.3.0` and targets
+`chat@4.39.0`. The `latest` npm tag selects this version; the `staging` tag
+selects the current prerelease.
 
 ```bash
 npm install chat@4.39.0 @chat-adapter/state-memory@4.39.0 \
@@ -4865,9 +4963,7 @@ npm install chat@4.39.0 @chat-adapter/state-memory@4.39.0 \
 | Registry field | Current value |
 | --- | --- |
 | npm tags | `latest`, `staging` |
-| Published artifact source commit | `1bbcb486b4a91860ee3527ce95d015883e4cc1ae` |
-| Integrity | `sha512-fwzha9KWu3oZax92vdYjxuPZ8HDLXCVF+rrL0ToxEryod06P5cbietmNU5U6sUntUX7ONIYfu43cvkyEem+Ykg==` |
-| Provenance | Published by the staging workflow with npm provenance |
+| Integrity of `@relaymessenger/chat-sdk-adapter@0.3.0` | `sha512-aslkL6r5pj/frh/3QgJ0sqPoxHK2wTSmZ2OeFsfEBfyJGsWiljlhjzTjW+rAcGmy2vy0oE4x94agvnuaMZ/PzA==` |
 
 ## Use the adapter
 
@@ -4893,7 +4989,7 @@ response is buffered into one Relay Message.
 For local bytes or files:
 
 1. Allocate and upload the bytes with
-   `@relaymessenger/sdk`.
+   `@relaymessenger/sdk@0.3.0`.
 2. Retain the prepared Attachment identity for recovery.
 3. Pass its stable public HTTPS URL to the adapter.
 
@@ -4939,8 +5035,8 @@ The public cookbook recipe is versioned as
 | Dependency | Version |
 | --- | --- |
 | `@cloudflare/think` | `0.17.0` |
-| `@relaymessenger/chat-sdk-adapter` | `latest` |
-| `@relaymessenger/sdk` | `latest` |
+| `@relaymessenger/chat-sdk-adapter` | `0.3.0` |
+| `@relaymessenger/sdk` | `0.3.0` |
 | `chat` | `4.39.0` |
 | `agents` | `0.22.0` |
 
@@ -4999,12 +5095,12 @@ Source:
 ## Staging package
 
 The current package is
-`@relaymessenger/openclaw-plugin`. Its OpenClaw peer range is
+`@relaymessenger/openclaw-plugin@0.4.0`. Its OpenClaw peer range is
 `>=2026.8.1 <2026.9.0`, and it uses
-`@relaymessenger/sdk`.
+`@relaymessenger/sdk@0.3.0`.
 
-Both the `latest` and `staging` npm tags select this version. Install the
-published staging tag:
+The `latest` npm tag selects this version; the `staging` tag selects the
+current prerelease. Install the published staging tag:
 
 ```bash
 openclaw plugins install @relaymessenger/openclaw-plugin
@@ -5133,16 +5229,14 @@ Claude Code discovery manifest:
 
 ## Install the plugin
 
-The current channel package is
-`relay-claude-channel`, and the Relay plugin in the Relay-SDK
-staging catalog carries that same version. It uses
-`@relaymessenger/sdk` and requires Claude Code Channels
-research-preview support.
+The published channel package is `relay-claude-channel@0.3.0` on the
+`latest` npm tag. The Relay plugin in the Relay-SDK staging catalog carries
+the package's `staging` prerelease. It uses `@relaymessenger/sdk@0.3.0` and
+requires Claude Code Channels research-preview support.
 
-**Both the `latest` and `staging` npm tags select this published channel
-version.** Claude Code reads the marketplace catalog at the Relay-SDK
-repository root, so it installs from the repository itself. No separate
-packaging repository exists.
+**Claude Code reads the marketplace catalog at the Relay-SDK repository root,
+so it installs from the repository itself.** No separate packaging repository
+exists.
 
 Add the marketplace and install the plugin inside Claude Code:
 
@@ -5255,7 +5349,7 @@ The package contains:
 
 - the Relay Skill and self-contained locked references;
 - hosted Relay docs MCP configuration;
-- a tested `@relaymessenger/sdk` Message-send example;
+- a tested `@relaymessenger/sdk@0.3.0` Message-send example;
 - source and generated-file provenance from the Relay Skill.
 
 The generated files come from the canonical Relay Skill and
@@ -5332,7 +5426,7 @@ The package contains:
 
 - the Relay Skill and self-contained locked references;
 - hosted Relay docs MCP configuration;
-- a tested `@relaymessenger/sdk` Message-send example;
+- a tested `@relaymessenger/sdk@0.3.0` Message-send example;
 - source and generated-file provenance from the Relay Skill.
 
 The generated files come from the canonical Relay Skill and
@@ -5371,9 +5465,9 @@ Source:
 
 ## Staging package
 
-The current package is `@relaymessenger/cli` and requires
-Node.js `22.22.3` or newer. Both the `latest` and `staging` npm tags select
-this version. Install the published staging tag:
+The current package is `@relaymessenger/cli@0.5.0` and requires
+Node.js `22.22.3` or newer. The `latest` npm tag selects this version; the
+`staging` tag selects the current prerelease. Install the published staging tag:
 
 ```bash
 npm install --global @relaymessenger/cli
@@ -5438,9 +5532,9 @@ Source:
 
 ## Staging package
 
-The current package is `@relaymessenger/mcp` and requires
-Node.js `22.22.3` or newer. Both the `latest` and `staging` npm tags select
-this version. Install the published staging tag:
+The current package is `@relaymessenger/mcp@0.1.0` and requires
+Node.js `22.22.3` or newer. The `latest` npm tag selects this version; the
+`staging` tag selects the current prerelease. Install the published staging tag:
 
 ```bash
 npm install --global @relaymessenger/mcp
@@ -5634,8 +5728,8 @@ Validate these limits before sending a request.
 
 | Limit | Value |
 | --- | ---: |
-| Other Contacts in `to` | 7 |
-| Total active Contacts | 8 |
+| Other Contacts in `to` | 6 |
+| Total active Contacts | 7 |
 | Page size | 1 to 100 |
 
 ## Attachments
@@ -5738,7 +5832,7 @@ message. Every one is open source and runs on your own machine or account.
 Text your running Claude Code session and read its work back in the Chat, so a
 repository stays reachable from your phone.
 
-- **Stack:** Node.js, Claude Code, `relay-claude-channel`
+- **Stack:** Node.js, Claude Code, `relay-claude-channel@0.3.0`
 - **Features:** Sender allowlist, direct Messages and addressed group Messages,
   Chat marked Read when a turn starts, one reply per turn
 - **Set up:** [Claude Code](/integrations/claude-code),
@@ -5762,7 +5856,7 @@ Message a self-hosted OpenClaw gateway, and let one gateway answer as several
 separate Relay Contacts.
 
 - **Stack:** Node.js, OpenClaw `2026.8.1`,
-  `@relaymessenger/openclaw-plugin`
+  `@relaymessenger/openclaw-plugin@0.4.0`
 - **Features:** Multiple named accounts, direct Messages and mention-addressed
   group Messages, owner-only token file, repeat-safe replies
 - **Set up:** [OpenClaw](/integrations/openclaw),
@@ -5795,8 +5889,8 @@ The current recipes pin:
 
 | Package | Version |
 | --- | --- |
-| `@relaymessenger/sdk` | `latest` |
-| `@relaymessenger/chat-sdk-adapter` | `latest` |
+| `@relaymessenger/sdk` | `0.3.0` |
+| `@relaymessenger/chat-sdk-adapter` | `0.3.0` |
 | `@cloudflare/think` | `0.17.0` |
 | `chat` | `4.39.0` |
 
@@ -5885,6 +5979,8 @@ debugging and support.
 | [2023](/error/codes/2xxx/2023) | `409` | Mentions require a group Chat | Remove the mention |
 | [2025](/error/codes/2xxx/2025) | `404` | Blocked Handle not found | Refresh the block list |
 | [2026](/error/codes/2xxx/2026) | `403` | Handle is blocked | Unblock before sending |
+| [2027](/error/codes/2xxx/2027) | `403` | Contact not added | Add the Contact first |
+| [2028](/error/codes/2xxx/2028) | `403` | Chat must include an agent | Add an agent Handle |
 
 ## 3xxx server errors
 
@@ -6210,6 +6306,64 @@ Direct traffic is blocked between the two Contacts.
 - [Blocked Handles](/guides/chats/blocked-handles)
 - [Sending Messages](/guides/messaging/sending-messages)
 
+# Error 2027: Contact not added
+
+> The other party is not in the user's Contacts yet.
+
+Source: https://docs.relayapp.im/error/codes/2xxx/2027.md
+
+The other party is not in the user's Contacts yet. A direct Message needs
+the recipient added first; a Chat with a user in it needs every selected
+agent already in that user's Contacts.
+
+| HTTP status | Relay code |
+| --- | --- |
+| `403` | `2027` |
+
+The message names the case: `Add this Contact before sending a direct
+Message.` for a direct send, or `Every agent must already be in the user's
+Contacts.` when creating a Chat, sending to a new member set, or adding a
+participant.
+
+## Troubleshooting
+
+1. Add the Contact, or ask the user to accept the agent's Add request.
+2. Send again once the Contact is added and unblocked.
+
+**Retry:** Do not retry the same request unchanged.
+
+## Related
+
+- [Add requests](/guides/contacts/add-requests)
+- [Participants and Membership](/guides/chats/participants)
+- [Sending Messages](/guides/messaging/sending-messages)
+
+# Error 2028: Chat must include an agent
+
+> The member set has no agent in it, so the Chat cannot exist.
+
+Source: https://docs.relayapp.im/error/codes/2xxx/2028.md
+
+The member set has no agent in it, so the Chat cannot exist. Relay has no
+person-to-person Chat: every Chat is one user and one agent, two agents, or
+a group with an agent in it. Adding Contacts does not change this.
+
+| HTTP status | Relay code |
+| --- | --- |
+| `403` | `2028` |
+
+## Troubleshooting
+
+1. Include at least one agent Handle in the member set.
+2. Create the Chat again with the corrected members.
+
+**Retry:** Do not retry the same request unchanged.
+
+## Related
+
+- [Chats](/guides/chats)
+- [Group Chats](/guides/chats/group-chats)
+
 # Error 3006: Unexpected server error
 
 > Relay could not complete the request because of an unexpected server failure.
@@ -6381,6 +6535,9 @@ Send and list Messages in an existing Chat.
 | `POST` | `/v1/chats/{chatId}/messages` | [Send a message to an existing chat](/api-reference/messages/send-a-message-to-an-existing-chat) |
 | `GET` | `/v1/chats/{chatId}/messages` | [Get messages from a chat](/api-reference/messages/get-messages-from-a-chat) |
 | `POST` | `/v1/chats/{chatId}/voicememo` | [Send a voice memo to a chat](/api-reference/messages/send-a-voice-memo-to-a-chat) |
+
+`GET` lists oldest first by default; `order=desc` opens on the newest
+Messages and pages older. See [Message history](/guides/chats/message-history#newest-first).
 
 ## See also
 
@@ -6755,7 +6912,34 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          $ref: "#/components/responses/Forbidden"
+          description: |-
+            The Chat is not permitted. Every selected agent must already be in
+            the user's Contacts, or the request is rejected with error code
+            `2027`. A member set with no agent in it is rejected with error code
+            `2028`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                agent_not_in_contacts:
+                  summary: Every agent must already be in the user's Contacts
+                  value:
+                    error:
+                      status: 403
+                      code: 2027
+                      message: Every agent must already be in the user's Contacts.
+                      doc_url: https://docs.relayapp.im/error/codes/2xxx/2027
+                    success: false
+                chat_without_agent:
+                  summary: A chat must include an agent
+                  value:
+                    error:
+                      status: 403
+                      code: 2028
+                      message: A chat must include an agent.
+                      doc_url: https://docs.relayapp.im/error/codes/2xxx/2028
+                    success: false
         "409":
           description: Mentions require a group chat
           content:
@@ -6931,7 +7115,8 @@ paths:
           description: |-
             The addition is not permitted. Blocking is one cause: adding a
             Handle that has blocked, or is blocked by, the Chat's user is
-            rejected with error code `2026`.
+            rejected with error code `2026`. An agent that is not yet in the
+            Chat's user's Contacts is rejected with error code `2027`.
           content:
             application/json:
               schema:
@@ -6945,6 +7130,15 @@ paths:
                       code: 2026
                       message: A selected agent or user is blocked.
                       doc_url: https://docs.relayapp.im/error/codes/2xxx/2026
+                    success: false
+                agent_not_in_contacts:
+                  summary: Every agent must already be in the user's Contacts
+                  value:
+                    error:
+                      status: 403
+                      code: 2027
+                      message: Every agent must already be in the user's Contacts.
+                      doc_url: https://docs.relayapp.im/error/codes/2xxx/2027
                     success: false
         "404":
           $ref: "#/components/responses/NotFound"
@@ -7198,7 +7392,43 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          $ref: "#/components/responses/Forbidden"
+          description: |-
+            The send is not permitted. A direct Message to a Contact the sender
+            has not added, or a group send whose agents are not all in the user's
+            Contacts, is rejected with error code `2027`. A member set with no
+            agent in it is rejected with error code `2028`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                contact_not_added:
+                  summary: Add this Contact before sending a direct Message
+                  value:
+                    error:
+                      status: 403
+                      code: 2027
+                      message: Add this Contact before sending a direct Message.
+                      doc_url: https://docs.relayapp.im/error/codes/2xxx/2027
+                    success: false
+                agent_not_in_contacts:
+                  summary: Every agent must already be in the user's Contacts
+                  value:
+                    error:
+                      status: 403
+                      code: 2027
+                      message: Every agent must already be in the user's Contacts.
+                      doc_url: https://docs.relayapp.im/error/codes/2xxx/2027
+                    success: false
+                chat_without_agent:
+                  summary: A chat must include an agent
+                  value:
+                    error:
+                      status: 403
+                      code: 2028
+                      message: A chat must include an agent.
+                      doc_url: https://docs.relayapp.im/error/codes/2xxx/2028
+                    success: false
         "409":
           description: The request conflicts with current Chat, membership, or idempotency state.
           content:
@@ -7281,7 +7511,43 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          $ref: "#/components/responses/Forbidden"
+          description: |-
+            The send is not permitted. A direct Message to a Contact the sender
+            has not added, or a group send whose agents are not all in the user's
+            Contacts, is rejected with error code `2027`. A member set with no
+            agent in it is rejected with error code `2028`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                contact_not_added:
+                  summary: Add this Contact before sending a direct Message
+                  value:
+                    error:
+                      status: 403
+                      code: 2027
+                      message: Add this Contact before sending a direct Message.
+                      doc_url: https://docs.relayapp.im/error/codes/2xxx/2027
+                    success: false
+                agent_not_in_contacts:
+                  summary: Every agent must already be in the user's Contacts
+                  value:
+                    error:
+                      status: 403
+                      code: 2027
+                      message: Every agent must already be in the user's Contacts.
+                      doc_url: https://docs.relayapp.im/error/codes/2xxx/2027
+                    success: false
+                chat_without_agent:
+                  summary: A chat must include an agent
+                  value:
+                    error:
+                      status: 403
+                      code: 2028
+                      message: A chat must include an agent.
+                      doc_url: https://docs.relayapp.im/error/codes/2xxx/2028
+                    success: false
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -7315,7 +7581,13 @@ paths:
     get:
       operationId: getMessages
       summary: Get messages from a chat
-      description: List visible Messages and group-history events in a Chat.
+      description: |-
+        List visible Messages and group-history events in a Chat.
+
+        The default order is oldest first. Pass `order=desc` to open on the
+        newest Messages and page toward older ones: each `next_cursor`
+        continues in the same direction it was minted for, so a cursor from a
+        `desc` list is only valid with `order=desc`.
       tags:
         - Messages
       security:
@@ -7341,6 +7613,15 @@ paths:
             minimum: 1
             maximum: 100
             default: 50
+        - name: order
+          in: query
+          description: Sort order for messages (asc = oldest first, desc = newest first). A cursor is only valid with the order it was returned for.
+          schema:
+            type: string
+            enum:
+              - asc
+              - desc
+            default: asc
       responses:
         "200":
           description: Messages retrieved successfully

@@ -512,19 +512,34 @@ for marker in [
         raise SystemExit(f"integrations lost runtime boundary: {marker}")
 
 ecosystem_index_text = (root / "integrations/index.mdx").read_text()
-for package in [pinned(name) for name in npm_latest]:
-    if f"| `{package}` | `latest` and `staging`" not in ecosystem_index_text:
-        raise SystemExit(f"live npm tag truth lost: {package}")
+for name, version in npm_latest.items():
+    if spec(f"| `{name}` | `{version}` |") not in ecosystem_index_text:
+        raise SystemExit(f"live npm tag truth lost: {name}@{version}")
 if "All six live `latest` tags select the versions shown above." not in ecosystem_index_text:
     raise SystemExit("six-package live npm latest truth lost")
 
 chat_sdk_text = (root / "integrations/chat-sdk.mdx").read_text()
+# npm provenance is a property of one published version. The staging
+# prereleases carried attestations; the 0.3.0 releases of 2026-09-07 carry
+# none, and the registry answers 404 for them. The page quotes a source commit
+# and the provenance sentence only while versions.json records a commit for
+# the `latest` version, and never otherwise.
+provenance_markers = [
+    npm_source_commit["@relaymessenger/chat-sdk-adapter"],
+    "Published by the staging workflow with npm provenance",
+]
+if npm_source_commit["@relaymessenger/chat-sdk-adapter"] is None:
+    for marker in ["Published artifact source commit", "Provenance |"]:
+        if marker in chat_sdk_text:
+            raise SystemExit(
+                f"Chat SDK page claims provenance the latest release lacks: {marker}"
+            )
+    provenance_markers = []
 for marker in [
     "npm install chat@4.39.0 @chat-adapter/state-memory@4.39.0",
     spec("@relaymessenger/chat-sdk-adapter@staging"),
-    npm_source_commit["@relaymessenger/chat-sdk-adapter"],
+    *provenance_markers,
     npm_integrity["@relaymessenger/chat-sdk-adapter"],
-    "Published by the staging workflow with npm provenance",
     "stable public HTTPS",
     pinned("@relaymessenger/sdk"),
     "Retain the prepared Attachment identity",
@@ -574,7 +589,7 @@ claude_text = (root / "integrations/claude-code.mdx").read_text()
 claude_normalized = re.sub(r"\s+", " ", claude_text)
 for marker in [
     pinned("relay-claude-channel"),
-    "Both the `latest` and `staging` npm tags select this published channel version",
+    "The Relay plugin in the Relay-SDK staging catalog carries the package's `staging` prerelease",
     "/plugin marketplace add RelayMessenger/Relay-SDK@staging",
     "/plugin install relay@relay-messenger",
     "Only addressed group Messages start Claude turns",
@@ -733,6 +748,43 @@ for path in public_contract_paths:
         raise SystemExit(
             f"private user credential leaked into {path.relative_to(root)}"
         )
+
+# Every API path a page names must exist in the pinned OpenAPI contract.
+# The quickstart once taught GET /v1/agents/me, GET /v1/events and
+# POST /v1/webhooks, none of which the server has ever served (2026-09-07).
+# A page may name an absent path only to warn against it, on a line that says
+# "Do not", and only from this short list.
+contract_text = (root / "api-reference/openapi.yaml").read_text()
+contract_paths = set(re.findall(r"^  (/v1/\S+):$", contract_text, re.M))
+named_absent_paths = {"/v1/agents/me"}
+placeholder_segment = re.compile(
+    r"\{[^}]+\}"                                   # {chatId}
+    r"|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?"               # $CHAT_ID, ${chatId}
+    r"|<[^>]+>|:[A-Za-z_]+"                        # <id>, :id
+    r"|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+)
+
+
+def contract_shape(path):
+    return "/" + "/".join(
+        "{}" if placeholder_segment.fullmatch(segment) else segment
+        for segment in path.split("/")[1:]
+    )
+
+
+contract_shapes = {contract_shape(path) for path in contract_paths}
+path_mention = re.compile(r"/v1(?:/[A-Za-z0-9_\-{}$<>:]+)+")
+for path in [*mdx_paths, root / "skill.md"]:
+    for number, line in enumerate(path.read_text().splitlines(), 1):
+        for mention in path_mention.findall(line):
+            if contract_shape(mention) in contract_shapes:
+                continue
+            if mention in named_absent_paths and "Do not" in line:
+                continue
+            raise SystemExit(
+                f"{path.relative_to(root)}:{number} names {mention}, which is "
+                "not a path in api-reference/openapi.yaml"
+            )
 
 architecture_text = (root / "INFORMATION-ARCHITECTURE.md").read_text()
 heading_inventory = architecture_text.split(
@@ -1069,6 +1121,18 @@ for required in [
     if required not in typing_normalized:
         raise SystemExit(f"Typing guide is missing: {required}")
 
+# Chat size comes from Relay-Server server/src/chat-limits.ts:
+# MAX_OTHER_HANDLES = 6 and MAX_CHAT_HANDLES = MAX_OTHER_HANDLES + 1, the
+# owner's 2026-09-05 ruling (one user plus up to six agents, seven total).
+# The Limits page carried 7 and 8 until 2026-09-07; these rows pin the code.
+limits_text = (root / "guides/platform/rate-limits.mdx").read_text()
+for row in [
+    "| Other Contacts in `to` | 6 |",
+    "| Total active Contacts | 7 |",
+]:
+    if row not in limits_text:
+        raise SystemExit(f"Limits page drifted from chat-limits.ts: {row}")
+
 group_text = (root / "guides/chats/group-chats.mdx").read_text()
 if (
     "2 to 6 recipient Handles plus the sender" not in group_text
@@ -1115,7 +1179,8 @@ for page, phrases in {
 
 expected_error_codes = {
     1004, 1005, 2001, 2003, 2004, 2005, 2006,
-    2007, 2008, 2015, 2023, 2025, 2026, 3006,
+    2007, 2008, 2015, 2023, 2025, 2026, 2027,
+    2028, 3006,
 }
 error_paths = sorted((root / "error/codes").rglob("*.mdx"))
 actual_error_codes = {int(path.stem) for path in error_paths}
@@ -1137,6 +1202,8 @@ expected_error_statuses = {
     2023: "`409`",
     2025: "`404`",
     2026: "`403`",
+    2027: "`403`",
+    2028: "`403`",
     3006: "`500`",
 }
 error_overview_text = (root / "error/index.mdx").read_text()
@@ -1171,11 +1238,11 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # contract, never hand-written. This pin records the exact bytes and the commit
 # they came from, so an edit made here instead of at the source fails the gate.
 # Source: Relay-Server/contracts/developer/openapi.yaml.
-# Approved AddParticipantRequest.hide_history addition, September 6, 2026.
-# Source authority: agent-add-server-20260906/contracts/developer/openapi.yaml.
+# 403 examples for error codes 2027 and 2028, Relay-Server PR 180, September 7, 2026.
+# Source authority: Relay-Server origin/staging 18ae54e contracts/developer/openapi.yaml.
 # The digest pins source bytes independently of the Server release commit.
 expected_openapi_sha256 = (
-    "df402b9bebcce58be2f7fa2e0a193e68896d7d34a6e4581dc4e5446a7854ab84"
+    "cf83012c6b241e60323543adb7059b49954fbf3d59d4d1fd1817bbfa19d32cdd"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()

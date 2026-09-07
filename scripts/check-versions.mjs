@@ -122,13 +122,43 @@ for (const file of new Set(files)) {
   });
 }
 
+// The manifest lives on the Relay-SDK staging branch, so it carries the
+// `staging` tag's version, which is what integrations/claude-code.mdx says.
+// Plain releases (0.3.0) fall outside VERSION on purpose, so a page could
+// state `@relaymessenger/sdk@0.2.0` and nothing above would notice. Every
+// `<package>@<version>` and every `| \`<package>\` | \`<version>\` |` row
+// must therefore name a version versions.json carries, whatever its train.
+const PLAIN = String.raw`\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?`;
+for (const file of new Set(files)) {
+  const relative = path.relative(root, file);
+  const lines = (await readFile(file, "utf8")).split("\n");
+  lines.forEach((line, index) => {
+    for (const [name, allowed] of expected) {
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const claims = [
+        ...line.matchAll(new RegExp(`(?<![\\w./@-])${escaped}@(${PLAIN})\\b`, "g")),
+        ...line.matchAll(new RegExp(`\\|\\s*\`${escaped}\`\\s*\\|\\s*\`(${PLAIN})\``, "g")),
+      ];
+      for (const claim of claims) {
+        checked += 1;
+        if (!allowed.has(claim[1])) {
+          failures.push(
+            `${relative}:${index + 1} states ${name}@${claim[1]}, but versions.json `
+            + `says ${[...allowed].join(" or ")}: run npm run refresh:versions`,
+          );
+        }
+      }
+    }
+  });
+}
+
 if (versions.claudeCodePluginManifest
-  !== versions.npm["relay-claude-channel"]?.latest) {
+  !== versions.npm["relay-claude-channel"]?.staging) {
   failures.push(
     "versions.json says the Relay-SDK Claude Code plugin manifest "
-    + `(${versions.claudeCodePluginManifest}) differs from `
-    + `relay-claude-channel@${versions.npm["relay-claude-channel"]?.latest}, but `
-    + "integrations/claude-code.mdx tells readers the two carry the same version",
+    + `(${versions.claudeCodePluginManifest}) differs from the staging tag `
+    + `relay-claude-channel@${versions.npm["relay-claude-channel"]?.staging}, but `
+    + "integrations/claude-code.mdx tells readers the staging catalog carries it",
   );
 }
 
