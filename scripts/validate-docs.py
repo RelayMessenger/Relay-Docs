@@ -1069,6 +1069,18 @@ for required in [
     if required not in typing_normalized:
         raise SystemExit(f"Typing guide is missing: {required}")
 
+# Chat size comes from Relay-Server server/src/chat-limits.ts:
+# MAX_OTHER_HANDLES = 6 and MAX_CHAT_HANDLES = MAX_OTHER_HANDLES + 1, the
+# owner's 2026-09-05 ruling (one user plus up to six agents, seven total).
+# The Limits page carried 7 and 8 until 2026-09-07; these rows pin the code.
+limits_text = (root / "guides/platform/rate-limits.mdx").read_text()
+for row in [
+    "| Other Contacts in `to` | 6 |",
+    "| Total active Contacts | 7 |",
+]:
+    if row not in limits_text:
+        raise SystemExit(f"Limits page drifted from chat-limits.ts: {row}")
+
 group_text = (root / "guides/chats/group-chats.mdx").read_text()
 if (
     "2 to 6 recipient Handles plus the sender" not in group_text
@@ -1115,7 +1127,8 @@ for page, phrases in {
 
 expected_error_codes = {
     1004, 1005, 2001, 2003, 2004, 2005, 2006,
-    2007, 2008, 2015, 2023, 2025, 2026, 3006,
+    2007, 2008, 2015, 2023, 2025, 2026, 2027,
+    2028, 3006,
 }
 error_paths = sorted((root / "error/codes").rglob("*.mdx"))
 actual_error_codes = {int(path.stem) for path in error_paths}
@@ -1137,6 +1150,8 @@ expected_error_statuses = {
     2023: "`409`",
     2025: "`404`",
     2026: "`403`",
+    2027: "`403`",
+    2028: "`403`",
     3006: "`500`",
 }
 error_overview_text = (root / "error/index.mdx").read_text()
