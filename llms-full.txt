@@ -3040,6 +3040,21 @@ curl -sS \
 
 Use a cursor with the list operation that returned it.
 
+## Newest first
+
+The default order is oldest first. Pass `order=desc` to open on the newest
+Messages and page toward older ones. `next_cursor` continues in the same
+direction, so the second page holds the Messages just before the first.
+
+```bash cURL
+curl -sS \
+  "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages?limit=50&order=desc" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+A cursor is only valid with the order it was returned for. Passing a `desc`
+cursor without `order=desc` returns `400`.
+
 ## Group-history rows
 
 Relay returns group activity in the same ordered timeline:
@@ -6382,6 +6397,9 @@ Send and list Messages in an existing Chat.
 | `GET` | `/v1/chats/{chatId}/messages` | [Get messages from a chat](/api-reference/messages/get-messages-from-a-chat) |
 | `POST` | `/v1/chats/{chatId}/voicememo` | [Send a voice memo to a chat](/api-reference/messages/send-a-voice-memo-to-a-chat) |
 
+`GET` lists oldest first by default; `order=desc` opens on the newest
+Messages and pages older. See [Message history](/guides/chats/message-history#newest-first).
+
 ## See also
 
 - [API overview](/api-reference/overview)
@@ -7315,7 +7333,13 @@ paths:
     get:
       operationId: getMessages
       summary: Get messages from a chat
-      description: List visible Messages and group-history events in a Chat.
+      description: |-
+        List visible Messages and group-history events in a Chat.
+
+        The default order is oldest first. Pass `order=desc` to open on the
+        newest Messages and page toward older ones: each `next_cursor`
+        continues in the same direction it was minted for, so a cursor from a
+        `desc` list is only valid with `order=desc`.
       tags:
         - Messages
       security:
@@ -7341,6 +7365,15 @@ paths:
             minimum: 1
             maximum: 100
             default: 50
+        - name: order
+          in: query
+          description: Sort order for messages (asc = oldest first, desc = newest first). A cursor is only valid with the order it was returned for.
+          schema:
+            type: string
+            enum:
+              - asc
+              - desc
+            default: asc
       responses:
         "200":
           description: Messages retrieved successfully
