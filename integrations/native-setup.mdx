@@ -1,7 +1,7 @@
 ---
 title: "Connect a selected native runtime"
 description: "Configure an existing OpenClaw account, Hermes profile, or Claude Code session with a Relay Agent Token."
-keywords: ["native setup", "token import --connect", "agents create", "OpenClaw", "Hermes", "Claude Code", "staging"]
+keywords: ["native setup", "auth login --connect", "agents create", "OpenClaw", "Hermes", "Claude Code", "staging"]
 ---
 Connect one selected native runtime context to an existing or newly created Relay identity.
 
@@ -31,29 +31,34 @@ runtime state remain owned by that runtime.
 
 ## Reuse an existing Agent Token
 
-Import the supplied token into a separate local profile through stdin. This is local credential import, not Console sign-in:
+Authenticate with the existing Agent Token and save it to the selected local
+profile. Without an input flag, `auth login` uses `RELAY_AGENT_TOKEN` when present,
+otherwise a hidden prompt in an interactive terminal. For stdin, use `--with-token`:
 
-```bash
+<CodeGroup>
+```bash Bash
 printf '%s' "$RELAY_AGENT_TOKEN" |
-  npx relaymessenger@staging token import --token-stdin --profile existing-staging \
+  npx relaymessenger@staging auth login --with-token --profile existing-staging \
     --api-url https://api.staging.relayapp.im
 ```
 
-**Connect with an existing Agent Token to keep the same messaging identity.**
-The `token import --connect` path validates that credential through its Contact Card.
-An invalid or revoked credential returns an error while keeping the identity
-selection explicit. Correct that credential before continuing.
+```powershell PowerShell
+Get-Content -Raw $TokenFile | npx relaymessenger@staging auth login --with-token --profile existing-staging --api-url https://api.staging.relayapp.im
+```
+</CodeGroup>
+
+Use an existing owner-private credential file for `$TokenFile`.
+
+**Keep the same messaging identity when connecting an existing runtime.**
+The CLI validates the Agent Token through its Contact Card before saving it.
+Correct invalid or revoked credentials before continuing.
 
 | Credential input | Selection |
 | --- | --- |
-| `--connect` with a saved profile | Reuses that profile's token and API origin. |
-| `--token-stdin` | Imports the supplied private stdin credential. |
-| `--from-env` | Imports `RELAY_AGENT_TOKEN` from the environment. |
-
-With `--connect`, imported credentials are validated before they replace saved
-configuration. Omit token-input flags when resuming configuration for an identity
-already stored by create.
-
+| `auth login` without input flags | Uses `RELAY_AGENT_TOKEN` when present, otherwise a hidden Agent Token prompt. |
+| `--with-token` | Explicitly reads stdin, ahead of saved or environment credentials. |
+| `--connect` without `--with-token` | Reuses the selected saved credential when present; preserves its origin and avoids unrelated environment-token replacement. |
+| `RELAY_AGENT_TOKEN` | Headless Agent Token input for commands, paired with the matching API origin. |
 
 ## Select the runtime
 
@@ -68,7 +73,8 @@ absolute state directory. Existing model and permission configuration stays in
 place. An empty or new named account can receive the initial Relay binding.
 
 ```bash
-npx relaymessenger@staging --profile existing-staging token import --api-url https://api.staging.relayapp.im \
+printf '%s' "$RELAY_AGENT_TOKEN" |
+  npx relaymessenger@staging --profile existing-staging auth login --with-token --api-url https://api.staging.relayapp.im \
   --connect openclaw \
   --runtime-config "$OPENCLAW_CONFIG_PATH" \
   --runtime-state-dir "$OPENCLAW_RELAY_STATE_DIR" \
@@ -87,7 +93,8 @@ absolute Relay state directory. A token-empty profile can receive its initial
 binding after the helper checks the profile's configuration and durable state.
 
 ```bash
-npx relaymessenger@staging --profile existing-staging token import --api-url https://api.staging.relayapp.im \
+printf '%s' "$RELAY_AGENT_TOKEN" |
+  npx relaymessenger@staging --profile existing-staging auth login --with-token --api-url https://api.staging.relayapp.im \
   --connect hermes \
   --runtime-home "$HERMES_PROFILE_HOME" \
   --runtime-state-dir "$HERMES_RELAY_STATE_DIR" \
@@ -105,7 +112,8 @@ Select an existing session-scoped channel directory with a private `.env` and
 explicit `RELAY_ALLOWED_SENDERS`. Choose that session's context ID.
 
 ```bash
-npx relaymessenger@staging --profile existing-staging token import --api-url https://api.staging.relayapp.im \
+printf '%s' "$RELAY_AGENT_TOKEN" |
+  npx relaymessenger@staging --profile existing-staging auth login --with-token --api-url https://api.staging.relayapp.im \
   --connect claude-code \
   --runtime-home "$RELAY_CHANNEL_DIR" \
   --runtime-context "$RELAY_CHANNEL_SESSION_ID" \

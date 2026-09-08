@@ -30,8 +30,10 @@ class AgentOnboardingTests(unittest.TestCase):
         cli = (ROOT / "integrations/cli.mdx").read_text()
         self.assertIn(expected("npx relaymessenger@staging --help"), cli)
         self.assertIn("no login, Console account, or existing Agent Token", cli)
-        self.assertLess(cli.index("## Create an agent"), cli.index("## Import an existing Agent Token"))
+        self.assertLess(cli.index("## Create an agent"), cli.index("## Authenticate an existing Agent Token"))
         self.assertIn("Coming soon on staging", cli)
+        for marker in ("hidden Agent Token prompt", "Get-Content -Raw $TokenFile", "auth login --with-token", "auth status", "auth logout", "RELAY_AGENT_TOKEN"):
+            self.assertIn(marker, cli)
         for path in ROOT.rglob("*.mdx"):
             if "node_modules" in path.parts:
                 continue
@@ -40,9 +42,11 @@ class AgentOnboardingTests(unittest.TestCase):
                 self.assertNotIn("@relaymessenger/cli", text)
                 self.assertNotRegex(text, r"\brelaymessenger@\d")
                 self.assertNotIn("agents setup", text)
-                self.assertNotIn("auth login", text)
-                self.assertNotIn("auth status", text)
-                self.assertNotIn("auth logout", text)
+                self.assertNotIn("--token-stdin", text)
+                self.assertNotIn("--from-env", text)
+                self.assertNotIn("token import", text)
+                self.assertNotIn("token status", text)
+                self.assertNotIn("token clear", text)
                 self.assertNotRegex(text, r"(?m)^\s*relay (?:agents|auth|profiles|doctor|events)\b")
 
     def test_lifecycle_boundaries_and_explicit_origin(self):
@@ -56,7 +60,7 @@ class AgentOnboardingTests(unittest.TestCase):
 
     def test_native_consent_and_separate_connection_proof(self):
         text = (ROOT / "integrations/native-setup.mdx").read_text()
-        for marker in ("token import --api-url", "--confirm-configure", "--runtime-stopped",
+        for marker in ("auth login --with-token --api-url", "--confirm-configure", "--runtime-stopped",
                        "--runtime-account", "--runtime-context", '"connected": false',
                        "RELAY_ALLOWED_SENDERS", "sender permissions"):
             self.assertIn(marker, text)

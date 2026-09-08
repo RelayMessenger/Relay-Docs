@@ -8,10 +8,10 @@ from pathlib import Path
 from origins import target
 
 ROOT = Path(__file__).resolve().parents[1]
-# Main-owned canonical commit is validated; final staging merge pin is pending.
+# Canonical input at the reviewed Server staging merge; deployment is verified separately.
 # Update only after reading and synchronizing a newly agreed upstream contract.
-UPSTREAM_COMMIT = "40df3700f143d4421fa522d1bc5bbeb840c2b142"
-UPSTREAM_STAGING_COMMIT = "pending-staging-merge"
+UPSTREAM_COMMIT = "9f0a023c65dc52515d2916d1d8f90118fd0bf790"
+UPSTREAM_STAGING_COMMIT = "9f0a023c65dc52515d2916d1d8f90118fd0bf790"
 UPSTREAM_SHA256 = "a2bebc32ab50dd52e6f437ec3ae97b775799e84518b503fba6dda471c007b519"
 
 

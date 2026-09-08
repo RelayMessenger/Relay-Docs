@@ -94,9 +94,9 @@ class RegressionTests(unittest.TestCase):
             "/plugin marketplace add RelayMessenger/Relay-SDK@main\n", "production"
         ))
 
-    def test_named_profile_before_token_import_is_not_environment_prose(self):
+    def test_named_profile_suffix_is_not_token_environment_prose(self):
         self.assertFalse(example_errors(
-            "npx relaymessenger --profile existing-staging token import --connect hermes", "production"
+            "Profile: existing-staging token source: config", "production"
         ))
 
     def test_production_mode_still_requires_explicit_base_url(self):

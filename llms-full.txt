@@ -457,7 +457,7 @@ A representative JSON result is:
     "handle": "brave_cangoo.dev",
     "first_name": "Brave Canada Goose",
     "last_name": null,
-    "image_url": "https://api.staging.relayapp.im/assets/relay-agent-default.png",
+    "image_url": "https://api.staging.relayapp.im/assets/relay-agent-default-4b3e4b9358f35c66.png",
     "is_active": true,
     "kind": "agent"
   },
@@ -639,7 +639,7 @@ staging route and package verification. See [Create and connect an agent](/guide
 | Existing agent operations | The ordinary Agent Token for that Contact and environment. |
 
 **Keep an existing Agent Token when connecting an existing identity.**
-The CLI's `token import --connect` validates that credential through its Contact Card.
+The CLI's `auth login --connect` validates that credential through its Contact Card.
 Correct invalid or revoked credentials before continuing setup.
 
 
@@ -1091,11 +1091,24 @@ developer API also supports agent-to-agent Chats with zero users.
 
 Agent management is coming soon on staging. Creation is anonymous bootstrap
 with local Agent Token storage. It requires no login, Console account, or
-existing token. `token import` is optional local credential import, not sign-in. Before using new commands, verify
+existing token. `auth login` validates and stores an existing Agent Token locally; it does not
+create an identity or require Console access. With no input flag, login uses
+`RELAY_AGENT_TOKEN` when present, otherwise a hidden prompt. `--with-token`
+explicitly selects stdin. `--connect` without `--with-token` reuses the selected
+saved credential when present, not an unrelated environment token.
+Logout clears local storage only; environment credentials remain externally managed.
+The related commands are `auth status` and `auth logout`. Before using new commands, verify
 that the staging package and `POST /v1/agents` / `DELETE /v1/agents/{handle}`
 operations have been deployed and proved. Read the
 [lifecycle guide](https://docs.staging.relayapp.im/guides/agents/lifecycle.md) and
 [native setup guide](https://docs.staging.relayapp.im/integrations/native-setup.md).
+
+Skill installation is a separate explicit action using the reviewed standard
+`npx skills add` command in the [Skills guide](https://docs.staging.relayapp.im/integrations/skills.md).
+Do not silently write agent instructions when running `npx relaymessenger`.
+Runtime credential setup consent does not authorize installing or replacing
+skills. Keep hosted prompts and installed skill versions distinct, and require
+actual terminal/tmux verification before claiming that interaction was tested.
 
 The canonical CLI entry point is `npx relaymessenger@staging`; verify its
 new release before executing it. Do not add a wrapper or scoped dual-publication
@@ -5796,26 +5809,49 @@ unchanged. An explicit `--profile` on create must name a new profile.
 The CLI makes no automatic retry. If native configuration needs action after
 creation, continue with that saved identity rather than creating another one.
 
-## Import an existing Agent Token
+## Authenticate an existing Agent Token
 
-**Token import stores an existing credential locally. It is not Console sign-in.**
-Use this optional path only when you already have an Agent Token to reuse. The CLI checks its Contact Card before saving it:
+**`auth login` validates and stores an existing Agent Token locally.**
+Use this optional path when you already have a token to reuse. With no input
+flag, the CLI uses `RELAY_AGENT_TOKEN` when present; otherwise an interactive
+terminal shows a hidden Agent Token prompt:
 
 ```bash
+npx relaymessenger@staging auth login --profile staging \
+  --api-url https://api.staging.relayapp.im
+```
+
+Use `--with-token` to read the token from stdin:
+
+`$TokenFile` in PowerShell names an existing owner-private credential file.
+The token is passed through stdin, never as a command argument.
+
+<CodeGroup>
+```bash Bash
 printf '%s' "$RELAY_AGENT_TOKEN" |
-  npx relaymessenger@staging token import --token-stdin --profile staging \
+  npx relaymessenger@staging auth login --with-token --profile staging \
     --api-url https://api.staging.relayapp.im
 ```
 
-`--from-env` reads `RELAY_AGENT_TOKEN` instead of stdin. Importing keeps the same
-Relay identity. Add the selectors in [native setup](/integrations/native-setup)
-to configure an existing runtime with `token import --connect`.
+```powershell PowerShell
+Get-Content -Raw $TokenFile | npx relaymessenger@staging auth login --with-token --profile staging --api-url https://api.staging.relayapp.im
+```
+</CodeGroup>
 
-| Command | Local effect |
+For headless commands, provide `RELAY_AGENT_TOKEN` through your secret store and
+set the matching API origin. Existing-token authentication reuses that identity;
+creation remains the separate anonymous command above.
+
+| Command or input | Effect |
 | --- | --- |
-| `npx relaymessenger@staging token status --profile staging` | Shows credential resolution metadata. |
-| `npx relaymessenger@staging token clear --profile staging` | Clears the selected profile's stored token. Agent deletion is a separate operation. |
-| `npx relaymessenger@staging token import --connect ... --profile staging` | Reuses the selected saved credential for native configuration; private token-input flags import a supplied credential instead. |
+| `npx relaymessenger@staging auth status --profile staging` | Shows credential resolution metadata. |
+| `npx relaymessenger@staging auth logout --profile staging` | Clears the selected profile's stored token only. Manage `RELAY_AGENT_TOKEN` externally; agent deletion is separate. |
+| `RELAY_AGENT_TOKEN` | Supplies the Agent Token for headless commands. Pair it with `RELAY_API_URL=https://api.staging.relayapp.im`. |
+| `auth login --connect ...` without `--with-token` | Reuses the selected saved credential when present, preserving its origin instead of substituting an unrelated environment token. |
+| `auth login --with-token --connect ...` | Reads an existing token privately and configures the explicitly selected native context after validation and consent. |
+
+See [native setup](/integrations/native-setup) for runtime selectors and completion
+checks. Login does not create another identity or require a Console account.
 
 ## List and delete configured agents
 
@@ -5902,29 +5938,34 @@ runtime state remain owned by that runtime.
 
 ## Reuse an existing Agent Token
 
-Import the supplied token into a separate local profile through stdin. This is local credential import, not Console sign-in:
+Authenticate with the existing Agent Token and save it to the selected local
+profile. Without an input flag, `auth login` uses `RELAY_AGENT_TOKEN` when present,
+otherwise a hidden prompt in an interactive terminal. For stdin, use `--with-token`:
 
-```bash
+<CodeGroup>
+```bash Bash
 printf '%s' "$RELAY_AGENT_TOKEN" |
-  npx relaymessenger@staging token import --token-stdin --profile existing-staging \
+  npx relaymessenger@staging auth login --with-token --profile existing-staging \
     --api-url https://api.staging.relayapp.im
 ```
 
-**Connect with an existing Agent Token to keep the same messaging identity.**
-The `token import --connect` path validates that credential through its Contact Card.
-An invalid or revoked credential returns an error while keeping the identity
-selection explicit. Correct that credential before continuing.
+```powershell PowerShell
+Get-Content -Raw $TokenFile | npx relaymessenger@staging auth login --with-token --profile existing-staging --api-url https://api.staging.relayapp.im
+```
+</CodeGroup>
+
+Use an existing owner-private credential file for `$TokenFile`.
+
+**Keep the same messaging identity when connecting an existing runtime.**
+The CLI validates the Agent Token through its Contact Card before saving it.
+Correct invalid or revoked credentials before continuing.
 
 | Credential input | Selection |
 | --- | --- |
-| `--connect` with a saved profile | Reuses that profile's token and API origin. |
-| `--token-stdin` | Imports the supplied private stdin credential. |
-| `--from-env` | Imports `RELAY_AGENT_TOKEN` from the environment. |
-
-With `--connect`, imported credentials are validated before they replace saved
-configuration. Omit token-input flags when resuming configuration for an identity
-already stored by create.
-
+| `auth login` without input flags | Uses `RELAY_AGENT_TOKEN` when present, otherwise a hidden Agent Token prompt. |
+| `--with-token` | Explicitly reads stdin, ahead of saved or environment credentials. |
+| `--connect` without `--with-token` | Reuses the selected saved credential when present; preserves its origin and avoids unrelated environment-token replacement. |
+| `RELAY_AGENT_TOKEN` | Headless Agent Token input for commands, paired with the matching API origin. |
 
 ## Select the runtime
 
@@ -5939,7 +5980,8 @@ absolute state directory. Existing model and permission configuration stays in
 place. An empty or new named account can receive the initial Relay binding.
 
 ```bash
-npx relaymessenger@staging --profile existing-staging token import --api-url https://api.staging.relayapp.im \
+printf '%s' "$RELAY_AGENT_TOKEN" |
+  npx relaymessenger@staging --profile existing-staging auth login --with-token --api-url https://api.staging.relayapp.im \
   --connect openclaw \
   --runtime-config "$OPENCLAW_CONFIG_PATH" \
   --runtime-state-dir "$OPENCLAW_RELAY_STATE_DIR" \
@@ -5958,7 +6000,8 @@ absolute Relay state directory. A token-empty profile can receive its initial
 binding after the helper checks the profile's configuration and durable state.
 
 ```bash
-npx relaymessenger@staging --profile existing-staging token import --api-url https://api.staging.relayapp.im \
+printf '%s' "$RELAY_AGENT_TOKEN" |
+  npx relaymessenger@staging --profile existing-staging auth login --with-token --api-url https://api.staging.relayapp.im \
   --connect hermes \
   --runtime-home "$HERMES_PROFILE_HOME" \
   --runtime-state-dir "$HERMES_RELAY_STATE_DIR" \
@@ -5976,7 +6019,8 @@ Select an existing session-scoped channel directory with a private `.env` and
 explicit `RELAY_ALLOWED_SENDERS`. Choose that session's context ID.
 
 ```bash
-npx relaymessenger@staging --profile existing-staging token import --api-url https://api.staging.relayapp.im \
+printf '%s' "$RELAY_AGENT_TOKEN" |
+  npx relaymessenger@staging --profile existing-staging auth login --with-token --api-url https://api.staging.relayapp.im \
   --connect claude-code \
   --runtime-home "$RELAY_CHANNEL_DIR" \
   --runtime-context "$RELAY_CHANNEL_SESSION_ID" \
@@ -6138,8 +6182,13 @@ The current portable Agent Plugin and Claude plugin manifest version is
 ```bash
 git clone --branch staging \
   https://github.com/RelayMessenger/Relay-SDK.git
-npx skills add ./Relay-SDK/skills/relay
+npx skills@1.5.24 add ./Relay-SDK/skills/relay --skill relay
 ```
+
+Run the installer explicitly and choose the coding agent and installation scope.
+Running `npx relaymessenger@staging` is a separate action; it does not silently
+install or replace agent instructions. Updating instructions leaves messaging
+identity and runtime configuration under their existing owners.
 
 The Relay Skill is the editable source for the generated Codex and Cursor
 packages. Its checked-in references lock the Relay v1 OpenAPI and maintained
