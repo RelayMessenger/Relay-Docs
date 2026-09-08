@@ -71,6 +71,26 @@ Chat. The starter uses a `reply`
 Action for the completed response. Preserve its idempotency handling when
 customizing the reply.
 
+## Answer a second Message during a reply
+
+Think builds the Chat SDK instance itself with
+`concurrency: { strategy: "burst", debounceMs: 600 }` and runs each reply with
+`waitForCompletion: true`, so the Chat stays locked for the whole turn. The
+starter cannot change that window.
+
+| Second Message arrives | Outcome |
+| --- | --- |
+| Within 600 ms of the first | One turn runs for the latest Message; Think's handlers never read the earlier ones. |
+| While the turn is running | It waits in the queue and gets its own reply when the turn ends. |
+| Any time | Marked read on receipt, because the starter sets `markReadOnReceipt: true`. |
+
+A newer Message never cancels a running turn. Think's handlers take only
+`(thread, message)` and never read `thread.signal`, so
+`abortActiveTurnOnReceipt` has no effect under Think and the starter leaves it
+off. The
+[starter README](https://github.com/RelayMessenger/Relay-SDK/blob/staging/cookbook/cloudflare-think-agent/README.md)
+records why.
+
 <span id="current-source" />
 <span id="delivery-behavior" />
 <span id="related" />
