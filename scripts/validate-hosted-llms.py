@@ -218,7 +218,11 @@ def fetch(path: str, cache_busted: bool = False) -> dict:
 
 pages = {}
 page_bodies = {}
-for path, canonical, cache_busted in canonical_cache_pairs(fetch):
+expected_agent_sources = {
+    name: (Path(__file__).resolve().parents[1] / name).read_bytes()
+    for name in ("skill.md", "llms.txt", "llms-full.txt")
+}
+for path, canonical, cache_busted in canonical_cache_pairs(fetch, expected_agent_sources):
     text = canonical["body"].decode("utf-8")
     for label, pattern in deleted_wording.items():
         if pattern.search(text):
