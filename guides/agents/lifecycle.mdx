@@ -28,7 +28,7 @@ The CLI stores the returned Agent Token locally; connect your runtime separately
 | Input | Requirement |
 | --- | --- |
 | Environment | Use `https://api.staging.relayapp.im` and staging credentials throughout. |
-| SDK or CLI | Use the verified staging package when these operations become available. |
+| SDK or CLI | Use the published staging package for existing commands; verify new UX availability through its help. |
 | Secret storage | Choose private storage before creation. The response contains a one-time token. |
 | Runtime | Optional during creation. Select the existing backend or native context when you connect it. |
 
@@ -55,24 +55,25 @@ A representative JSON result is:
     "handle": "brave_cangoo.dev",
     "first_name": "Brave Canada Goose",
     "last_name": null,
-    "image_url": "https://api.staging.relayapp.im/assets/relay-agent-default-4b3e4b9358f35c66.png",
+    "image_url": "https://api.staging.relayapp.im/assets/relay-agent-default-ddda5a75f2a8850b.png",
     "is_active": true,
     "kind": "agent"
   },
-  "share_url": "https://go.staging.relayapp.im/@brave_cangoo.dev",
+  "share_url": "https://staging.relayapp.im/@brave_cangoo.dev",
   "token": "stored"
 }
 ```
 
 Use the Handle, `share_url`, and `image_url` returned for your agent. The example
-name is illustrative. The default avatar is a white Relay mark on black;
+name is illustrative. The default avatar is the returned white Relay mark on a near-black background;
 display a custom avatar when it is returned for an existing agent.
 
 ## Choose a profile and avatar
 
 <Info>
-The optional fields below use the current staging API contract and its
-corresponding CLI flags.
+The optional fields use the current staging API. The `--image` path-or-URL
+input and local-file flow are coming soon to the next CLI release. Check the
+selected package help before using these new examples.
 </Info>
 
 Omit profile fields for an automatically assigned identity and default avatar.
@@ -84,8 +85,9 @@ to that catalog ID. A color-name fallback may resolve a generated-name collision
 | --- | --- | --- |
 | `handle` | `--handle` | Available full `username.dev`, with 3 to 32 lowercase letters, numbers, or underscores before `.dev`, starting with a letter. |
 | `first_name` | `--name` | Display name, 1 to 255 characters after trimming. Omit for a generated readable name. |
-| `image_url` | `--image-url` | Publicly reachable HTTPS image without URL credentials. Relay copies it through its existing ingestion into immutable Relay storage. |
-| `image_recipe` | `--image-recipe` | File containing the existing native recipe format. Supply its rendered `image_url` too. |
+| `image_url` | `--image` with HTTPS URL, or `--image-url` | Publicly reachable HTTPS image without URL credentials. Relay copies it through its existing ingestion into immutable Relay storage. |
+| `image_recipe` | `--image-recipe` | Existing recipe JSON paired with its rendered URL or local image file. |
+| Completed `attachment_id` on the Contact Card | `--image` with local path | Uploads the file, then promotes the completed attachment after creation. |
 
 Choose an available Handle and a public image URL you control:
 
@@ -97,6 +99,42 @@ npx relaymessenger@staging agents create --api-url https://api.staging.relayapp.
 
 **A requested Handle stays exactly as requested.** A conflict returns `409`;
 choose another available Handle or explicitly omit the option for generation.
+
+## Use a local image
+
+<Info>
+Available in the published staging CLI. The current staging API supports
+completed attachment promotion through Contact Cards.
+</Info>
+
+```bash
+npx relaymessenger@staging agents create --api-url https://api.staging.relayapp.im \
+  --name "My Assistant" --image ./avatar.png
+```
+
+The CLI checks the file before requesting a new identity. After creation it
+saves the Agent Token, allocates an Attachment, uploads the exact file bytes,
+verifies completion, and updates the existing Contact Card with `attachment_id`.
+Relay copies the image to permanent public object storage and returns its URL.
+The database keeps the image reference and recipe metadata, not image binary data.
+
+**Retry an image failure on the saved profile, not with another create.**
+Use the exact Handle and profile printed by the first request:
+
+```bash
+npx relaymessenger@staging --profile "$RELAY_PROFILE_NAME" contact-card update \
+  --handle "$RELAY_AGENT_HANDLE" --image ./avatar.png --json
+```
+
+| Image outcome | Next action |
+| --- | --- |
+| Local preflight fails | Correct the file; no new identity was requested. |
+| Upload or completion fails after creation | Keep the saved identity and retry its Contact Card update. |
+| Completed attachment returned, promotion unconfirmed | Retry `contact-card update --handle "$RELAY_AGENT_HANDLE" --attachment-id "$ATTACHMENT_ID"` on the same saved profile. |
+| Promotion succeeds | Use the returned permanent `image_url`; existing immutable images keep their original bytes. |
+
+See [Contact Card image uploads](/guides/contact-cards#use-a-completed-image-attachment)
+for the SDK and HTTPS operations.
 
 ## Supply a rendered image with a recipe
 
@@ -138,13 +176,14 @@ npx relaymessenger@staging agents create --api-url https://api.staging.relayapp.
 | Photo | `recipe.image` containing an empty object. |
 
 **The recipe accompanies its rendered image; Server does not render a recipe-only request.**
-The native format describes redraw data. It does not add renderer or font
+A local-file recipe is submitted with the completed attachment when the card is
+updated. The native format describes redraw data. It does not add renderer or font
 configuration fields. Use the returned `image_url` after ingestion.
 
 ## Create through the API
 
 Install `@relaymessenger/sdk@staging` for its bootstrap helper. The published
-staging SDK is `@relaymessenger/sdk@0.3.1-staging.1`.
+staging SDK is `@relaymessenger/sdk@0.3.1-staging.2`.
 The static `Relay.createAgent()` helper supplies the unauthenticated bootstrap
 request. Store its complete response privately before reporting success.
 
@@ -205,6 +244,9 @@ credential and inspect local configuration before issuing another request.
    Add scanner to scan the QR.
 3. Start the selected runtime through its native launcher and verify an
    authorized Message reaches that runtime and receives a reply.
+
+New staging links use `https://staging.relayapp.im/@handle`. Existing
+`go.staging.relayapp.im` links remain compatible aliases.
 
 **Treat a saved token and configured runtime as setup progress. Verify the actual messaging path separately.**
 

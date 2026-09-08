@@ -20,6 +20,7 @@ STAGING_TO_PRODUCTION = {
     "docs.staging.relayapp.im": "docs.relayapp.im",
     "api.staging.relayapp.im": "api.relayapp.im",
     "go.staging.relayapp.im": "go.relayapp.im",
+    "staging.relayapp.im": "relayapp.im",
     "cdn.staging.relayapp.im": "cdn.relayapp.im",
     "console.staging.relayapp.im": "console.relayapp.im",
     "uploads.staging.relayapp.im": "uploads.relayapp.im",

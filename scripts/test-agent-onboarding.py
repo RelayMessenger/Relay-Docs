@@ -95,6 +95,58 @@ class AgentOnboardingTests(unittest.TestCase):
             self.assertIn(marker, guide)
         self.assertIn("Server does not render a recipe-only request", guide)
 
+    def test_released_ux_preserves_script_behavior(self):
+        cli = (ROOT / "integrations/cli.mdx").read_text()
+        for marker in ("published staging CLI", "--image", "path or public HTTPS URL",
+                       "Handle (optional)", "Name (optional)", "Image (optional)",
+                       "before setup", "read-only", "observational: true", "--json",
+                       "Ctrl-C", "full_sync_complete", "real consumer"):
+            self.assertIn(marker, cli)
+        self.assertNotIn("Coming soon", cli)
+        self.assertNotIn("coming release", cli)
+        self.assertIn('export RELAY_CONFIG_PATH="$(mktemp -d)/config.json"', cli)
+        self.assertLess(cli.index("## Keep the terminal open"), cli.index("## Use local event forwarding"))
+        skills = (ROOT / "integrations/skills.mdx").read_text()
+        for marker in ("Offer skills before setup", "opt-in", "Decline or cancel", "unknown detection", "provider API keys"):
+            self.assertIn(marker, skills)
+
+    def test_image_upload_uses_completed_owned_attachment_and_existing_profile_retry(self):
+        guide = (ROOT / "guides/agents/lifecycle.mdx").read_text()
+        for marker in ("--image ./avatar.png", "published staging CLI", "allocates an Attachment", "verifies completion",
+                       "attachment_id", "not image binary data", "--attachment-id", "not with another create"):
+            self.assertIn(marker, guide)
+        self.assertIn(expected("https://staging.relayapp.im/@brave_cangoo.dev"), guide)
+        self.assertIn("compatible aliases", guide)
+        cards = " ".join((ROOT / "guides/contact-cards.mdx").read_text().split())
+        for marker in ("attachment must be complete", "authenticated agent", "mutually exclusive", "permanent public image storage"):
+            self.assertIn(marker, cards)
+
+    def test_observer_wire_is_canonical_and_distinct_from_ack_consumer(self):
+        spec = (ROOT / "api-reference/openapi.yaml").read_text()
+        socket = spec.split("  /v1/websocket:\n", 1)[1].split("  /v1/contact_requests:", 1)[0]
+        self.assertIn("name: observe", socket)
+        self.assertIn("observational:true", socket)
+        self.assertIn("ACK and full_sync_complete frames are rejected", socket)
+        websocket = (ROOT / "guides/websocket/index.mdx").read_text()
+        self.assertIn("observe=true", websocket)
+        self.assertIn("Connection-local transient cursor", websocket)
+        self.assertNotIn("An upgrade URL with a query string returns", websocket)
+
+    def test_released_agent_admission_keeps_authorization_and_session_caveats(self):
+        openclaw = (ROOT / "integrations/openclaw.mdx").read_text()
+        claude = (ROOT / "integrations/claude-code.mdx").read_text()
+        self.assertIn("`>=2026.8.1 <2026.9.0`", openclaw)
+        self.assertIn("build version `2026.8.1`", openclaw)
+        for text in (openclaw, claude):
+            for marker in ("agent Contact", "allowlist", "FULL sync", "session", "API origin"):
+                self.assertIn(marker, text)
+        for marker in ("allowFrom", "Contact UUID", "stable-ID", "dmScope", "Snapshot recovery"):
+            self.assertIn(marker, openclaw)
+        for marker in ("RELAY_ALLOWED_SENDERS", "reply-origin", "contact.is_me", "authenticated origin"):
+            self.assertIn(marker, claude)
+        for name in ("cli", "skills"):
+            self.assertNotIn("Coming soon", (ROOT / f"integrations/{name}.mdx").read_text())
+
     def test_new_pages_and_operations_are_integrated(self):
         navigation = json.dumps(json.loads((ROOT / "docs.json").read_text())["navigation"])
         for path in ("guides/agents/lifecycle", "integrations/native-setup",
