@@ -19,6 +19,7 @@ TARGET_FILE = ROOT / ".docs-target"
 STAGING_TO_PRODUCTION = {
     "docs.staging.relayapp.im": "docs.relayapp.im",
     "api.staging.relayapp.im": "api.relayapp.im",
+    "go.staging.relayapp.im": "go.relayapp.im",
     "cdn.staging.relayapp.im": "cdn.relayapp.im",
     "console.staging.relayapp.im": "console.relayapp.im",
     "uploads.staging.relayapp.im": "uploads.relayapp.im",
@@ -35,7 +36,7 @@ STAGING_HOSTS = tuple(host for host in STAGING_TO_PRODUCTION if "/" not in host)
 # `-staging.N` prerelease (owner ruling, 2026-09-07). The rewrite drops the
 # tag or version from a package spec and turns a bare version cell into
 # `latest`, which is the version the plain install resolves to.
-PACKAGE = r"(?:@relaymessenger/[a-z-]+|relay-claude-channel)"
+PACKAGE = r"(?:@relaymessenger/[a-z-]+|relay-claude-channel|relaymessenger)"
 PRERELEASE = r"\d+\.\d+\.\d+-staging\.\d+"
 PACKAGE_REWRITES = (
     (re.compile(rf"({PACKAGE})@{PRERELEASE}\b"), r"\1"),
@@ -54,8 +55,8 @@ SOURCE_REWRITES = (
     (re.compile(r"(git clone --branch )staging(\s+(?:\\\s+)?https://github\.com/RelayMessenger/Relay-SDK(?:\.git)?)"), r"\1main\2"),
 )
 PROFILE_REWRITES = (
-    (re.compile(r"(\brelay profiles (?:add|use) )staging(?![\w./-])"), r"\1production"),
-    (re.compile(r"(\brelay\b[^\n]*?--profile\s+)staging(?![\w./-])"), r"\1production"),
+    (re.compile(r"(\b(?:relay|npx relaymessenger(?:@staging)?) profiles (?:add|use) )staging(?![\w./-])"), r"\1production"),
+    (re.compile(r"(\b(?:relay|npx relaymessenger(?:@staging)?)\b[^\n]*?--profile\s+)staging(?![\w./-])"), r"\1production"),
     (re.compile(r"(\$HOME/\.hermes/relay-)staging(?![\w./-])"), r"\1production"),
 )
 
@@ -72,6 +73,7 @@ INSTRUCTION_REWRITES = {
     "`Configure staging`": "`Configure production`",
     "## Staging package": "## Published package",
     "`Staging package`": "`Published package`",
+    "staging package": "package",
     "current published staging package": "current published package",
     "Install the published staging tag:": "Install the published package:",
     "Staging train": "Install",
@@ -92,7 +94,7 @@ PROSE_REWRITES = (
 
 STAGING_INSTRUCTION_REFERENCE = re.compile(
     "|".join(pattern.pattern for pattern, _ in (*SOURCE_REWRITES, *PROFILE_REWRITES))
-    + r"|\bstaging[-\s]+(?:agent[-\s]+)?token\b"
+    + r"|(?<![\w-])staging[-\s]+(?:agent[-\s]+)?token\b"
     r"|token\s+from\s+staging\b|staging\s+API\s+(?:root|origin)\b"
     r"|STAGING_RELAY_AGENT_TOKEN\b"
     r'|"RELAY_PROFILE":\s*"staging"'

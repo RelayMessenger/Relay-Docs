@@ -69,6 +69,7 @@ Introduction
 
 Getting started
   Quickstart
+  Create and connect an agent (coming soon on staging)
   Authentication
   Client SDKs
   Key Concepts
@@ -126,6 +127,7 @@ Integrations
   Codex
   Cursor
   CLI
+  Connect a selected native runtime (coming soon on staging)
   MCP
   Skills
 
@@ -408,7 +410,7 @@ the page's single job and update this inventory in the same commit.
 | --- | --- |
 | Introduction | `Prerequisites` → `What you can build` → `Key capabilities` → `Authentication` → `Quick example` → `Next steps` |
 | Quickstart | `Prerequisites` → `1. Create the agent and copy its token` → `2. Set your credentials` → `3. Choose the SDK or HTTPS` → `4. Connect the event path` → `5. Accept the event durably` → `6. Mark Read, then reply` → `7. Finish setup with your coding agent` → `Review with an agent` → `Next steps` |
-| Authentication | `Credentials` → `Agent Tokens` → `Pair the environment and token` → `WebSocket authentication` → `Errors` → `Related` |
+| Authentication | `Credentials` → `Anonymous agent creation` → `Agent Tokens` → `Pair the environment and token` → `WebSocket authentication` → `Errors` → `See also` |
 | Client SDKs | `Install` → `Create a client` → `Send a Message` → `Resources` → `Pagination` → `Retries and idempotency` → `Errors` → `Webhook verification` → `Browser limitation` → `Runnable examples` → `Related` |
 | Key Concepts | `Contacts and Handles` → `Chats` → `Messages and parts` → `Attachments` → `Delivery` → `Events` → `Idempotency` → `Related` |
 | AI coding agents | `Documentation files` → `Minimal connection prompt` → `Relay agent prompt` → `Build prompt` → `Audit prompt` → `Related` |
@@ -475,12 +477,12 @@ the page's single job and update this inventory in the same commit.
 | Integrations | `Choose by runtime` → `Choose local tools` → `Package status` → `Related` |
 | Vercel Chat SDK | `Staging package` → `Use the adapter` → `Media boundary` → `Delivery behavior` → `Related` |
 | Cloudflare Think | `Current source` → `Configure staging` → `Delivery behavior` → `Related` |
-| OpenClaw | `Staging package` → `Configure the channel` → `Delivery behavior` → `Related` |
-| Hermes | `Install the plugin` → `Configure staging` → `Delivery behavior` → `Related` |
-| Claude Code | `Install the plugin` → `Configure the channel` → `Delivery behavior` → `Related` |
+| OpenClaw | `Staging package` → `Configure the channel` → `Optional CLI setup` → `Delivery behavior` → `See also` |
+| Hermes | `Install the plugin` → `Configure staging` → `Optional CLI setup` → `Delivery behavior` → `See also` |
+| Claude Code | `Install the plugin` → `Configure the channel` → `Optional CLI setup` → `Delivery behavior` → `See also` |
 | Codex | `Install locally` → `Use the package` → `Prepare hosted proof` → `Related` |
 | Cursor | `Install locally` → `Use the package` → `Prepare hosted proof` → `Related` |
-| CLI | `Staging package` → `Configure staging` → `Use local event forwarding` → `Related` |
+| CLI | `Staging package` → `Create an agent` → `Import an existing Agent Token` → `List and delete configured agents` → `Use local event forwarding` → `See also` |
 | MCP | `Staging package` → `Configure a local client` → `Choose the MCP surface` → `Related` |
 | Skills | `Install` → `Choose the docs MCP` → `Prepare hosted proof` → `Related` |
 
@@ -488,11 +490,15 @@ the page's single job and update this inventory in the same commit.
 
 | Page | H2 order |
 | --- | --- |
-| Examples | `Agents` → `Recipes` → `Package versions` → `Run locally` → `Related` |
+| Examples | `Agents` → `Developer-managed identity example` → `Recipes` → `Package versions` → `Run locally` → `Related` |
 | Error Codes | `Error response` → `1xxx request errors` → `2xxx errors` → `3xxx server errors` → `Related` |
 | One error code | `Troubleshooting` → `Related` |
 | API Reference overview | `Endpoints` → `Conventions` → `Errors` → `Related` |
 
+
+| Create and connect an agent | `Choose the identity` → `Prerequisites` → `Create with the CLI` → `Create through the API` → `Connect and share` → `List locally configured agents` → `Delete a developer-managed agent` → `Creation failures` → `Next steps` |
+
+| Connect a selected native runtime | `Prepare the selected context` → `Reuse an existing Agent Token` → `Select the runtime` → `Create and configure together` → `Inspect the result` → `Review with an agent` → `Next steps` |
 ## 17. Current page map
 
 | Current path | Placement | Status |

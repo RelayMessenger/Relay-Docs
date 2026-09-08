@@ -1,0 +1,205 @@
+---
+title: "Create and connect an agent"
+description: "Prepare a developer-managed messaging identity, keep its Agent Token private, and connect your existing runtime."
+keywords: ["createAgent", "deleteAgent", "developer agent", "Agent Token", "CLI", "staging"]
+---
+Create a developer-managed Relay Contact, save its Agent Token, and connect the runtime that supplies its model, tools, and memory.
+
+<Info>
+**Coming soon on staging.** Agent creation, deletion, and the CLI handoff below
+await staging route and package verification. These examples describe the
+implementation being prepared for staging.
+</Info>
+
+**Creating an agent requires no login, Console account, or existing Agent Token.**
+The CLI stores the returned Agent Token locally; connect your runtime separately.
+
+## Choose the identity
+
+| Starting point | Path |
+| --- | --- |
+| An Agent Token you already have | Validate that credential and connect the same Contact through [native setup](/integrations/native-setup). |
+| A new developer-managed agent | Create an assigned `.dev` Handle and save its one-time Agent Token. |
+| An organization-managed agent | Use Relay Console for identity and token management. |
+
+**Creation supplies the messaging identity. Your existing runtime supplies the agent's behavior.**
+
+## Prerequisites
+
+| Input | Requirement |
+| --- | --- |
+| Environment | Use `https://api.staging.relayapp.im` and staging credentials throughout. |
+| SDK or CLI | Use the verified staging package when these operations become available. |
+| Secret storage | Choose private storage before creation. The response contains a one-time token. |
+| Runtime | Optional during creation. Select the existing backend or native context when you connect it. |
+
+## Create with the CLI
+
+Use the canonical staging entry point to request a new identity:
+
+```bash
+npx relaymessenger@staging agents create --api-url https://api.staging.relayapp.im
+```
+
+The command saves a new local profile, then prints the display name, Handle,
+HTTPS share link, and terminal QR. Use `--json` for metadata with `token: "stored"`.
+A generated Handle is the default profile name; a suffix distinguishes an
+existing local profile with the same name.
+
+A representative JSON result is:
+
+```json
+{
+  "profile": "brave_cangoo.dev",
+  "api_url": "https://api.staging.relayapp.im",
+  "agent": {
+    "handle": "brave_cangoo.dev",
+    "first_name": "Brave Canada Goose",
+    "last_name": null,
+    "image_url": "https://api.staging.relayapp.im/assets/relay-agent-default.png",
+    "is_active": true,
+    "kind": "agent"
+  },
+  "share_url": "https://go.staging.relayapp.im/@brave_cangoo.dev",
+  "token": "stored"
+}
+```
+
+Use the Handle, `share_url`, and `image_url` returned for your agent. The example
+name is illustrative. The default avatar is a white Relay mark on black;
+display a custom avatar when it is returned for an existing agent.
+
+## Create through the API
+
+Install `@relaymessenger/sdk@staging` after its bootstrap helper is verified.
+The static `Relay.createAgent()` helper supplies the unauthenticated bootstrap
+request. Store its complete response privately before reporting success.
+
+<CodeGroup>
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+import { mkdtemp, writeFile } from "node:fs/promises";
+
+// POSIX example: reserve a new private directory before requesting the identity.
+const directory = await mkdtemp("./relay-bootstrap-");
+const created = await Relay.createAgent(
+  { token_name: "Relay CLI" },
+  { baseURL: "https://api.staging.relayapp.im", maxRetries: 0 },
+);
+await writeFile(`${directory}/agent-bootstrap.json`, JSON.stringify(created), {
+  mode: 0o600,
+  flag: "wx",
+});
+console.log({ handle: created.agent.handle, share_url: created.share_url });
+```
+
+```bash HTTPS, save the response privately
+# POSIX shell: a new private directory keeps the one-time secret out of stdout.
+umask 077
+BOOTSTRAP_DIR="$(mktemp -d)"
+curl -sS --fail-with-body \
+  --request POST https://api.staging.relayapp.im/v1/agents \
+  --header 'Content-Type: application/json' \
+  --data '{"token_name":"Relay CLI"}' \
+  --output "$BOOTSTRAP_DIR/agent-bootstrap.json"
+```
+</CodeGroup>
+
+On Windows, use owner-private credential storage with verified access controls.
+The CLI performs its platform-specific private-storage checks.
+
+| Request or response | Meaning |
+| --- | --- |
+| `token_name` | Optional token label, 1 to 80 characters; defaults to `Relay CLI`. |
+| HTTP `201` | Identity and Agent Token were created. |
+| `Cache-Control: no-store` | Keep the response out of caches. |
+| `agent` | The returned Contact Card, including assigned Handle and `image_url`. |
+| `secret` | One-time ordinary Agent Token. Save it in private storage. |
+| `share_url` | Public HTTPS link for the assigned Handle. |
+
+<Warning>
+**After an uncertain creation result, investigate before creating again.**
+The CLI makes no automatic retry. A timeout can follow a committed creation,
+and a local save failure can follow a successful response. Preserve any saved
+credential and inspect local configuration before issuing another request.
+</Warning>
+
+## Connect and share
+
+1. Choose [native setup](/integrations/native-setup), or connect your own
+   [WebSocket](/guides/websocket) or [Webhook](/guides/webhooks) backend.
+2. Open the returned HTTPS share link on your phone, or use Relay's existing
+   Add scanner to scan the QR.
+3. Start the selected runtime through its native launcher and verify an
+   authorized Message reaches that runtime and receives a reply.
+
+**Treat a saved token and configured runtime as setup progress. Verify the actual messaging path separately.**
+
+## List locally configured agents
+
+```bash
+npx relaymessenger@staging agents list --json
+```
+
+The CLI reads locally saved profiles containing credentials and retrieves each
+profile's authenticated Contact Card at its saved API origin. An unavailable
+card remains an entry with `Contact Card unavailable`. The inventory covers
+those local profiles, including profiles for different environments.
+
+## Delete a developer-managed agent
+
+Select the saved profile for the Handle returned by your create command:
+
+```bash
+npx relaymessenger@staging --profile brave_cangoo.dev agents delete brave_cangoo.dev --json
+```
+
+Without an explicit profile or credential override, the CLI checks saved Contact
+Cards for an unambiguous matching agent. Choose `--profile` when selection needs
+clarification. A confirmed deletion removes the matching saved token; the local
+profile's other configuration remains.
+
+The same operation is available through the SDK and HTTPS:
+
+<CodeGroup>
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+  baseURL: "https://api.staging.relayapp.im",
+});
+await relay.agents.delete("brave_cangoo.dev");
+```
+
+```bash HTTPS
+RELAY_AGENT_HANDLE="brave_cangoo.dev"
+curl -sS --fail-with-body \
+  --request DELETE "https://api.staging.relayapp.im/v1/agents/$RELAY_AGENT_HANDLE" \
+  --header "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+</CodeGroup>
+
+| Outcome | Handling |
+| --- | --- |
+| HTTP `204` | Contact archived and tokens revoked; existing history retained. |
+| HTTP `401` | Check the token and its environment. |
+| HTTP `403` | Use the token for this removable, developer-managed `.dev` agent. Organization-managed identities remain managed in Console. |
+| HTTP `404` | The requested agent was not found. |
+| HTTP `409` | Finish normal durable processing and acknowledgement of pending WebSocket events before deleting. |
+| Uncertain or failed deletion | Keep local credentials until the result is confirmed. The CLI retains them on failure. |
+
+## Creation failures
+
+| Status | Handling |
+| --- | --- |
+| `400` | Correct the strict request body or token label. |
+| `413` | Keep the JSON body within 2048 bytes. |
+| `429` | Respect `Retry-After`; creation is limited by caller address. |
+| `500` or `503` | Inspect the result before issuing another create; avoid blind retries. |
+
+## Next steps
+
+- [CLI](/integrations/cli)
+- [Connect a selected native runtime](/integrations/native-setup)
+- [Agents API](/api-reference/resources/agents/overview)

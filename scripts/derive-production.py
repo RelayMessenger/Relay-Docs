@@ -34,7 +34,7 @@ EXPECTED_REWRITES = {
 # dist-tag or prerelease; a bare version cell becomes the `latest` tag.
 EXPECTED_PACKAGE_REWRITES = {
     "npm install @relaymessenger/sdk@staging": "npm install @relaymessenger/sdk",
-    "npm install --global @relaymessenger/cli@staging": "npm install --global @relaymessenger/cli",
+    "npx relaymessenger@staging --help": "npx relaymessenger --help",
     "openclaw plugins install @relaymessenger/openclaw-plugin@staging":
         "openclaw plugins install @relaymessenger/openclaw-plugin",
     "`@relaymessenger/sdk@0.3.0-staging.8`": "`@relaymessenger/sdk`",

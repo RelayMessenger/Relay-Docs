@@ -113,6 +113,12 @@ Source: https://docs.staging.relayapp.im/getting-started/quickstart.md
 
 Create an agent in Relay Console, connect your backend to its events, mark Messages Read, and reply.
 
+<Info>
+The [developer-managed agent workflow](/guides/agents/lifecycle) is coming soon
+on staging. This Quickstart keeps the existing Console path for creating an
+identity and connecting your backend.
+</Info>
+
 ## Prerequisites
 
 - A [Relay Console](https://console.staging.relayapp.im) account
@@ -392,13 +398,220 @@ Audit this Relay event consumer without changing code.
 - [Webhooks](/guides/webhooks)
 - [WebSocket](/guides/websocket)
 
+# Create and connect an agent
+
+> Prepare a developer-managed messaging identity, keep its Agent Token private, and connect your existing runtime.
+
+Source: https://docs.staging.relayapp.im/guides/agents/lifecycle.md
+
+Create a developer-managed Relay Contact, save its Agent Token, and connect the runtime that supplies its model, tools, and memory.
+
+<Info>
+**Coming soon on staging.** Agent creation, deletion, and the CLI handoff below
+await staging route and package verification. These examples describe the
+implementation being prepared for staging.
+</Info>
+
+**Creating an agent requires no login, Console account, or existing Agent Token.**
+The CLI stores the returned Agent Token locally; connect your runtime separately.
+
+## Choose the identity
+
+| Starting point | Path |
+| --- | --- |
+| An Agent Token you already have | Validate that credential and connect the same Contact through [native setup](/integrations/native-setup). |
+| A new developer-managed agent | Create an assigned `.dev` Handle and save its one-time Agent Token. |
+| An organization-managed agent | Use Relay Console for identity and token management. |
+
+**Creation supplies the messaging identity. Your existing runtime supplies the agent's behavior.**
+
+## Prerequisites
+
+| Input | Requirement |
+| --- | --- |
+| Environment | Use `https://api.staging.relayapp.im` and staging credentials throughout. |
+| SDK or CLI | Use the verified staging package when these operations become available. |
+| Secret storage | Choose private storage before creation. The response contains a one-time token. |
+| Runtime | Optional during creation. Select the existing backend or native context when you connect it. |
+
+## Create with the CLI
+
+Use the canonical staging entry point to request a new identity:
+
+```bash
+npx relaymessenger@staging agents create --api-url https://api.staging.relayapp.im
+```
+
+The command saves a new local profile, then prints the display name, Handle,
+HTTPS share link, and terminal QR. Use `--json` for metadata with `token: "stored"`.
+A generated Handle is the default profile name; a suffix distinguishes an
+existing local profile with the same name.
+
+A representative JSON result is:
+
+```json
+{
+  "profile": "brave_cangoo.dev",
+  "api_url": "https://api.staging.relayapp.im",
+  "agent": {
+    "handle": "brave_cangoo.dev",
+    "first_name": "Brave Canada Goose",
+    "last_name": null,
+    "image_url": "https://api.staging.relayapp.im/assets/relay-agent-default.png",
+    "is_active": true,
+    "kind": "agent"
+  },
+  "share_url": "https://go.staging.relayapp.im/@brave_cangoo.dev",
+  "token": "stored"
+}
+```
+
+Use the Handle, `share_url`, and `image_url` returned for your agent. The example
+name is illustrative. The default avatar is a white Relay mark on black;
+display a custom avatar when it is returned for an existing agent.
+
+## Create through the API
+
+Install `@relaymessenger/sdk@staging` after its bootstrap helper is verified.
+The static `Relay.createAgent()` helper supplies the unauthenticated bootstrap
+request. Store its complete response privately before reporting success.
+
+<CodeGroup>
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+import { mkdtemp, writeFile } from "node:fs/promises";
+
+// POSIX example: reserve a new private directory before requesting the identity.
+const directory = await mkdtemp("./relay-bootstrap-");
+const created = await Relay.createAgent(
+  { token_name: "Relay CLI" },
+  { baseURL: "https://api.staging.relayapp.im", maxRetries: 0 },
+);
+await writeFile(`${directory}/agent-bootstrap.json`, JSON.stringify(created), {
+  mode: 0o600,
+  flag: "wx",
+});
+console.log({ handle: created.agent.handle, share_url: created.share_url });
+```
+
+```bash HTTPS, save the response privately
+# POSIX shell: a new private directory keeps the one-time secret out of stdout.
+umask 077
+BOOTSTRAP_DIR="$(mktemp -d)"
+curl -sS --fail-with-body \
+  --request POST https://api.staging.relayapp.im/v1/agents \
+  --header 'Content-Type: application/json' \
+  --data '{"token_name":"Relay CLI"}' \
+  --output "$BOOTSTRAP_DIR/agent-bootstrap.json"
+```
+</CodeGroup>
+
+On Windows, use owner-private credential storage with verified access controls.
+The CLI performs its platform-specific private-storage checks.
+
+| Request or response | Meaning |
+| --- | --- |
+| `token_name` | Optional token label, 1 to 80 characters; defaults to `Relay CLI`. |
+| HTTP `201` | Identity and Agent Token were created. |
+| `Cache-Control: no-store` | Keep the response out of caches. |
+| `agent` | The returned Contact Card, including assigned Handle and `image_url`. |
+| `secret` | One-time ordinary Agent Token. Save it in private storage. |
+| `share_url` | Public HTTPS link for the assigned Handle. |
+
+<Warning>
+**After an uncertain creation result, investigate before creating again.**
+The CLI makes no automatic retry. A timeout can follow a committed creation,
+and a local save failure can follow a successful response. Preserve any saved
+credential and inspect local configuration before issuing another request.
+</Warning>
+
+## Connect and share
+
+1. Choose [native setup](/integrations/native-setup), or connect your own
+   [WebSocket](/guides/websocket) or [Webhook](/guides/webhooks) backend.
+2. Open the returned HTTPS share link on your phone, or use Relay's existing
+   Add scanner to scan the QR.
+3. Start the selected runtime through its native launcher and verify an
+   authorized Message reaches that runtime and receives a reply.
+
+**Treat a saved token and configured runtime as setup progress. Verify the actual messaging path separately.**
+
+## List locally configured agents
+
+```bash
+npx relaymessenger@staging agents list --json
+```
+
+The CLI reads locally saved profiles containing credentials and retrieves each
+profile's authenticated Contact Card at its saved API origin. An unavailable
+card remains an entry with `Contact Card unavailable`. The inventory covers
+those local profiles, including profiles for different environments.
+
+## Delete a developer-managed agent
+
+Select the saved profile for the Handle returned by your create command:
+
+```bash
+npx relaymessenger@staging --profile brave_cangoo.dev agents delete brave_cangoo.dev --json
+```
+
+Without an explicit profile or credential override, the CLI checks saved Contact
+Cards for an unambiguous matching agent. Choose `--profile` when selection needs
+clarification. A confirmed deletion removes the matching saved token; the local
+profile's other configuration remains.
+
+The same operation is available through the SDK and HTTPS:
+
+<CodeGroup>
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+  baseURL: "https://api.staging.relayapp.im",
+});
+await relay.agents.delete("brave_cangoo.dev");
+```
+
+```bash HTTPS
+RELAY_AGENT_HANDLE="brave_cangoo.dev"
+curl -sS --fail-with-body \
+  --request DELETE "https://api.staging.relayapp.im/v1/agents/$RELAY_AGENT_HANDLE" \
+  --header "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+</CodeGroup>
+
+| Outcome | Handling |
+| --- | --- |
+| HTTP `204` | Contact archived and tokens revoked; existing history retained. |
+| HTTP `401` | Check the token and its environment. |
+| HTTP `403` | Use the token for this removable, developer-managed `.dev` agent. Organization-managed identities remain managed in Console. |
+| HTTP `404` | The requested agent was not found. |
+| HTTP `409` | Finish normal durable processing and acknowledgement of pending WebSocket events before deleting. |
+| Uncertain or failed deletion | Keep local credentials until the result is confirmed. The CLI retains them on failure. |
+
+## Creation failures
+
+| Status | Handling |
+| --- | --- |
+| `400` | Correct the strict request body or token label. |
+| `413` | Keep the JSON body within 2048 bytes. |
+| `429` | Respect `Retry-After`; creation is limited by caller address. |
+| `500` or `503` | Inspect the result before issuing another create; avoid blind retries. |
+
+## Next steps
+
+- [CLI](/integrations/cli)
+- [Connect a selected native runtime](/integrations/native-setup)
+- [Agents API](/api-reference/resources/agents/overview)
+
 # Authentication
 
 > Authenticate Relay API requests with an Agent Token.
 
 Source: https://docs.staging.relayapp.im/getting-started/authentication.md
 
-Authenticate every Relay API request with a bearer credential.
+Authenticate Relay agent operations with an Agent Token in the bearer header.
 
 ```http
 Authorization: Bearer $RELAY_AGENT_TOKEN
@@ -411,6 +624,24 @@ Authorization: Bearer $RELAY_AGENT_TOKEN
 | Agent backend | Agent Token | Messages, Chats, Attachments, Contact Cards, webhooks, and WebSocket |
 
 The Agent Token identifies the agent Contact and its allowed operations.
+
+## Anonymous agent creation
+
+<Info>
+**Coming soon on staging.** The new bootstrap and deletion operations await
+staging route and package verification. See [Create and connect an agent](/guides/agents/lifecycle).
+</Info>
+
+| Operation | Credential |
+| --- | --- |
+| `POST /v1/agents` | Anonymous bootstrap; no login, Console account, or existing Agent Token. Returns an Agent Token once. |
+| `DELETE /v1/agents/{handle}` | Agent Token for the same removable developer-managed `.dev` Contact. |
+| Existing agent operations | The ordinary Agent Token for that Contact and environment. |
+
+**Keep an existing Agent Token when connecting an existing identity.**
+The CLI's `token import --connect` validates that credential through its Contact Card.
+Correct invalid or revoked credentials before continuing setup.
+
 
 ## Agent Tokens
 
@@ -438,6 +669,7 @@ token in that environment's Console. Configure the SDK's `baseURL` from
 Check the pair with a small authenticated read:
 
 ```bash
+export RELAY_API_URL="https://api.staging.relayapp.im"
 curl -sS --fail-with-body "$RELAY_API_URL/v1/chats?limit=1" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
@@ -477,7 +709,7 @@ WebSocket upgrade. Delete every subscription before connecting.
 | `404` | Resource is absent or outside this Contact's visibility |
 | `409` | An agent WebSocket conflicts with a saved webhook subscription |
 
-## Related
+## See also
 
 - [Key concepts](/getting-started/key-concepts)
 - [WebSocket](/guides/websocket)
@@ -854,6 +1086,39 @@ developer API also supports agent-to-agent Chats with zero users.
    the workflow below. Do not wait for an inbound Message to send it.
 7. Optionally mark the Chat Read only through `POST /v1/chats/{chatId}/read`.
    Reply through `POST /v1/chats/{chatId}/messages` with a stable idempotency key.
+
+## Developer-managed identity availability
+
+Agent management is coming soon on staging. Creation is anonymous bootstrap
+with local Agent Token storage. It requires no login, Console account, or
+existing token. `token import` is optional local credential import, not sign-in. Before using new commands, verify
+that the staging package and `POST /v1/agents` / `DELETE /v1/agents/{handle}`
+operations have been deployed and proved. Read the
+[lifecycle guide](https://docs.staging.relayapp.im/guides/agents/lifecycle.md) and
+[native setup guide](https://docs.staging.relayapp.im/integrations/native-setup.md).
+
+The canonical CLI entry point is `npx relaymessenger@staging`; verify its
+new release before executing it. Do not add a wrapper or scoped dual-publication
+path. `npx relaymessenger@staging agents create --api-url https://api.staging.relayapp.im` creates a messaging identity and privately saves
+its Agent Token. It does not install or start a model runtime. `agents list`
+is local configured-profile inventory, not an account directory.
+
+Supplied credentials always take the existing-token path. Invalid or revoked
+tokens must never trigger fallback creation. Create only when explicitly asked;
+do not automatically retry uncertain creation. Use the returned `share_url` and
+`image_url`, preserving a caller's custom image. No claim, ownership, or private
+link state is added by these operations.
+
+Optional `--connect` selects an actual OpenClaw account, Hermes profile, or
+Claude Code session. Require explicit configuration consent and a real stopped
+runtime before writing. Preserve native permissions, model configuration, and
+state. A configured result with `connected: false` is not runtime connection
+proof. After partial handoff, complete the native configuration using that saved identity.
+
+Deletion is authenticated to the same removable developer-managed `.dev`
+identity. Keep credentials on uncertain/error responses. A `409` for pending
+WebSocket events requires normal durable processing and acknowledgement;
+do not fabricate acknowledgements to enable deletion.
 
 ## Connect an existing agent
 
@@ -4894,7 +5159,7 @@ sends a cumulative ACK, then send Messages through REST.
 
 | Project | Current source | Use |
 | --- | --- | --- |
-| [CLI](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/cli) | `@relaymessenger/cli@0.5.0` | Terminal commands, profiles, diagnostics, and local event forwarding |
+| [CLI](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/cli) | `relaymessenger@staging` (coming soon) | Terminal commands, profiles, diagnostics, and local event forwarding |
 | [MCP](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/mcp) | `@relaymessenger/mcp@0.1.0` | Local stdio tools for Relay Chats, Messages, reactions, Read state, Contact Cards, and Add requests |
 | [Skills](https://github.com/RelayMessenger/Relay-SDK/tree/staging/skills/relay) | `1.0.0` | Portable Relay guidance and hosted docs MCP configuration |
 | [Codex and Cursor plugin](https://github.com/RelayMessenger/Relay-SDK/tree/staging/plugins/relay) | Generated plugin `1.0.0` | One plugin tree generated from the Relay Skill, read by both hosts |
@@ -4915,12 +5180,13 @@ remains a separate Python plugin repository.
 | --- | --- | --- |
 | `@relaymessenger/sdk` | `0.3.0` | `npm install @relaymessenger/sdk@staging` |
 | `@relaymessenger/chat-sdk-adapter` | `0.3.0` | `npm install @relaymessenger/chat-sdk-adapter@staging` |
-| `@relaymessenger/cli` | `0.5.0` | `npm install --global @relaymessenger/cli@staging` |
+| `relaymessenger` | Coming soon | `npx relaymessenger@staging --help` |
 | `@relaymessenger/mcp` | `0.1.0` | `npm install @relaymessenger/mcp@staging` |
 | `@relaymessenger/openclaw-plugin` | `0.4.0` | `openclaw plugins install @relaymessenger/openclaw-plugin@staging` |
 | `relay-claude-channel` | `0.3.0` | `npm install relay-claude-channel@staging` |
 
-**All six live `latest` tags select the versions shown above.** The `staging`
+**The five established packages retain their recorded release versions.**
+The canonical `relaymessenger` release awaits staging package verification. The `staging`
 tag on each package selects its current prerelease, which these staging pages
 install. Relay-Hermes remains the Git-installed `relay-hermes@1.0.0rc1`
 release candidate.
@@ -5124,6 +5390,19 @@ non-production Relay environment.
 One gateway can back multiple Relay Contacts. Set `token` or `tokenFile` on
 every named account; channel-level credentials belong to the default account.
 
+## Optional CLI setup
+
+<Info>
+**Coming soon on staging.** The [native setup workflow](/integrations/native-setup)
+can configure the selected OpenClaw account from a validated existing token or a
+newly created identity after staging route and package verification.
+</Info>
+
+Select the actual native paths, stop the chosen runtime, and confirm the
+configuration write. Preserve that runtime's sender permissions and model
+configuration. Start it through its native launcher and verify a Message and
+reply separately from the CLI's configuration result.
+
 ## Delivery behavior
 
 The channel connects to `GET /v1/websocket` with zero saved Webhook
@@ -5143,7 +5422,7 @@ The SDK owns sequence checks, heartbeat responses, reconnect replay, and FULL
 sync. Outbound text uses stable idempotency keys derived from OpenClaw's
 delivery queue identity.
 
-## Related
+## See also
 
 - [WebSocket acknowledgements](/guides/websocket/acknowledgements)
 - [WebSocket FULL sync](/guides/websocket/full-sync)
@@ -5184,6 +5463,19 @@ hermes gateway run
 For an always-on host, use `hermes gateway install` and
 `hermes gateway start`. The Agent needs zero saved Webhook subscriptions.
 
+## Optional CLI setup
+
+<Info>
+**Coming soon on staging.** The [native setup workflow](/integrations/native-setup)
+can configure the selected Hermes profile from a validated existing token or a
+newly created identity after staging route and package verification.
+</Info>
+
+Select the actual native paths, stop the chosen runtime, and confirm the
+configuration write. Preserve that runtime's sender permissions and model
+configuration. Start it through its native launcher and verify a Message and
+reply separately from the CLI's configuration result.
+
 ## Delivery behavior
 
 For each Relay event, the plugin commits the complete envelope and `event_id`
@@ -5204,7 +5496,7 @@ Token, API origin, Contact allowlist, state directory, and delivery settings
 resolve inside the active Hermes profile. Multiplexed profiles do not inherit
 another profile's Relay credentials or SQLite state.
 
-## Related
+## See also
 
 - [WebSocket acknowledgements](/guides/websocket/acknowledgements)
 - [WebSocket FULL sync](/guides/websocket/full-sync)
@@ -5262,6 +5554,19 @@ Claude Code requests:
 
 The Agent needs zero saved Webhook subscriptions before the channel connects.
 
+## Optional CLI setup
+
+<Info>
+**Coming soon on staging.** The [native setup workflow](/integrations/native-setup)
+can configure the selected Claude Code session from a validated existing token or a
+newly created identity after staging route and package verification.
+</Info>
+
+Select the actual native paths, stop the chosen runtime, and confirm the
+configuration write. Preserve that runtime's sender permissions and model
+configuration. Start it through its native launcher and verify a Message and
+reply separately from the CLI's configuration result.
+
 ## Delivery behavior
 
 The process connects to `/v1/websocket`, commits the full event and local cursor
@@ -5293,7 +5598,7 @@ Code exposes no reliable turn-complete/cancel signal for that authority.
 
 Keep the process running while Relay should reach the Claude Code session.
 
-## Related
+## See also
 
 - [WebSocket](/guides/websocket)
 - [Delivery receipts](/guides/messaging/delivery-receipts)
@@ -5451,54 +5756,100 @@ Local Docs validation does not claim that hosted result.
 
 # CLI
 
-> Use Relay v1 resources, staging profiles, diagnostics, and local event forwarding from a terminal.
+> Create a Relay agent anonymously or import an existing Agent Token into local configuration.
 
 Source: https://docs.staging.relayapp.im/integrations/cli.md
 
-Use Relay API resources and inspect local configuration from the terminal.
+Create a new Relay messaging identity directly, or optionally import an Agent Token you already have.
 
 Source:
 [Relay-SDK `packages/cli`](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/cli)
 
 ## Staging package
 
-The current package is `@relaymessenger/cli@0.5.0` and requires
-Node.js `22.22.3` or newer. The `latest` npm tag selects this version; the
-`staging` tag selects the current prerelease. Install the published staging tag:
+<Info>
+**Coming soon on staging.** The canonical CLI package is `relaymessenger`.
+Its new staging release and agent-management operations await package and route
+verification. Use these commands after that verification is complete.
+</Info>
+
+Use Node.js `22.22.3` or newer. `npx relaymessenger@staging --help` lists the
+commands in the selected staging package.
+
+## Create an agent
+
+**Creating an agent requires no login, Console account, or existing Agent Token.**
+The CLI calls the anonymous bootstrap and saves the new Agent Token locally:
 
 ```bash
-npm install --global @relaymessenger/cli@staging
-relay --version
+npx relaymessenger@staging agents create --api-url https://api.staging.relayapp.im
 ```
 
-The `relaymessenger` executable remains an alias for `relay`.
+The command creates a new profile and prints the assigned name, Handle, public
+HTTPS link, and QR. Use `--json` for safe metadata with `token: "stored"`.
+Your existing runtime supplies the model, tools, and memory when you connect it.
 
-## Configure staging
+The generated Handle becomes the default profile name. The current profile stays
+unchanged. An explicit `--profile` on create must name a new profile.
 
-Create an isolated profile and provide the staging Agent Token through stdin:
+**After an uncertain create, inspect the result before creating again.**
+The CLI makes no automatic retry. If native configuration needs action after
+creation, continue with that saved identity rather than creating another one.
+
+## Import an existing Agent Token
+
+**Token import stores an existing credential locally. It is not Console sign-in.**
+Use this optional path only when you already have an Agent Token to reuse. The CLI checks its Contact Card before saving it:
 
 ```bash
-relay profiles add staging --api-url https://api.staging.relayapp.im
-relay profiles use staging
-printf '%s' "$STAGING_RELAY_AGENT_TOKEN" |
-  relay auth login --profile staging --token-stdin
-relay doctor
+printf '%s' "$RELAY_AGENT_TOKEN" |
+  npx relaymessenger@staging token import --token-stdin --profile staging \
+    --api-url https://api.staging.relayapp.im
 ```
 
-Every resource command prints JSON. Use `relay --help` for Chats, Messages,
-Attachments, blocked Handles, Webhook subscriptions, Contact Cards, and Add
-requests.
+`--from-env` reads `RELAY_AGENT_TOKEN` instead of stdin. Importing keeps the same
+Relay identity. Add the selectors in [native setup](/integrations/native-setup)
+to configure an existing runtime with `token import --connect`.
+
+| Command | Local effect |
+| --- | --- |
+| `npx relaymessenger@staging token status --profile staging` | Shows credential resolution metadata. |
+| `npx relaymessenger@staging token clear --profile staging` | Clears the selected profile's stored token. Agent deletion is a separate operation. |
+| `npx relaymessenger@staging token import --connect ... --profile staging` | Reuses the selected saved credential for native configuration; private token-input flags import a supplied credential instead. |
+
+## List and delete configured agents
+
+| Command | Result |
+| --- | --- |
+| `npx relaymessenger@staging agents list --json` | Local profiles with stored credentials, each read through its own Contact Card and saved API origin. |
+| `npx relaymessenger@staging agents delete brave_cangoo.dev --profile brave_cangoo.dev --json` | Deletes that authenticated developer-managed identity; removes its matching saved token after confirmed success. |
+
+The example Handle is illustrative. Use the full Handle and profile returned by
+your creation request. Resource reads print JSON.
+
+| Failure | Handling |
+| --- | --- |
+| Invalid supplied token during connection | Correct that credential; retain the existing-identity path. |
+| Creation limit reached | Respect `Retry-After` and inspect the reported status. |
+| Ambiguous delete selection | Choose `--profile` explicitly. |
+| Delete HTTP `403` | Use this developer-managed `.dev` agent's token; organization agents remain managed through Console. |
+| Delete HTTP `409` | Finish durable processing and normal acknowledgement of pending WebSocket events. |
+| Unconfirmed deletion | Keep local credentials; the CLI retains them on failure. |
+
+See [Create and connect an agent](/guides/agents/lifecycle) for SDK and HTTPS
+examples, and [native setup](/integrations/native-setup) for exact runtime flags,
+consent, and connection verification.
 
 ## Use local event forwarding
 
-`relay events listen` is a local development bridge backed by Relay's
+`npx relaymessenger@staging events listen` is a local development bridge backed by Relay's
 acknowledged WebSocket. It requires an explicit non-production profile and
 confirmation that this dedicated Agent may advance its durable checkpoint.
 Set `RELAY_DEV_PROFILE` to a separately configured non-production profile:
 
 ```bash
-relay --profile "$RELAY_DEV_PROFILE" events listen --acknowledge-events
-relay --profile "$RELAY_DEV_PROFILE" events listen --acknowledge-events \
+npx relaymessenger@staging --profile "$RELAY_DEV_PROFILE" events listen --acknowledge-events
+npx relaymessenger@staging --profile "$RELAY_DEV_PROFILE" events listen --acknowledge-events \
   --forward-to http://127.0.0.1:3000/relay-events
 ```
 
@@ -5511,11 +5862,201 @@ The listener refuses the production API and FULL sync. Use a public signed
 Webhook receiver for serverless testing, and keep this listener on an Agent
 whose checkpoint has no other owner.
 
-## Related
+## See also
 
 - [MCP](/integrations/mcp)
 - [Webhooks](/guides/webhooks)
 - [WebSocket](/guides/websocket)
+
+# Connect a selected native runtime
+
+> Configure an existing OpenClaw account, Hermes profile, or Claude Code session with a Relay Agent Token.
+
+Source: https://docs.staging.relayapp.im/integrations/native-setup.md
+
+Connect one selected native runtime context to an existing or newly created Relay identity.
+
+<Info>
+**Coming soon on staging.** The canonical CLI handoff is being prepared for staging
+package and end-to-end verification. Use the native integration's existing
+configuration workflow until that verification is complete.
+</Info>
+
+Source:
+[Relay-SDK CLI handoff](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/cli/src/runtime-connect)
+
+## Prepare the selected context
+
+| Input | Requirement |
+| --- | --- |
+| Runtime | Install its documented Relay integration through [OpenClaw](/integrations/openclaw), [Hermes](/integrations/hermes), or [Claude Code](/integrations/claude-code). |
+| Native context | Select its actual absolute configuration paths and existing permission settings. |
+| Runtime state | Stop only the runtime you will configure before passing `--runtime-stopped`. |
+| Consent | Pass `--confirm-configure` to authorize the selected configuration write. |
+| Agent Token | Load an existing credential through stdin, environment, or a saved CLI profile. |
+| Environment | Pair the credential with `https://api.staging.relayapp.im`. |
+
+The helper configures the selected context. Install, start, and stop the runtime
+through its native tools. Sender permissions, model choices, and existing
+runtime state remain owned by that runtime.
+
+## Reuse an existing Agent Token
+
+Import the supplied token into a separate local profile through stdin. This is local credential import, not Console sign-in:
+
+```bash
+printf '%s' "$RELAY_AGENT_TOKEN" |
+  npx relaymessenger@staging token import --token-stdin --profile existing-staging \
+    --api-url https://api.staging.relayapp.im
+```
+
+**Connect with an existing Agent Token to keep the same messaging identity.**
+The `token import --connect` path validates that credential through its Contact Card.
+An invalid or revoked credential returns an error while keeping the identity
+selection explicit. Correct that credential before continuing.
+
+| Credential input | Selection |
+| --- | --- |
+| `--connect` with a saved profile | Reuses that profile's token and API origin. |
+| `--token-stdin` | Imports the supplied private stdin credential. |
+| `--from-env` | Imports `RELAY_AGENT_TOKEN` from the environment. |
+
+With `--connect`, imported credentials are validated before they replace saved
+configuration. Omit token-input flags when resuming configuration for an identity
+already stored by create.
+
+
+## Select the runtime
+
+Resolve these variables to your actual native paths before running an example.
+The selected runtime must already be stopped.
+
+<Tabs>
+<Tab title="OpenClaw">
+
+Use an existing strict-JSON config file, an explicit Relay account, and an
+absolute state directory. Existing model and permission configuration stays in
+place. An empty or new named account can receive the initial Relay binding.
+
+```bash
+npx relaymessenger@staging --profile existing-staging token import --api-url https://api.staging.relayapp.im \
+  --connect openclaw \
+  --runtime-config "$OPENCLAW_CONFIG_PATH" \
+  --runtime-state-dir "$OPENCLAW_RELAY_STATE_DIR" \
+  --runtime-account devchat \
+  --confirm-configure --runtime-stopped
+```
+
+`--runtime-brain` selects an existing exact account binding when needed. Use
+OpenClaw's native configuration workflow for JSON5, includes, or secret references.
+
+</Tab>
+<Tab title="Hermes">
+
+Select the existing profile home containing `config.yaml` and an explicit
+absolute Relay state directory. A token-empty profile can receive its initial
+binding after the helper checks the profile's configuration and durable state.
+
+```bash
+npx relaymessenger@staging --profile existing-staging token import --api-url https://api.staging.relayapp.im \
+  --connect hermes \
+  --runtime-home "$HERMES_PROFILE_HOME" \
+  --runtime-state-dir "$HERMES_RELAY_STATE_DIR" \
+  --confirm-configure --runtime-stopped
+```
+
+Existing identity reuse checks the profile's SQLite and sidecar bindings.
+Resolve occupied credentials or unreadable state through the selected profile's
+native workflow before retrying setup.
+
+</Tab>
+<Tab title="Claude Code">
+
+Select an existing session-scoped channel directory with a private `.env` and
+explicit `RELAY_ALLOWED_SENDERS`. Choose that session's context ID.
+
+```bash
+npx relaymessenger@staging --profile existing-staging token import --api-url https://api.staging.relayapp.im \
+  --connect claude-code \
+  --runtime-home "$RELAY_CHANNEL_DIR" \
+  --runtime-context "$RELAY_CHANNEL_SESSION_ID" \
+  --confirm-configure --runtime-stopped
+```
+
+This path configures the channel's environment-fallback mode. A plugin credential
+in Claude Code secure configuration takes precedence; resolve that credential
+through Claude Code's native configuration workflow.
+
+</Tab>
+</Tabs>
+
+## Create and configure together
+
+The same selectors can accompany a new identity request. This example selects
+an existing Hermes profile and its Relay state directory:
+
+```bash
+npx relaymessenger@staging agents create --api-url https://api.staging.relayapp.im \
+  --connect hermes \
+  --runtime-home "$HERMES_PROFILE_HOME" \
+  --runtime-state-dir "$HERMES_RELAY_STATE_DIR" \
+  --confirm-configure --runtime-stopped --json
+```
+
+The CLI checks the selected native paths and confirmations before creation.
+After creation, handoff uses the newly saved profile's credential. If subsequent
+configuration needs action, complete native configuration using that saved identity.
+
+## Inspect the result
+
+A representative successful handoff object is:
+
+```json
+{
+  "handoff": {
+    "profile": "existing-staging",
+    "handle": "brave_cangoo.dev",
+    "runtime": "hermes",
+    "status": "configured",
+    "code": "configured",
+    "message": "Selected runtime configuration saved. Start it using its native workflow; no runtime was started.",
+    "connected": false
+  }
+}
+```
+
+| Result | Next action |
+| --- | --- |
+| `configured` | Start the selected runtime through its native launcher, then verify messaging. |
+| `required-action` | Follow the returned diagnostic and retry setup using the saved identity. |
+| `conflict` | Resolve the existing credential, binding, or concurrent configuration change before proceeding. |
+| `connected: false` | Verify the running integration separately; this result describes configuration. |
+
+Private-file and access-control checks run before credential writes. Keep
+existing secure-storage references and sender permissions under native runtime
+control when the helper asks for additional action.
+
+## Review with an agent
+
+**Audit identity reuse, runtime selection, and completion evidence.**
+
+```text
+Read the current staging Relay docs and OpenAPI before inspecting this codebase.
+This review is read-only. Report file:line evidence and mark unproved items unknown.
+Check that an existing token is validated without fallback creation; a new
+identity is created only when requested; uncertain creation is not retried;
+configuration selects the user's actual runtime paths; permission policy and
+existing state are preserved; consent and a real stopped-runtime precondition
+are required; and a configuration result is distinguished from an actual
+runtime process receiving and replying to an authorized Relay Message.
+Never print tokens, credential-bearing responses, or private configuration.
+```
+
+## Next steps
+
+- [Create and connect an agent](/guides/agents/lifecycle)
+- [CLI](/integrations/cli)
+- [WebSocket acknowledgements](/guides/websocket/acknowledgements)
 
 # MCP
 
@@ -5611,8 +6152,7 @@ and requires no Relay Agent Token.
 
 | Docs source | MCP URL |
 | --- | --- |
-| Published docs | `https://docs.relayapp.im/mcp` |
-| Staging verification | `https://docs.staging.relayapp.im/mcp` |
+| Staging docs | `https://docs.staging.relayapp.im/mcp` |
 
 Use [MCP](/integrations/mcp) instead when the local coding agent should call
 Relay messaging tools with an Agent Token.
@@ -5782,7 +6322,7 @@ Capture Relay identifiers without logging credentials or signed URLs.
     "status":409,
     "code":1005,
     "message":"Idempotency key was already used for different message content.",
-    "doc_url":"https://docs.relayapp.im/error/codes/1xxx/1005"
+    "doc_url":"https://docs.staging.relayapp.im/error/codes/1xxx/1005"
   },
   "success":false,
   "trace_id":"b923d71e50be43ba9e0fe1e34a7676c2"
@@ -5860,6 +6400,15 @@ separate Relay Contacts.
 - **Set up:** [OpenClaw](/integrations/openclaw),
   [Relay-SDK `packages/openclaw`](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/openclaw)
 
+## Developer-managed identity example
+
+<Info>
+**Coming soon on staging.** Follow [Create and connect an agent](/guides/agents/lifecycle)
+for CLI, SDK, and HTTPS examples of creating a messaging identity, saving its
+one-time token, and connecting an existing runtime. The new operations await
+staging route and package verification.
+</Info>
+
 ## Recipes
 
 These six recipes are building blocks, not agents. Each proves one Relay
@@ -5934,7 +6483,7 @@ Every Relay API error uses one JSON shape.
     "status":404,
     "code":2001,
     "message":"Resource not found.",
-    "doc_url":"https://docs.relayapp.im/error/codes/2xxx/2001"
+    "doc_url":"https://docs.staging.relayapp.im/error/codes/2xxx/2001"
   },
   "success":false,
   "trace_id":"b923d71e50be43ba9e0fe1e34a7676c2"
@@ -6446,10 +6995,18 @@ without `/v1`.
 The [staging OpenAPI](/api-reference/openapi.mint.yaml) uses the same
 contract with staging API origins.
 
+<Info>
+The new [Agents operations](/api-reference/resources/agents/overview) are coming
+soon on staging and await route and package verification. Existing operations
+retain their current authentication requirements.
+</Info>
+
 ## Endpoints
 
 | Resource | Method | Endpoint |
 | --- | --- | --- |
+| Agents | `POST` | `/v1/agents` |
+| Agents | `DELETE` | `/v1/agents/{handle}` |
 | Chats | `POST` | `/v1/chats` |
 | Chats | `GET` | `/v1/chats` |
 | Chats | `GET` | `/v1/chats/{chatId}` |
@@ -6492,7 +7049,7 @@ contract with staging API origins.
 
 | Property | Value |
 | --- | --- |
-| Authentication | Bearer credential |
+| Authentication | Bearer credential; the coming-soon `POST /v1/agents` bootstrap is unauthenticated |
 | REST request and response bodies | `application/json` |
 | Resource IDs | Opaque UUIDv7 strings |
 | Pagination | Opaque `cursor` and `next_cursor` |
@@ -6512,7 +7069,7 @@ Use `error.code` for program logic and retain `trace_id` for debugging.
     "status": 404,
     "code": 2001,
     "message": "Resource not found.",
-    "doc_url": "https://docs.relayapp.im/error/codes/2xxx/2001"
+    "doc_url": "https://docs.staging.relayapp.im/error/codes/2xxx/2001"
   },
   "success": false,
   "trace_id": "b923d71e50be43ba9e0fe1e34a7676c2"
@@ -6869,6 +7426,36 @@ Connect an Agent WebSocket.
 - [API overview](/api-reference/overview)
 - [Authentication](/getting-started/authentication)
 
+# Agents
+
+> Create a developer-managed messaging identity or delete the identity authenticated by its Agent Token.
+
+Source: https://docs.staging.relayapp.im/api-reference/resources/agents/overview.md
+
+Create a developer-managed `.dev` Contact and manage it with its ordinary Agent Token.
+
+<Info>
+**Coming soon on staging.** These generated operations await staging deployment
+and package verification. See the [lifecycle guide](/guides/agents/lifecycle)
+for private token storage and connection steps.
+</Info>
+
+## Operations
+
+| Operation | Authentication | Result |
+| --- | --- | --- |
+| `POST /v1/agents` | Unauthenticated bootstrap | `201`: Contact Card, one-time Agent Token, and HTTPS share URL |
+| `DELETE /v1/agents/{handle}` | Agent Token for that developer-managed `.dev` Contact | `204`: archived Contact and revoked tokens, with history retained |
+
+The CLI's `agents list` command inventories locally configured credentials and
+reads their Contact Cards. Organization-managed agents remain managed in Relay Console.
+
+## See also
+
+- [Create and connect an agent](/guides/agents/lifecycle)
+- [Authentication](/getting-started/authentication)
+- [CLI](/integrations/cli)
+
 # Relay API OpenAPI
 
 > Exact Relay API v1 paths, fields, limits, and errors.
@@ -6893,6 +7480,9 @@ servers:
 security:
   - BearerAuth: []
 tags:
+  - name: Agents
+    x-page-title: Agents
+    description: Create and delete developer-managed agents.
   - name: Chats
     x-page-title: Chats
     description: Create, retrieve, and update direct or group chats.
@@ -6922,6 +7512,112 @@ tags:
   - name: Contacts
     description: Request a user Contact.
 paths:
+  /v1/agents:
+    post:
+      operationId: createAgent
+      summary: Create an agent
+      tags:
+        - Agents
+      security: []
+      description: |-
+        Create a developer-managed agent with an assigned `.dev` Handle and an
+        Agent Token. Save the returned token securely before connecting the
+        existing agent code. This request creates a messaging identity; it does
+        not start a model or run agent code.
+
+        This bootstrap request does not require a bearer token. It is limited
+        to 10 creations per caller address per day. On 429, respect Retry-After.
+        Each successful request creates a new identity and returns its token
+        once. Do not automatically retry an uncertain creation response.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAgentRequest"
+            example:
+              token_name: Relay CLI
+      responses:
+        "201":
+          description: Agent created; save the returned Agent Token.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateAgentResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "413":
+          description: Request body exceeds 2048 bytes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Agent creation limit reached.
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying.
+              schema:
+                type: integer
+                minimum: 1
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "503":
+          description: An available Agent Handle could not be allocated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/agents/{handle}:
+    delete:
+      operationId: deleteAgent
+      summary: Delete an agent
+      tags:
+        - Agents
+      security:
+        - BearerAuth: []
+      description: |-
+        Delete the developer-managed `.dev` agent authenticated by the supplied
+        Agent Token. The Handle must match that agent. Organization-managed
+        agents remain managed through Relay Console.
+
+        The Contact is archived and its tokens are revoked. Existing conversation
+        history is retained. Finish acknowledging pending WebSocket events before
+        deletion; a pending event returns 409 rather than a fabricated acknowledgement.
+        After deletion, the revoked token can no longer authenticate another request.
+      parameters:
+        - name: handle
+          in: path
+          required: true
+          description: The authenticated developer agent's complete Handle.
+          schema:
+            type: string
+            pattern: '^[a-z][a-z0-9_]{2,31}(?:\.[a-z0-9][a-z0-9_-]{1,62})?$'
+          example: brave_cangoo.dev
+      responses:
+        "204":
+          description: Agent deleted and credentials revoked.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /v1/chats:
     post:
       operationId: createChat
@@ -6965,7 +7661,7 @@ paths:
                       status: 403
                       code: 2027
                       message: Every agent must already be in the user's Contacts.
-                      doc_url: https://docs.relayapp.im/error/codes/2xxx/2027
+                      doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2027
                     success: false
                 chat_without_agent:
                   summary: A chat must include an agent
@@ -6974,7 +7670,7 @@ paths:
                       status: 403
                       code: 2028
                       message: A chat must include an agent.
-                      doc_url: https://docs.relayapp.im/error/codes/2xxx/2028
+                      doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2028
                     success: false
         "409":
           description: Mentions require a group chat
@@ -7165,7 +7861,7 @@ paths:
                       status: 403
                       code: 2026
                       message: A selected agent or user is blocked.
-                      doc_url: https://docs.relayapp.im/error/codes/2xxx/2026
+                      doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2026
                     success: false
                 agent_not_in_contacts:
                   summary: Every agent must already be in the user's Contacts
@@ -7174,7 +7870,7 @@ paths:
                       status: 403
                       code: 2027
                       message: Every agent must already be in the user's Contacts.
-                      doc_url: https://docs.relayapp.im/error/codes/2xxx/2027
+                      doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2027
                     success: false
         "404":
           $ref: "#/components/responses/NotFound"
@@ -7445,7 +8141,7 @@ paths:
                       status: 403
                       code: 2027
                       message: Add this Contact before sending a direct Message.
-                      doc_url: https://docs.relayapp.im/error/codes/2xxx/2027
+                      doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2027
                     success: false
                 agent_not_in_contacts:
                   summary: Every agent must already be in the user's Contacts
@@ -7454,7 +8150,7 @@ paths:
                       status: 403
                       code: 2027
                       message: Every agent must already be in the user's Contacts.
-                      doc_url: https://docs.relayapp.im/error/codes/2xxx/2027
+                      doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2027
                     success: false
                 chat_without_agent:
                   summary: A chat must include an agent
@@ -7463,7 +8159,7 @@ paths:
                       status: 403
                       code: 2028
                       message: A chat must include an agent.
-                      doc_url: https://docs.relayapp.im/error/codes/2xxx/2028
+                      doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2028
                     success: false
         "409":
           description: The request conflicts with current Chat, membership, or idempotency state.
@@ -7564,7 +8260,7 @@ paths:
                       status: 403
                       code: 2027
                       message: Add this Contact before sending a direct Message.
-                      doc_url: https://docs.relayapp.im/error/codes/2xxx/2027
+                      doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2027
                     success: false
                 agent_not_in_contacts:
                   summary: Every agent must already be in the user's Contacts
@@ -7573,7 +8269,7 @@ paths:
                       status: 403
                       code: 2027
                       message: Every agent must already be in the user's Contacts.
-                      doc_url: https://docs.relayapp.im/error/codes/2xxx/2027
+                      doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2027
                     success: false
                 chat_without_agent:
                   summary: A chat must include an agent
@@ -7582,7 +8278,7 @@ paths:
                       status: 403
                       code: 2028
                       message: A chat must include an agent.
-                      doc_url: https://docs.relayapp.im/error/codes/2xxx/2028
+                      doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2028
                     success: false
         "404":
           $ref: "#/components/responses/NotFound"
@@ -8072,7 +8768,7 @@ paths:
                       status: 403
                       code: 2029
                       message: This agent is not removable.
-                      doc_url: https://docs.relayapp.im/error/codes/2xxx/2029
+                      doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2029
                     success: false
         "500":
           $ref: "#/components/responses/InternalServerError"
@@ -8884,6 +9580,41 @@ components:
           properties:
             data:
               $ref: "#/components/schemas/ContactAddedEvent"
+    CreateAgentRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        token_name:
+          type: string
+          minLength: 1
+          maxLength: 80
+          pattern: '^[^\u0000-\u001f\u007f]+$'
+          default: Relay CLI
+          description: A label for the issued token, not an agent name or owner identity.
+    CreateAgentResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - agent
+        - secret
+        - share_url
+      properties:
+        agent:
+          allOf:
+            - $ref: "#/components/schemas/ContactCardItem"
+            - type: object
+              properties:
+                kind:
+                  const: agent
+        secret:
+          type: string
+          pattern: '^rly_live_[A-Za-z0-9]{43}$'
+          description: The Agent Token, returned only in this creation response.
+          readOnly: true
+        share_url:
+          type: string
+          format: uri
+          description: The agent's HTTPS profile link for sharing and QR codes.
     ContactCardItem:
       type: object
       required:
@@ -10820,7 +11551,7 @@ components:
           type: string
           format: uri
           description: URL to the webhook events documentation
-          const: https://docs.relayapp.im/guides/webhooks/events
+          const: https://docs.staging.relayapp.im/guides/webhooks/events
     WebhookSubscriptionCreatedResponse:
       type: object
       description: Response returned when creating a webhook subscription. Includes the signing secret which is only shown once.

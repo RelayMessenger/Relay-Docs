@@ -233,6 +233,7 @@ expected_guide_pages = {
     "Introduction": ["index"],
     "Getting started": [
         "getting-started/quickstart",
+        "guides/agents/lifecycle",
         "getting-started/authentication",
         "getting-started/sdks",
         "getting-started/key-concepts",
@@ -294,6 +295,7 @@ expected_guide_pages = {
         "integrations/codex",
         "integrations/cursor",
         "integrations/cli",
+        "integrations/native-setup",
         "integrations/mcp",
         "integrations/skills",
     ],
@@ -495,7 +497,7 @@ for archived_mirror in ["Relay-Codex", "Relay-Cursor", "Relay-Claude-Code"]:
         )
 
 for version in [
-    *(pinned(name) for name in npm_latest),
+    *(pinned(name) for name in npm_latest if name != "@relaymessenger/cli"),
     *(pinned(name) for name in versions["pypi"]),
     "@relaymessenger/cookbook-cloudflare-think-agent@0.1.0",
 ]:
@@ -513,10 +515,12 @@ for marker in [
 
 ecosystem_index_text = (root / "integrations/index.mdx").read_text()
 for name, version in npm_latest.items():
+    if name == "@relaymessenger/cli":
+        continue  # Historical registry snapshot; canonical CLI publication is pending.
     if spec(f"| `{name}` | `{version}` |") not in ecosystem_index_text:
         raise SystemExit(f"live npm tag truth lost: {name}@{version}")
-if "All six live `latest` tags select the versions shown above." not in ecosystem_index_text:
-    raise SystemExit("six-package live npm latest truth lost")
+if "The five established packages retain their recorded release versions." not in ecosystem_index_text:
+    raise SystemExit("established package release status lost")
 
 chat_sdk_text = (root / "integrations/chat-sdk.mdx").read_text()
 # npm provenance is a property of one published version. The staging
@@ -554,8 +558,8 @@ if re.search(r"\bsource[- ]only\b|\bsource tarball\b", chat_sdk_text, re.I):
 
 cli_text = (root / "integrations/cli.mdx").read_text()
 for marker in [
-    spec("npm install --global @relaymessenger/cli@staging"),
-    'relay --profile "$RELAY_DEV_PROFILE" events listen --acknowledge-events',
+    spec("npx relaymessenger@staging --help"),
+    spec('npx relaymessenger@staging --profile "$RELAY_DEV_PROFILE" events listen --acknowledge-events'),
     "requires an explicit non-production profile",
     "dedicated Agent may advance its durable checkpoint",
 ]:
@@ -1240,10 +1244,10 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # they came from, so an edit made here instead of at the source fails the gate.
 # Source: Relay-Server/contracts/developer/openapi.yaml.
 # Error 2029 and Contact.is_removable, Relay-Server PR 185, September 7, 2026.
-# Source authority: Relay-Server staging 8c66df98287cc588401fbfeccdc301384e6e5f4d.
+# Source authority: Relay-Server canonical commit 40df3700f143d4421fa522d1bc5bbeb840c2b142; staging merge pin pending.
 # The digest pins source bytes independently of the Server release commit.
 expected_openapi_sha256 = (
-    "b1504c934cc8a13f9bce87ed73c30879fb4d0302bc91aec1ee366518c0766680"
+    "a2bebc32ab50dd52e6f437ec3ae97b775799e84518b503fba6dda471c007b519"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
@@ -1405,6 +1409,8 @@ if leaked_private_operations:
         f"private operation entered public OpenAPI: {leaked_private_operations}"
     )
 expected_operation_ids = {
+    "createAgent",
+    "deleteAgent",
     "addParticipant",
     "blockHandle",
     "connectAgentWebSocket",
@@ -1679,7 +1685,6 @@ if "setup agent performs this step once" not in (root / "getting-started/quickst
 for name, pattern in {
     "Socket Mode product name": r"\bSocket Mode\b",
     "agent installation lifecycle": r"\bagent installation\b|\binstalled agents?\b|\binstall agents?\b",
-    "agent share-link lifecycle": r"\bshare[- ]link\b",
     "old ecosystem path": r"/ecosystem(?:/|\b)",
     "old ecosystem vocabulary": r"\becosystem\b|\bRelay for \b|\bRelay channel for\b",
     "old conversation vocabulary": r"\bconversations?\b",

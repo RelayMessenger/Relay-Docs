@@ -8,10 +8,11 @@ from pathlib import Path
 from origins import target
 
 ROOT = Path(__file__).resolve().parents[1]
-# Relay-Server/contracts/developer/openapi.yaml at this reviewed staging commit.
+# Main-owned canonical commit is validated; final staging merge pin is pending.
 # Update only after reading and synchronizing a newly agreed upstream contract.
-UPSTREAM_COMMIT = "8c66df98287cc588401fbfeccdc301384e6e5f4d"
-UPSTREAM_SHA256 = "b1504c934cc8a13f9bce87ed73c30879fb4d0302bc91aec1ee366518c0766680"
+UPSTREAM_COMMIT = "40df3700f143d4421fa522d1bc5bbeb840c2b142"
+UPSTREAM_STAGING_COMMIT = "pending-staging-merge"
+UPSTREAM_SHA256 = "a2bebc32ab50dd52e6f437ec3ae97b775799e84518b503fba6dda471c007b519"
 
 
 class ContractSourceTests(unittest.TestCase):
@@ -23,8 +24,12 @@ class ContractSourceTests(unittest.TestCase):
     def test_projection_changes_only_environment_origins(self):
         expected = (ROOT / "api-reference/openapi.yaml").read_bytes()
         if target() == "staging":
-            expected = expected.replace(b"https://api.relayapp.im", b"https://api.staging.relayapp.im")
-            expected = expected.replace(b"wss://api.relayapp.im", b"wss://api.staging.relayapp.im")
+            for host in ("api", "docs", "go"):
+                for scheme in ("https", "wss"):
+                    expected = expected.replace(
+                        f"{scheme}://{host}.relayapp.im".encode(),
+                        f"{scheme}://{host}.staging.relayapp.im".encode(),
+                    )
         self.assertEqual((ROOT / "api-reference/openapi.staging.yaml").read_bytes(), expected)
 
     def test_error_is_integrated_in_navigation_and_generated_surfaces(self):
