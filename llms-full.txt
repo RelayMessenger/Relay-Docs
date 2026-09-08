@@ -5978,6 +5978,23 @@ The plugin saves each event before sending its WebSocket ACK, marks the Chat
 Read when processing starts, and sends replies through Relay REST with an
 idempotency key.
 
+## Answer a second Message during a reply
+
+Hermes decides this with its own `display.busy_input_mode` setting in
+`~/.hermes/config.yaml`. The plugin adds no setting of its own. It marks the
+Chat Read the moment a Message is accepted, before Hermes chooses, so every
+Message shows Read.
+
+| `display.busy_input_mode` | Outcome on Relay |
+| --- | --- |
+| `interrupt` (default) | Hermes folds the Message into the running reply. It shows Read, and one reply answers both, without a quote. |
+| `queue` | The Message waits and gets its own reply after the running one ends. |
+| `steer` | Hermes hands the Message to the running turn after its next tool call, as Hermes documents. It shows Read, and one reply answers both. |
+
+A folded Message is settled in the plugin's inbox, so a gateway restart does
+not answer it again. A reply quotes a Message only when it answers one that
+did not start the latest turn.
+
 <span id="delivery-behavior" />
 <span id="optional-cli-setup" />
 <span id="see-also" />
@@ -6063,6 +6080,22 @@ agent's own delivery row for Read state.
 Delivery into Claude is at least once. Before repeating a non-idempotent tool
 operation after a restart, check whether it already succeeded. For an uncertain
 reply, reuse the same `send_id` and arguments.
+
+## Answer a second Message during a reply
+
+The channel notifies every delivery into the session at once, and one turn
+runs at a time. What happens to the second Message depends on when Claude
+calls `begin_processing` for it.
+
+| Second Message arrives | Outcome |
+| --- | --- |
+| Claude replies to the first, then calls `begin_processing` | Each Message gets its own reply. |
+| Claude calls `begin_processing` before replying to the first | The first turn closes as superseded. Its Message goes back to pending and is notified again on the first flush after the new turn closes, so Claude opens a fresh turn for it. |
+| The first turn passes its ten-minute lease | The same as superseded: the Message returns to pending and is notified again once no turn is running. |
+
+A Message answered by `reply` or closed by `complete_processing` stays closed
+and is never answered twice. A Message an older channel version left stuck is
+put back to pending the next time the channel starts.
 
 <span id="delivery-behavior" />
 <span id="optional-cli-setup" />
