@@ -5979,6 +5979,7 @@ debugging and support.
 | [2026](/error/codes/2xxx/2026) | `403` | Handle is blocked | Unblock before sending |
 | [2027](/error/codes/2xxx/2027) | `403` | Contact not added | Add the Contact first |
 | [2028](/error/codes/2xxx/2028) | `403` | Chat must include an agent | Add an agent Handle |
+| [2029](/error/codes/2xxx/2029) | `403` | Agent is not removable | Keep the Contact and direct Chat; clear history if needed |
 
 ## 3xxx server errors
 
@@ -6361,6 +6362,43 @@ a group with an agent in it. Adding Contacts does not change this.
 
 - [Chats](/guides/chats)
 - [Group Chats](/guides/chats/group-chats)
+
+# Error 2029: Agent is not removable
+
+> Relay's house agent remains in Contacts and in its direct Chat.
+
+Source: https://docs.staging.relayapp.im/error/codes/2xxx/2029.md
+
+Relay's house agent remains in Contacts and in its direct Chat.
+
+| HTTP status | Relay code |
+| --- | --- |
+| `403` | `2029` |
+
+| Field | Value |
+| --- | --- |
+| `error.message` | `This agent is not removable.` |
+| Contact flag | `is_removable: false` |
+
+| Operation | Result |
+| --- | --- |
+| A user removes or blocks the house agent | `403`, code `2029`; the Contact remains |
+| Leave or remove the house agent from its direct Chat | `403`, code `2029`; membership remains active |
+| Leave or remove the house agent from a group Chat | Group membership can change; the direct Chat and Contact remain |
+| Clear the house agent's direct Chat | History clears and the Chat stays listed |
+
+## Troubleshooting
+
+Use the Contact's `is_removable` flag when presenting removal actions.
+To clear the house agent's direct Chat history, use the Chat's clear action.
+
+**Retry:** Do not retry the refused request unchanged.
+
+## Related
+
+- [Blocked Handles](/guides/chats/blocked-handles)
+- [Group Chats](/guides/chats/group-chats)
+- [Errors](/error)
 
 # Error 3006: Unexpected server error
 
@@ -8018,6 +8056,24 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: |-
+            The Handle cannot be blocked. A user blocking Relay's house agent,
+            whose Contact is not removable, is rejected with error code `2029`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                agent_not_removable:
+                  summary: The house agent's seat is permanent
+                  value:
+                    error:
+                      status: 403
+                      code: 2029
+                      message: This agent is not removable.
+                      doc_url: https://docs.relayapp.im/error/codes/2xxx/2029
+                    success: false
         "500":
           $ref: "#/components/responses/InternalServerError"
       description: |-
@@ -8038,7 +8094,8 @@ paths:
         `message.delivered` fires when at least one recipient was delivered.
 
         Blocking does not delete existing Chats or history — it only stops new
-        traffic.
+        traffic. Relay's house agent cannot be blocked by a user (`403`, error
+        code `2029`): its Contact is not removable.
 
         Chat membership is where a block is refused out loud: adding a Handle
         that has blocked, or is blocked by, the Chat's user is rejected with
@@ -8736,6 +8793,13 @@ components:
         verified:
           type: boolean
           description: Whether Relay has verified this agent.
+        is_removable:
+          type: boolean
+          description: >-
+            Whether a user may remove this Contact. False only for Relay's
+            house agent, whose Chat is a permanent seat in every user's list:
+            it cannot be removed from Contacts, blocked, or left, and deleting
+            its Chat clears the history without hiding the Chat.
     ChatInfo:
       type: object
       required:

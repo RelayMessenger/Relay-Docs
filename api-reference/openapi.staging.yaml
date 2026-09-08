@@ -1178,6 +1178,24 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: |-
+            The Handle cannot be blocked. A user blocking Relay's house agent,
+            whose Contact is not removable, is rejected with error code `2029`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                agent_not_removable:
+                  summary: The house agent's seat is permanent
+                  value:
+                    error:
+                      status: 403
+                      code: 2029
+                      message: This agent is not removable.
+                      doc_url: https://docs.relayapp.im/error/codes/2xxx/2029
+                    success: false
         "500":
           $ref: "#/components/responses/InternalServerError"
       description: |-
@@ -1198,7 +1216,8 @@ paths:
         `message.delivered` fires when at least one recipient was delivered.
 
         Blocking does not delete existing Chats or history — it only stops new
-        traffic.
+        traffic. Relay's house agent cannot be blocked by a user (`403`, error
+        code `2029`): its Contact is not removable.
 
         Chat membership is where a block is refused out loud: adding a Handle
         that has blocked, or is blocked by, the Chat's user is rejected with
@@ -1896,6 +1915,13 @@ components:
         verified:
           type: boolean
           description: Whether Relay has verified this agent.
+        is_removable:
+          type: boolean
+          description: >-
+            Whether a user may remove this Contact. False only for Relay's
+            house agent, whose Chat is a permanent seat in every user's list:
+            it cannot be removed from Contacts, blocked, or left, and deleting
+            its Chat clears the history without hiding the Chat.
     ChatInfo:
       type: object
       required:
