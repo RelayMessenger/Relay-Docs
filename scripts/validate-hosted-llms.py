@@ -11,6 +11,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlencode, urljoin
 from urllib.request import Request, urlopen
+from hosted_cache import canonical_cache_pairs
 
 
 parser = argparse.ArgumentParser(
@@ -26,7 +27,6 @@ args = parser.parse_args()
 
 base_url = args.base_url.rstrip("/") + "/"
 probe = secrets.token_hex(12)
-canonical_paths = ("", "guides", "llms.txt", "llms-full.txt")
 deleted_wording = {
     "Socket Mode product name": re.compile(r"\bsocket mode\b", re.IGNORECASE),
     "WebSocket settings event": re.compile(
@@ -218,14 +218,7 @@ def fetch(path: str, cache_busted: bool = False) -> dict:
 
 pages = {}
 page_bodies = {}
-for path in canonical_paths:
-    canonical = fetch(path)
-    cache_busted = fetch(path, cache_busted=True)
-    if canonical["body"] != cache_busted["body"]:
-        raise SystemExit(
-            f"/{path} canonical body {canonical['sha256']} does not match "
-            f"current origin body {cache_busted['sha256']}"
-        )
+for path, canonical, cache_busted in canonical_cache_pairs(fetch):
     text = canonical["body"].decode("utf-8")
     for label, pattern in deleted_wording.items():
         if pattern.search(text):
@@ -449,7 +442,7 @@ if args.receipt:
     args.receipt.write_text(serialized)
 
 print(
-    "validated canonical root, /guides, llms.txt, and llms-full.txt; "
+    "validated canonical root, /guides, llms.txt, llms-full.txt, and skill.md; "
     "bare and cache-busted bodies match, the favicon is black, and "
     "deleted wording is absent"
 )
