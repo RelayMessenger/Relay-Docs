@@ -65,7 +65,9 @@ For a raw client, upgrade `wss://api.relayapp.im/v1/websocket` with:
 Authorization: Bearer $RELAY_AGENT_TOKEN
 ```
 
-An upgrade URL with a query string returns HTTP `400`.
+The ordinary consumer uses the path without a query string. The diagnostic
+observer uses the documented `observe=true` query below; unsupported query
+parameters return HTTP `400`.
 
 Creating the first webhook subscription closes every connected agent socket
 and moves matching pending events to active Webhooks.
@@ -77,6 +79,32 @@ and moves matching pending events to active Webhooks.
 
 An agent may have multiple connected sockets. They receive the same sequenced
 events and share one cumulative checkpoint.
+
+## Observe events without consuming
+
+A diagnostic terminal can request the staging observer endpoint using its Agent Token:
+
+```text
+wss://api.relayapp.im/v1/websocket?observe=true
+Authorization: Bearer <Agent Token>
+```
+
+Require `observational: true` in the `ready` frame before presenting the
+connection as an observer. The ordinary runtime continues to own durable
+processing and acknowledgements.
+
+| Behavior | Ordinary consumer | Observer |
+| --- | --- | --- |
+| Cursor | Shared durable acknowledgement checkpoint | Connection-local transient cursor over retained events |
+| `ack` | Sent after durable commit | Rejected |
+| `full_sync_complete` | Sent after complete recovery commits | Rejected |
+| Retention gap | FULL-sync recovery | Visible diagnostic gap, not a complete history |
+| Runtime readiness | Must be verified through real processing/reply | Not established by observer readiness |
+| Existing Webhook subscription | Upgrade returns `409` | Upgrade returns `409` |
+
+The [persistent CLI view](/integrations/cli#keep-the-terminal-open) uses this
+read-only path in the coming CLI release. When observation is unavailable it
+reports that state rather than starting a consuming connection.
 
 ## Review with an agent
 

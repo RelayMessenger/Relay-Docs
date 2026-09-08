@@ -5,7 +5,7 @@ import re
 import sys
 from pathlib import Path
 from api_navigation import validate_api_navigation, page_paths
-from origins import origin, production_text, target
+from origins import origin, production_text, source_ref, target
 
 
 def spec(text: str) -> str:
@@ -233,6 +233,7 @@ expected_guide_pages = {
     "Introduction": ["index"],
     "Getting started": [
         "getting-started/quickstart",
+        "guides/agents/lifecycle",
         "getting-started/authentication",
         "getting-started/sdks",
         "getting-started/key-concepts",
@@ -294,6 +295,7 @@ expected_guide_pages = {
         "integrations/codex",
         "integrations/cursor",
         "integrations/cli",
+        "integrations/native-setup",
         "integrations/mcp",
         "integrations/skills",
     ],
@@ -423,7 +425,7 @@ canonical_ecosystem_sources = {
     "examples/index.mdx": "cookbook",
 }
 for relative, source_path in canonical_ecosystem_sources.items():
-    expected = (
+    expected = spec(
         "https://github.com/RelayMessenger/Relay-SDK/tree/staging/"
         f"{source_path}"
     )
@@ -440,7 +442,7 @@ for relative, manifest in {
     "integrations/codex.mdx": ".agents/plugins/marketplace.json",
     "integrations/cursor.mdx": ".cursor-plugin/marketplace.json",
 }.items():
-    expected = (
+    expected = spec(
         "https://github.com/RelayMessenger/Relay-SDK/blob/staging/"
         f"{manifest}"
     )
@@ -495,7 +497,7 @@ for archived_mirror in ["Relay-Codex", "Relay-Cursor", "Relay-Claude-Code"]:
         )
 
 for version in [
-    *(pinned(name) for name in npm_latest),
+    *(pinned(name) for name in npm_latest if name not in {"@relaymessenger/cli", "relaymessenger"}),
     *(pinned(name) for name in versions["pypi"]),
     "@relaymessenger/cookbook-cloudflare-think-agent@0.1.0",
 ]:
@@ -513,10 +515,12 @@ for marker in [
 
 ecosystem_index_text = (root / "integrations/index.mdx").read_text()
 for name, version in npm_latest.items():
+    if name == "@relaymessenger/cli":
+        continue  # Historical registry snapshot; canonical CLI publication is pending.
     if spec(f"| `{name}` | `{version}` |") not in ecosystem_index_text:
         raise SystemExit(f"live npm tag truth lost: {name}@{version}")
-if "All six live `latest` tags select the versions shown above." not in ecosystem_index_text:
-    raise SystemExit("six-package live npm latest truth lost")
+if "The five established packages retain their recorded release versions." not in ecosystem_index_text:
+    raise SystemExit("established package release status lost")
 
 chat_sdk_text = (root / "integrations/chat-sdk.mdx").read_text()
 # npm provenance is a property of one published version. The staging
@@ -554,8 +558,8 @@ if re.search(r"\bsource[- ]only\b|\bsource tarball\b", chat_sdk_text, re.I):
 
 cli_text = (root / "integrations/cli.mdx").read_text()
 for marker in [
-    spec("npm install --global @relaymessenger/cli@staging"),
-    "relay --profile staging events listen --acknowledge-events",
+    spec("npx relaymessenger@staging --help"),
+    spec('npx relaymessenger@staging --profile "$RELAY_DEV_PROFILE" events listen --acknowledge-events'),
     "requires an explicit non-production profile",
     "dedicated Agent may advance its durable checkpoint",
 ]:
@@ -569,7 +573,7 @@ for marker in [
     "Codex CLI",
     "0.152.0",
     "codex plugin marketplace add",
-    "https://github.com/RelayMessenger/Relay-SDK --ref staging",
+    spec("https://github.com/RelayMessenger/Relay-SDK --ref staging"),
     "codex plugin add relay@relay-plugin-marketplace",
 ]:
     if marker not in codex_text:
@@ -589,8 +593,8 @@ claude_text = (root / "integrations/claude-code.mdx").read_text()
 claude_normalized = re.sub(r"\s+", " ", claude_text)
 for marker in [
     pinned("relay-claude-channel"),
-    "The Relay plugin in the Relay-SDK staging catalog carries the package's `staging` prerelease",
-    "/plugin marketplace add RelayMessenger/Relay-SDK@staging",
+    "The Relay plugin version is recorded in the selected catalog and plugin manifest",
+    spec("/plugin marketplace add RelayMessenger/Relay-SDK@staging"),
     "/plugin install relay@relay-messenger",
     "Only addressed group Messages start Claude turns",
     "structured `parts[].mention`",
@@ -637,8 +641,8 @@ for index, line in enumerate(ecosystem_text.splitlines()):
     command = line
     if line.endswith("\\") and index + 1 < len(ecosystem_text.splitlines()):
         command += " " + ecosystem_text.splitlines()[index + 1].strip()
-    if "https://github.com/RelayMessenger/" in command and "--branch staging" not in command:
-        raise SystemExit(f"public source clone is not pinned to staging: {command}")
+    if "https://github.com/RelayMessenger/" in command and f"--branch {source_ref()}" not in command:
+        raise SystemExit(f"public source clone is not pinned to the target branch: {command}")
 
 hosted_proof_text = "\n".join(
     (root / relative).read_text()
@@ -1180,7 +1184,7 @@ for page, phrases in {
 expected_error_codes = {
     1004, 1005, 2001, 2003, 2004, 2005, 2006,
     2007, 2008, 2015, 2023, 2025, 2026, 2027,
-    2028, 3006,
+    2028, 2029, 3006,
 }
 error_paths = sorted((root / "error/codes").rglob("*.mdx"))
 actual_error_codes = {int(path.stem) for path in error_paths}
@@ -1204,6 +1208,7 @@ expected_error_statuses = {
     2026: "`403`",
     2027: "`403`",
     2028: "`403`",
+    2029: "`403`",
     3006: "`500`",
 }
 error_overview_text = (root / "error/index.mdx").read_text()
@@ -1238,11 +1243,11 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # contract, never hand-written. This pin records the exact bytes and the commit
 # they came from, so an edit made here instead of at the source fails the gate.
 # Source: Relay-Server/contracts/developer/openapi.yaml.
-# 403 examples for error codes 2027 and 2028, Relay-Server PR 180, September 7, 2026.
-# Source authority: Relay-Server origin/staging 18ae54e contracts/developer/openapi.yaml.
+# Error 2029 and Contact.is_removable, Relay-Server PR 185, September 7, 2026.
+# Source authority: Relay-Server staging commit 5607d9f73d99eef3da6c5dc0b1066f91e602b337; CLI publication is gated separately.
 # The digest pins source bytes independently of the Server release commit.
 expected_openapi_sha256 = (
-    "cf83012c6b241e60323543adb7059b49954fbf3d59d4d1fd1817bbfa19d32cdd"
+    "7094178cb01c0ddc05f9254dc91094900a0a7b6273979c0cad6257eec486f0d8"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
@@ -1404,6 +1409,8 @@ if leaked_private_operations:
         f"private operation entered public OpenAPI: {leaked_private_operations}"
     )
 expected_operation_ids = {
+    "createAgent",
+    "deleteAgent",
     "addParticipant",
     "blockHandle",
     "connectAgentWebSocket",
@@ -1678,7 +1685,6 @@ if "setup agent performs this step once" not in (root / "getting-started/quickst
 for name, pattern in {
     "Socket Mode product name": r"\bSocket Mode\b",
     "agent installation lifecycle": r"\bagent installation\b|\binstalled agents?\b|\binstall agents?\b",
-    "agent share-link lifecycle": r"\bshare[- ]link\b",
     "old ecosystem path": r"/ecosystem(?:/|\b)",
     "old ecosystem vocabulary": r"\becosystem\b|\bRelay for \b|\bRelay channel for\b",
     "old conversation vocabulary": r"\bconversations?\b",

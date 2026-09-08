@@ -34,15 +34,22 @@ explicitly use the staging API, and Console actions must open staging Console.
 origins and publishes the staging docs site.
 
 `main` is generated; never edit it by hand. Production is never updated by a
-push to `staging`. A person runs `.github/workflows/promote-to-production.yml`
-(GitHub Actions, "Promote docs to production") on a chosen staging commit; it
-runs `scripts/derive-production.py`, which rewrites every staging origin to its
-production twin, drops every `@staging` npm dist-tag and `-staging.N` version
-from package references (the tables live in `scripts/origins.py`),
-regenerates the presented OpenAPI, Mintlify bundle, agent prompt, and llms
-files, validates in production mode, and opens a pull request against `main`.
-Merging that pull request publishes docs.relayapp.im. `main` therefore always
-equals "a promoted staging commit with production origins".
+push to `staging`. A person reviews the staging diff and runs
+`.github/workflows/promote-to-production.yml` (GitHub Actions, "Promote docs to
+production") on a chosen staging commit; that dispatch is the review gate. The
+workflow runs `scripts/derive-production.py`, which rewrites every staging
+origin to its production twin, drops every `@staging` npm dist-tag and
+`-staging.N` version from package references (the tables live in
+`scripts/origins.py`), selects `main` for Relay-SDK source installs and links,
+and pairs production token instructions with production origins. It preserves
+the canonical contract and registry snapshot as inputs, regenerates the presented OpenAPI, Mintlify bundle,
+agent prompt, and llms files, validates in production mode, and then pushes
+`main` itself: one commit whose tree is the derived tree and whose message
+names the source staging commit and the run. Mintlify publishes
+docs.relayapp.im from that push. `main` therefore always equals "a promoted
+staging commit with production origins". `scripts/test-promote-workflow.py`
+pins that shape (no pull request step; the push comes after the staging
+reference guard and production validation).
 
 `.docs-target` records which environment a checkout describes (`staging` or
 `production`); every validator and generator reads it, and `--production`
@@ -89,9 +96,12 @@ npm run dev
 
 ## Staging preview
 
-`.github/workflows/preview.yml` validates every push to `staging`, every pull
-request, and any branch chosen by a manual run, then creates a Mintlify preview
+`.github/workflows/preview.yml` validates every push to `staging`, every ready
+pull request, and any branch chosen by a manual run, then creates a Mintlify preview
 deployment.
+
+Draft pull requests skip both validation workflows and their hosted preview step. Run
+their checks in Daytona before requesting review.
 
 Configure these GitHub values:
 
