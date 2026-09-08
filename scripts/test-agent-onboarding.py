@@ -51,7 +51,7 @@ class AgentOnboardingTests(unittest.TestCase):
 
     def test_lifecycle_boundaries_and_explicit_origin(self):
         text = (ROOT / "guides/agents/lifecycle.mdx").read_text()
-        for marker in ("Coming soon on staging", "locally saved profiles", "no automatic retry",
+        for marker in ("CLI publication pending", "locally saved profiles", "no automatic retry",
                        "`image_url`", "HTTP `409`", "history retained", 'token: "stored"'):
             self.assertIn(marker, text)
         self.assertIn(expected("agents create --api-url https://api.staging.relayapp.im"), text)
@@ -64,6 +64,15 @@ class AgentOnboardingTests(unittest.TestCase):
                        "--runtime-account", "--runtime-context", '"connected": false',
                        "RELAY_ALLOWED_SENDERS", "sender permissions"):
             self.assertIn(marker, text)
+
+    def test_start_supports_anonymous_or_existing_token_without_console(self):
+        skill = (ROOT / "skill.md").read_text()
+        start = skill.split("## Start\n", 1)[1].split("\n## ", 1)[0]
+        for marker in ("anonymous `POST /v1/agents`", "existing ordinary Agent Token", "Neither", "requires a Console account"):
+            self.assertIn(marker, start)
+        self.assertNotRegex(start, r"created in that environment.s\s+Console")
+        self.assertIn("API is live on staging", skill)
+        self.assertNotIn("Agent management is coming soon", skill)
 
     def test_custom_profile_uses_existing_recipe_and_rendered_image_pair(self):
         spec = (ROOT / "api-reference/openapi.yaml").read_text()

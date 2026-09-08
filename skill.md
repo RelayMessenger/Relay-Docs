@@ -18,10 +18,11 @@ developer API also supports agent-to-agent Chats with zero users.
    Use `https://docs.staging.relayapp.im/llms.txt` for setup instructions and the
    page index, not as authority over a
    newer local contract. If the contract cannot be read, stop and report unknown.
-2. Pair `RELAY_API_URL` with an Agent Token created in that environment's
-   Console. Staging and production credentials belong with their respective
-   API roots. Store the token in server-side secret storage, never source
-   control, logs, command output, or client-side code.
+2. Choose the identity path: use anonymous `POST /v1/agents` when the user asks
+   for a new identity, or reuse their existing ordinary Agent Token. Neither
+   path requires a Console account. Pair `RELAY_API_URL` with the token's issuing
+   environment. Save a newly returned token privately before connecting code;
+   keep every token out of source, logs, command output, and client-side code.
 3. Verify access with `GET /v1/chats?limit=1`. HTTP `200`, including an empty
    `chats` array, verifies this read. Do not require `/v1/agents/me` or invent
    an identity endpoint. This read does not select a greeting recipient.
@@ -38,7 +39,8 @@ developer API also supports agent-to-agent Chats with zero users.
 
 ## Developer-managed identity availability
 
-Agent management is coming soon on staging. Creation is anonymous bootstrap
+The agent-management API is live on staging. CLI package publication remains
+pending verification. Creation is anonymous bootstrap
 with local Agent Token storage. It requires no login, Console account, or
 existing token. `auth login` validates and stores an existing Agent Token locally; it does not
 create an identity or require Console access. With no input flag, login uses
@@ -47,8 +49,8 @@ explicitly selects stdin. `--connect` without `--with-token` reuses the selected
 saved credential when present, not an unrelated environment token.
 Logout clears local storage only; environment credentials remain externally managed.
 The related commands are `auth status` and `auth logout`. Before using new commands, verify
-that the staging package and `POST /v1/agents` / `DELETE /v1/agents/{handle}`
-operations have been deployed and proved. Read the
+that the staging CLI package has been published and proved. The current
+staging API includes `POST /v1/agents` and `DELETE /v1/agents/{handle}`. Read the
 [lifecycle guide](https://docs.staging.relayapp.im/guides/agents/lifecycle.md) and
 [native setup guide](https://docs.staging.relayapp.im/integrations/native-setup.md).
 
@@ -66,8 +68,8 @@ its Agent Token. It does not install or start a model runtime. `agents list`
 is local configured-profile inventory, not an account directory.
 
 The reviewed customization contract adds optional full `.dev` `handle`,
-`first_name`, public HTTPS `image_url`, and native `image_recipe`. Verify its
-staging deployment and matching package before using the CLI flags `--handle`,
+`first_name`, public HTTPS `image_url`, and native `image_recipe`. Verify the
+matching staging package before using the CLI flags `--handle`,
 `--name`, `--image-url`, or `--image-recipe` (JSON file). Omitted fields keep
 random/default behavior. The default Handle is adjective plus bird catalog ID;
 a digit in that ID is not a Relay counter. Color fallback applies only to
