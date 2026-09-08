@@ -28,22 +28,10 @@ root = Path(__file__).resolve().parents[1]
 config = json.loads((root / "docs.json").read_text())
 
 agent_instructions = (root / "skill.md").read_text()
-greeting_section = re.search(
-    r"^## Send the setup greeting once\n(.*?)(?=^## |\Z)",
-    agent_instructions,
-    re.M | re.S,
-)
-if not greeting_section:
-    raise SystemExit("Agent instructions lost the setup greeting")
-greeting = greeting_section.group(1)
-if re.findall(r"```text\n(.*?)\n```", greeting, re.S) != ["Hello, I'm here"]:
-    raise SystemExit("Setup greeting must be exactly Hello, I'm here without end punctuation")
-for required in [
-    "This is a setup-agent action, not a backend startup hook",
-    "Do not send another greeting on backend restarts",
-]:
-    if required not in greeting:
-        raise SystemExit(f"Setup greeting instructions lost: {required}")
+# Relay Add replaced the setup greeting, so the agent's first Message follows
+# the user's Add and its contact.added event. Nothing may teach a greeting.
+if not re.search(r"contact\.added", agent_instructions):
+    raise SystemExit("Agent instructions lost the contact.added first-Message path")
 
 # versions.json is the one source of truth for every published package version.
 # scripts/refresh-versions.mjs writes it from the live registries and
@@ -445,8 +433,8 @@ webhook_events_text = (root / "guides/webhooks/events.mdx").read_text()
 
 expected_error_codes = {
     1004, 1005, 2001, 2003, 2004, 2005, 2006,
-    2007, 2008, 2015, 2023, 2025, 2026, 2027,
-    2028, 2029, 3006,
+    2007, 2008, 2009, 2015, 2023, 2025, 2026,
+    2027, 2028, 2029, 3006,
 }
 error_paths = sorted((root / "error/codes").rglob("*.mdx"))
 actual_error_codes = {int(path.stem) for path in error_paths}
@@ -455,23 +443,30 @@ if actual_error_codes != expected_error_codes:
         f"error code pages drifted: {sorted(actual_error_codes ^ expected_error_codes)}"
     )
 expected_error_statuses = {
-    1004: "`400`",
-    1005: "`400`",
-    2001: "`404`",
-    2003: "`403`",
-    2004: "`401`",
-    2005: "`500`",
-    2006: "`413`, `415`, or `422`",
-    2007: "`404`",
-    2008: "`429`",
-    2015: "`409`",
-    2023: "`409`",
-    2025: "`404`",
-    2026: "`403`",
-    2027: "`403`",
-    2028: "`403`",
-    2029: "`403`",
-    3006: "`500`",
+    1004: ("`400`",),
+    # errors.ts:12-17 makes 1005 the default for every status that is not
+    # 401, 402, 404, 429 or 5xx, so it ships as 400 and as 409.
+    1005: ("`400`", "`409`"),
+    2001: ("`404`",),
+    2003: ("`403`",),
+    2004: ("`401`",),
+    2005: ("`500`",),
+    2006: ("`413`, `415`, or `422`",),
+    2007: ("`404`",),
+    2008: ("`429`",),
+    # contact-add.ts:465 raises 402/2009 for a Handle that cannot send Adds.
+    2009: ("`402`",),
+    2015: ("`409`",),
+    2023: ("`409`",),
+    2025: ("`404`",),
+    # chat-contacts.ts:51 is 403; contact-add.ts:359 is 409.
+    2026: ("`403`", "`409`"),
+    2027: ("`403`",),
+    2028: ("`403`",),
+    2029: ("`403`",),
+    # app.ts:225 is the 500 catch-all; images.ts:466 and :507,
+    # attachments.ts:153 and developer-agents.ts:140 are 503.
+    3006: ("`500`", "`503`"),
 }
 error_overview_text = (root / "error/index.mdx").read_text()
 for path in error_paths:
@@ -487,8 +482,12 @@ for path in error_paths:
         raise SystemExit(
             f"error sidebar title is not concise: {path.relative_to(root)}"
         )
-    if f'| {expected_error_statuses[code]} | `{code}` |' not in error_text:
-        raise SystemExit(f"error status/code row drifted in {path.relative_to(root)}")
+    for status in expected_error_statuses[code]:
+        if f'| {status} | `{code}` |' not in error_text:
+            raise SystemExit(
+                f"error status/code row drifted in {path.relative_to(root)}: "
+                f"no row for {status}"
+            )
     if "## Troubleshooting" not in error_text or "**Retry:**" not in error_text:
         raise SystemExit(f"error recovery guidance missing in {path.relative_to(root)}")
     if "```json" in error_text:
@@ -915,31 +914,17 @@ for name, pattern in {
     if re.search(pattern, handwritten_text, re.I):
         raise SystemExit(f"stale {name}")
 
-if '"value":"Hello, I\'m here"' not in skill_text:
-    raise SystemExit("setup greeting must preserve its exact existing text")
 for stale_hook in ["Implement this in the agent backend's connection flow", "## Backend connection greeting"]:
     if stale_hook in skill_text:
-        raise SystemExit("setup greeting must not become a backend connection hook")
-
-# Setup greetings are operator actions, not a restored product lifecycle.
-setup_greeting_pages = {
-    "skill.md", ".mintlify/skills/relay/SKILL.md",
-    "getting-started/quickstart.mdx", "getting-started/authentication.mdx",
-    "getting-started/ai-agents.mdx", "agent-reference/prompt.mdx",
-}
-for path in handwritten_paths:
-    if (path.relative_to(root).as_posix() not in setup_greeting_pages
-            and re.search(r"\bgreeting(?:s)?\b", path.read_text(), re.I)):
-        raise SystemExit(f"greeting behavior outside setup: {path.relative_to(root)}")
+        raise SystemExit("agent instructions must not add a backend connection hook")
 for required in [
     "GET /v1/chats?limit=1", "Do not require `/v1/agents/me`",
-    "not a backend startup hook", "setup task's saved progress",
-    "retry the same Chat, body, and key", "explicitly intended direct Chat",
+    "A user must add an agent before that", "`contact.added`",
 ]:
     if required not in skill_text:
         raise SystemExit(f"setup prompt lost safety guidance: {required}")
 if "/agent-reference/prompt#relay-agent-prompt" not in (root / "getting-started/quickstart.mdx").read_text():
-    raise SystemExit("Quickstart lost setup-agent greeting ownership")
+    raise SystemExit("Quickstart lost its link to the agent instructions")
 
 for name, pattern in {
     "Socket Mode product name": r"\bSocket Mode\b",
@@ -952,7 +937,7 @@ for name, pattern in {
     "old public status language": r"current-status|Current status|known contract residue|local proof|evidence app",
     "old WebSocket handshake": r"/v1/websocket-connections|relay_ticket_|relay\.v1\.json|\?ticket=",
     "source-company language": source_company_pattern,
-    "removed greeting field": r"\bgreeting_message\b",
+    "removed greeting step": r"\bgreeting(?:s)?\b|\bgreeting_message\b",
     "removed Broadcast feature": r"\bbroadcasts?\b",
     "removed Proactive feature": r"\bproactive\b",
     "MFA surface": r"\bMFA\b",

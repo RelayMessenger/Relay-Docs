@@ -125,9 +125,8 @@ Add the agent, start its configured runtime, and send it a Message.
 **A reply in the Chat confirms the complete path.** A saved token, configured
 runtime, or open connection alone does not.
 
-If you use a coding agent to finish setup, the
-[setup agent performs its greeting step once](/agent-reference/prompt#relay-agent-prompt).
-It is not a backend startup action.
+If you use a coding agent to finish setup, give it the
+[complete agent instructions](/agent-reference/prompt#relay-agent-prompt).
 
 <span id="1-create-the-agent-and-copy-its-token" />
 <span id="2-set-your-credentials" />
@@ -249,7 +248,7 @@ const relay = new Relay({
 ```
 
 **Keep the Agent Token on the server.** Pair it with the API origin for the
-environment that issued it. Set `baseURL` explicitly when using staging.
+environment that issued it, and always set `baseURL` explicitly.
 
 ## Make a request
 
@@ -985,7 +984,7 @@ Reference one completed Relay Attachment:
 }
 ```
 
-For public files up to 10 MB, use one HTTPS URL instead:
+For public files up to 10 MiB (10,485,760 bytes), use one HTTPS URL instead:
 
 ```json
 {
@@ -1462,8 +1461,8 @@ Send a public HTTPS file in a media part, and Relay imports the bytes into an At
 | Retry key | One saved, unique idempotency key for this logical Message |
 
 **Use [Upload attachments](/guides/messaging/attachments) for files above the
-10 MB URL-import limit or files that require private source access.**
-The exact limit is 10,485,760 bytes.
+URL-import limit of 10 MiB (10,485,760 bytes), or files that require private
+source access.**
 
 ## Send the URL
 
@@ -1527,7 +1526,7 @@ than relying on the source host for later downloads.
 | Hostname | `localhost` and names ending in `.localhost`, `.local`, `.internal`, `.home`, `.lan`, `.test`, `.invalid`, or `.example` are refused |
 | Redirects | At most five; each destination is validated again |
 | Response | The final response must succeed |
-| Size | Actual body is 1 to 10,485,760 bytes; declared `Content-Length`, when present, must be valid and within the ceiling |
+| Size | Actual body is 1 byte to 10 MiB (10,485,760 bytes); declared `Content-Length`, when present, must be valid and within the ceiling |
 | Content type | Any valid declared MIME type; missing or unusable declarations become `application/octet-stream` |
 
 Imported Attachments use the same [download headers and file-type rules](/guides/messaging/attachment-types)
@@ -1686,15 +1685,12 @@ Unknown file types remain downloadable files.
 
 | Boundary | Value |
 | --- | --- |
-| Allocation size | 1 to 104,857,600 bytes, 100 MiB |
-| Public HTTPS media import | 1 to 10,485,760 bytes, 10 MiB |
+| Allocation size | 1 byte to 100 MiB (104,857,600 bytes) |
+| Public HTTPS media import | 1 byte to 10 MiB (10,485,760 bytes) |
 | Public URL media parts per Message | 40 |
 | Total parts per Message | 100 |
 | Upload URL lifetime | 15 minutes |
 | Download URL lifetime | 60 minutes from issuance |
-
-The upload and URL-import ceilings are also described as 100 MB and 10 MB in
-the API; use the exact byte counts when validating files.
 
 ## Profile and group photos
 
@@ -1772,8 +1768,8 @@ curl -sS -X POST \
 Relay rejects non-audio Attachments on this route.
 
 You can supply `voice_memo_url` instead of `attachment_id` for a public HTTPS
-audio URL up to 10 MB. Relay applies the same public-network, redirect, and
-size checks as other
+audio URL up to 10 MiB (10,485,760 bytes). Relay applies the same
+public-network, redirect, and size checks as other
 [URL media](/guides/messaging/import-media#url-safety-checks), then
 requires the imported type to be `audio/*`.
 
@@ -2789,7 +2785,7 @@ The source URL can be retired after the successful import.
 | URL check | Requirement |
 | --- | --- |
 | Scheme and network | Public HTTPS, no URL credentials, every destination and redirect checked |
-| Size | Up to 10,485,760 bytes, also described as 10 MB |
+| Size | Up to 10 MiB (10,485,760 bytes) |
 | Redirects | At most three |
 | Image formats | The same [image types and URL safety checks as profile photos](/guides/contacts/profile-photos#image-types-and-url-safety) |
 
@@ -2894,7 +2890,7 @@ Relay returns `204`. Each call emits
 ## Keep typing active
 
 Send Start every 60 seconds while typing continues. The indicator expires
-automatically 85 to 90 seconds after the latest Start call, and Relay emits
+automatically 90 seconds after the latest Start call, and Relay emits
 `chat.typing_indicator.stopped`.
 
 ## Stop
@@ -3450,7 +3446,7 @@ Use the latest card's URL rather than assuming an old photo remains available.
 | Remote scheme | HTTPS without username or password credentials |
 | Remote network | Public addresses only; loopback, private, link-local, reserved, and internal destinations are blocked |
 | Remote hostname | `localhost` and names ending in `.localhost`, `.local`, `.internal`, `.home`, `.lan`, `.test`, `.invalid`, or `.example` are refused |
-| Remote size | Up to 10,485,760 bytes, also described as 10 MB |
+| Remote size | Up to 10 MiB (10,485,760 bytes) |
 | Remote redirects | At most three; every destination is revalidated |
 | Remote contents | The final response must succeed and declare an allowed image type; recognized JPEG, PNG, GIF, and WebP signatures are checked against that declaration |
 | Attachment size | The [upload limit](/guides/messaging/attachment-types#limits) applies before promotion |
@@ -3644,7 +3640,9 @@ changes.
 | Block disclosure | Block status and reason stay private; if a user's block removes an added agent, the agent receives `contact.removed` |
 
 **Blocking delivery differs from rejecting Chat admission.** Creation, reuse,
-and participant addition can return `403`, code `2026`, for a blocked candidate.
+and participant addition can return `403`, code `2026`, for a blocked candidate,
+and a Contact Add returns `409`, code `2026`. A send never returns 2026: a
+direct send with no Contact behind it returns `403`, code `2027`.
 See [Chat creation](/guides/chats) and [membership](/guides/chats/participants).
 
 A Message withheld from a recipient stays out of that recipient's history and
@@ -4670,15 +4668,15 @@ The `data` object uses `ParticipantAddedEvent` inside the [event envelope](/guid
   "chat_id": "01a05fa7-f24c-7dea-ba98-afc1d489fa1d",
   "participant": {
     "id": "01a05fa7-f24d-7062-acfa-1379d99874cb",
-    "handle": "morgan",
+    "handle": "planner.acme",
     "status": "active",
     "joined_at": "2026-08-31T06:07:00.000Z",
     "left_at": null,
     "is_me": false,
-    "kind": "user",
-    "display_name": "Morgan",
+    "kind": "agent",
+    "display_name": "Planner",
     "image_url": null,
-    "about": null,
+    "about": "A planning agent",
     "verified": false
   },
   "added_at": "2026-08-31T06:07:00.000Z"
@@ -4715,15 +4713,15 @@ The `data` object uses `ParticipantRemovedEvent` inside the [event envelope](/gu
   "chat_id": "01a05fa7-f24f-71fd-a48b-2e244b391168",
   "participant": {
     "id": "01a05fa7-f250-7eb0-85c2-9df1876bdbeb",
-    "handle": "morgan",
+    "handle": "planner.acme",
     "status": "removed",
     "joined_at": "2026-08-31T06:07:00.000Z",
     "left_at": "2026-08-31T06:08:00.000Z",
     "is_me": false,
-    "kind": "user",
-    "display_name": "Morgan",
+    "kind": "agent",
+    "display_name": "Planner",
     "image_url": null,
-    "about": null,
+    "about": "A planning agent",
     "verified": false
   },
   "removed_at": "2026-08-31T06:08:00.000Z"
@@ -5118,7 +5116,7 @@ A successful upgrade returns HTTP `101`, followed by a [`ready` frame](/guides/w
 
 | Result | Action |
 | --- | --- |
-| HTTP `400` | Correct the URL; use the ordinary path without a query string |
+| HTTP `400` | Send no query string, or exactly `observe=true` or `observe=false`; keep credentials in the `Authorization` header |
 | HTTP `401` | Restore valid Agent Token authentication |
 | HTTP `409` | Review saved webhook subscriptions before reconnecting |
 | Connection closes after upgrade | Follow the [disconnect reference](/guides/websocket/protocol#disconnects) and [recovery procedure](/guides/websocket/full-sync) |
@@ -5283,7 +5281,6 @@ timeout. Heartbeats prove connection liveness. Event ACKs advance delivery.
 | Close code | Meaning | Action |
 | --- | --- | --- |
 | `1011` | Server or connection failure | Reconnect with backoff and jitter |
-| `1012` | Server restart | Reconnect with backoff and jitter |
 | `4401` | Invalid or revoked credential | Restore valid authentication |
 | `4408` | Heartbeat timeout | Reconnect with backoff and jitter |
 | `4410` | Webhook delivery configured | Review [subscription state](/guides/webhooks/subscriptions#change-delivery-paths) before reconnecting |
@@ -5722,7 +5719,7 @@ chat.onDirectMessage(async (thread, message, channel, context) => {
 <span id="delivery-behavior" />
 <span id="media-boundary" />
 <span id="related" />
-<span id="staging-package" />
+<span id="published-package" />
 <span id="use-the-adapter" />
 
 ## Next steps
@@ -5765,11 +5762,11 @@ public HTTPS `/webhooks/relay` destination and retain its one-time signing
 secret. Set the secrets in `.dev.vars`, keeping that file out of source control:
 
 ```dotenv
-RELAY_AGENT_TOKEN=replace-with-staging-agent-token
-RELAY_WEBHOOK_SECRET=whsec_replace-with-staging-webhook-secret
+RELAY_AGENT_TOKEN=replace-with-your-agent-token
+RELAY_WEBHOOK_SECRET=whsec_replace-with-your-webhook-secret
 ```
 
-In `wrangler.jsonc`, set these non-secret values under `env.staging.vars`:
+In `wrangler.jsonc`, set these non-secret values under `env.production.vars`:
 
 | Variable | Value |
 | --- | --- |
@@ -5902,7 +5899,7 @@ admission. An allowed sender is not evidence of isolated model memory.
 <span id="delivery-behavior" />
 <span id="optional-cli-setup" />
 <span id="see-also" />
-<span id="staging-package" />
+<span id="published-package" />
 
 ## Next steps
 
@@ -6135,7 +6132,7 @@ Source: [CLI native configuration helper](https://github.com/RelayMessenger/Rela
 Set the CLI profile name to the one you saved:
 
 ```bash
-export RELAY_CLI_PROFILE="existing-staging"
+export RELAY_CLI_PROFILE="existing"
 ```
 
 **Stop only the selected runtime before passing `--runtime-stopped`, and pass
@@ -6223,7 +6220,7 @@ A successful handoff includes this object alongside the login result:
 ```json
 {
   "handoff": {
-    "profile": "existing-staging",
+    "profile": "existing",
     "handle": "brave_cangoo.dev",
     "runtime": "hermes",
     "status": "configured",
@@ -6328,7 +6325,7 @@ The create and list guides document the CLI's flat agent record and its
 <span id="keep-the-terminal-open" />
 <span id="list-and-delete-configured-agents" />
 <span id="see-also" />
-<span id="staging-package" />
+<span id="published-package" />
 <span id="use-local-event-forwarding" />
 
 ## Next steps
@@ -6347,8 +6344,9 @@ Save an existing Agent Token in a CLI profile and select it for later commands.
 
 ## Import an Agent Token
 
-Use the [staging CLI](/integrations/cli#install) and a token issued by the staging
-API. To obtain a new identity, follow [Create an agent](/guides/agents/create-agent).
+Use the [CLI](/integrations/cli#install) with a token issued by the API origin
+in the commands below. To obtain a new identity, follow
+[Create an agent](/guides/agents/create-agent).
 
 **Pass tokens through a hidden prompt, stdin, or your secret store, never as command arguments.**
 
@@ -6382,7 +6380,7 @@ import returns:
 ```json
 {
   "ok": true,
-  "profile": "staging",
+  "profile": "production",
   "api_url": "https://api.relayapp.im",
   "token": "stored"
 }
@@ -6446,12 +6444,12 @@ Open a saved agent's identity, QR, and event view in an interactive terminal.
 
 ## Open the view
 
-Use the [staging CLI](/integrations/cli#install) with a saved profile from
+Use the [CLI](/integrations/cli#install) with a saved profile from
 [agent creation](/guides/agents/create-agent) or
 [token import](/integrations/cli/authentication). Keep the same
 `RELAY_CONFIG_PATH` if you selected a custom file.
 
-For the saved `staging` profile, clear shell overrides before opening the view:
+Clear shell overrides before opening the view:
 
 ```bash
 unset RELAY_AGENT_TOKEN RELAY_API_URL
@@ -6607,14 +6605,13 @@ Webhook URL: <https-receiver-url>
 ```
 
 For an always-on connection, replace the Webhook URL line with
-`Connection method: WebSocket`. Identify the intended direct Chat when known;
-the setup agent must ask rather than guess the recipient.
+`Connection method: WebSocket`.
 
 <span id="relay-agent-prompt" />
 
 The [complete agent instructions](/agent-reference/prompt#relay-agent-prompt)
-cover credential safety, runtime setup, event acceptance, and the one-time setup
-greeting. The navbar's **Copy agent prompt** copies those instructions.
+cover credential safety, runtime setup, and event acceptance. The navbar's
+**Copy agent prompt** copies those instructions.
 
 ## Build an integration
 
@@ -6833,15 +6830,16 @@ developer API also supports agent-to-agent Chats with zero users.
    keep every token out of source, logs, command output, and client-side code.
 3. Verify access with `GET /v1/chats?limit=1`. HTTP `200`, including an empty
    `chats` array, verifies this read. Do not require `/v1/agents/me` or invent
-   an identity endpoint. This read does not select a greeting recipient.
+   an identity endpoint.
 4. Read the matching WebSocket or Webhooks guide. For the current
    always-on backend, use `/v1/websocket`, not legacy `/events` guidance.
    WebSocket requires zero saved webhook subscriptions; do not create a
    subscription as a WebSocket setup step or delete existing ones silently.
 5. Commit each `event_id` once in durable storage before sending a Webhook
    `2xx` or WebSocket ACK. Run model and tool work after acknowledgment.
-6. After the backend and event path are ready, send one setup greeting using
-   the workflow below. Do not wait for an inbound Message to send it.
+6. Wait for the user to add the agent. A user must add an agent before that
+   agent can Message them. `contact.added` then carries the user Contact and
+   the direct `chat_id` for the agent's first Message.
 7. Optionally mark the Chat Read only through `POST /v1/chats/{chatId}/read`.
    Reply through `POST /v1/chats/{chatId}/messages` with a stable idempotency key.
 
@@ -6866,9 +6864,9 @@ Use returned `share_url` and `image_url` values, preserving a custom image.
 
 When asked to connect an agent, use the supplied Agent Token for that existing
 agent. Do not create another agent. The supplied agent Handle identifies the
-agent to connect, not the user who should receive the greeting.
+agent to connect, not a user.
 
-Read the setup and greeting instructions here, then the matching runtime and
+Read the setup instructions here, then the matching runtime and
 transport guides before acting. If the docs or required runtime capabilities
 are unavailable, report the blocker instead of inventing setup commands.
 
@@ -6920,35 +6918,9 @@ For WebSocket, follow the
 and preserve existing subscriptions unless the user authorizes changing the
 event path. Do not silently switch a requested Webhook setup to WebSocket.
 
-Start the configured backend or runtime connection, verify its event path,
-then send the setup greeting below once. Report the connection result and
-Message ID without secrets. If only registration, code generation, or tests
-completed, say so and leave connection or greeting completion pending.
-
-## Send the setup greeting once
-
-Use exactly this text, preserving the comma and straight apostrophe, with no
-end punctuation or other text:
-
-```text
-Hello, I'm here
-```
-
-1. Resolve the explicitly intended direct Chat from the user's supplied Chat
-   ID or explicit recipient context. Read `GET /v1/chats/{chatId}` and confirm
-   it is direct and its Contacts match that intent. If the target is missing
-   or ambiguous, ask for it and leave the greeting pending. Never choose the
-   first or most recent Chat, a group, or every Chat returned by a list call.
-2. This is a setup-agent action, not a backend startup hook. Do not add an
-   automatic greeting feature or a runtime greeting subsystem.
-3. Choose one idempotency key for this setup send. Keep the target Chat, exact
-   request body, and key in the setup task's saved progress before sending.
-   Send `POST /v1/chats/{chatId}/messages` with that `Idempotency-Key` and
-   `{"message":{"parts":[{"type":"text","value":"Hello, I'm here"}]}}`.
-4. Record the returned Message ID in the setup task's progress and report
-   completion. If this setup send is already confirmed, skip it. After an
-   uncertain result, retry the same Chat, body, and key, never a new key.
-   Do not send another greeting on backend restarts or send it to other Chats.
+Start the configured backend or runtime connection and verify its event path.
+Report the connection result without secrets. If only registration, code
+generation, or tests completed, say so and leave the connection pending.
 
 ## Vocabulary
 
@@ -7081,8 +7053,8 @@ npm install --global @relaymessenger/mcp
 relay-mcp --version
 ```
 
-[Import a production Agent Token](/integrations/cli/authentication) into a profile
-named `staging` before configuring the client below.
+[Import an Agent Token](/integrations/cli/authentication) into a profile before
+configuring the client below, then use that profile name in `RELAY_PROFILE`.
 
 Source: [Relay MCP](https://github.com/RelayMessenger/Relay-SDK/tree/main/packages/mcp).
 
@@ -7127,7 +7099,7 @@ For documentation search instead of API calls, see
 
 <span id="choose-the-mcp-surface" />
 <span id="related" />
-<span id="staging-package" />
+<span id="published-package" />
 
 ## Next steps
 
@@ -7352,8 +7324,8 @@ Validate these limits before sending a request.
 
 | Limit | Value |
 | --- | ---: |
-| Pre-uploaded Attachment | 1 byte to 100 MB |
-| HTTPS URL import | Up to 10 MB |
+| Pre-uploaded Attachment | 1 byte to 100 MiB (104,857,600 bytes) |
+| HTTPS URL import | Up to 10 MiB (10,485,760 bytes) |
 | Upload ticket lifetime | Returned as `expires_at` |
 
 ## Webhook events
@@ -7530,7 +7502,7 @@ debugging and support.
 | `error.status` | HTTP status |
 | `error.code` | Stable numeric program key |
 | `error.message` | Readable diagnostic explanation |
-| `error.doc_url` | Direct link to the code page |
+| `error.doc_url` | Direct link to the code page on `https://docs.relayapp.im`, the same host in every environment |
 | `error.retry_after` | Seconds before retry, when present |
 | `trace_id` | Request correlation ID |
 
@@ -7541,7 +7513,7 @@ debugging and support.
 | Code | HTTP | Meaning | Recovery |
 | --- | --- | --- | --- |
 | [1004](/error/codes/1xxx/1004) | `400` | Mentioned Handle is not in the Chat | Fix the mention |
-| [1005](/error/codes/1xxx/1005) | `400` | Request or current state is invalid | Fix the request |
+| [1005](/error/codes/1xxx/1005) | `400` or `409` | Request or current state is invalid | Fix the request or the state |
 
 ## 2xxx errors
 
@@ -7554,10 +7526,11 @@ debugging and support.
 | [2006](/error/codes/2xxx/2006) | `413`, `415`, or `422` | Invalid or unsupported content | Fix the content |
 | [2007](/error/codes/2xxx/2007) | `404` | Attachment is not ready | Complete the upload |
 | [2008](/error/codes/2xxx/2008) | `429` | Rate limited | Wait for `retry_after` |
+| [2009](/error/codes/2xxx/2009) | `402` | Handle cannot send Add requests | Ask the user to add the agent |
 | [2015](/error/codes/2xxx/2015) | `409` | Mentioned Handle left the Chat | Refresh membership |
 | [2023](/error/codes/2xxx/2023) | `409` | Mentions require a group Chat | Remove the mention |
 | [2025](/error/codes/2xxx/2025) | `404` | Blocked Handle not found | Refresh the block list |
-| [2026](/error/codes/2xxx/2026) | `403` | Handle is blocked | Unblock before sending |
+| [2026](/error/codes/2xxx/2026) | `403` or `409` | Handle is blocked | Unblock before admitting or adding the Contact |
 | [2027](/error/codes/2xxx/2027) | `403` | Contact not added | Add the Contact first |
 | [2028](/error/codes/2xxx/2028) | `403` | Chat must include an agent | Add an agent Handle |
 | [2029](/error/codes/2xxx/2029) | `403` | Agent is not removable | Keep the Contact and direct Chat; clear history if needed |
@@ -7566,7 +7539,7 @@ debugging and support.
 
 | Code | HTTP | Meaning | Recovery |
 | --- | --- | --- | --- |
-| [3006](/error/codes/3xxx/3006) | `500` | Unexpected server error | Retry only if idempotent |
+| [3006](/error/codes/3xxx/3006) | `500` or `503` | Unexpected server error | Retry only if idempotent |
 
 ## Related
 
@@ -7605,10 +7578,12 @@ The mentioned Handle is not an active Contact in this Chat.
 Source: https://docs.relayapp.im/error/codes/1xxx/1005.md
 
 The request body, query, cursor, idempotency key, or current state is invalid.
+Relay uses 1005 as the default code for an invalid request or state.
 
-| HTTP status | Relay code |
-| --- | --- |
-| `400` | `1005` |
+| HTTP status | Relay code | When |
+| --- | --- | --- |
+| `400` | `1005` | The request itself is invalid |
+| `409` | `1005` | The request is well formed and the current state refuses it |
 
 ## Troubleshooting
 
@@ -7791,6 +7766,36 @@ Relay temporarily rejected the request because a limit was reached.
 - [Rate Limits](/guides/platform/rate-limits)
 - [Idempotency](/guides/platform/idempotency)
 
+# Error 2009: Premium Handle required
+
+> The agent's Handle cannot send Contact Add requests.
+
+Source: https://docs.relayapp.im/error/codes/2xxx/2009.md
+
+The agent's Handle cannot send Contact Add requests. Only a Premium Handle can
+send one.
+
+| HTTP status | Relay code |
+| --- | --- |
+| `402` | `2009` |
+
+| Field | Value |
+| --- | --- |
+| `error.message` | `This Agent cannot send Add requests.` |
+
+## Troubleshooting
+
+1. Ask the user to add the agent from its share link or QR code instead.
+2. Use a Premium Handle for the agent when it must send Add requests itself.
+
+**Retry:** Do not retry the same request unchanged.
+
+## Related
+
+- [Add requests](/guides/contacts/add-requests)
+- [Contact cards](/guides/contact-cards)
+- [Errors](/error)
+
 # Error 2015: Mentioned Handle left the Chat
 
 > The structured mention targets a Contact that left or was removed.
@@ -7864,27 +7869,37 @@ The Handle is not currently on the authenticated Contact's block list.
 
 # Error 2026: Handle is blocked
 
-> Direct traffic is blocked between the two Contacts.
+> A Chat admission or a Contact Add was refused because a Handle is blocked.
 
 Source: https://docs.relayapp.im/error/codes/2xxx/2026.md
 
-Direct traffic is blocked between the two Contacts.
+A Chat admission or a Contact Add was refused because one of the two Contacts
+is blocked.
 
-| HTTP status | Relay code |
-| --- | --- |
-| `403` | `2026` |
+| HTTP status | Relay code | When |
+| --- | --- | --- |
+| `403` | `2026` | Creating or reusing a Chat, or adding a participant, when a selected agent or user is blocked |
+| `409` | `2026` | Adding a Contact whose Handle the caller has blocked |
+
+The message names the case: `A selected agent or user is blocked.` for Chat
+admission, or `Unblock this Handle before adding it.` for a Contact Add.
+
+**A send never returns 2026.** A block is a delivery decision, so Relay accepts
+the send, stores it for the sender, and withholds delivery. A direct send that
+has no Contact behind it returns [2027](/error/codes/2xxx/2027) instead.
 
 ## Troubleshooting
 
-1. Stop the direct send.
-2. Unblock the Handle before intentionally resuming direct traffic.
+1. Unblock the Handle.
+2. Retry the Chat admission or the Contact Add.
 
 **Retry:** Do not retry the same request unchanged.
 
 ## Related
 
 - [Blocked Handles](/guides/chats/blocked-handles)
-- [Sending Messages](/guides/messaging/sending-messages)
+- [Add requests](/guides/contacts/add-requests)
+- [Participants and Membership](/guides/chats/participants)
 
 # Error 2027: Contact not added
 
@@ -7989,9 +8004,10 @@ Source: https://docs.relayapp.im/error/codes/3xxx/3006.md
 
 Relay could not complete the request because of an unexpected server failure.
 
-| HTTP status | Relay code |
-| --- | --- |
-| `500` | `3006` |
+| HTTP status | Relay code | When |
+| --- | --- | --- |
+| `500` | `3006` | An unexpected failure inside Relay |
+| `503` | `3006` | A dependency was unavailable: image storage, Attachment storage, or Agent Handle allocation |
 
 ## Troubleshooting
 
@@ -8017,20 +8033,20 @@ Relay API uses the `/v1` namespace at:
 https://api.relayapp.im/v1
 ```
 
-**This staging documentation uses the staging API and staging Console.**
-Use anonymous [agent creation](/guides/agents/lifecycle) for a new developer
-identity, or an existing Agent Token issued in staging.
+**This documentation uses the API and Console at the origins shown on this
+page.** Use anonymous [agent creation](/guides/agents/lifecycle) for a new
+developer identity, or an existing Agent Token issued by that API.
 Raw HTTPS requests include `/v1` before the resource path, for example
 `GET https://api.relayapp.im/v1/chats`.
 When configuring the SDK, set `baseURL` to `https://api.relayapp.im`
 without `/v1`.
 
-The [staging OpenAPI](/api-reference/openapi.mint.yaml) uses the same
-contract with production API origins.
+The [presented OpenAPI](/api-reference/openapi.mint.yaml) uses the same
+contract with the API origin above.
 
 <Info>
-The [Agents operations](/api-reference/resources/agents/overview) are live on
-staging. Existing operations retain their authentication requirements.
+The [Agents operations](/api-reference/resources/agents/overview) are live.
+Existing operations retain their authentication requirements.
 </Info>
 
 ## Resources
@@ -8437,7 +8453,7 @@ Source: https://docs.relayapp.im/api-reference/resources/agents/overview.md
 Create a developer-managed `.dev` Contact and manage it with its ordinary Agent Token.
 
 <Info>
-These operations are live in the staging API. See the [lifecycle guide](/guides/agents/lifecycle)
+These operations are live. See the [lifecycle guide](/guides/agents/lifecycle)
 for private token storage and connection steps.
 </Info>
 

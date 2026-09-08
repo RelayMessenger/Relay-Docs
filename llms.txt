@@ -22,15 +22,16 @@ When asked to connect a Relay agent, follow these instructions before the page i
    keep every token out of source, logs, command output, and client-side code.
 3. Verify access with `GET /v1/chats?limit=1`. HTTP `200`, including an empty
    `chats` array, verifies this read. Do not require `/v1/agents/me` or invent
-   an identity endpoint. This read does not select a greeting recipient.
+   an identity endpoint.
 4. Read the matching WebSocket or Webhooks guide. For the current
    always-on backend, use `/v1/websocket`, not legacy `/events` guidance.
    WebSocket requires zero saved webhook subscriptions; do not create a
    subscription as a WebSocket setup step or delete existing ones silently.
 5. Commit each `event_id` once in durable storage before sending a Webhook
    `2xx` or WebSocket ACK. Run model and tool work after acknowledgment.
-6. After the backend and event path are ready, send one setup greeting using
-   the workflow below. Do not wait for an inbound Message to send it.
+6. Wait for the user to add the agent. A user must add an agent before that
+   agent can Message them. `contact.added` then carries the user Contact and
+   the direct `chat_id` for the agent's first Message.
 7. Optionally mark the Chat Read only through `POST /v1/chats/{chatId}/read`.
    Reply through `POST /v1/chats/{chatId}/messages` with a stable idempotency key.
 
@@ -55,9 +56,9 @@ Use returned `share_url` and `image_url` values, preserving a custom image.
 
 When asked to connect an agent, use the supplied Agent Token for that existing
 agent. Do not create another agent. The supplied agent Handle identifies the
-agent to connect, not the user who should receive the greeting.
+agent to connect, not a user.
 
-Read the setup and greeting instructions here, then the matching runtime and
+Read the setup instructions here, then the matching runtime and
 transport guides before acting. If the docs or required runtime capabilities
 are unavailable, report the blocker instead of inventing setup commands.
 
@@ -109,35 +110,9 @@ For WebSocket, follow the
 and preserve existing subscriptions unless the user authorizes changing the
 event path. Do not silently switch a requested Webhook setup to WebSocket.
 
-Start the configured backend or runtime connection, verify its event path,
-then send the setup greeting below once. Report the connection result and
-Message ID without secrets. If only registration, code generation, or tests
-completed, say so and leave connection or greeting completion pending.
-
-### Send the setup greeting once
-
-Use exactly this text, preserving the comma and straight apostrophe, with no
-end punctuation or other text:
-
-```text
-Hello, I'm here
-```
-
-1. Resolve the explicitly intended direct Chat from the user's supplied Chat
-   ID or explicit recipient context. Read `GET /v1/chats/{chatId}` and confirm
-   it is direct and its Contacts match that intent. If the target is missing
-   or ambiguous, ask for it and leave the greeting pending. Never choose the
-   first or most recent Chat, a group, or every Chat returned by a list call.
-2. This is a setup-agent action, not a backend startup hook. Do not add an
-   automatic greeting feature or a runtime greeting subsystem.
-3. Choose one idempotency key for this setup send. Keep the target Chat, exact
-   request body, and key in the setup task's saved progress before sending.
-   Send `POST /v1/chats/{chatId}/messages` with that `Idempotency-Key` and
-   `{"message":{"parts":[{"type":"text","value":"Hello, I'm here"}]}}`.
-4. Record the returned Message ID in the setup task's progress and report
-   completion. If this setup send is already confirmed, skip it. After an
-   uncertain result, retry the same Chat, body, and key, never a new key.
-   Do not send another greeting on backend restarts or send it to other Chats.
+Start the configured backend or runtime connection and verify its event path.
+Report the connection result without secrets. If only registration, code
+generation, or tests completed, say so and leave the connection pending.
 
 ## Documentation index
 
@@ -243,10 +218,11 @@ Hello, I'm here
 - [Error 2006: Invalid content](https://docs.relayapp.im/error/codes/2xxx/2006.md): A Message part, Attachment, media URL, reaction, or part index is invalid.
 - [Error 2007: Attachment not ready](https://docs.relayapp.im/error/codes/2xxx/2007.md): The Attachment exists, but its upload is incomplete.
 - [Error 2008: Rate limited](https://docs.relayapp.im/error/codes/2xxx/2008.md): Relay rejected the request because a rate limit was reached.
+- [Error 2009: Premium Handle required](https://docs.relayapp.im/error/codes/2xxx/2009.md): The agent's Handle cannot send Contact Add requests.
 - [Error 2015: Mentioned Handle left the Chat](https://docs.relayapp.im/error/codes/2xxx/2015.md): The structured mention targets a Contact that left or was removed.
 - [Error 2023: Mentions require a group Chat](https://docs.relayapp.im/error/codes/2xxx/2023.md): Structured mentions require a group Chat.
 - [Error 2025: Blocked Handle not found](https://docs.relayapp.im/error/codes/2xxx/2025.md): The Handle is not on the authenticated Contact’s block list.
-- [Error 2026: Handle is blocked](https://docs.relayapp.im/error/codes/2xxx/2026.md): Direct traffic is blocked between the two Contacts.
+- [Error 2026: Handle is blocked](https://docs.relayapp.im/error/codes/2xxx/2026.md): A Chat admission or a Contact Add was refused because a Handle is blocked.
 - [Error 2027: Contact not added](https://docs.relayapp.im/error/codes/2xxx/2027.md): The other party is not in the user's Contacts yet.
 - [Error 2028: Chat must include an agent](https://docs.relayapp.im/error/codes/2xxx/2028.md): The member set has no agent in it, so the Chat cannot exist.
 - [Error 2029: Agent is not removable](https://docs.relayapp.im/error/codes/2xxx/2029.md): Relay's house agent remains in Contacts and in its direct Chat.

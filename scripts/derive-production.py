@@ -45,6 +45,16 @@ EXPECTED_PACKAGE_REWRITES = {
         "/plugin marketplace add RelayMessenger/Relay-SDK@main",
 }
 
+# Values that must keep naming an environment, so prose alone cannot carry them.
+# Every other "staging" in the content is written without naming an environment
+# and lets the host in the same sentence carry it.
+EXPECTED_INSTRUCTION_REWRITES = {
+    '<span id="staging-package" />': '<span id="published-package" />',
+    '  "profile": "staging",': '  "profile": "production",',
+    "set these values under `env.staging.vars`:":
+        "set these values under `env.production.vars`:",
+}
+
 CONTENT_SUFFIXES = {".mdx", ".md", ".json", ".yaml", ".yml", ".txt", ".js", ".mjs", ".svg"}
 SKIP_DIRS = {".git", "node_modules", ".mint", "scripts", ".github"}
 # Immutable contract and registry observations are inputs, not content to derive.
@@ -118,6 +128,16 @@ class DeriveTests(unittest.TestCase):
         rewrite_tree(root)
         self.assertEqual(
             page.read_text().splitlines(), list(EXPECTED_PACKAGE_REWRITES.values())
+        )
+
+    def test_every_environment_naming_instruction_is_rewritten(self):
+        root = self.fixture()
+        page = root / "guides" / "instructions.mdx"
+        page.write_text("\n".join(EXPECTED_INSTRUCTION_REWRITES) + "\n")
+        rewrite_tree(root)
+        self.assertEqual(
+            page.read_text().splitlines(),
+            list(EXPECTED_INSTRUCTION_REWRITES.values()),
         )
 
     def test_rewrite_is_idempotent(self):
