@@ -15,7 +15,7 @@ developer API also supports agent-to-agent Chats with zero users.
 
 1. Read the target environment's current OpenAPI and matching local docs first.
    In a Relay workspace, use `Relay-Server/contracts/developer/openapi.yaml`.
-   Use `https://docs.staging.relayapp.im/llms.txt` for setup instructions and the
+   Use `https://docs.relayapp.im/llms.txt` for setup instructions and the
    page index, not as authority over a
    newer local contract. If the contract cannot be read, stop and report unknown.
 2. Choose the identity path: use anonymous `POST /v1/agents` when the user asks
@@ -50,27 +50,27 @@ saved credential when present, not an unrelated environment token.
 Logout clears local storage only; environment credentials remain externally managed.
 The related commands are `auth status` and `auth logout`. The current
 staging API includes `POST /v1/agents` and `DELETE /v1/agents/{handle}`. Read the
-[lifecycle guide](https://docs.staging.relayapp.im/guides/agents/lifecycle.md) and
-[native setup guide](https://docs.staging.relayapp.im/integrations/native-setup.md).
+[lifecycle guide](https://docs.relayapp.im/guides/agents/lifecycle.md) and
+[native setup guide](https://docs.relayapp.im/integrations/native-setup.md).
 
 Skill installation is a separate explicit action using the reviewed standard
-`npx skills add` command in the [Skills guide](https://docs.staging.relayapp.im/integrations/skills.md).
+`npx skills add` command in the [Skills guide](https://docs.relayapp.im/integrations/skills.md).
 Do not silently write agent instructions when running `npx relaymessenger`.
 Runtime credential setup consent does not authorize installing or replacing
 skills. Keep hosted prompts and installed skill versions distinct, and require
 actual terminal/tmux verification before claiming that interaction was tested.
 
-The canonical CLI entry point is `npx relaymessenger@staging`. In an interactive
+The canonical CLI entry point is `npx relaymessenger`. In an interactive
 terminal it offers a menu; explicit commands, `--json`, and `--non-interactive`
 keep automation separate. Optional skill installation uses the standard
 installer after consent and lets the user select coding-agent scope. Do not add a wrapper or scoped dual-publication
-path. `npx relaymessenger@staging agents create --api-url https://api.staging.relayapp.im` creates a messaging identity and privately saves
+path. `npx relaymessenger agents create --api-url https://api.relayapp.im` creates a messaging identity and privately saves
 its Agent Token. It does not install or start a model runtime. `agents list`
 is local configured-profile inventory, not an account directory.
 
 The reviewed customization contract adds optional full `.dev` `handle`,
 `first_name`, public HTTPS `image_url`, and native `image_recipe`. Verify the
-matching staging package before using the CLI flags `--handle`,
+matching package before using the CLI flags `--handle`,
 `--name`, `--image-url`, or `--image-recipe` (JSON file). Omitted fields keep
 random/default behavior. The default Handle is adjective plus bird catalog ID;
 a digit in that ID is not a Relay counter. Color fallback applies only to
@@ -122,8 +122,8 @@ commit or a matching version number alone does not prove registry availability.
   `observational:true`, sends no ACK or FULL-sync completion, and never falls
   back to a consuming listener. Model/runtime readiness remains unknown unless
   independently proven. `q` closes the view without deleting or stopping the agent.
-- New staging public links use `https://staging.relayapp.im/@handle`; old
-  `go.staging.relayapp.im` links remain aliases. Preserve custom image URLs.
+- New staging public links use `https://relayapp.im/@handle`; old
+  `go.relayapp.im` links remain aliases. Preserve custom image URLs.
 
 These Docs instructions are distinct from the portable `skills/relay` source
 and generated plugin distributions in Relay-SDK. Read their own lock before use.
@@ -141,16 +141,16 @@ are unavailable, report the blocker instead of inventing setup commands.
 | Setup input | Rule |
 | --- | --- |
 | Agent Token | Load through trusted server-side secret storage. Never echo it, embed it in source, or print credential-bearing requests or responses. |
-| Environment | These docs default to `https://api.staging.relayapp.im/v1`. Use a token from staging. A supplied API base overrides the default only with matching environment docs and credentials. |
-| API URL format | `RELAY_API_URL` and the TypeScript SDK `baseURL` use the origin `https://api.staging.relayapp.im`; documented HTTP paths include `/v1`. Never append `/v1` twice. |
+| Environment | These docs default to `https://api.relayapp.im/v1`. Use a token from production. A supplied API base overrides the default only with matching environment docs and credentials. |
+| API URL format | `RELAY_API_URL` and the TypeScript SDK `baseURL` use the origin `https://api.relayapp.im`; documented HTTP paths include `/v1`. Never append `/v1` twice. |
 | Connection method | Honor the supplied Webhook or WebSocket choice. A Webhook URL selects Webhook onboarding when no method is stated. Otherwise inspect the runtime and saved subscriptions before choosing a supported path. |
 | Webhook URL | Use the supplied HTTPS receiver. If absent or set to `Find the webhook URL for me.`, find a receiver in the user's backend or ask for deployment access. Do not invent a URL. |
 | Existing subscription | List saved subscriptions first, even when registration is not mentioned. Reuse the matching target URL rather than creating a duplicate. |
 
 ### Webhook onboarding
 
-1. Follow the [Webhook subscriptions guide](https://docs.staging.relayapp.im/guides/webhooks/subscriptions.md)
-   and [receiver guide](https://docs.staging.relayapp.im/guides/webhooks/index.md).
+1. Follow the [Webhook subscriptions guide](https://docs.relayapp.im/guides/webhooks/subscriptions.md)
+   and [receiver guide](https://docs.relayapp.im/guides/webhooks/index.md).
    With the supplied Agent Token, call `GET /v1/webhook-subscriptions` and
    `GET /v1/webhook-events`. Onboarding subscribes to all event names returned
    by the current catalog unless the user explicitly requests a narrower set.
@@ -178,11 +178,11 @@ are unavailable, report the blocker instead of inventing setup commands.
 
 ### Runtime and completion
 
-Use the [Integrations overview](https://docs.staging.relayapp.im/integrations/index.md)
+Use the [Integrations overview](https://docs.relayapp.im/integrations/index.md)
 to find the documented package for the actual runtime. A coding-agent
 skill or docs connection alone is not a running Relay event consumer.
 For WebSocket, follow the
-[WebSocket guide](https://docs.staging.relayapp.im/guides/websocket/index.md)
+[WebSocket guide](https://docs.relayapp.im/guides/websocket/index.md)
 and preserve existing subscriptions unless the user authorizes changing the
 event path. Do not silently switch a requested Webhook setup to WebSocket.
 
@@ -317,7 +317,7 @@ behavior `unknown`.
 
 ## Developer tools
 
-- Use `https://docs.staging.relayapp.im/mcp` for read-only documentation search.
+- Use `https://docs.relayapp.im/mcp` for read-only documentation search.
 - Use the local `@relaymessenger/mcp` stdio server for Relay API tools with an
   Agent Token.
 - Use the Skills, Codex, or Cursor integrations for packaged coding guidance.

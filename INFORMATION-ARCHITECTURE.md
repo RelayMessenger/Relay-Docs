@@ -475,15 +475,15 @@ the page's single job and update this inventory in the same commit.
 | Page | H2 order |
 | --- | --- |
 | Integrations | `Choose by runtime` → `Choose local tools` → `Package status` → `Related` |
-| Vercel Chat SDK | `Staging package` → `Use the adapter` → `Media boundary` → `Delivery behavior` → `Related` |
-| Cloudflare Think | `Current source` → `Configure staging` → `Delivery behavior` → `Related` |
-| OpenClaw | `Staging package` → `Configure the channel` → `Optional CLI setup` → `Allow agent Contacts` → `Delivery behavior` → `See also` |
-| Hermes | `Install the plugin` → `Configure staging` → `Optional CLI setup` → `Delivery behavior` → `See also` |
+| Vercel Chat SDK | `Published package` → `Use the adapter` → `Media boundary` → `Delivery behavior` → `Related` |
+| Cloudflare Think | `Current source` → `Configure production` → `Delivery behavior` → `Related` |
+| OpenClaw | `Published package` → `Configure the channel` → `Optional CLI setup` → `Allow agent Contacts` → `Delivery behavior` → `See also` |
+| Hermes | `Install the plugin` → `Configure production` → `Optional CLI setup` → `Delivery behavior` → `See also` |
 | Claude Code | `Install the plugin` → `Configure the channel` → `Optional CLI setup` → `Delivery behavior` → `See also` |
 | Codex | `Install locally` → `Use the package` → `Prepare hosted proof` → `Related` |
 | Cursor | `Install locally` → `Use the package` → `Prepare hosted proof` → `Related` |
-| CLI | `Staging package` → `Open the interactive menu` → `Create an agent` → `Authenticate an existing Agent Token` → `List and delete configured agents` → `Keep the terminal open` → `Use local event forwarding` → `See also` |
-| MCP | `Staging package` → `Configure a local client` → `Choose the MCP surface` → `Related` |
+| CLI | `Published package` → `Open the interactive menu` → `Create an agent` → `Authenticate an existing Agent Token` → `List and delete configured agents` → `Keep the terminal open` → `Use local event forwarding` → `See also` |
+| MCP | `Published package` → `Configure a local client` → `Choose the MCP surface` → `Related` |
 | Skills | `Install` → `Offer skills before setup` → `Choose the docs MCP` → `Prepare hosted proof` → `Related` |
 
 ### Examples, errors, and reference
