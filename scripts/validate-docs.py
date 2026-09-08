@@ -506,10 +506,12 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # they came from, so an edit made here instead of at the source fails the gate.
 # Source: Relay-Server/contracts/developer/openapi.yaml.
 # Error 2029 and Contact.is_removable, Relay-Server PR 185, September 7, 2026.
-# Source authority: Relay-Server staging commit 5607d9f73d99eef3da6c5dc0b1066f91e602b337; CLI publication is gated separately.
+# Documented 403/409/422/404/413/415 responses, request caps, nullable
+# BlockedHandleEntry.reason, UpdateChatRequest minProperties, Relay-Server PR 194, September 8, 2026.
+# Source authority: Relay-Server staging commit 1a2245dd775f781b57e0d1f6f3146ebd384c90c3; CLI publication is gated separately.
 # The digest pins source bytes independently of the Server release commit.
 expected_openapi_sha256 = (
-    "7094178cb01c0ddc05f9254dc91094900a0a7b6273979c0cad6257eec486f0d8"
+    "5458497fe8db4ee7dfe6bef67f2803137575d3ea4d835748290a5c9f8d906791"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
