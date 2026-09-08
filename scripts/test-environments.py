@@ -95,7 +95,7 @@ class EnvironmentTests(unittest.TestCase):
             for name in derive.SKIP_FILES:
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text("api.staging.relayapp.im @relaymessenger/sdk@0.3.0-staging.9")
+                path.write_text("api.staging.relayapp.im @relaymessenger/sdk@0.3.0")
             before = {name: (root / name).read_bytes() for name in derive.SKIP_FILES}
             derive.rewrite_tree(root)
             self.assertEqual(before, {name: (root / name).read_bytes() for name in derive.SKIP_FILES})
