@@ -65,6 +65,18 @@ class AgentOnboardingTests(unittest.TestCase):
                        "RELAY_ALLOWED_SENDERS", "sender permissions"):
             self.assertIn(marker, text)
 
+    def test_custom_profile_uses_existing_recipe_and_rendered_image_pair(self):
+        spec = (ROOT / "api-reference/openapi.yaml").read_text()
+        request = spec.split("    CreateAgentRequest:\n", 1)[1].split("    AgentImageRecipe:\n", 1)[0]
+        for field in ("handle:", "first_name:", "image_url:", "image_recipe:"):
+            self.assertIn(field, request)
+        self.assertIn("dependentRequired:", request)
+        self.assertIn("image_recipe:\n          - image_url", request)
+        guide = (ROOT / "guides/agents/lifecycle.mdx").read_text()
+        for marker in ("--handle", "--name", "--image-url", "--image-recipe", "8192", "drawAvatar", '"monogram"', '"5B9BFA"'):
+            self.assertIn(marker, guide)
+        self.assertIn("Server does not render a recipe-only request", guide)
+
     def test_new_pages_and_operations_are_integrated(self):
         navigation = json.dumps(json.loads((ROOT / "docs.json").read_text())["navigation"])
         for path in ("guides/agents/lifecycle", "integrations/native-setup",

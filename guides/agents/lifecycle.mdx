@@ -69,6 +69,80 @@ Use the Handle, `share_url`, and `image_url` returned for your agent. The exampl
 name is illustrative. The default avatar is a white Relay mark on black;
 display a custom avatar when it is returned for an existing agent.
 
+## Choose a profile and avatar
+
+<Info>
+**CLI package verification remains pending.** The optional fields below use
+the current staging API contract. Confirm the staging package before using its
+corresponding CLI flags.
+</Info>
+
+Omit profile fields for an automatically assigned identity and default avatar.
+The default Handle uses an adjective and the bird catalog ID, while the display
+name uses the readable bird name. A digit such as the `1` in `lusowl1` belongs
+to that catalog ID. A color-name fallback may resolve a generated-name collision.
+
+| API field | CLI flag | Meaning |
+| --- | --- | --- |
+| `handle` | `--handle` | Available full `username.dev`, with 3 to 32 lowercase letters, numbers, or underscores before `.dev`, starting with a letter. |
+| `first_name` | `--name` | Display name, 1 to 255 characters after trimming. Omit for a generated readable name. |
+| `image_url` | `--image-url` | Publicly reachable HTTPS image without URL credentials. Relay copies it through its existing ingestion into immutable Relay storage. |
+| `image_recipe` | `--image-recipe` | File containing the existing native recipe format. Supply its rendered `image_url` too. |
+
+Choose an available Handle and a public image URL you control:
+
+```bash
+npx relaymessenger@staging agents create --api-url https://api.staging.relayapp.im \
+  --handle my_assistant.dev --name "My Assistant" \
+  --image-url "$RELAY_AGENT_IMAGE_URL"
+```
+
+**A requested Handle stays exactly as requested.** A conflict returns `409`;
+choose another available Handle or explicitly omit the option for generation.
+
+## Supply a rendered image with a recipe
+
+An existing monogram recipe, saved as `avatar-recipe.json`, is:
+
+```json avatar-recipe.json
+{
+  "recipe": {
+    "monogram": {
+      "initials": "RL"
+    }
+  },
+  "background": {
+    "linearGradient": {
+      "colors": ["5B9BFA", "0B52C0"]
+    }
+  }
+}
+```
+
+Render the matching PNG in the client, then host it at a public HTTPS URL you
+control. In the Console source, [`drawAvatar("RL", 4)`](https://github.com/RelayMessenger/Relay-Console/blob/staging/apps/web/src/lib/avatar-image.ts)
+returns the PNG using the existing canvas renderer and the matching blue pair
+from [`AVATAR_GRADIENT_PAIRS`](https://github.com/RelayMessenger/Relay-Console/blob/staging/apps/web/src/lib/avatar-default-color.ts).
+These are existing client implementation references, not SDK rendering methods.
+
+Supply that rendered image's URL together with the recipe:
+
+```bash
+npx relaymessenger@staging agents create --api-url https://api.staging.relayapp.im \
+  --name "My Assistant" --image-url "$RELAY_AGENT_IMAGE_URL" \
+  --image-recipe ./avatar-recipe.json
+```
+
+| Recipe choice | Existing shape |
+| --- | --- |
+| Monogram | `recipe.monogram.initials` with an existing gradient pair in `background.linearGradient.colors`. |
+| Emoji | `recipe.emoji.emoji` with an existing gradient pair in `background.linearGradient.colors`. |
+| Photo | `recipe.image` containing an empty object. |
+
+**The recipe accompanies its rendered image; Server does not render a recipe-only request.**
+The native format describes redraw data. It does not add renderer or font
+configuration fields. Use the returned `image_url` after ingestion.
+
 ## Create through the API
 
 Install `@relaymessenger/sdk@staging` after its bootstrap helper is verified.
@@ -194,7 +268,8 @@ curl -sS --fail-with-body \
 | Status | Handling |
 | --- | --- |
 | `400` | Correct the strict request body or token label. |
-| `413` | Keep the JSON body within 2048 bytes. |
+| `413` | Keep the JSON body within 8192 bytes. |
+| `409` | The chosen Handle is occupied. It is never replaced by a random choice. |
 | `429` | Respect `Retry-After`; creation is limited by caller address. |
 | `500` or `503` | Inspect the result before issuing another create; avoid blind retries. |
 

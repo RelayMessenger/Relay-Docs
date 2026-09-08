@@ -496,7 +496,7 @@ the page's single job and update this inventory in the same commit.
 | API Reference overview | `Endpoints` → `Conventions` → `Errors` → `Related` |
 
 
-| Create and connect an agent | `Choose the identity` → `Prerequisites` → `Create with the CLI` → `Create through the API` → `Connect and share` → `List locally configured agents` → `Delete a developer-managed agent` → `Creation failures` → `Next steps` |
+| Create and connect an agent | `Choose the identity` → `Prerequisites` → `Create with the CLI` → `Choose a profile and avatar` → `Supply a rendered image with a recipe` → `Create through the API` → `Connect and share` → `List locally configured agents` → `Delete a developer-managed agent` → `Creation failures` → `Next steps` |
 
 | Connect a selected native runtime | `Prepare the selected context` → `Reuse an existing Agent Token` → `Select the runtime` → `Create and configure together` → `Inspect the result` → `Review with an agent` → `Next steps` |
 ## 17. Current page map

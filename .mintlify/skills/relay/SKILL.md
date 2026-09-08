@@ -65,6 +65,18 @@ path. `npx relaymessenger@staging agents create --api-url https://api.staging.re
 its Agent Token. It does not install or start a model runtime. `agents list`
 is local configured-profile inventory, not an account directory.
 
+The reviewed customization contract adds optional full `.dev` `handle`,
+`first_name`, public HTTPS `image_url`, and native `image_recipe`. Verify its
+staging deployment and matching package before using the CLI flags `--handle`,
+`--name`, `--image-url`, or `--image-recipe` (JSON file). Omitted fields keep
+random/default behavior. The default Handle is adjective plus bird catalog ID;
+a digit in that ID is not a Relay counter. Color fallback applies only to
+generated collisions; a requested Handle conflict is `409`, never random replacement.
+An image recipe REQUIRES its rendered `image_url`. Use the existing native
+monogram/emoji/photo format and existing client canvas rendering, not an invented
+renderer, font format, or recipe-only Server rendering service. Read the current
+lifecycle guide and canonical schema for the exact shape before constructing one.
+
 Supplied credentials always take the existing-token path. Invalid or revoked
 tokens must never trigger fallback creation. Create only when explicitly asked;
 do not automatically retry uncertain creation. Use the returned `share_url` and

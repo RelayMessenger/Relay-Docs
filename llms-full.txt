@@ -470,6 +470,80 @@ Use the Handle, `share_url`, and `image_url` returned for your agent. The exampl
 name is illustrative. The default avatar is a white Relay mark on black;
 display a custom avatar when it is returned for an existing agent.
 
+## Choose a profile and avatar
+
+<Info>
+**CLI package verification remains pending.** The optional fields below use
+the current staging API contract. Confirm the staging package before using its
+corresponding CLI flags.
+</Info>
+
+Omit profile fields for an automatically assigned identity and default avatar.
+The default Handle uses an adjective and the bird catalog ID, while the display
+name uses the readable bird name. A digit such as the `1` in `lusowl1` belongs
+to that catalog ID. A color-name fallback may resolve a generated-name collision.
+
+| API field | CLI flag | Meaning |
+| --- | --- | --- |
+| `handle` | `--handle` | Available full `username.dev`, with 3 to 32 lowercase letters, numbers, or underscores before `.dev`, starting with a letter. |
+| `first_name` | `--name` | Display name, 1 to 255 characters after trimming. Omit for a generated readable name. |
+| `image_url` | `--image-url` | Publicly reachable HTTPS image without URL credentials. Relay copies it through its existing ingestion into immutable Relay storage. |
+| `image_recipe` | `--image-recipe` | File containing the existing native recipe format. Supply its rendered `image_url` too. |
+
+Choose an available Handle and a public image URL you control:
+
+```bash
+npx relaymessenger@staging agents create --api-url https://api.staging.relayapp.im \
+  --handle my_assistant.dev --name "My Assistant" \
+  --image-url "$RELAY_AGENT_IMAGE_URL"
+```
+
+**A requested Handle stays exactly as requested.** A conflict returns `409`;
+choose another available Handle or explicitly omit the option for generation.
+
+## Supply a rendered image with a recipe
+
+An existing monogram recipe, saved as `avatar-recipe.json`, is:
+
+```json avatar-recipe.json
+{
+  "recipe": {
+    "monogram": {
+      "initials": "RL"
+    }
+  },
+  "background": {
+    "linearGradient": {
+      "colors": ["5B9BFA", "0B52C0"]
+    }
+  }
+}
+```
+
+Render the matching PNG in the client, then host it at a public HTTPS URL you
+control. In the Console source, [`drawAvatar("RL", 4)`](https://github.com/RelayMessenger/Relay-Console/blob/staging/apps/web/src/lib/avatar-image.ts)
+returns the PNG using the existing canvas renderer and the matching blue pair
+from [`AVATAR_GRADIENT_PAIRS`](https://github.com/RelayMessenger/Relay-Console/blob/staging/apps/web/src/lib/avatar-default-color.ts).
+These are existing client implementation references, not SDK rendering methods.
+
+Supply that rendered image's URL together with the recipe:
+
+```bash
+npx relaymessenger@staging agents create --api-url https://api.staging.relayapp.im \
+  --name "My Assistant" --image-url "$RELAY_AGENT_IMAGE_URL" \
+  --image-recipe ./avatar-recipe.json
+```
+
+| Recipe choice | Existing shape |
+| --- | --- |
+| Monogram | `recipe.monogram.initials` with an existing gradient pair in `background.linearGradient.colors`. |
+| Emoji | `recipe.emoji.emoji` with an existing gradient pair in `background.linearGradient.colors`. |
+| Photo | `recipe.image` containing an empty object. |
+
+**The recipe accompanies its rendered image; Server does not render a recipe-only request.**
+The native format describes redraw data. It does not add renderer or font
+configuration fields. Use the returned `image_url` after ingestion.
+
 ## Create through the API
 
 Install `@relaymessenger/sdk@staging` after its bootstrap helper is verified.
@@ -595,7 +669,8 @@ curl -sS --fail-with-body \
 | Status | Handling |
 | --- | --- |
 | `400` | Correct the strict request body or token label. |
-| `413` | Keep the JSON body within 2048 bytes. |
+| `413` | Keep the JSON body within 8192 bytes. |
+| `409` | The chosen Handle is occupied. It is never replaced by a random choice. |
 | `429` | Respect `Retry-After`; creation is limited by caller address. |
 | `500` or `503` | Inspect the result before issuing another create; avoid blind retries. |
 
@@ -1115,6 +1190,18 @@ new release before executing it. Do not add a wrapper or scoped dual-publication
 path. `npx relaymessenger@staging agents create --api-url https://api.staging.relayapp.im` creates a messaging identity and privately saves
 its Agent Token. It does not install or start a model runtime. `agents list`
 is local configured-profile inventory, not an account directory.
+
+The reviewed customization contract adds optional full `.dev` `handle`,
+`first_name`, public HTTPS `image_url`, and native `image_recipe`. Verify its
+staging deployment and matching package before using the CLI flags `--handle`,
+`--name`, `--image-url`, or `--image-recipe` (JSON file). Omitted fields keep
+random/default behavior. The default Handle is adjective plus bird catalog ID;
+a digit in that ID is not a Relay counter. Color fallback applies only to
+generated collisions; a requested Handle conflict is `409`, never random replacement.
+An image recipe REQUIRES its rendered `image_url`. Use the existing native
+monogram/emoji/photo format and existing client canvas rendering, not an invented
+renderer, font format, or recipe-only Server rendering service. Read the current
+lifecycle guide and canonical schema for the exact shape before constructing one.
 
 Supplied credentials always take the existing-token path. Invalid or revoked
 tokens must never trigger fallback creation. Create only when explicitly asked;
@@ -5809,6 +5896,11 @@ unchanged. An explicit `--profile` on create must name a new profile.
 The CLI makes no automatic retry. If native configuration needs action after
 creation, continue with that saved identity rather than creating another one.
 
+Optional profile flags are `--handle` (full `username.dev`), `--name`,
+`--image-url`, and `--image-recipe` (a JSON file). Profile customization uses the staging API; the CLI package still awaits
+verification. A recipe requires its rendered
+image URL; see [profile and avatar options](/guides/agents/lifecycle#choose-a-profile-and-avatar).
+
 ## Authenticate an existing Agent Token
 
 **`auth login` validates and stores an existing Agent Token locally.**
@@ -7569,8 +7661,14 @@ paths:
         - Agents
       security: []
       description: |-
-        Create a developer-managed agent with an assigned `.dev` Handle and an
-        Agent Token. Save the returned token securely before connecting the
+        Create a developer-managed agent with an optional chosen `.dev` Handle,
+        display name, and image. Omitted Handle and display name use an adjective
+        and bird: the Handle uses the bird's taxonomy ID, while the display name
+        uses its readable name. A color can resolve a generated-name collision.
+        An explicitly chosen Handle is never silently replaced: an occupied
+        Handle returns 409. Omitted image uses Relay's default image.
+
+        Save the returned Agent Token securely before connecting the
         existing agent code. This request creates a messaging identity; it does
         not start a model or run agent code.
 
@@ -7600,8 +7698,14 @@ paths:
                 $ref: "#/components/schemas/CreateAgentResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "409":
+          description: The explicitly chosen Handle is already in use.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "413":
-          description: Request body exceeds 2048 bytes.
+          description: Request body exceeds 8192 bytes.
           content:
             application/json:
               schema:
@@ -9632,6 +9736,9 @@ components:
     CreateAgentRequest:
       type: object
       additionalProperties: false
+      dependentRequired:
+        image_recipe:
+          - image_url
       properties:
         token_name:
           type: string
@@ -9640,6 +9747,117 @@ components:
           pattern: '^[^\u0000-\u001f\u007f]+$'
           default: Relay CLI
           description: A label for the issued token, not an agent name or owner identity.
+        handle:
+          type: string
+          pattern: '^[a-z][a-z0-9_]{2,31}\.dev$'
+          description: >-
+            An available developer Handle, including .dev. Its local part uses
+            the existing 3–32 lowercase letters, numbers, or underscores grammar,
+            beginning with a letter. Omit for an assigned adjective/bird-ID Handle.
+        first_name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: '^[^\u0000-\u001f\u007f]+$'
+          description: Display name. Surrounding whitespace is trimmed. Omit for an assigned adjective/bird name.
+        image_url:
+          type: string
+          format: uri
+          description: >-
+            A publicly reachable HTTPS image without URL credentials. Relay uses
+            its existing image ingestion and permanent-image storage. Omit for
+            Relay's default image.
+        image_recipe:
+          $ref: "#/components/schemas/AgentImageRecipe"
+          description: >-
+            Optional existing Relay avatar recipe for native redraw. Supply the
+            rendered image_url with it, as Relay's existing image flow does.
+            A recipe alone is not an image-rendering service.
+    AgentImageRecipe:
+      oneOf:
+        - $ref: "#/components/schemas/AgentMonogramImageRecipe"
+        - $ref: "#/components/schemas/AgentEmojiImageRecipe"
+        - $ref: "#/components/schemas/AgentPhotoImageRecipe"
+    AgentImageBackground:
+      type: object
+      additionalProperties: false
+      required: [linearGradient]
+      properties:
+        linearGradient:
+          type: object
+          additionalProperties: false
+          required: [colors]
+          properties:
+            colors:
+              type: array
+              minItems: 2
+              maxItems: 2
+              items:
+                type: string
+              description: One existing Relay gradient pair, ordered top then base.
+              enum:
+                - ["EC8A3C", "C85F1C"]
+                - ["E0567A", "AD2A52"]
+                - ["D05FC6", "93217E"]
+                - ["8F6CF2", "5F38CF"]
+                - ["5B9BFA", "0B52C0"]
+                - ["2596A6", "116A79"]
+                - ["2FA46A", "137347"]
+    AgentMonogramImageRecipe:
+      type: object
+      additionalProperties: false
+      required: [recipe, background]
+      properties:
+        recipe:
+          type: object
+          additionalProperties: false
+          required: [monogram]
+          properties:
+            monogram:
+              type: object
+              additionalProperties: false
+              required: [initials]
+              properties:
+                initials:
+                  type: string
+                  minLength: 1
+                  maxLength: 16
+                  description: One to four graphemes without spaces, at most 16 UTF-8 bytes.
+        background:
+          $ref: "#/components/schemas/AgentImageBackground"
+    AgentEmojiImageRecipe:
+      type: object
+      additionalProperties: false
+      required: [recipe, background]
+      properties:
+        recipe:
+          type: object
+          additionalProperties: false
+          required: [emoji]
+          properties:
+            emoji:
+              type: object
+              additionalProperties: false
+              required: [emoji]
+              properties:
+                emoji:
+                  type: string
+                  description: Exactly one emoji, validated by Relay's existing image-recipe parser.
+        background:
+          $ref: "#/components/schemas/AgentImageBackground"
+    AgentPhotoImageRecipe:
+      type: object
+      additionalProperties: false
+      required: [recipe]
+      properties:
+        recipe:
+          type: object
+          additionalProperties: false
+          required: [image]
+          properties:
+            image:
+              type: object
+              additionalProperties: false
     CreateAgentResponse:
       type: object
       additionalProperties: false
