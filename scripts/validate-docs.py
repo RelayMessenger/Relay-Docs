@@ -5,7 +5,7 @@ import re
 import sys
 from pathlib import Path
 from api_navigation import validate_api_navigation, page_paths
-from origins import origin, production_text, target
+from origins import origin, production_text, source_ref, target
 
 
 def spec(text: str) -> str:
@@ -423,7 +423,7 @@ canonical_ecosystem_sources = {
     "examples/index.mdx": "cookbook",
 }
 for relative, source_path in canonical_ecosystem_sources.items():
-    expected = (
+    expected = spec(
         "https://github.com/RelayMessenger/Relay-SDK/tree/staging/"
         f"{source_path}"
     )
@@ -440,7 +440,7 @@ for relative, manifest in {
     "integrations/codex.mdx": ".agents/plugins/marketplace.json",
     "integrations/cursor.mdx": ".cursor-plugin/marketplace.json",
 }.items():
-    expected = (
+    expected = spec(
         "https://github.com/RelayMessenger/Relay-SDK/blob/staging/"
         f"{manifest}"
     )
@@ -555,7 +555,7 @@ if re.search(r"\bsource[- ]only\b|\bsource tarball\b", chat_sdk_text, re.I):
 cli_text = (root / "integrations/cli.mdx").read_text()
 for marker in [
     spec("npm install --global @relaymessenger/cli@staging"),
-    "relay --profile staging events listen --acknowledge-events",
+    'relay --profile "$RELAY_DEV_PROFILE" events listen --acknowledge-events',
     "requires an explicit non-production profile",
     "dedicated Agent may advance its durable checkpoint",
 ]:
@@ -569,7 +569,7 @@ for marker in [
     "Codex CLI",
     "0.152.0",
     "codex plugin marketplace add",
-    "https://github.com/RelayMessenger/Relay-SDK --ref staging",
+    spec("https://github.com/RelayMessenger/Relay-SDK --ref staging"),
     "codex plugin add relay@relay-plugin-marketplace",
 ]:
     if marker not in codex_text:
@@ -589,8 +589,8 @@ claude_text = (root / "integrations/claude-code.mdx").read_text()
 claude_normalized = re.sub(r"\s+", " ", claude_text)
 for marker in [
     pinned("relay-claude-channel"),
-    "The Relay plugin in the Relay-SDK staging catalog carries the package's `staging` prerelease",
-    "/plugin marketplace add RelayMessenger/Relay-SDK@staging",
+    "The Relay plugin version is recorded in the selected catalog and plugin manifest",
+    spec("/plugin marketplace add RelayMessenger/Relay-SDK@staging"),
     "/plugin install relay@relay-messenger",
     "Only addressed group Messages start Claude turns",
     "structured `parts[].mention`",
@@ -637,8 +637,8 @@ for index, line in enumerate(ecosystem_text.splitlines()):
     command = line
     if line.endswith("\\") and index + 1 < len(ecosystem_text.splitlines()):
         command += " " + ecosystem_text.splitlines()[index + 1].strip()
-    if "https://github.com/RelayMessenger/" in command and "--branch staging" not in command:
-        raise SystemExit(f"public source clone is not pinned to staging: {command}")
+    if "https://github.com/RelayMessenger/" in command and f"--branch {source_ref()}" not in command:
+        raise SystemExit(f"public source clone is not pinned to the target branch: {command}")
 
 hosted_proof_text = "\n".join(
     (root / relative).read_text()

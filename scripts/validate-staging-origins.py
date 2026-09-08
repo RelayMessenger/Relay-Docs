@@ -10,16 +10,18 @@ import json
 import re
 import unittest
 from pathlib import Path
-from origins import STAGING_HOSTS, STAGING_PACKAGE_REFERENCE, ROOT, origin, target
+from origins import STAGING_HOSTS, STAGING_PACKAGE_REFERENCE, STAGING_INSTRUCTION_REFERENCE, ROOT, origin, target
 
 PRODUCTION = re.compile(r"(?:https|wss)://(?:api|console)\.relayapp\.im")
 STAGING = re.compile(
-    "|".join([*(re.escape(host) for host in STAGING_HOSTS), STAGING_PACKAGE_REFERENCE.pattern])
+    "|".join([*(re.escape(host) for host in STAGING_HOSTS),
+              STAGING_PACKAGE_REFERENCE.pattern, STAGING_INSTRUCTION_REFERENCE.pattern]),
+    re.I,
 )
 CONTENT_SUFFIXES = {".mdx", ".md", ".json", ".yaml", ".yml", ".txt", ".js", ".mjs"}
 # The tooling that knows both spellings is exempt from the production sweep,
 # and so is versions.json, the mirror of what the registries actually publish.
-SWEEP_EXEMPT = {".github", "node_modules", "scripts", ".git", "versions.json"}
+SWEEP_EXEMPT = {".github", "node_modules", "scripts", ".git", ".mint"}
 
 
 def example_errors(text: str, mode: str = "staging") -> list[str]:
@@ -85,7 +87,7 @@ class RegressionTests(unittest.TestCase):
     def test_production_mode_accepts_plain_package_references(self):
         self.assertFalse(example_errors(
             "npm install @relaymessenger/sdk\n`@relaymessenger/cli` is `latest`\n"
-            "/plugin marketplace add RelayMessenger/Relay-SDK@staging\n", "production"
+            "/plugin marketplace add RelayMessenger/Relay-SDK@main\n", "production"
         ))
 
     def test_production_mode_still_requires_explicit_base_url(self):
@@ -109,6 +111,8 @@ def validate() -> None:
         for path in sorted(ROOT.rglob("*")):
             relative = path.relative_to(ROOT)
             if not path.is_file() or path.suffix not in CONTENT_SUFFIXES:
+                continue
+            if relative.as_posix() in {"versions.json", "api-reference/openapi.yaml"}:
                 continue
             if SWEEP_EXEMPT & set(relative.parts) or path.suffix == ".mdx":
                 continue

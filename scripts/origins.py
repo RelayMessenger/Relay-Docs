@@ -44,6 +44,62 @@ PACKAGE_REWRITES = (
 )
 STAGING_PACKAGE_REFERENCE = re.compile(rf"{PACKAGE}@staging\b|{PRERELEASE}")
 
+# Only documented Relay SDK source refs are projected. Never rewrite arbitrary
+# branch names, historical prose, third-party repositories, or registry data.
+SOURCE_REWRITES = (
+    (re.compile(r"(github\.com/RelayMessenger/Relay-SDK/(?:tree|blob)/)staging(?![\w.-])"), r"\1main"),
+    (re.compile(r"(raw\.githubusercontent\.com/RelayMessenger/Relay-SDK/)staging/"), r"\1main/"),
+    (re.compile(r"(RelayMessenger/Relay-SDK(?:\.git)?)@staging(?![\w./-])"), r"\1@main"),
+    (re.compile(r"(https://github\.com/RelayMessenger/Relay-SDK(?:\.git)? --ref )staging(?![\w./-])"), r"\1main"),
+    (re.compile(r"(git clone --branch )staging(\s+(?:\\\s+)?https://github\.com/RelayMessenger/Relay-SDK(?:\.git)?)"), r"\1main\2"),
+)
+PROFILE_REWRITES = (
+    (re.compile(r"(\brelay profiles (?:add|use) )staging(?![\w./-])"), r"\1production"),
+    (re.compile(r"(\brelay\b[^\n]*?--profile\s+)staging(?![\w./-])"), r"\1production"),
+    (re.compile(r"(\$HOME/\.hermes/relay-)staging(?![\w./-])"), r"\1production"),
+)
+
+# Literal operator instructions, not a global staging -> production replace.
+# Registry/catalog versions are not inferred from an environment or branch.
+INSTRUCTION_REWRITES = {
+    "The root above is staging; use a staging token.": "The root above is production; use a production token.",
+    "Use a token from staging.": "Use a token from production.",
+    "staging Agent Token": "production Agent Token",
+    "staging API origin": "production API origin",
+    "<staging-agent-token>": "<production-agent-token>",
+    "$STAGING_RELAY_AGENT_TOKEN": "$RELAY_AGENT_TOKEN",
+    "## Configure staging": "## Configure production",
+    "`Configure staging`": "`Configure production`",
+    "## Staging package": "## Published package",
+    "`Staging package`": "`Published package`",
+    "current published staging package": "current published package",
+    "Install the published staging tag:": "Install the published package:",
+    "Staging train": "Install",
+    "Staging verification": "Environment verification",
+    "hosted staging index": "hosted production index",
+    "The staging `llms.txt` instructions": "The production `llms.txt` instructions",
+    "for this staging candidate": "for this docs candidate",
+    "staging profiles": "production profiles",
+    '"staging profile"': '"production profile"',
+    '"RELAY_PROFILE": "staging"': '"RELAY_PROFILE": "production"',
+    "| npm tags | `latest`, `staging` |": "| npm tag | `latest` |",
+}
+PROSE_REWRITES = (
+    (re.compile(r"The `staging` tag\s+selects the current prerelease, which the command above installs\."), "The command above installs the `latest` release."),
+    (re.compile(r"; the\s+`staging` tag\s+selects the\s+current prerelease\."), "."),
+    (re.compile(r"The `staging`\s+tag on each package selects its current prerelease, which these staging pages\s+install\."), "The commands above install those releases."),
+)
+
+STAGING_INSTRUCTION_REFERENCE = re.compile(
+    "|".join(pattern.pattern for pattern, _ in (*SOURCE_REWRITES, *PROFILE_REWRITES))
+    + r"|\bstaging[-\s]+(?:agent[-\s]+)?token\b"
+    r"|token\s+from\s+staging\b|staging\s+API\s+(?:root|origin)\b"
+    r"|STAGING_RELAY_AGENT_TOKEN\b"
+    r'|"RELAY_PROFILE":\s*"staging"'
+    r"|Configure staging\b|Staging package\b|published staging tag\b",
+    re.I,
+)
+
 
 def target() -> str:
     """`production` when asked explicitly or recorded in `.docs-target`."""
@@ -62,7 +118,18 @@ def production_text(text: str) -> str:
         text = text.replace(staging_value, production_value)
     for pattern, replacement in PACKAGE_REWRITES:
         text = pattern.sub(replacement, text)
+    for pattern, replacement in (*SOURCE_REWRITES, *PROFILE_REWRITES):
+        text = pattern.sub(replacement, text)
+    for staging_value, production_value in INSTRUCTION_REWRITES.items():
+        text = text.replace(staging_value, production_value)
+    for pattern, replacement in PROSE_REWRITES:
+        text = pattern.sub(replacement, text)
     return text
+
+
+def source_ref() -> str:
+    """The authored SDK source branch selected by this docs target."""
+    return "main" if target() == "production" else "staging"
 
 
 def origin(host: str) -> str:

@@ -25,7 +25,7 @@ developer API also supports agent-to-agent Chats with zero users.
 3. Verify access with `GET /v1/chats?limit=1`. HTTP `200`, including an empty
    `chats` array, verifies this read. Do not require `/v1/agents/me` or invent
    an identity endpoint. This read does not select a greeting recipient.
-4. Read the matching WebSocket or Webhooks guide. For the current staging
+4. Read the matching WebSocket or Webhooks guide. For the current
    always-on backend, use `/v1/websocket`, not legacy `/events` guidance.
    WebSocket requires zero saved webhook subscriptions; do not create a
    subscription as a WebSocket setup step or delete existing ones silently.
@@ -218,7 +218,7 @@ Agent backends authenticate the `/v1/websocket` upgrade with
 - Treat every inbound `event_id` as at-least-once.
 - Recover current state with ordinary REST reads or WebSocket FULL sync.
 - Retain `trace_id` from API errors and webhook events for debugging.
-- Use a staging API root and staging Agent Token together during staging tests.
+- Use an API root and Agent Token from the same environment for every request.
 
 Use the OpenAPI contract for exact fields, limits, and errors. Label unproved
 behavior `unknown`.
