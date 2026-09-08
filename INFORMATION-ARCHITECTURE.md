@@ -482,7 +482,7 @@ the page's single job and update this inventory in the same commit.
 | Claude Code | `Install the plugin` → `Configure the channel` → `Optional CLI setup` → `Delivery behavior` → `See also` |
 | Codex | `Install locally` → `Use the package` → `Prepare hosted proof` → `Related` |
 | Cursor | `Install locally` → `Use the package` → `Prepare hosted proof` → `Related` |
-| CLI | `Staging package` → `Create an agent` → `Authenticate an existing Agent Token` → `List and delete configured agents` → `Use local event forwarding` → `See also` |
+| CLI | `Staging package` → `Open the interactive menu` → `Create an agent` → `Authenticate an existing Agent Token` → `List and delete configured agents` → `Use local event forwarding` → `See also` |
 | MCP | `Staging package` → `Configure a local client` → `Choose the MCP surface` → `Related` |
 | Skills | `Install` → `Choose the docs MCP` → `Prepare hosted proof` → `Related` |
 

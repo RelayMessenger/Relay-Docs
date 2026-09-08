@@ -497,7 +497,7 @@ for archived_mirror in ["Relay-Codex", "Relay-Cursor", "Relay-Claude-Code"]:
         )
 
 for version in [
-    *(pinned(name) for name in npm_latest if name != "@relaymessenger/cli"),
+    *(pinned(name) for name in npm_latest if name not in {"@relaymessenger/cli", "relaymessenger"}),
     *(pinned(name) for name in versions["pypi"]),
     "@relaymessenger/cookbook-cloudflare-think-agent@0.1.0",
 ]:
