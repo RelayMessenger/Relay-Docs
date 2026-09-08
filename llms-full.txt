@@ -5542,7 +5542,7 @@ The observer receives ordinary [`event` frames](/guides/websocket/protocol#event
 | `ack` | Send after durable commit | Rejected with `invalid_frame` |
 | `full_sync_complete` | Send after recovery commits | Rejected with `invalid_frame` |
 | Heartbeat | Answer JSON `ping` with `pong` | Answer JSON `ping` with `pong` |
-| Retention gap | Complete FULL sync | Treat the view as incomplete diagnostics |
+| Earlier events no longer kept | Complete FULL sync | Treat the view as incomplete diagnostics |
 | Runtime readiness | Verify actual processing and replies | Readiness confirms observation only |
 | Existing webhook subscription | HTTP `409` | HTTP `409` |
 
@@ -5648,11 +5648,14 @@ import { createRelayAdapter } from "@relaymessenger/chat-sdk-adapter";
 
 const chat = new Chat({
   userName: "Relay example",
+  concurrency: { strategy: "burst", debounceMs: 2000 },
   adapters: {
     relay: createRelayAdapter({
       baseUrl: "https://api.relayapp.im",
       token: process.env.RELAY_AGENT_TOKEN,
       webhookSecret: process.env.RELAY_WEBHOOK_SECRET,
+      markReadOnReceipt: true,
+      abortActiveTurnOnReceipt: true,
     }),
   },
   state: createMemoryState(),
@@ -5690,6 +5693,31 @@ same Chat.
 The adapter accepts public HTTPS media URLs and file bytes. For an uncertain
 media send, preserve the prepared Attachment identity rather than allocating a
 new one on retry; see [Attachments](/guides/messaging/attachments).
+
+## Answer a second Message during a reply
+
+Chat SDK `4.39.0` defaults `concurrency` to `drop`. Under `drop`, a Message
+that arrives while the handler is still running throws a `LockError` out of
+`chat.webhooks.relay`, the Webhook fails, and Relay
+[retries the delivery](/guides/webhooks/delivery). The three settings in the
+example above replace that.
+
+| Setting | Effect |
+| --- | --- |
+| `concurrency: { strategy: "burst", debounceMs: 2000 }` | Waits 2 seconds after the first Message, then runs the handler once with the latest Message; earlier ones arrive in `context.skipped`. A Message that arrives mid-run is queued and handled when the run ends. |
+| `markReadOnReceipt: true` | Marks the Chat read as soon as the Webhook is verified, before the wait. |
+| `abortActiveTurnOnReceipt: true` | A newer Message aborts the running turn through `thread.signal`. Pass that signal to your model call, or the old turn finishes and posts. |
+
+Join the skipped Messages so one reply covers the burst:
+
+```typescript
+chat.onDirectMessage(async (thread, message, channel, context) => {
+  const text = [...(context?.skipped ?? []), message]
+    .map((m) => m.text)
+    .join("\n\n");
+  await thread.post(`Echo: ${text}`);
+});
+```
 
 <span id="delivery-behavior" />
 <span id="media-boundary" />
@@ -5774,6 +5802,26 @@ Send the agent a direct Message and confirm that its answer arrives in the same
 Chat. The starter uses a `reply`
 Action for the completed response. Preserve its idempotency handling when
 customizing the reply.
+
+## Answer a second Message during a reply
+
+Think builds the Chat SDK instance itself with
+`concurrency: { strategy: "burst", debounceMs: 600 }` and runs each reply with
+`waitForCompletion: true`, so the Chat stays locked for the whole turn. The
+starter cannot change that window.
+
+| Second Message arrives | Outcome |
+| --- | --- |
+| Within 600 ms of the first | One turn runs for the latest Message; Think's handlers never read the earlier ones. |
+| While the turn is running | It waits in the queue and gets its own reply when the turn ends. |
+| Any time | Marked read on receipt, because the starter sets `markReadOnReceipt: true`. |
+
+A newer Message never cancels a running turn. Think's handlers take only
+`(thread, message)` and never read `thread.signal`, so
+`abortActiveTurnOnReceipt` has no effect under Think and the starter leaves it
+off. The
+[starter README](https://github.com/RelayMessenger/Relay-SDK/blob/main/cookbook/cloudflare-think-agent/README.md)
+records why.
 
 <span id="current-source" />
 <span id="delivery-behavior" />
@@ -5872,7 +5920,7 @@ Add Relay as a messaging platform in your always-on Hermes gateway.
 
 ## Install the plugin
 
-Use Python `3.11` through `3.13` with the `relay-hermes@1.0.0rc1` source
+Use Python `3.11` through `3.13` with the `relay-hermes@1.0.0rc2` source
 package. Install the Git-hosted plugin:
 
 ```bash
@@ -5929,6 +5977,23 @@ Follow the [native messaging success checks](/integrations/native-setup#verify-m
 The plugin saves each event before sending its WebSocket ACK, marks the Chat
 Read when processing starts, and sends replies through Relay REST with an
 idempotency key.
+
+## Answer a second Message during a reply
+
+Hermes decides this with its own `display.busy_input_mode` setting in
+`~/.hermes/config.yaml`. The plugin adds no setting of its own. It marks the
+Chat Read the moment a Message is accepted, before Hermes chooses, so every
+Message shows Read.
+
+| `display.busy_input_mode` | Outcome on Relay |
+| --- | --- |
+| `interrupt` (default) | Hermes folds the Message into the running reply. It shows Read, and one reply answers both, without a quote. |
+| `queue` | The Message waits and gets its own reply after the running one ends. |
+| `steer` | Hermes hands the Message to the running turn after its next tool call, as Hermes documents. It shows Read, and one reply answers both. |
+
+A folded Message is settled in the plugin's inbox, so a gateway restart does
+not answer it again. A reply quotes a Message only when it answers one that
+did not start the latest turn.
 
 <span id="delivery-behavior" />
 <span id="optional-cli-setup" />
@@ -6015,6 +6080,22 @@ agent's own delivery row for Read state.
 Delivery into Claude is at least once. Before repeating a non-idempotent tool
 operation after a restart, check whether it already succeeded. For an uncertain
 reply, reuse the same `send_id` and arguments.
+
+## Answer a second Message during a reply
+
+The channel notifies every delivery into the session at once, and one turn
+runs at a time. What happens to the second Message depends on when Claude
+calls `begin_processing` for it.
+
+| Second Message arrives | Outcome |
+| --- | --- |
+| Claude replies to the first, then calls `begin_processing` | Each Message gets its own reply. |
+| Claude calls `begin_processing` before replying to the first | The first turn closes as superseded. Its Message goes back to pending and is notified again on the first flush after the new turn closes, so Claude opens a fresh turn for it. |
+| The first turn passes its ten-minute lease | The same as superseded: the Message returns to pending and is notified again once no turn is running. |
+
+A Message answered by `reply` or closed by `complete_processing` stays closed
+and is never answered twice. A Message an older channel version left stuck is
+put back to pending the next time the channel starts.
 
 <span id="delivery-behavior" />
 <span id="optional-cli-setup" />
@@ -6384,15 +6465,24 @@ non-TTY execution return without it.
 
 ## Read and control the view
 
-| Control or state | Meaning |
+| Control or line | Meaning |
 | --- | --- |
 | `q`, Ctrl-C, or Ctrl-D | Leave the view and restore the terminal. The identity, saved credential, and external runtime remain unchanged. |
 | `c` | Redraw the QR from the public share URL. |
 | `?` | Show view help. |
-| Event view ready | The server confirmed the observer connection. |
-| Runtime not started or unknown | The observer has not verified the model connection. |
-| Retention gap | Events have fallen outside retention; this view is not full history. |
-| View unavailable | The CLI keeps the saved identity and does not open a consuming fallback. |
+| `Agent: connection not checked` | The view has not checked whether a runtime is connected for this agent. |
+| `Agent: not running yet; nothing answers its messages until you connect one` | No runtime is connected. Messages sent to the agent get no reply until you connect one. |
+| `Agent: running` | A connected runtime answers for the agent. |
+| `Agent: not connected` | The runtime that answered for the agent has disconnected. |
+| `Live view: connecting` | The view is opening its observer connection. |
+| `Live view: watching only; your agent still receives every message` | The server confirmed the observer connection. Your runtime stays the consumer. |
+| `Live view: watching; some earlier events are not shown` | The view is live, but events older than the server keeps are not in it. This view is not full history. |
+| `Live view: disconnected` | The observer connection closed. The saved identity is unchanged. |
+| `Live view: unavailable` | The view could not open an observer connection. The CLI keeps the saved identity and does not open a consuming fallback. |
+
+The view also prints `This view does not start or stop your agent.` when a
+runtime is attached, and `?` shows `This view only watches. It does not answer
+messages or change anything.`
 
 The observer uses `/v1/websocket?observe=true` and requires
 `observational: true` in the ready frame. It sends neither event ACKs nor
@@ -8724,6 +8814,12 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: Only a group Chat has a name or photo (error code `1005`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           $ref: "#/components/responses/InternalServerError"
   /v1/chats/{chatId}/participants:
@@ -8797,6 +8893,15 @@ paths:
                     success: false
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: |-
+            The Chat cannot take this participant (error code `1005`): the
+            Chat is not a group, the Handle is already a member, or the group
+            is full (seven Handles, the user plus six agents).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           $ref: "#/components/responses/InternalServerError"
       description: Add an agent to a group Chat. In a Chat containing a user, the target agent and any acting agent must already be in that user's Contacts and unblocked. User membership is established at creation. By default, the added agent can read history from its new membership onward. Set hide_history to false to also share earlier retained history.
@@ -9544,6 +9649,14 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: "`part_index` does not exist on this Message (error code `2006`)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           $ref: "#/components/responses/InternalServerError"
   /v1/attachments:
@@ -9572,6 +9685,18 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "413":
+          description: "`size_bytes` is over 100 MiB (104857600 bytes)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: The request Content-Type is not `application/json`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           $ref: "#/components/responses/InternalServerError"
   /v1/attachments/{attachmentId}:
@@ -9627,6 +9752,12 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: The Attachment is referenced by a Message or Chat and cannot be deleted (error code `1005`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           $ref: "#/components/responses/InternalServerError"
   /v1/blocked_handles:
@@ -9693,6 +9824,18 @@ paths:
                       message: This agent is not removable.
                       doc_url: https://docs.relayapp.im/error/codes/2xxx/2029
                     success: false
+        "404":
+          description: The Handle is not a registered Relay Handle that can be blocked (error code `2001`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: A Contact cannot block itself (error code `2006`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           $ref: "#/components/responses/InternalServerError"
       description: |-
@@ -9768,6 +9911,8 @@ paths:
                 $ref: "#/components/schemas/WebhookEventsResult"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/AgentOnly"
         "500":
           $ref: "#/components/responses/InternalServerError"
   /v1/webhook-subscriptions:
@@ -9796,6 +9941,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/AgentOnly"
         "500":
           $ref: "#/components/responses/InternalServerError"
       description: Create a signed webhook subscription.
@@ -9816,6 +9963,8 @@ paths:
                 $ref: "#/components/schemas/ListWebhookSubscriptionsResult"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/AgentOnly"
         "500":
           $ref: "#/components/responses/InternalServerError"
   /v1/webhook-subscriptions/{subscriptionId}:
@@ -9970,6 +10119,12 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The authenticated agent has no Contact card row to update (error code `2001`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "409":
           $ref: "#/components/responses/Conflict"
         "500":
@@ -10084,6 +10239,12 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          description: The target Handle is not a user; an agent can request only a user Contact (error code `2006`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     AddParticipantRequest:
@@ -10163,9 +10324,13 @@ components:
       properties:
         handle:
           type: string
+          minLength: 1
+          maxLength: 255
           description: Registered Relay Handle.
         reason:
           type: string
+          minLength: 1
+          maxLength: 500
           description: Optional free-text note on why the handle was blocked
     BlockedHandleEntry:
       type: object
@@ -10177,8 +10342,10 @@ components:
           type: string
           description: Registered Relay Handle blocked by the authenticated Contact.
         reason:
-          type: string
-          description: Optional note recorded when the handle was blocked
+          type:
+            - string
+            - "null"
+          description: Optional note recorded when the handle was blocked; null when no note was given.
         blocked_at:
           type: string
           format: date-time
@@ -11759,19 +11926,28 @@ components:
             - integer
             - "null"
           minimum: 0
-          description: Audio or video duration in milliseconds when known.
+          description: >-
+            Audio or video duration in milliseconds when known. Accepted only
+            when `content_type` is `audio/*` or `video/*`; null is the same as
+            omitting it.
         width:
           type:
             - integer
             - "null"
           minimum: 1
-          description: Pixel width when known. Width and height are supplied together.
+          description: >-
+            Pixel width when known. Width and height are supplied together and
+            accepted only when `content_type` is `image/*` or `video/*`; null
+            is the same as omitting it.
         height:
           type:
             - integer
             - "null"
           minimum: 1
-          description: Pixel height when known. Width and height are supplied together.
+          description: >-
+            Pixel height when known. Width and height are supplied together and
+            accepted only when `content_type` is `image/*` or `video/*`; null
+            is the same as omitting it.
     RequestUploadResult:
       type: object
       required:
@@ -11892,6 +12068,8 @@ components:
           $ref: "#/components/schemas/ReactionType"
         custom_emoji:
           type: string
+          minLength: 1
+          maxLength: 32
           description: |
             Custom emoji string. Required when type is "custom".
         part_index:
@@ -12279,14 +12457,18 @@ components:
           description: Registered Relay Handle.
     UpdateChatRequest:
       type: object
+      minProperties: 1
       properties:
         display_name:
           type: string
+          minLength: 1
+          maxLength: 255
           description: New display name for the chat (group chats only)
         group_chat_icon:
           type:
             - string
             - "null"
+          maxLength: 2048
           description: >-
             Group photo for the chat, in either of two forms. A completed image
             Attachment ID uses an image you already uploaded. Any publicly
@@ -12799,6 +12981,12 @@ components:
             carries no mention.
             *Characters are measured as UTF-16 code units. Most characters count as 1; some emoji count as 2.*
   responses:
+    AgentOnly:
+      description: Forbidden - the route requires an active agent principal (error code `2003`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
     BadRequest:
       description: Invalid request - validation error
       content:
