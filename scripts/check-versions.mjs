@@ -27,6 +27,7 @@ const published = (relative) => !relative.startsWith("scripts/")
 // live registry by npm run validate:ecosystem-hosted, so neither is scanned
 // here.
 const SCAN_DIRECTORIES = [
+  "agent-reference",
   "integrations",
   "examples",
   "getting-started",

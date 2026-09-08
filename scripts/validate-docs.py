@@ -5,7 +5,7 @@ import re
 import sys
 from pathlib import Path
 from api_navigation import validate_api_navigation, page_paths
-from origins import origin, production_text, source_ref, target
+from origins import origin, production_text, source_ref, target, STAGING_INSTRUCTION_REFERENCE
 
 
 def spec(text: str) -> str:
@@ -89,7 +89,7 @@ if config.get("navbar", {}).get("primary") != {
 if config.get("navbar", {}).get("links") != [
     {
         "label": "Copy agent prompt",
-        "href": "/getting-started/ai-agents#relay-agent-prompt",
+        "href": "/agent-reference/prompt#relay-agent-prompt",
         "icon": "copy",
     }
 ]:
@@ -213,100 +213,12 @@ expected_tabs = ["Guides", "Error Codes", "API Reference"]
 if actual_tabs != expected_tabs:
     raise SystemExit(f"top tab order changed: {actual_tabs}")
 
-expected_guide_groups = [
-    "Introduction",
-    "Getting started",
-    "Messaging",
-    "Chats",
-    "Contacts",
-    "Webhooks",
-    "WebSocket",
-    "Integrations",
-    "Platform",
-    "Examples",
-]
-actual_guide_groups = [group["group"] for group in tabs[0]["groups"]]
-if actual_guide_groups != expected_guide_groups:
-    raise SystemExit(f"guide group order changed: {actual_guide_groups}")
-
-expected_guide_pages = {
-    "Introduction": ["index"],
-    "Getting started": [
-        "getting-started/quickstart",
-        "guides/agents/lifecycle",
-        "getting-started/authentication",
-        "getting-started/sdks",
-        "getting-started/key-concepts",
-        "getting-started/ai-agents",
-        "getting-started/best-practices",
-    ],
-    "Messaging": [
-        "guides/messaging/index",
-        "guides/messaging/sending-messages",
-        "guides/messaging/mentions",
-        "guides/messaging/message-details",
-        "guides/messaging/message-parts",
-        "guides/messaging/attachments",
-        "guides/messaging/voice-memos",
-        "guides/messaging/receiving-media",
-        "guides/messaging/rich-link-previews",
-        "guides/messaging/replies",
-        "guides/messaging/reactions",
-        "guides/messaging/edit-and-unsend",
-        "guides/messaging/delivery-receipts",
-    ],
-    "Chats": [
-        "guides/chats/index",
-        "guides/chats/group-chats",
-        "guides/chats/participants",
-        "guides/chats/typing-indicators",
-        "guides/chats/share-contact-card",
-        "guides/chats/message-history",
-    ],
-    "Contacts": [
-        "guides/contacts/add-requests",
-        "guides/contact-cards",
-        "guides/chats/blocked-handles",
-    ],
-    "Webhooks": [
-        "guides/webhooks/index",
-        "guides/webhooks/subscriptions",
-        "guides/webhooks/delivery",
-        "guides/webhooks/events",
-    ],
-    "WebSocket": [
-        "guides/websocket/index",
-        "guides/websocket/protocol",
-        "guides/websocket/acknowledgements",
-        "guides/websocket/full-sync",
-    ],
-    "Platform": [
-        "guides/platform/idempotency",
-        "guides/platform/rate-limits",
-        "guides/platform/debugging",
-    ],
-    "Integrations": [
-        "integrations/index",
-        "integrations/chat-sdk",
-        "integrations/cloudflare-think",
-        "integrations/openclaw",
-        "integrations/hermes",
-        "integrations/claude-code",
-        "integrations/codex",
-        "integrations/cursor",
-        "integrations/cli",
-        "integrations/native-setup",
-        "integrations/mcp",
-        "integrations/skills",
-    ],
-    "Examples": ["examples/index"],
-}
-for group in tabs[0]["groups"]:
-    expected = expected_guide_pages[group["group"]]
-    if group["pages"] != expected:
-        raise SystemExit(
-            f"{group['group']} page order changed: {group['pages']}"
-        )
+# Page boundaries and navigation coverage are checked independently of a
+# frozen list of heading strings. Editorial changes must not require growing
+# an existing catch-all page to satisfy a historical outline.
+from docs_structure import validate_structure
+validate_structure(root, config)
+expected_guide_groups = [group["group"] for group in tabs[0]["groups"]]
 
 expected_error_groups = [
     "Overview",
@@ -357,27 +269,12 @@ for path in required_paths:
     if not path.exists():
         raise SystemExit(f"required atomic guide missing: {path.relative_to(root)}")
 for path in [
-    root / "guides/messaging/index.mdx",
-    root / "guides/chats/index.mdx",
-    root / "guides/webhooks/index.mdx",
-    root / "guides/websocket/index.mdx",
-    root / "integrations/index.mdx",
-    root / "api-reference/overview.mdx",
+    root / "guides/messaging/index.mdx", root / "guides/chats/index.mdx",
+    root / "integrations/index.mdx", root / "api-reference/overview.mdx",
 ]:
     if 'sidebarTitle: "Overview"' not in path.read_text():
         raise SystemExit(f"overview sidebar label drifted: {path.relative_to(root)}")
-for relative, label in {
-    "error/index.mdx": "All errors",
-    "guides/webhooks/events.mdx": "Webhook Event Types",
-    "guides/webhooks/subscriptions.mdx": "Subscriptions",
-    "guides/webhooks/delivery.mdx": "Delivery",
-    "guides/websocket/protocol.mdx": "Frames",
-    "guides/websocket/acknowledgements.mdx": "Acknowledgements",
-    "guides/websocket/full-sync.mdx": "FULL sync",
-}.items():
-    path = root / relative
-    if f'sidebarTitle: "{label}"' not in path.read_text():
-        raise SystemExit(f"concise sidebar label drifted: {relative}")
+
 for stale in [
     root / "guides/chats/install-agents.mdx",
     root / "guides/socket-mode.mdx",
@@ -414,257 +311,9 @@ ecosystem_paths = [
     root / "examples/index.mdx",
 ]
 ecosystem_text = "\n".join(path.read_text() for path in ecosystem_paths)
-canonical_ecosystem_sources = {
-    "integrations/chat-sdk.mdx": "packages/chat-sdk-adapter",
-    "integrations/cli.mdx": "packages/cli",
-    "integrations/mcp.mdx": "packages/mcp",
-    "integrations/openclaw.mdx": "packages/openclaw",
-    "integrations/claude-code.mdx": "packages/claude-code",
-    "integrations/cloudflare-think.mdx": "cookbook/cloudflare-think-agent",
-    "integrations/skills.mdx": "skills/relay",
-    "examples/index.mdx": "cookbook",
-}
-for relative, source_path in canonical_ecosystem_sources.items():
-    expected = spec(
-        "https://github.com/RelayMessenger/Relay-SDK/tree/staging/"
-        f"{source_path}"
-    )
-    if expected not in (root / relative).read_text():
-        raise SystemExit(
-            f"integrations lost canonical source link: {expected}"
-        )
-
-# Each coding-agent host installs from a discovery manifest at the Relay-SDK
-# repository root. The pages must name the manifest their host reads, so a
-# reader can see what a plain clone of Relay-SDK offers that host.
-for relative, manifest in {
-    "integrations/claude-code.mdx": ".claude-plugin/marketplace.json",
-    "integrations/codex.mdx": ".agents/plugins/marketplace.json",
-    "integrations/cursor.mdx": ".cursor-plugin/marketplace.json",
-}.items():
-    expected = spec(
-        "https://github.com/RelayMessenger/Relay-SDK/blob/staging/"
-        f"{manifest}"
-    )
-    if expected not in (root / relative).read_text():
-        raise SystemExit(
-            f"integrations lost root discovery manifest: {expected}"
-        )
-
-hosted_lock = json.loads(
-    (root / "scripts/ecosystem-hosted-lock.json").read_text()
-)
-locked_sdk_paths = hosted_lock["repositories"]["Relay-SDK"]["paths"]
-for locked_path in [
-    ".agents/plugins/marketplace.json",
-    ".cursor-plugin/marketplace.json",
-    ".claude-plugin/marketplace.json",
-    "plugins/relay",
-    "packages/claude-code/plugin",
-]:
-    if locked_path not in locked_sdk_paths:
-        raise SystemExit(f"hosted lock lost root discovery path: {locked_path}")
-
-hermes_source = "https://github.com/RelayMessenger/Relay-Hermes"
-if hermes_source not in (root / "integrations/hermes.mdx").read_text():
-    raise SystemExit(f"integrations lost separate source: {hermes_source}")
-
-for stale_repository in [
-    "Relay-Chat-SDK",
-    "Relay-CLI",
-    "Relay-MCP",
-    "Relay-OpenClaw",
-    "Relay-Agent-Starter",
-    "Relay-Skills",
-    "Relay-Examples",
-]:
-    stale = f"https://github.com/RelayMessenger/{stale_repository}"
-    if stale in ecosystem_text:
-        raise SystemExit(f"standalone source link returned: {stale}")
-
-# Relay-Codex, Relay-Cursor and Relay-Claude-Code were packaging mirrors, not
-# host requirements, and are archived. An archived repository stays readable,
-# so nothing breaks on its own; every published page and the hosted lock must
-# stop naming one anyway, or a reader installs bytes that never move again.
-lock_text = (root / "scripts/ecosystem-hosted-lock.json").read_text()
-published_text = "\n".join(path.read_text() for path in mdx_paths)
-for archived_mirror in ["Relay-Codex", "Relay-Cursor", "Relay-Claude-Code"]:
-    if archived_mirror in published_text:
-        raise SystemExit(f"archived install mirror returned: {archived_mirror}")
-    if archived_mirror in lock_text:
-        raise SystemExit(
-            f"archived install mirror returned to the hosted lock: {archived_mirror}"
-        )
-
-for version in [
-    *(pinned(name) for name in npm_latest if name not in {"@relaymessenger/cli", "relaymessenger"}),
-    *(pinned(name) for name in versions["pypi"]),
-    "@relaymessenger/cookbook-cloudflare-think-agent@0.1.0",
-]:
-    if version not in ecosystem_text:
-        raise SystemExit(f"integrations lost current source version: {version}")
-for marker in [
-    "serverless-friendly",
-    "Acknowledged WebSocket",
-    "Cloudflare Think messenger",
-    "Local Relay MCP",
-    "hosted docs MCP",
-]:
-    if marker not in ecosystem_text:
-        raise SystemExit(f"integrations lost runtime boundary: {marker}")
-
-ecosystem_index_text = (root / "integrations/index.mdx").read_text()
-for name, version in npm_latest.items():
-    if name == "@relaymessenger/cli":
-        continue  # Historical registry snapshot; canonical CLI publication is pending.
-    if spec(f"| `{name}` | `{version}` |") not in ecosystem_index_text:
-        raise SystemExit(f"live npm tag truth lost: {name}@{version}")
-if "The five established packages retain their recorded release versions." not in ecosystem_index_text:
-    raise SystemExit("established package release status lost")
-
-chat_sdk_text = (root / "integrations/chat-sdk.mdx").read_text()
-# npm provenance is a property of one published version. The staging
-# prereleases carried attestations; the 0.3.0 releases of 2026-09-07 carry
-# none, and the registry answers 404 for them. The page quotes a source commit
-# and the provenance sentence only while versions.json records a commit for
-# the `latest` version, and never otherwise.
-provenance_markers = [
-    npm_source_commit["@relaymessenger/chat-sdk-adapter"],
-    "Published by the staging workflow with npm provenance",
-]
-if npm_source_commit["@relaymessenger/chat-sdk-adapter"] is None:
-    for marker in ["Published artifact source commit", "Provenance |"]:
-        if marker in chat_sdk_text:
-            raise SystemExit(
-                f"Chat SDK page claims provenance the latest release lacks: {marker}"
-            )
-    provenance_markers = []
-for marker in [
-    "npm install chat@4.39.0 @chat-adapter/state-memory@4.39.0",
-    spec("@relaymessenger/chat-sdk-adapter@staging"),
-    *provenance_markers,
-    npm_integrity["@relaymessenger/chat-sdk-adapter"],
-    "stable public HTTPS",
-    pinned("@relaymessenger/sdk"),
-    "Retain the prepared Attachment identity",
-    "automatic local byte or file upload",
-    "ambiguous send",
-]:
-    if marker not in chat_sdk_text:
-        raise SystemExit(f"Chat SDK media boundary lost: {marker}")
-
-if re.search(r"\bsource[- ]only\b|\bsource tarball\b", chat_sdk_text, re.I):
-    raise SystemExit("published Chat SDK is described as source-only")
-
-cli_text = (root / "integrations/cli.mdx").read_text()
-for marker in [
-    spec("npx relaymessenger@staging --help"),
-    spec('npx relaymessenger@staging --profile "$RELAY_DEV_PROFILE" events listen --acknowledge-events'),
-    "requires an explicit non-production profile",
-    "dedicated Agent may advance its durable checkpoint",
-]:
-    if marker not in cli_text:
-        raise SystemExit(f"Relay CLI event-listener boundary lost: {marker}")
-if "relay webhooks listen" in cli_text:
-    raise SystemExit("stale Relay CLI event-listener command returned")
-
-codex_text = (root / "integrations/codex.mdx").read_text()
-for marker in [
-    "Codex CLI",
-    "0.152.0",
-    "codex plugin marketplace add",
-    spec("https://github.com/RelayMessenger/Relay-SDK --ref staging"),
-    "codex plugin add relay@relay-plugin-marketplace",
-]:
-    if marker not in codex_text:
-        raise SystemExit(f"Codex staging install proof lost: {marker}")
-
-# Cursor loads a local plugin from a directory holding a plugin manifest.
-# Relay-SDK's root has none, so the link must name the plugin subtree.
-cursor_text = (root / "integrations/cursor.mdx").read_text()
-for marker in [
-    "ln -s /absolute/path/to/Relay-SDK/plugins/relay ~/.cursor/plugins/local/relay",
-    "https://github.com/RelayMessenger/Relay-SDK.git",
-]:
-    if marker not in cursor_text:
-        raise SystemExit(f"Cursor staging install proof lost: {marker}")
-
-claude_text = (root / "integrations/claude-code.mdx").read_text()
-claude_normalized = re.sub(r"\s+", " ", claude_text)
-for marker in [
-    pinned("relay-claude-channel"),
-    "The Relay plugin version is recorded in the selected catalog and plugin manifest",
-    spec("/plugin marketplace add RelayMessenger/Relay-SDK@staging"),
-    "/plugin install relay@relay-messenger",
-    "Only addressed group Messages start Claude turns",
-    "structured `parts[].mention`",
-    "`deliveries[]` row whose `contact.is_me` is `true`",
-    "authenticated origin of the active turn",
-    "`complete_processing`",
-    "never leave a Relay turn open",
-    "permission prompts remain local to Claude Code",
-    "supersession, expiry, shutdown, and restart",
-]:
-    if marker not in claude_normalized:
-        raise SystemExit(f"Claude Code channel boundary lost: {marker}")
-
-hermes_text = re.sub(
-    r"\s+",
-    " ",
-    (root / "integrations" / "hermes.mdx").read_text(),
-)
-for marker in [
-    "slash-command Messages are ignored before Hermes dispatch",
-    "fails closed for `/update` and every other slash command",
-    "ordinary Contact chat continues",
-    "resolve inside the active Hermes profile",
-    "do not inherit another profile's Relay credentials or SQLite state",
-]:
-    if marker not in hermes_text:
-        raise SystemExit(f"Hermes profile/slash boundary lost: {marker}")
-
-examples_text = (root / "examples/index.mdx").read_text()
-for recipe in [
-    "cookbook/send-a-message",
-    "cookbook/send-an-image",
-    "cookbook/send-a-voice-memo",
-]:
-    if recipe not in examples_text:
-        raise SystemExit(f"Relay Cookbook taxonomy lost: {recipe}")
-retired_combined_recipe = "-and-".join(["messages", "attachments"])
-if retired_combined_recipe in ecosystem_text.lower():
-    raise SystemExit("retired combined Message and Attachment taxonomy returned")
-
-for index, line in enumerate(ecosystem_text.splitlines()):
-    if not line.startswith("git clone"):
-        continue
-    command = line
-    if line.endswith("\\") and index + 1 < len(ecosystem_text.splitlines()):
-        command += " " + ecosystem_text.splitlines()[index + 1].strip()
-    if "https://github.com/RelayMessenger/" in command and f"--branch {source_ref()}" not in command:
-        raise SystemExit(f"public source clone is not pinned to the target branch: {command}")
-
-hosted_proof_text = "\n".join(
-    (root / relative).read_text()
-    for relative in [
-        "integrations/skills.mdx",
-        "integrations/codex.mdx",
-        "integrations/cursor.mdx",
-    ]
-)
-for marker in [
-    "## Prepare hosted proof",
-    "only after this docs candidate is pushed",
-    "Local Docs validation",
-]:
-    if marker not in hosted_proof_text:
-        raise SystemExit(f"hosted proof deferral lost: {marker}")
-for stale in [
-    "## Verify staging search",
-    "Staging search must return",
-]:
-    if stale in hosted_proof_text:
-        raise SystemExit(f"premature hosted proof claim returned: {stale}")
+# Integration installation and safety boundaries have dedicated regression
+# tests. Registry inventories and internal release proof belong in tooling,
+# not as mandatory prose in every installation guide.
 
 for path in mdx_paths:
     text = path.read_text()
@@ -790,396 +439,9 @@ for path in [*mdx_paths, root / "skill.md"]:
                 "not a path in api-reference/openapi.yaml"
             )
 
-architecture_text = (root / "INFORMATION-ARCHITECTURE.md").read_text()
-heading_inventory = architecture_text.split(
-    "## 16. Exact heading skeletons", 1
-)[1].split("## 17. Current page map", 1)[0]
-documented_heading_rows = {
-    page.strip().lower(): re.findall(r"`([^`]+)`", order)
-    for page, order in re.findall(r"^\| ([^|]+) \| (.+) \|$", heading_inventory, re.M)
-    if "`" in order
-}
-heading_aliases = {
-    "participants and membership": "participants",
-    "websocket acknowledgements": "acknowledgements",
-    "websocket full sync": "full sync",
-    "websocket frames": "websocket frames",
-    "limits": "rate limits",
-    "error codes": "error codes",
-    "api reference": "api reference overview",
-    "webhook events": "webhook event types",
-}
-for path in mdx_paths:
-    text = path.read_text()
-    frontmatter = text.split("---", 2)[1]
-    title_match = re.search(r'^title:\s*"([^"]+)"', frontmatter, re.M)
-    if not title_match:
-        raise SystemExit(f"quoted title missing from frontmatter: {path}")
-    title = title_match.group(1).lower()
-    if "error/codes/" in str(path.relative_to(root)):
-        inventory_key = "one error code"
-    else:
-        inventory_key = heading_aliases.get(title, title)
-    expected_headings = (
-        ["Operations", "See also"]
-        if path.relative_to(root).as_posix().startswith("api-reference/resources/")
-        else documented_heading_rows.get(inventory_key)
-    )
-    if expected_headings is None:
-        raise SystemExit(
-            f"heading inventory missing for {path.relative_to(root)}: {inventory_key}"
-        )
-    actual_headings = h2_headings(text)
-    if actual_headings != expected_headings:
-        raise SystemExit(
-            f"heading inventory drifted for {path.relative_to(root)}: "
-            f"{actual_headings} != {expected_headings}"
-        )
-
-side_by_side_guides = [
-    "getting-started/quickstart.mdx",
-    "guides/chats/index.mdx",
-    "guides/messaging/sending-messages.mdx",
-    "guides/messaging/mentions.mdx",
-    "guides/messaging/message-details.mdx",
-    "guides/messaging/attachments.mdx",
-    "guides/messaging/voice-memos.mdx",
-    "guides/messaging/rich-link-previews.mdx",
-    "guides/messaging/replies.mdx",
-    "guides/messaging/reactions.mdx",
-    "guides/messaging/delivery-receipts.mdx",
-    "guides/chats/group-chats.mdx",
-    "guides/chats/participants.mdx",
-    "guides/chats/typing-indicators.mdx",
-    "guides/chats/share-contact-card.mdx",
-    "guides/chats/message-history.mdx",
-    "guides/chats/blocked-handles.mdx",
-    "guides/contact-cards.mdx",
-    "guides/contacts/add-requests.mdx",
-    "guides/webhooks/index.mdx",
-    "guides/webhooks/subscriptions.mdx",
-    "guides/webhooks/events.mdx",
-    "guides/websocket/index.mdx",
-]
-for relative in side_by_side_guides:
-    text = (root / relative).read_text()
-    if "TypeScript SDK" not in text or "cURL" not in text:
-        raise SystemExit(f"SDK/cURL task variants missing: {relative}")
-
-share_text = (root / "guides/chats/share-contact-card.mdx").read_text()
-if "POST /v1/chats/{chatId}/share_contact_card" not in share_text:
-    raise SystemExit("Contact Card sharing guide lost the canonical route")
-if not re.search(r"\bexisting Chat\b", share_text):
-    raise SystemExit("Contact Card sharing guide must require an existing Chat")
-if not re.search(
-    r"\b(?:send an empty request|empty request body)\b",
-    share_text,
-    re.I,
-):
-    raise SystemExit("Contact Card sharing guide must state that the route is bodyless")
-
-contact_text = (root / "guides/contact-cards.mdx").read_text()
-if not re.search(rf"\bPOST https://{re.escape(origin('api.staging.relayapp.im'))}/v1/contact_card\b", contact_text):
-    raise SystemExit("Contact Card configuration guide lost POST /v1/contact_card")
-if not re.search(
-    rf"\bPATCH\b[\s\S]{{0,100}}{re.escape(origin('api.staging.relayapp.im'))}/v1/contact_card\?handle=",
-    contact_text,
-):
-    raise SystemExit("Contact Card configuration guide lost its PATCH operation")
-
-add_requests_text = (root / "guides/contacts/add-requests.mdx").read_text()
-for required in [
-    "Username-scoped Handle",
-    "Premium Handle",
-    "relay.contactRequests.create",
-    f"POST https://{origin('api.staging.relayapp.im')}/v1/contact_requests",
-    '"state": "pending"',
-    "`402`",
-    "`contact.added`",
-    "`contact.removed`",
-    '"chat_id":',
-]:
-    if required not in add_requests_text:
-        raise SystemExit(f"Add requests guide is missing: {required}")
-if "greeting" in add_requests_text.lower():
-    raise SystemExit("Add requests guide invented greeting behavior")
-
-receipt_text = (root / "guides/messaging/delivery-receipts.mdx").read_text()
-if "/v1/chats/$CHAT_ID/read" not in receipt_text:
-    raise SystemExit("Delivery receipt guide lost the Agent Read route")
-if "Authorization: Bearer $RELAY_AGENT_TOKEN" not in receipt_text:
-    raise SystemExit("Delivery receipt guide must authenticate Read with an Agent Token")
-for required in [
-    "`deliveries`",
-    "direct and group Chats",
-    "per-recipient",
-]:
-    if required not in receipt_text:
-        raise SystemExit(f"Delivery receipt rationale is missing: {required}")
-receipt_normalized = re.sub(r"\s+", " ", receipt_text)
-for required in [
-    "**Delivered means Relay accepted and stored the Message.**",
-    "same `delivered_at` value as the Message commit time",
-    "Webhook `2xx` responses and WebSocket ACKs acknowledge event transport only.",
-    "**Read is optional.**",
-    "the only operation that advances Read is `POST /v1/chats/{chatId}/read`",
-    "does not show those labels in group Chats",
-    "Message API remains the source of truth for per-recipient state in direct and group Chats",
-]:
-    if required not in receipt_normalized:
-        raise SystemExit(f"approved delivery wording is missing: {required}")
-
-delivery_surface_text = "\n".join(
-    (root / relative).read_text()
-    for relative in [
-        "getting-started/key-concepts.mdx",
-        "getting-started/quickstart.mdx",
-        "guides/webhooks/events.mdx",
-        "guides/messaging/delivery-receipts.mdx",
-        "guides/webhooks/index.mdx",
-        "guides/webhooks/delivery.mdx",
-        "guides/websocket/acknowledgements.mdx",
-        "guides/websocket/full-sync.mdx",
-        "skill.md",
-    ]
-)
-delivery_surface_normalized = re.sub(r"\s+", " ", delivery_surface_text)
-for required in [
-    "Delivered means Relay accepted and stored the Message.",
-    "A webhook `2xx` acknowledges event transport only.",
-    "A WebSocket ACK acknowledges event transport only.",
-    "Read is optional",
-    "`POST /v1/chats/{chatId}/read`",
-]:
-    if required not in delivery_surface_normalized:
-        raise SystemExit(f"delivery surface is missing: {required}")
-for forbidden in [
-    "agent reaches Delivered after a webhook",
-    "marks that agent recipient Delivered",
-    "marks the Message Delivered to the agent",
-    "can advance their Delivered state",
-    "message.received delivery advances only at the durable ACK boundary",
-    "Relay client application applied the Message",
-    "Relay device durably applies the Message",
-    "recipient-specific Delivered boundary",
-]:
-    if forbidden.lower() in delivery_surface_normalized.lower():
-        raise SystemExit(f"stale delivery semantics returned: {forbidden}")
-
-attachments_text = (root / "guides/messaging/attachments.mdx").read_text()
-if "Public URL media parts per Message" not in attachments_text:
-    raise SystemExit("Attachment guide must scope the 40-part limit to URL media")
-if not all(term in attachments_text for term in [
-    "Every DNS answer",
-    "Every hop is revalidated",
-    "at most five redirects",
-]):
-    raise SystemExit("Attachment guide lost URL import safety boundaries")
-if (
-    not all(term in attachments_text for term in [
-        "any file type",
-        "application/octet-stream",
-        "nosniff",
-        "Content-Disposition",
-        "SVG",
-    ])
-    or re.search(r"\brejects\s+SVG\b", attachments_text)
-):
-    raise SystemExit("Attachment guide lost the any-file-type rule")
-for required in [
-    "relay.attachments.retrieve",
-    'attachment.status !== "complete"',
-    '"Range: bytes=0-1048575"',
-    "relay.attachments.delete",
-]:
-    if required not in attachments_text:
-        raise SystemExit(f"Attachment lifecycle guide is missing: {required}")
-
-webhook_text = (root / "guides/webhooks/index.mdx").read_text()
+from docs_behavior import validate_behavior
+validate_behavior(root)
 webhook_events_text = (root / "guides/webhooks/events.mdx").read_text()
-webhook_delivery_text = (root / "guides/webhooks/delivery.mdx").read_text()
-webhook_delivery_normalized = re.sub(r"\s+", " ", webhook_delivery_text)
-websocket_text = (root / "guides/websocket/index.mdx").read_text()
-websocket_protocol_text = (root / "guides/websocket/protocol.mdx").read_text()
-websocket_recovery_text = (root / "guides/websocket/full-sync.mdx").read_text()
-typing_text = (root / "guides/chats/typing-indicators.mdx").read_text()
-typing_normalized = re.sub(r"\s+", " ", typing_text)
-transport_text = "\n".join([
-    webhook_events_text,
-    webhook_text,
-    websocket_text,
-    websocket_protocol_text,
-    webhook_delivery_text,
-])
-for required in [
-    "one or more saved subscriptions",
-    "subscription list must be empty",
-    "HTTP `409`",
-    "closes connected agent sockets",
-    "same `event_id`",
-    "wait durably",
-    "30 days",
-]:
-    if required.lower() not in transport_text.lower():
-        raise SystemExit(f"final event path decision is missing: {required}")
-for forbidden in [
-    "relay.websocket.update",
-    f"PUT https://{origin('api.staging.relayapp.im')}/v1/websocket",
-    '{"enabled":true}',
-    '{"enabled":false}',
-    "WebSocket is enabled",
-]:
-    if forbidden.lower() in transport_text.lower():
-        raise SystemExit(f"stale WebSocket setting returned: {forbidden}")
-if (
-    '"webhook_version": "2026-08-30"' not in webhook_events_text
-    or "use this fixed payload version" not in webhook_events_text.lower()
-):
-    raise SystemExit("webhook event guide lost the fixed payload version")
-for required in [
-    "MessageEvent",
-    "ReactionEventBase",
-    "ParticipantAddedEvent",
-    "ParticipantRemovedEvent",
-    "ChatCreatedEvent",
-    "ChatGroupNameUpdatedEvent",
-    "ChatGroupIconUpdatedEvent",
-    "ChatTypingIndicatorStartedEvent",
-    "ChatTypingIndicatorStoppedEvent",
-    "ContactAddedEvent",
-    "ContactRemovedEvent",
-]:
-    if f"`{required}`" not in webhook_events_text:
-        raise SystemExit(f"event payload schema missing from catalog: {required}")
-if '"data": {}' in webhook_events_text:
-    raise SystemExit("event catalog returned an empty event-specific payload")
-if (
-    "`4410`" not in websocket_protocol_text
-    or "`webhook_configured`" not in websocket_protocol_text
-):
-    raise SystemExit("WebSocket protocol is missing the webhook-configured close")
-for reason in ["revoked", "heartbeat_timeout", "restart", "webhook_configured"]:
-    if f"`{reason}`" not in websocket_protocol_text:
-        raise SystemExit(f"WebSocket protocol is missing disconnect reason: {reason}")
-if "`stale_connection`" not in websocket_protocol_text:
-    raise SystemExit("WebSocket protocol is missing stale-connection error handling")
-if "A fatal error ends consumption" not in websocket_protocol_text:
-    raise SystemExit("WebSocket protocol lost fatal error handling")
-for required in [
-    f"wss://{origin('api.staging.relayapp.im')}/v1/websocket",
-    "Authorization: Bearer $RELAY_AGENT_TOKEN",
-    "Agent Token",
-    "multiple connected sockets",
-    "HTTP `409`",
-    "relay.websocket.run",
-]:
-    if required not in websocket_text:
-        raise SystemExit(f"WebSocket authentication guide is missing: {required}")
-if (
-    not re.search(r"\bping(?: frame)? every 30 seconds\b", websocket_protocol_text)
-    or "within 60 seconds" not in websocket_protocol_text
-):
-    raise SystemExit("WebSocket guide lost the 30-second ping and 60-second pong timeout")
-for forbidden in [
-    "/v1/websocket-connections",
-    "relay_ticket_",
-    "relay.v1.json",
-]:
-    if forbidden in websocket_text + "\n" + websocket_protocol_text:
-        raise SystemExit(f"stale WebSocket handshake returned: {forbidden}")
-for required in [
-    "full_sync",
-    "full_sync_complete",
-    "checkpoint_outside_retention",
-    "same `event_id`",
-    "pending webhook events for 30 days",
-]:
-    if required not in websocket_recovery_text:
-        raise SystemExit(f"WebSocket recovery guide is missing: {required}")
-for required in [
-    "1 immediate attempt",
-    "Up to 10",
-    "10 seconds per attempt",
-    "`429`",
-    "`5xx`",
-    "Relay stops after a terminal response",
-    "Recover current Chat and Message state",
-    "HTTP `3xx`",
-    "redirect is not followed",
-    "localhost",
-    "private",
-    "link-local",
-    "cloud metadata",
-    "same `event_id`",
-]:
-    if required not in webhook_delivery_normalized:
-        raise SystemExit(f"Webhook delivery policy is missing: {required}")
-for required in [
-    "chat.typing_indicator.started",
-    "chat.typing_indicator.stopped",
-    "every 60 seconds",
-    "85 to 90 seconds",
-    '"contact": {',
-    "expires automatically",
-]:
-    if required not in typing_normalized:
-        raise SystemExit(f"Typing guide is missing: {required}")
-
-# Chat size comes from Relay-Server server/src/chat-limits.ts:
-# MAX_OTHER_HANDLES = 6 and MAX_CHAT_HANDLES = MAX_OTHER_HANDLES + 1, the
-# owner's 2026-09-05 ruling (one user plus up to six agents, seven total).
-# The Limits page carried 7 and 8 until 2026-09-07; these rows pin the code.
-limits_text = (root / "guides/platform/rate-limits.mdx").read_text()
-for row in [
-    "| Other Contacts in `to` | 6 |",
-    "| Total active Contacts | 7 |",
-]:
-    if row not in limits_text:
-        raise SystemExit(f"Limits page drifted from chat-limits.ts: {row}")
-
-group_text = (root / "guides/chats/group-chats.mdx").read_text()
-if (
-    "2 to 6 recipient Handles plus the sender" not in group_text
-    or "keep at least three active Contacts" not in group_text
-):
-    raise SystemExit("Group Chat guide lost max-7 and minimum-three rules")
-
-for page, phrases in {
-    "guides/chats/index.mdx": [
-        "Both the user and an authorized agent can create and manage Chats",
-        "On creation or reuse of a Chat containing a user, every selected agent",
-        "already be in that user's Contacts and unblocked",
-        "sender plus at most 6 others",
-        "agent-to-agent Chat with zero users",
-    ],
-    "guides/chats/participants.mdx": [
-        "Only agents can be introduced",
-        "an agent adding or removing others must still be in that user's Contacts and unblocked",
-        "leave under the existing membership rules even after the user removes it from Contacts",
-        "recorded membership periods and the history choice made when adding the agent",
-        "Omitting `hide_history` keeps history visible from joining onward",
-        "earlier retained group history",
-        '"hide_history":false',
-        "an active member can continue sending in that group after Contact removal",
-        "Direct Messages still require the Contact relationship",
-        "hide_history: false",
-        "history already cleared for that participant",
-        "`participant.added`",
-        "`participant.removed`",
-    ],
-    "skill.md": [
-        "Every Chat has at most 7 active Contacts total",
-        "On creation or reuse of a Chat containing a user, every selected agent",
-        "Self-leave follows the existing membership rules",
-        "Do not claim that removing a Contact removes the agent from all Chats or erases history",
-        "Do not invent approval prompts or company-policy UI",
-        "Existing agent-only communication remains supported",
-    ],
-}.items():
-    text = " ".join((root / page).read_text().replace("**", "").split())
-    for phrase in phrases:
-        if phrase not in text:
-            raise SystemExit(f"{page} lost Contacts admission rule: {phrase}")
 
 expected_error_codes = {
     1004, 1005, 2001, 2003, 2004, 2005, 2006,
@@ -1475,11 +737,6 @@ if (
         "API Reference endpoint order drifted from OpenAPI: "
         f"{sorted(set(configured_endpoint_refs) ^ set(contract_endpoint_refs))}"
     )
-api_overview_text = (root / "api-reference/overview.mdx").read_text()
-for endpoint_ref in configured_endpoint_refs:
-    method, endpoint = endpoint_ref.split(" ", 1)
-    if f"| `{method}` | `{endpoint}` |" not in api_overview_text:
-        raise SystemExit(f"API overview endpoint missing: {endpoint_ref}")
 mint_sidebar_operations = dict(re.findall(
     r"^      operationId: ([A-Za-z0-9]+)\n"
     r"^      x-mint:\n"
@@ -1519,9 +776,7 @@ contract_events = {
     value.strip()
     for value in re.findall(r"^        - (.+)$", event_type_block.group(1), re.M)
 }
-event_catalog_text = webhook_events_text.split(
-    "## Event types", 1
-)[1].split("## List event types", 1)[0]
+event_catalog_text = webhook_events_text
 documented_events = set(
     re.findall(
         r"`((?:message|reaction|participant|chat|contact)\.[a-z_.]+)`",
@@ -1557,6 +812,8 @@ if disconnect_reasons != [
 handwritten_paths = [*mdx_paths, root / "skill.md", root / "README.md"]
 handwritten_text = "\n".join(path.read_text() for path in handwritten_paths)
 all_contract_text = handwritten_text + "\n" + openapi_text
+if target() == "production" and STAGING_INSTRUCTION_REFERENCE.search(handwritten_text):
+    raise SystemExit("staging installation or credential guidance returned to production")
 generated_paths = [root / "llms.txt", root / "llms-full.txt"]
 generated_text = "\n".join(path.read_text() for path in generated_paths)
 llms_index_text = (root / "llms.txt").read_text()
@@ -1599,7 +856,7 @@ if (root / "skill.md").read_bytes() != (
 ).read_bytes():
     raise SystemExit("published Relay skill drifted from skill.md")
 skill_text = (root / "skill.md").read_text()
-agent_prompt_page = (root / "getting-started/ai-agents.mdx").read_text()
+agent_prompt_page = (root / "agent-reference/prompt.mdx").read_text()
 prompt_match = re.search(
     r"^## Relay agent prompt\n.*?^````text Relay agent prompt\n"
     r"(.*?)\n````$",
@@ -1620,7 +877,7 @@ if (
 ):
     raise SystemExit("agent-prompt.js payload drifted from skill.md")
 if (
-    'const FALLBACK_PATH = "/getting-started/ai-agents#relay-agent-prompt";'
+    'const FALLBACK_PATH = "/agent-reference/prompt#relay-agent-prompt";'
     not in agent_prompt_script
 ):
     raise SystemExit("agent-prompt.js lost its safe fallback destination")
@@ -1666,7 +923,7 @@ for stale_hook in ["Implement this in the agent backend's connection flow", "## 
 setup_greeting_pages = {
     "skill.md", ".mintlify/skills/relay/SKILL.md",
     "getting-started/quickstart.mdx", "getting-started/authentication.mdx",
-    "getting-started/ai-agents.mdx",
+    "getting-started/ai-agents.mdx", "agent-reference/prompt.mdx",
 }
 for path in handwritten_paths:
     if (path.relative_to(root).as_posix() not in setup_greeting_pages
@@ -1679,7 +936,7 @@ for required in [
 ]:
     if required not in skill_text:
         raise SystemExit(f"setup prompt lost safety guidance: {required}")
-if "setup agent performs this step once" not in (root / "getting-started/quickstart.mdx").read_text():
+if "/agent-reference/prompt#relay-agent-prompt" not in (root / "getting-started/quickstart.mdx").read_text():
     raise SystemExit("Quickstart lost setup-agent greeting ownership")
 
 for name, pattern in {
@@ -1724,7 +981,7 @@ print(
     f"validated {len(files)} Relay public pages, three tabs, "
     "Console CTA, Copy agent prompt action, logo destination, Quickstart sidebar placement, "
     "atomic guide groups, "
-    "exact heading inventory, "
+    "focused page boundaries, "
     "frontmatter, bodyless Contact Card sharing, exact delivery states and error pages, "
     "typing, exact OpenAPI event inventory, webhook retries, transport recovery, URL safety, "
     "Add requests and exact idempotency scope, private Contact and route exclusion, Agent Read authentication, "

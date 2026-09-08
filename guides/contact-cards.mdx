@@ -1,80 +1,64 @@
 ---
-title: "Contact Cards"
-description: "Configure the name and photo an agent can share into a Chat."
-keywords: ["Contact Card", "agent profile", "name", "photo"]
+title: "Configure a Contact Card"
+description: "Read and configure the name on your agent's Contact Card."
+keywords: ["Contact Card", "agent profile", "first_name", "last_name", "upsert"]
 ---
 
-A Contact Card stores the name and photo an agent can share with Contacts in a Chat.
+Configure the name on your agent's Contact Card, then share the card into a Chat when needed.
 
-## How Contact Cards work
+## Prerequisites
 
-**Configuration and sharing are separate actions.**
+| Input | Requirement |
+| --- | --- |
+| Authentication | The agent's Agent Token and a [configured SDK client](/getting-started/sdks) |
+| Handle | The same Handle authenticated by the token |
 
-<Steps>
-  <Step title="Configure the card">
-    Upsert the authenticated active agent's Contact Card.
-  </Step>
-  <Step title="Share it into a Chat">
-    Call the share endpoint for an existing Chat. Relay uses the active card automatically.
-  </Step>
-</Steps>
-
-Configuring a Contact Card changes the agent's card. Sharing makes that card available in one Chat.
+**Configuration and sharing are separate actions.** Use
+[Profile photos](/guides/contacts/profile-photos) to change the image and
+[Share a Contact Card](/guides/chats/share-contact-card) to share the configured card.
 
 ## Retrieve the card
 
 <CodeGroup>
 ```typescript TypeScript SDK
-const cards = await relay.contactCard.retrieve({
+const { contact_cards } = await relay.contactCard.retrieve({
   handle: "weather.acme",
 });
 ```
 
 ```bash cURL
-curl -sS https://api.staging.relayapp.im/v1/contact_card \
+curl -sS \
+  "https://api.staging.relayapp.im/v1/contact_card?handle=weather.acme" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 </CodeGroup>
 
-## Upsert the card
+Relay returns `200` with the authenticated agent's card:
 
-<CodeGroup>
-```typescript TypeScript SDK
-const card = await relay.contactCard.create({
-  handle: "weather.acme",
-  first_name: "Weather",
-  last_name: "Agent",
-  image_url: "https://agent.example/avatar.png",
-});
+```json Example response
+{
+  "contact_cards": [{
+    "handle": "weather.acme",
+    "first_name": "Weather",
+    "last_name": "Agent",
+    "image_url": null,
+    "is_active": true,
+    "kind": "agent"
+  }]
+}
 ```
 
-```bash cURL
-curl -sS -X POST https://api.staging.relayapp.im/v1/contact_card \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "handle":"weather.acme",
-    "first_name":"Weather",
-    "last_name":"Agent",
-    "image_url":"https://agent.example/avatar.png"
-  }'
-```
-</CodeGroup>
+## Update the name
 
-**`POST` is an upsert for the authenticated active agent.** The `handle` must
-match the Agent Token. Repeating the request replaces the card fields and
-returns the active card instead of failing because a card already exists.
-
-Omitting `last_name` or `image_url` from `POST` clears that field. Use `PATCH`
-when omitted fields should keep their current values.
-
-## Update the card
+Use `PATCH` to change selected fields while retaining the current photo and
+other omitted fields.
 
 <CodeGroup>
 ```typescript TypeScript SDK
 const card = await relay.contactCard.update({
   handle: "weather.acme",
-  image_url: "https://agent.example/new-avatar.png",
+  first_name: "Weather Assistant",
+  last_name: null,
 });
 ```
 
@@ -83,102 +67,70 @@ curl -sS -X PATCH \
   "https://api.staging.relayapp.im/v1/contact_card?handle=weather.acme" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"image_url":"https://agent.example/new-avatar.png"}'
+  -d '{"first_name":"Weather Assistant","last_name":null}'
 ```
 </CodeGroup>
 
-Omitted fields keep their current values.
+The `200` response is the updated card itself, without the `contact_cards`
+array wrapper. Sending `last_name: null` clears the last name.
 
-## Profile photo
+## Upsert the card
 
-`image_url` accepts any publicly reachable HTTPS image address. Relay downloads
-the picture, stores a permanent copy of its own, and returns the address of that
-copy.
+Use `POST` when you intend to replace the configured card fields and activate it.
 
-```json Response
-{
-  "handle": "weather.acme",
-  "first_name": "Weather",
-  "last_name": "Agent",
-  "image_url": "https://cdn.staging.relayapp.im/images/01993d4f-8a11-7e02-9c63-4b7a15d8e620/01993d50-d263-7d6b-87ce-90aba89b7815.png",
-  "is_active": true,
-  "kind": "agent"
-}
-```
-
-Send an address Relay already serves and Relay keeps it as it is, so returning a
-card straight back to `PATCH` copies nothing.
-
-| Rule | Value |
-| --- | --- |
-| Scheme | HTTPS, with no credentials in the address |
-| Host | A public host. `localhost`, private and loopback addresses, and names ending in `.localhost`, `.local`, `.internal`, `.home`, `.lan`, `.test`, `.invalid`, or `.example` are refused |
-| Size | 10 MB |
-| Redirects | Up to 3 followed |
-| Content types | `image/jpeg`, `image/png`, `image/gif`, `image/webp`, `image/heic`, `image/heif`, `image/tiff`, `image/bmp`, `image/x-icon` |
-
-A refused address leaves the stored photo as it was.
-
-| Address | Response |
-| --- | --- |
-| Not HTTPS, or carrying credentials | [`400` with code `1005`](/error/codes/1xxx/1005) |
-| Unreachable, over 10 MB, not an image type Relay serves, or bytes that do not match the type its host declares | [`422` with code `2006`](/error/codes/2xxx/2006) |
-
-The address Relay returns never expires, so cache it for as long as you want.
-Replacing the photo returns a new address instead of changing the bytes behind
-the old one.
-
-## Use a completed image attachment
-
-Promote an image uploaded by this same agent through the [Attachments API](/guides/messaging/attachments).
-**The attachment must be complete before the Contact Card update.**
+<Warning>
+**Omitting `last_name` or both image inputs from `POST` clears those values.**
+Use `PATCH` for a name-only update that should preserve an existing photo.
+</Warning>
 
 <CodeGroup>
 ```typescript TypeScript SDK
-const card = await relay.contactCard.update({
-  handle: "my_assistant.dev",
-  attachment_id: completedAttachmentId,
+const card = await relay.contactCard.create({
+  handle: "weather.acme",
+  first_name: "Weather",
+  last_name: "Agent",
 });
 ```
 
-```bash HTTPS
-curl -sS -X PATCH "https://api.staging.relayapp.im/v1/contact_card?handle=$RELAY_AGENT_HANDLE" \
+```bash cURL
+curl -sS -X POST https://api.staging.relayapp.im/v1/contact_card \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
-  --data "{\"attachment_id\":\"$ATTACHMENT_ID\"}"
+  -d '{"handle":"weather.acme","first_name":"Weather","last_name":"Agent"}'
 ```
 </CodeGroup>
 
-| Input | Requirement |
-| --- | --- |
-| `attachment_id` | A completed image upload owned by the authenticated agent. |
-| `image_url` | Alternative public HTTPS input; mutually exclusive with `attachment_id`, including null. |
-| `image_recipe` | Existing native recipe accompanying the selected URL or attachment. |
-| Neither image input | Keep the current image. |
+`POST` returns `200` with the active card. Repeating it replaces the fields
+again rather than failing because a card already exists.
 
-Relay copies the completed image from private attachment storage to permanent
-public image storage. The card returns the permanent `image_url`; its database
-row holds references and recipe metadata rather than binary file contents.
-
-## Fields
+## Fields and failures
 
 | Field | Meaning |
 | --- | --- |
-| `handle` | Handle owned by the authenticated agent |
-| `first_name` | First part of the shared name |
-| `last_name` | Optional last part of the shared name |
-| `image_url` | Photo address, always one Relay serves |
-| `is_active` | Whether the card is ready to share |
-| `kind` | Always `agent` for this Agent Token |
+| `handle` | Authenticated agent's Handle; required in the `POST` body and `PATCH` query |
+| `first_name` | Name, 1 to 255 characters; required for `POST` |
+| `last_name` | Optional last name, up to 255 characters; `PATCH` accepts `null` to clear it |
+| `image_url` | Current Relay-served photo URL, or `null`; see [Profile photos](/guides/contacts/profile-photos) |
+| `is_active` | Whether the card is active |
+| `kind` | `agent` for this Agent Token |
 
-## Sharing is separate
+| Outcome | Next action |
+| --- | --- |
+| `400` | Correct the fields and send at least one field in a `PATCH` |
+| `403` | Match the requested Handle to the Agent Token |
+| `404` | Confirm that the agent's card is available |
+| Uncertain name update | Retrieve the card before retrying or replacing its fields |
 
-Share the configured card through the target Chat. Follow
-[Sharing Contact Card](/guides/chats/share-contact-card) for the complete
-request.
+<span id="fields" />
+<span id="how-contact-cards-work" />
+<span id="profile-photo" />
+<span id="related" />
+<span id="sharing-is-separate" />
+<span id="update-the-card" />
+<span id="use-a-completed-image-attachment" />
 
-## Related
+## Next steps
 
-- [Sharing Contact Card](/guides/chats/share-contact-card)
-- [Chats](/guides/chats)
-- [API Reference](/api-reference/overview)
+- [Profile photos](/guides/contacts/profile-photos)
+- [Share a Contact Card](/guides/chats/share-contact-card)
+- [Sending Messages](/guides/messaging/sending-messages)

@@ -1,540 +1,85 @@
 # Relay documentation information architecture
 
-This file controls Relay's public documentation structure. It keeps
-navigation, page responsibilities, examples, and generated reference content
-aligned with the current contract.
+`docs.json` owns navigation. The Server OpenAPI owns the public API contract.
+Each authored page owns one reader task or one reference subject.
 
-## Product identity
+## Reader paths
 
-| Surface | Name |
-| --- | --- |
-| Product and company | Relay |
-| Developer interface | Relay API |
-| Developer dashboard | Relay Console |
-| TypeScript package | `@relaymessenger/sdk` |
-| Public API origin | `https://api.relayapp.im` |
-| Console origin | `https://console.relayapp.im` |
-
-The `relayapp.im` hostnames are Relay's current domains.
-
-## 1. Contract boundary
-
-Public behavior comes from three current sources:
-
-1. Relay Server OpenAPI defines public paths, fields, limits, errors, and
-   authentication.
-2. Relay Server implementation and tests prove runtime behavior.
-3. Relay SDK source and tests prove TypeScript methods and return types.
-
-`api-reference/openapi.yaml` is byte-identical to the approved Relay Server
-contract. `api-reference/openapi.mint.yaml` is the generated Mintlify bundle.
-Endpoint pages come from that bundle.
-
-Every public claim maps to a current contract field, implementation branch, or
-test. Public pages describe the supported Relay path directly.
-
-## 2. Public model
-
-Use Relay's current resource names consistently:
-
-| Resource | Meaning |
-| --- | --- |
-| Contact | A user or agent profile |
-| Handle | A Contact's public messaging address |
-| Chat | A direct or group message container |
-| Message | One ordered set of parts in a Chat |
-| part | A text, media, or link unit inside a Message |
-| Attachment | Uploaded media referenced by a Message part |
-| Webhook event | A versioned event delivered by Webhook or WebSocket |
-
-Use `participants` for group membership operations and `participant.*` event
-names. Use Webhooks for signed HTTPS event delivery and WebSocket for a durable
-agent connection. Message commands use REST.
-
-## 3. Site topology
-
-Relay has three top-level tabs:
-
-```text
-Guides
-Error Codes
-API Reference
-```
-
-The Guides tab uses this exact order:
-
-```text
-Introduction
-  Introduction
-
-Getting started
-  Quickstart
-  Create and connect an agent (coming soon on staging)
-  Authentication
-  Client SDKs
-  Key Concepts
-  AI coding agents
-  Best Practices
-
-Messaging
-  Messaging
-  Sending Messages
-  Mentions
-  Message Details
-  Message Parts
-  Attachments
-  Voice Memos
-  Rich Link Previews
-  Replies
-  Reactions
-  Delivery Receipts
-
-Chats
-  Chats
-  Group Chats
-  Participants
-  Typing Indicators
-  Sharing Contact Card
-  Message History
-
-Contacts
-  Add requests
-  Contact Cards
-  Blocked Handles
-
-Webhooks
-  Webhooks
-  Webhook Event Types
-
-Webhooks
-  Webhooks
-  Webhook Subscriptions
-  Webhook Delivery
-
-WebSocket
-  WebSocket
-  Frames
-  Acknowledgements
-  FULL sync
-
-Integrations
-  Integrations
-  Vercel Chat SDK
-  Cloudflare Think
-  OpenClaw
-  Hermes
-  Claude Code
-  Codex
-  Cursor
-  CLI
-  Connect a selected native runtime (coming soon on staging)
-  MCP
-  Skills
-
-Platform
-  Idempotency
-  Rate Limits
-  Debugging
-
-
-Examples
-  Examples
-```
-
-Error Codes groups stable errors by `1xxx`, `2xxx`, and `3xxx`. API Reference
-contains the shared conventions page followed by generated endpoint groups.
-
-## 4. Reader order
-
-The sidebar teaches Relay in this sequence:
-
-1. complete a first request;
-2. authenticate;
-3. install the maintained SDK;
-4. learn shared resources;
-5. send and read Messages;
-6. manage Chat content and membership;
-7. receive webhook events;
-8. implement reliability and debugging;
-9. choose a maintained runtime, local tool, or coding-agent package.
-
-Pages follow task frequency rather than alphabetical order.
-
-## 5. Page responsibilities
-
-A page owns one developer job. Separate pages carry separate resource
-lifecycles, credentials, protocols, acknowledgement boundaries, retry rules,
-or common search terms.
-
-Current focused pages include:
-
-- Sending Messages, Mentions, Message Details, and Message Parts;
-- Attachments, Voice Memos, and Rich Link Previews;
-- Group Chats, Participants, Typing Indicators, and Message History;
-- Add requests, Contact Card configuration, and Sharing Contact Card;
-- Webhooks and the shared Event types catalog;
-- Webhooks, Webhook Subscriptions, and Webhook Delivery;
-- WebSocket, Frames, Acknowledgements, and FULL sync.
-- Chat SDK, CLI, MCP, supported agent channels, Think, and coding-agent
-  packages.
-
-Closely related operations stay together: webhook subscription CRUD, reaction
-add/remove, typing start/stop, and participant add/remove/leave.
-
-## 6. Page archetypes
-
-### Task guide
-
-```text
-Outcome sentence
-Prerequisites when required
-## Perform the task
-TypeScript SDK and cURL
-Real response
-## Rules
-## Failure and retry behavior
-## Next steps
-```
-
-### Concept page
-
-```text
-Direct definition
-## Core model
-Small table or diagram
-## Invariants
-## Example
-## Related
-```
-
-### Protocol page
-
-```text
-Direct protocol boundary
-## Connect and authenticate
-## Client to server frames
-## Server to client frames
-## Ordering and acknowledgement
-## Reconnect and recovery
-## Errors and close codes
-## Review with an agent
-```
-
-### Error page
-
-```text
-One-sentence cause
-HTTP status and Relay code
-## Troubleshooting
-Retry rule
-## Related
-```
-
-## 7. Heading and prose system
-
-Mintlify supplies the page title from frontmatter. H2 headings describe the
-reader's sequence. H3 headings group comparable variants under one H2.
-
-Public prose uses:
-
-- one direct opening sentence;
-- paragraphs of one to three sentences;
-- active voice and second person;
-- sentence case headings;
-- bold text for a single operational rule;
-- numbered lists for ordered work;
-- tables for fields, states, limits, and comparisons;
-- `Next steps`, `Related`, or `See also` as the final section.
-
-Relay nouns keep their contract capitalization: Contact, Handle, Chat, Message,
-Attachment, Agent Token, Webhooks, and WebSocket.
-
-## 8. TypeScript SDK and cURL
-
-Executable developer tasks show equivalent options in this order:
-
-```text
-TypeScript SDK
-cURL
-```
-
-The TypeScript call comes from `@relaymessenger/sdk`. The cURL request uses the
-same operation, identifiers, and payload. Pure concepts, retry tables,
-WebSocket frame examples, and generated endpoint reference use the clearest
-single representation.
-
-Attachment examples keep allocation, raw upload, and Message creation in one
-workflow. WebSocket examples use the SDK's maintained connection runner and
-the current `/v1/websocket` contract.
-
-## 9. Code and response presentation
-
-Code examples use current paths, fields, event names, and limits. Each task
-keeps identifiers consistent from request through response. Credentials appear
-as environment variables.
-
-The first mutation on a page includes its canonical response when later steps
-use the returned ID. Error examples include HTTP status, `error.code`, and
-`trace_id`. Retry guidance names the exact idempotency or acknowledgement
-boundary.
-
-## 10. Operational safety
-
-Developer-facing safety instructions stay next to the action they protect:
-
-- Agent Tokens remain in server-side secret storage.
-- Message retries reuse a stable idempotency key.
-- Webhook receivers verify the signature and commit `event_id` before `2xx`.
-- WebSocket consumers commit `event_id` before a cumulative ACK.
-- Webhook destinations use direct public HTTPS endpoints.
-- FULL sync completes before later WebSocket acknowledgements.
-- Logs retain `trace_id` and omit credentials, signing secrets, and message
-  content unless the developer explicitly needs that content.
-
-Warnings are reserved for security, data loss, irreversible actions, and
-duplicate side effects. Notes and tips carry ordinary context.
-
-## 11. Agent-friendly treatment
-
-Mintlify header actions expose page copy and source viewing:
-
-```json
-{
-  "contextual": {
-    "options": ["copy", "view"],
-    "display": "header"
-  }
-}
-```
-
-The secondary navbar action copies `skill.md`. The primary navbar action opens
-Relay Console. The Relay logo opens `https://relayapp.im`.
-
-Review-with-an-agent blocks are used for concrete codebase audits such as
-authentication, idempotency, webhook verification, durable ACK, and FULL sync.
-Each prompt reads current Relay docs and OpenAPI, requests file-and-line
-evidence, and reports unknown findings explicitly.
-
-## 12. Overview pages
-
-Overview pages orient multiple child tasks and provide the shortest useful
-path through the category. Messaging, Chats, Webhooks, and WebSocket have
-category overviews. Webhooks documents signed HTTP delivery, and WebSocket documents acknowledged socket delivery.
-Contacts and Platform link directly to their task pages.
-
-## 13. API Reference and errors
-
-The API Reference overview owns conventions shared by all endpoints. Generated
-endpoint pages own request fields, response fields, status codes, and schemas.
-Guides own workflows, sequencing, acceptance boundaries, and recovery.
-
-Each Error Code page includes:
-
-1. HTTP status and Relay error code;
-2. response example;
-3. corrective action;
-4. retry behavior;
-5. related endpoint or guide.
-
-## 14. Page jobs
-
-| Page | Developer job |
-| --- | --- |
-| Quickstart | Create an agent in Relay Console, connect a backend, and reply |
-| Authentication | Store and send an Agent Token |
-| Client SDKs | Install and use `@relaymessenger/sdk` |
-| Key Concepts | Learn Contact, Handle, Chat, Message, part, and event |
-| Sending Messages | Create or use a Chat and send ordered parts |
-| Mentions | Address a Contact with UTF-16 ranges in a group Chat |
-| Message Details | Retrieve a Message, thread, or Chat history |
-| Attachments | Allocate, upload, retrieve, and delete media |
-| Voice Memos | Upload and send audio with voice presentation |
-| Rich Link Previews | Send a link part |
-| Replies | Target a Message and `part_index` |
-| Reactions | Add and remove a reaction on a Message part |
-| Delivery Receipts | Read per-recipient state and acknowledgement boundaries |
-| Group Chats | Create and update a group Chat |
-| Participants | Add, remove, leave, and understand membership periods |
-| Typing Indicators | Start, refresh, stop, and receive typing state |
-| Sharing Contact Card | Share the configured card inside an existing Chat |
-| Message History | Page through visible Message and Chat event history |
-| Add requests | Let users add an agent or request a Contact from a Premium Handle |
-| Contact Cards | Configure an agent's public card |
-| Blocked Handles | Block, list, and unblock Handles |
-| Webhooks | Choose Webhooks or WebSocket delivery |
-| Webhooks | Receive and verify signed HTTPS events |
-| Webhook Subscriptions | Configure event destinations and event filters |
-| Webhook Event Types | Read every event delivered by Webhooks or WebSocket |
-| Webhook Delivery | Implement retries and terminal handling |
-| WebSocket | Connect an always-on agent backend |
-| WebSocket frames | Implement every frame, heartbeat, and close code |
-| Acknowledgements | Commit and cumulatively acknowledge events |
-| FULL sync | Recover after a checkpoint falls outside retention |
-| Idempotency | Retry commands without duplicate side effects |
-| Rate Limits | Design around current request and content limits |
-| Debugging | Use IDs, errors, and traces to diagnose requests |
-| Integrations | Add Relay to the tool you already use |
-| Vercel Chat SDK | Receive signed Webhooks through Vercel Chat SDK |
-| Cloudflare Think | Run a serverless-friendly Think messenger through signed Webhooks |
-| OpenClaw | Connect an OpenClaw gateway by acknowledged WebSocket |
-| Hermes | Connect Hermes as an always-on acknowledged WebSocket process |
-| Claude Code | Connect a running Claude Code session by acknowledged WebSocket |
-| Codex | Install the generated Codex plugin |
-| Cursor | Install the generated Cursor plugin |
-| CLI | Call Relay v1 resources and forward local events |
-| MCP | Run local Relay messaging tools over MCP v2 stdio |
-| Skills | Install portable coding-agent guidance and docs search |
-
-## 15. Validation sequence
-
-A documentation change passes these checks in order:
-
-1. Relay Server and Docs OpenAPI byte comparison;
-2. Mintlify OpenAPI bundle rebuild and diff;
-3. agent prompt synchronization;
-4. docs topology and heading inventory;
-5. JSON and shell example validation;
-6. Mintlify broken-link validation;
-7. Mintlify site validation;
-8. Mintlify accessibility validation;
-9. desktop and narrow rendered inspection.
-
-## 16. Exact heading skeletons
-
-These outlines match the current public pages. A heading change must preserve
-the page's single job and update this inventory in the same commit.
-
-### Introduction and Getting started
-
-| Page | H2 order |
-| --- | --- |
-| Introduction | `Prerequisites` → `What you can build` → `Key capabilities` → `Authentication` → `Quick example` → `Next steps` |
-| Quickstart | `Prerequisites` → `1. Create the agent and copy its token` → `2. Set your credentials` → `3. Choose the SDK or HTTPS` → `4. Connect the event path` → `5. Accept the event durably` → `6. Mark Read, then reply` → `7. Finish setup with your coding agent` → `Review with an agent` → `Next steps` |
-| Authentication | `Credentials` → `Anonymous agent creation` → `Agent Tokens` → `Pair the environment and token` → `WebSocket authentication` → `Errors` → `See also` |
-| Client SDKs | `Install` → `Create a client` → `Send a Message` → `Resources` → `Pagination` → `Retries and idempotency` → `Errors` → `Webhook verification` → `Browser limitation` → `Runnable examples` → `Related` |
-| Key Concepts | `Contacts and Handles` → `Chats` → `Messages and parts` → `Attachments` → `Delivery` → `Events` → `Idempotency` → `Related` |
-| AI coding agents | `Documentation files` → `Minimal connection prompt` → `Relay agent prompt` → `Build prompt` → `Audit prompt` → `Related` |
-| Best Practices | `Accept events before processing` → `Make commands idempotent` → `Keep replies on REST` → `Treat IDs as opaque` → `Upload media before sending` → `Respect membership visibility` → `Handle duplicates` → `Related` |
-
-### Messaging
-
-| Page | H2 order |
-| --- | --- |
-| Messaging | `Part types` → `Send paths` → `Message lifecycle` → `Next steps` |
-| Sending Messages | `Send to an existing Chat` → `Resolve or create a Chat` → `Send multiple parts` → `Idempotency` → `Limits` → `Next steps` |
-| Mentions | `Mention a Contact` → `Choose the range` → `Validation rules` → `Related` |
-| Message Details | `Retrieve a Message` → `Read the response` → `Direction` → `List Chat history` → `Related` |
-| Message Parts | `Part types` → `Ordering and composition` → `Response-only parts` → `Related` |
-| Attachments | `1. Create an upload` → `2. Upload the raw bytes` → `3. Confirm the upload` → `4. Send the Attachment` → `5. Download or delete` → `Import a public media URL` → `Media metadata` → `File types` → `Limits` → `Ownership` → `Related` |
-| Voice Memos | `Upload audio` → `Send the voice memo` → `Read the response` → `Related` |
-| Receiving Attachments | `Inbound attachments` → `Download the bytes` → `URL lifetime` → `Pass the file to a model` → `Related` |
-| Rich Link Previews | `Send a link part` → `Composition rules` → `Start a Chat with a link` → `Related` |
-| Replies | `Reply to a Message` → `Target a part` → `List a reply thread` → `Related` |
-| Reactions | `Add a reaction` → `Reaction types` → `Remove a reaction` → `Events` → `Related` |
-| Edit and unsend | `Prerequisites` → `Edit a text part` → `Unsend a Message` → `Limits and errors` → `Events` → `Next steps` |
-| Delivery Receipts | `Response fields` → `What Delivered means` → `Mark Read` → `What the app shows` → `Related` |
-
-### Chats and Contacts
-
-| Page | H2 order |
-| --- | --- |
-| Chats | `Chat types` → `Create a Chat` → `Chat fields` → `Next steps` |
-| Group Chats | `Create a group` → `Limits` → `Rename the group` → `Set a group photo` → `Group metadata events` → `Related` |
-| Participants | `Add a Contact` → `Remove a Contact` → `Leave` → `Membership periods` → `Events` → `Related` |
-| Typing Indicators | `Start` → `Keep typing active` → `Stop` → `Receive events` → `API reference` → `Related` |
-| Sharing Contact Card | `Before sharing` → `Share the card` → `Keep configuration separate` → `Related` |
-| Message History | `Pagination` → `Newest first` → `Group-history rows` → `Membership visibility` → `Agent recovery` → `Related` |
-| Add requests | `How Add works` → `Send an Add request` → `Read the response` → `Receive Contact events` → `Related` |
-| Contact Cards | `How Contact Cards work` → `Retrieve the card` → `Upsert the card` → `Update the card` → `Profile photo` → `Use a completed image attachment` → `Fields` → `Sharing is separate` → `Related` |
-| Blocked Handles | `Block` → `Behavior` → `List` → `Unblock` → `Related` |
-
-### Webhooks and WebSocket
-
-| Page | H2 order |
-| --- | --- |
-| Webhooks | `Choose a transport` → `Shared envelope` → `Switch transports` → `Recovery` → `Review with an agent` → `Related` |
-| Webhooks | `Flow` → `Create a subscription` → `Verify the signature` → `Acknowledge safely` → `Review with an agent` → `Related` |
-| Webhook Subscriptions | `Create` → `Store the signing secret` → `List, retrieve, update, or delete` → `Related` |
-| Webhook Event Types | `Event types` → `List event types` → `Webhook envelope` → `Message events` → `Reaction events` → `Participant events` → `Chat events` → `Contact events` → `Delivery paths` → `Related` |
-| Webhook Delivery | `Delivery policy` → `Retry classes` → `Receiver pattern` → `Delivered meaning` → `Terminal delivery` → `Review with an agent` → `Related` |
-| WebSocket | `Select WebSocket delivery` → `Connect` → `Observe events without consuming` → `Review with an agent` → `Related` |
-| WebSocket frames | `Ready frame` → `Observer readiness` → `Event frame` → `Error frame` → `Backpressure` → `Heartbeats` → `Disconnects` → `Related` |
-| Acknowledgements | `Frame` → `Safe order` → `Delivery meaning` → `Replay` → `Errors` → `Review with an agent` → `Related` |
-| FULL sync | `Normal reconnect` → `When Relay requires FULL sync` → `Commit the snapshot` → `Events during sync` → `Retention` → `Failure handling` → `Related` |
-
-### Platform
-
-| Page | H2 order |
-| --- | --- |
-| Idempotency | `Supply a key` → `Retry behavior` → `Derive reply keys from events` → `Event idempotency` → `Related` |
-| Rate Limits | `Messages` → `Chats` → `Attachments` → `Webhook events` → `Related` |
-| Debugging | `IDs to record` → `Error response` → `Safe logs` → `Event debugging` → `Related` |
-
-### Integrations
-
-| Page | H2 order |
-| --- | --- |
-| Integrations | `Choose by runtime` → `Choose local tools` → `Package status` → `Related` |
-| Vercel Chat SDK | `Staging package` → `Use the adapter` → `Media boundary` → `Delivery behavior` → `Related` |
-| Cloudflare Think | `Current source` → `Configure staging` → `Delivery behavior` → `Related` |
-| OpenClaw | `Staging package` → `Configure the channel` → `Optional CLI setup` → `Allow agent Contacts` → `Delivery behavior` → `See also` |
-| Hermes | `Install the plugin` → `Configure staging` → `Optional CLI setup` → `Delivery behavior` → `See also` |
-| Claude Code | `Install the plugin` → `Configure the channel` → `Optional CLI setup` → `Delivery behavior` → `See also` |
-| Codex | `Install locally` → `Use the package` → `Prepare hosted proof` → `Related` |
-| Cursor | `Install locally` → `Use the package` → `Prepare hosted proof` → `Related` |
-| CLI | `Staging package` → `Open the interactive menu` → `Create an agent` → `Authenticate an existing Agent Token` → `List and delete configured agents` → `Keep the terminal open` → `Use local event forwarding` → `See also` |
-| MCP | `Staging package` → `Configure a local client` → `Choose the MCP surface` → `Related` |
-| Skills | `Install` → `Offer skills before setup` → `Choose the docs MCP` → `Prepare hosted proof` → `Related` |
-
-### Examples, errors, and reference
-
-| Page | H2 order |
-| --- | --- |
-| Examples | `Agents` → `Developer-managed identity example` → `Recipes` → `Package versions` → `Run locally` → `Related` |
-| Error Codes | `Error response` → `1xxx request errors` → `2xxx errors` → `3xxx server errors` → `Related` |
-| One error code | `Troubleshooting` → `Related` |
-| API Reference overview | `Endpoints` → `Conventions` → `Errors` → `Related` |
-
-
-| Create and connect an agent | `Choose the identity` → `Prerequisites` → `Create with the CLI` → `Choose a profile and avatar` → `Use a local image` → `Supply a rendered image with a recipe` → `Create through the API` → `Connect and share` → `List locally configured agents` → `Delete a developer-managed agent` → `Creation failures` → `Next steps` |
-
-| Connect a selected native runtime | `Prepare the selected context` → `Reuse an existing Agent Token` → `Select the runtime` → `Create and configure together` → `Inspect the result` → `Review with an agent` → `Next steps` |
-## 17. Current page map
-
-| Current path | Placement | Status |
+| Area | Reader job | Keep elsewhere |
 | --- | --- | --- |
-| `index.mdx` | Introduction | integrated |
-| `getting-started/*` | Getting started | integrated |
-| `guides/messaging/*` | Messaging | integrated |
-| `guides/chats/index.mdx`, `group-chats.mdx`, `participants.mdx`, `typing-indicators.mdx`, `share-contact-card.mdx`, `message-history.mdx` | Chats | integrated |
-| `guides/contacts/add-requests.mdx`, `guides/contact-cards.mdx`, `guides/chats/blocked-handles.mdx` | Contacts | integrated |
-| `guides/webhooks/events.mdx` | Webhook Event Types | complete event catalog with payload examples |
-| `guides/webhooks/*` | Webhooks | integrated |
-| `guides/websocket/*` | WebSocket | integrated |
-| `guides/platform/*` | Platform | integrated |
-| `integrations/*` | Integrations | integrated source-backed project guides |
-| `examples/index.mdx` | Examples | integrated |
-| `api-reference/*` | API Reference | generated from the current OpenAPI |
-| `error/*` | Error Codes | integrated one-code pages |
+| Introduction | Understand Relay and choose a starting point | Setup walkthroughs and complete capability tables |
+| Getting started | Complete a first exchange, authenticate, install the SDK | Agent management, full transport protocols, audit prompts |
+| Agents | Create, connect, list, or delete an identity | Profile-image internals and runtime-specific installation |
+| Messaging | Perform one Message operation | Whole event envelopes and transport recovery |
+| Attachments | Upload, download, import, delete, or check file limits | Model-provider request formats |
+| Chats | Create a Chat, change membership, read history, or update metadata | Repeated Contact rules on every page |
+| Contacts | Manage contact relationships and profiles | Sending or event-delivery tutorials |
+| Webhooks | Receive, verify, manage subscriptions, or handle retries | Full event-specific payloads |
+| Webhook event reference | Look up one event's data | Receiver implementation |
+| WebSocket | Connect, acknowledge, recover, observe, or inspect frames | CLI terminal controls |
+| Integrations | Install and connect one supported runtime or tool | Maintainer publication and package-provenance reports |
+| Platform | Check reliability, limits, retries, and errors | Repeated first-run setup |
+| Examples | Choose a runnable maintained example | Another copy of each integration guide |
+| Agent instructions | Supply a complete machine-readable setup task | Human onboarding prose |
+| API Reference | Inspect canonical operations and schemas | Narrative setup walkthroughs |
+| Error Codes | Resolve one specific error | Repeated shared error envelopes |
 
-## 18. Release gates
+Getting started contains Quickstart, Authentication, and TypeScript SDK.
+Management, CLI, and coding-agent pages are grouped by their task, even when
+an existing URL retains a `getting-started` prefix for compatibility.
 
-A release is ready when:
+## Page boundaries
 
-- every MDX page appears once in `docs.json` navigation;
-- the three top-level tabs and Guide groups match the current topology;
-- page headings match the inventory below;
-- TypeScript and cURL variants perform equivalent operations;
-- the Docs OpenAPI is byte-identical to the approved Relay Server contract;
-- the Mintlify OpenAPI bundle is reproducible;
-- examples match the current API and SDK;
-- generated `llms.txt` and `llms-full.txt` contain the current public pages;
-- links, site validation, and accessibility checks pass;
-- desktop and narrow layouts remain readable.
+Lead with the action or fact. Keep required inputs, the smallest complete
+example, its success condition, and relevant failure handling together.
 
-## 19. Final principle
+Related operations can share a page when they answer the same question:
+start/stop typing, add/remove a reaction, or read a paginated history. A shared
+noun alone does not justify combining creation, deletion, customization, and
+troubleshooting into an onboarding page.
 
-Relay documentation teaches the current product from the first request through
-reliable event processing. The contract defines behavior, the SDK defines
-maintained TypeScript calls, and each public page explains one developer job in
-simple language.
+An overview routes to tasks. It does not reproduce each child's instructions.
+A guide links to a concept or reference when that information becomes useful.
+A reference can be longer when the reader explicitly came to inspect that
+protocol, schema, or machine instruction.
+
+Ordinary task guides have at most five top-level sections before related
+links. Examples, tables, tabs, and accordions still cost reader attention.
+Do not use formatting to disguise independent tasks inside one page.
+
+## Source and example integrity
+
+- Keep `api-reference/openapi.yaml` byte-identical to the approved Server input.
+- Check runtime statements against current implementation or tests.
+- Generate endpoint presentation from OpenAPI; preserve stable endpoint URLs.
+- Use the maintained SDK and equivalent HTTPS for actual API tasks.
+- Show CLI commands for CLI tasks, without an unrelated HTTP walkthrough.
+- Keep credentials private, request identifiers consistent, and retry boundaries explicit.
+- Keep registry observations in `versions.json`, not repeated inventories on task pages.
+- Separate conflicting source evidence from a confirmed behavior; do not invent a rule.
+
+## Machine-readable surfaces
+
+`skill.md` is the source for the navbar copy action, the Mintlify skill copy,
+and the full code block on `agent-reference/prompt.mdx`. The short AI coding
+agents page links there instead of embedding the full instruction file.
+
+`llms.txt` is a setup entry point and a compact page index. Endpoint entries
+name their method and path, not the complete operation description.
+`llms-full.txt` contains the authored pages and complete presented OpenAPI.
+Both files are generated, not hand-maintained.
+
+## Compatibility and verification
+
+Retain existing page URLs or add redirects. Rewrite internal links to the new
+owning page and preserve useful old fragments on retained pages.
+
+Checks cover navigation ownership, focused onboarding, internal fragments,
+contract identity, event coverage, safety-critical topic content, examples,
+package references, and generated outputs. Tests must not require internal
+publishing notes or a frozen list of prose headings in public task pages.
+
+Run the repository's validation and Mintlify link, build, and accessibility
+checks in Daytona. Inspect desktop and narrow rendering before release.
+Publish and verify staging, then derive production with the same approved
+content and verify its hosted pages, machine files, and environment links.

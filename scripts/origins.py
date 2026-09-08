@@ -20,6 +20,8 @@ STAGING_TO_PRODUCTION = {
     "docs.staging.relayapp.im": "docs.relayapp.im",
     "api.staging.relayapp.im": "api.relayapp.im",
     "go.staging.relayapp.im": "go.relayapp.im",
+    # Server developerAgentShareUrl uses the go host for production profiles.
+    "staging.relayapp.im/@": "go.relayapp.im/@",
     "staging.relayapp.im": "relayapp.im",
     "cdn.staging.relayapp.im": "cdn.relayapp.im",
     "console.staging.relayapp.im": "console.relayapp.im",
@@ -64,9 +66,20 @@ PROFILE_REWRITES = (
 # Literal operator instructions, not a global staging -> production replace.
 # Registry/catalog versions are not inferred from an environment or branch.
 INSTRUCTION_REWRITES = {
+    "issued by the staging API": "issued by the production API",
+    "Clone the staging source": "Clone the production source",
+    "staging docs MCP dependency": "production docs MCP dependency",
+    "staging origin": "production origin",
+    "with the staging API": "with the production API",
     "The root above is staging; use a staging token.": "The root above is production; use a production token.",
     "Use a token from staging.": "Use a token from production.",
     "staging Agent Token": "production Agent Token",
+    "staging token": "production token",
+    "a staging token": "a production token",
+    "Install the staging CLI": "Install the CLI",
+    "canonical staging CLI": "canonical CLI",
+    "published staging CLI": "published CLI",
+    "current staging API": "current API",
     "staging API origin": "production API origin",
     "<staging-agent-token>": "<production-agent-token>",
     "$STAGING_RELAY_AGENT_TOKEN": "$RELAY_AGENT_TOKEN",

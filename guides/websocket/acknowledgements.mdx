@@ -1,12 +1,11 @@
 ---
-title: "WebSocket Acknowledgements"
+title: "Acknowledge WebSocket events"
 sidebarTitle: "Acknowledgements"
 description: "Commit WebSocket events durably before sending a cumulative ACK."
 keywords: ["WebSocket ACK", "cumulative acknowledgement", "durable inbox", "through_sequence"]
 ---
 
-A WebSocket ACK confirms that an agent backend durably accepted every event
-through one sequence.
+Acknowledge WebSocket events after your backend commits them to durable storage.
 
 ## Frame
 
@@ -14,10 +13,13 @@ through one sequence.
 {"type":"ack","through_sequence":"42"}
 ```
 
-`through_sequence` is a decimal string. It is scoped to one receiving agent.
+| Field | Meaning |
+| --- | --- |
+| `through_sequence` | Decimal string identifying the cumulative boundary for one receiving agent |
 
-**ACK is cumulative and monotonic.** Before acknowledging `42`, commit every
-event at or below `42` that Relay sent on this connection.
+**ACK is cumulative and monotonic.** Before acknowledging `42`, durably accept every event through that boundary, including earlier events on the connection.
+
+Consumers share one durable checkpoint per agent. An ACK from one connection advances that shared checkpoint; coordinate their durable acceptance rather than treating each connection as an independent subscription.
 
 ## Safe order
 
@@ -29,7 +31,17 @@ read event
   → run tools and model work
 ```
 
-Send the ACK after the durable commit shown above.
+With `relay.websocket.run`, the SDK sends an ACK after `onEvent` resolves. Keep model work, tools, and replies in a separate worker; make this callback finish after durable acceptance:
+
+```typescript TypeScript SDK callback
+import type { RelayWebhookEvent } from "@relaymessenger/sdk";
+
+async function onEvent(event: RelayWebhookEvent) {
+  await durableInbox.insertOnce(event.event_id, event);
+}
+```
+
+`durableInbox.insertOnce` is your application’s database operation. It must resolve after inserting a new event or confirming that a duplicate is already committed.
 
 ## Delivery meaning
 
@@ -49,32 +61,17 @@ the cumulative ACK while running each side effect once.
 
 | Code | Meaning | Action |
 | --- | --- | --- |
-| `ack_out_of_range` | ACK is above the highest sequence Relay sent | Correct the sequence |
+| `ack_out_of_range` | ACK is above the highest sequence Relay sent on this connection | Correct the sequence |
 | `stale_connection` | The connection can no longer advance the checkpoint | Stop this consumer |
 | `full_sync_required` | Normal ACKs are paused | Complete FULL sync first |
 
-## Review with an agent
+<span id="related" />
+<span id="review-with-an-agent" />
 
-**Audit cumulative ACK safety before running the consumer.** Copy this prompt
-into your coding agent.
-
-```text
-You are auditing a Relay WebSocket consumer.
-
-This is read-only. Do not change code unless I ask.
-
-1. Read the current Relay WebSocket, Acknowledgements, FULL Sync, and OpenAPI pages.
-2. Locate the event_id uniqueness rule, durable transaction, through_sequence calculation, ACK send, and post-ACK processing.
-3. Prove every sequence at or below an ACK is committed before the frame is sent.
-4. Prove replayed event_id values cannot repeat tools, model work, or replies.
-5. Prove a message.received ACK advances only the transport checkpoint.
-6. Report Check | Status | file:line evidence | Fix.
-7. Mark anything you cannot prove as unknown.
-```
-
-## Related
+## Next steps
 
 - [WebSocket](/guides/websocket)
 - [WebSocket Protocol](/guides/websocket/protocol)
 - [FULL Sync](/guides/websocket/full-sync)
 - [Idempotency](/guides/platform/idempotency)
+- [Audit an integration](/getting-started/ai-agents#audit-an-integration)

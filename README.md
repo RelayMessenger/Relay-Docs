@@ -8,12 +8,13 @@ The site has three top-level tabs:
 Guides
   Introduction
   Getting started
+  Agents
   Messaging
   Chats
   Contacts
   Webhooks
   WebSocket
-  Integrations
+  Integrations (including CLI and coding agents)
   Platform
   Examples
 Error Codes

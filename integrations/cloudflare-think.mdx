@@ -1,67 +1,82 @@
 ---
-title: "Cloudflare Think"
-description: "Run a Relay agent as a serverless-friendly Cloudflare Think messenger with signed Webhook ingress."
-keywords: ["Relay Agent Starter", "Cloudflare Think", "Think messenger", "serverless webhook", "Workers"]
+title: "Run a Relay agent with Cloudflare Think"
+sidebarTitle: "Cloudflare Think"
+description: "Configure and run the Relay Think starter with signed Webhook ingress in a Cloudflare Worker."
+keywords: ["Relay Agent Starter", "Cloudflare Think", "Think messenger", "Workers", "Webhooks"]
 ---
 
-Fork a minimal Cloudflare Think messenger for a Relay agent.
+Run the Relay Think starter to receive signed Webhooks and answer Messages from a Cloudflare Worker.
 
-**The starter receives signed Webhooks in a Worker. Choose an always-on
-channel page when the runtime should keep an acknowledged WebSocket open.**
+## Install the starter
 
-Source:
-[Relay-SDK `cookbook/cloudflare-think-agent`](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook/cloudflare-think-agent)
-
-## Current source
-
-The public cookbook recipe is versioned as
-`@relaymessenger/cookbook-cloudflare-think-agent@0.1.0` and pins:
-
-| Dependency | Version |
+| Requirement | Value |
 | --- | --- |
-| `@cloudflare/think` | `0.17.0` |
-| `@relaymessenger/chat-sdk-adapter` | `0.3.0` |
-| `@relaymessenger/sdk` | `0.3.0` |
-| `chat` | `4.39.0` |
-| `agents` | `0.22.0` |
+| Node.js | `22.22.3` or newer. |
+| Cloudflare | An account with Workers AI access. |
+| Relay | A staging Agent Token and a public HTTPS Webhook destination. |
 
-The lockfile pins the Chat SDK adapter and its registry integrity.
-Clone the documented source branch and install its exact dependencies:
+Clone the source and install the starter:
 
 ```bash
-git clone --branch staging \
-  https://github.com/RelayMessenger/Relay-SDK.git
+git clone --branch staging https://github.com/RelayMessenger/Relay-SDK.git
 cd Relay-SDK/cookbook/cloudflare-think-agent
 npm ci
+cp .dev.vars.example .dev.vars
 ```
+
+Source: [Cloudflare Think starter](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook/cloudflare-think-agent).
 
 ## Configure staging
 
-Set the staging Agent Token and one-time Webhook signing secret in
-`.dev.vars`. Keep these non-secret values in `wrangler.jsonc`:
+[Register a Webhook subscription](/guides/webhooks/subscriptions) for your
+public HTTPS `/webhooks/relay` destination and retain its one-time signing
+secret. Set the secrets in `.dev.vars`, keeping that file out of source control:
 
-```text
-RELAY_API_ORIGIN=https://api.staging.relayapp.im
-RELAY_AGENT_HANDLE=your_agent_handle
-MODEL_ID=@cf/openai/gpt-oss-120b
+```dotenv
+RELAY_AGENT_TOKEN=replace-with-staging-agent-token
+RELAY_WEBHOOK_SECRET=whsec_replace-with-staging-webhook-secret
 ```
 
-Run `npm run dev`, expose the Worker's exact `/webhooks/relay` path through
-HTTPS, and save that URL through
-`POST /v1/webhook-subscriptions`.
+In `wrangler.jsonc`, set these non-secret values under `env.staging.vars`:
 
-## Delivery behavior
+| Variable | Value |
+| --- | --- |
+| `RELAY_API_ORIGIN` | `https://api.staging.relayapp.im` |
+| `RELAY_AGENT_HANDLE` | The Handle returned for your agent. |
+| `MODEL_ID` | `@cf/openai/gpt-oss-120b` |
 
-Relay's Chat SDK adapter verifies the raw signed body. Think maps
-`relay:<Chat UUID>` to one durable thread, runs the model in a recoverable
-fiber, and requires the model to call the native `reply` Action once.
+Start the Worker and route the registered HTTPS destination to it:
 
-The Action commits one complete Relay Message with a stable idempotency key
-derived from the inbound Relay Message ID. Think owns durable turn recovery
-and its Action ledger.
+```bash
+npm run dev
+```
 
-## Related
+## Check the setup
+
+Request `/healthz` at the local URL printed by the development server. Valid
+configuration returns:
+
+```json
+{"ok": true}
+```
+
+| Result | Action |
+| --- | --- |
+| `/healthz` returns `503` | Fill in the settings named in the response. |
+| Webhook returns `401` | Check the subscription's signing secret and preserve the original signed body. |
+| Signed Webhook returns `202` | The request was accepted; verify the model's reply separately. |
+
+Send the agent a direct Message and confirm that its answer arrives in the same
+Chat. The starter uses a `reply`
+Action for the completed response. Preserve its idempotency handling when
+customizing the reply.
+
+<span id="current-source" />
+<span id="delivery-behavior" />
+<span id="related" />
+
+## Next steps
 
 - [Vercel Chat SDK](/integrations/chat-sdk)
-- [Webhooks](/guides/webhooks)
-- [Relay Cookbook](/examples)
+- [Webhook delivery and retries](/guides/webhooks/delivery)
+- [More examples](/examples)

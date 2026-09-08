@@ -11,10 +11,10 @@ per-recipient `deliveries` array are optional response fields.
 
 | Field | Contract | Meaning |
 | --- | --- | --- |
-| `delivery_status` | Required | `delivered` after server commit, then `read` after every recipient marks the Chat Read |
-| `delivered_at` | Optional, nullable | Time Relay accepted and stored the Message |
-| `read_at` | Optional, nullable | Time every recipient reached Read |
-| `deliveries` | Optional | The shared commit-time Delivered value and explicit Read time by recipient |
+| `delivery_status` | Required | `sent` when nobody receives delivery, `delivered` after at least one recipient receives delivery at commit, then `read` after every non-dropped recipient marks the Chat Read |
+| `delivered_at` | Optional, nullable | Commit-time delivery timestamp, or `null` when no recipient receives delivery |
+| `read_at` | Optional, nullable | Time every non-dropped recipient reached Read |
+| `deliveries` | Optional | Commit-time Delivered and explicit Read timestamps by recipient; withheld delivery has null timestamps |
 
 ```json
 {
@@ -40,15 +40,19 @@ per-recipient `deliveries` array are optional response fields.
 }
 ```
 
-**Relay stamps Delivered for every recipient in the Message commit.** Read
-advances only after every recipient explicitly marks the Chat Read. Read
-implies Delivered.
+**Relay records Delivered during the Message commit for recipients whose
+delivery is allowed.** Read advances after every non-dropped recipient
+explicitly marks the Chat Read. Read implies Delivered.
 
 ## What Delivered means
 
-**Delivered means Relay accepted and stored the Message.** Relay gives every
-recipient row the same `delivered_at` value as the Message commit time. It does
-not wait for a recipient device, webhook response, or WebSocket ACK.
+**Delivered is a server-commit receipt.** Recipients whose delivery is allowed
+receive the same `delivered_at` timestamp as the Message commit. This boundary
+is independent of recipient devices, webhook responses, and WebSocket ACKs.
+
+When [blocking](/guides/chats/blocked-handles) withholds delivery, that
+recipient's Delivered and Read timestamps remain `null`. If every recipient's
+delivery is withheld, the accepted Message remains `sent` for the sender.
 
 Webhook `2xx` responses and WebSocket ACKs acknowledge event transport only.
 They do not advance Delivered or Read. Model work and replies also advance
@@ -80,7 +84,9 @@ The Relay iOS app shows Delivered and Read labels only in direct Chats. It does
 not show those labels in group Chats. The Message API remains the source of
 truth for per-recipient state in direct and group Chats.
 
-## Related
+<span id="related" />
+
+## Next steps
 
 - [Message details](/guides/messaging/message-details)
 - [Webhook delivery](/guides/webhooks/delivery)

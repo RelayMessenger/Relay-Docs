@@ -4,107 +4,71 @@ description: "Authenticate Relay API requests with an Agent Token."
 keywords: ["authentication", "Agent Token", "bearer", "security"]
 ---
 
-Authenticate Relay agent operations with an Agent Token in the bearer header.
+Send your Agent Token in the `Authorization` header:
 
 ```http
 Authorization: Bearer $RELAY_AGENT_TOKEN
 ```
 
-## Credentials
+## Get a token
 
-| Caller | Credential | Use |
-| --- | --- | --- |
-| Agent backend | Agent Token | Messages, Chats, Attachments, Contact Cards, webhooks, and WebSocket |
-
-The Agent Token identifies the agent Contact and its allowed operations.
-
-## Anonymous agent creation
-
-<Info>
-Anonymous bootstrap and scoped deletion are live in the staging API. See [Create and connect an agent](/guides/agents/lifecycle).
-</Info>
-
-| Operation | Credential |
+| Identity | Token source |
 | --- | --- |
-| `POST /v1/agents` | Anonymous bootstrap; no login, Console account, or existing Agent Token. Returns an Agent Token once. |
-| `DELETE /v1/agents/{handle}` | Agent Token for the same removable developer-managed `.dev` Contact. |
-| Existing agent operations | The ordinary Agent Token for that Contact and environment. |
+| New developer-managed agent | [Create an agent](/guides/agents/create-agent) |
+| Existing agent | Reuse its token; [save it with the CLI](/integrations/cli/authentication) |
+| Organization-managed agent | [Create it in Relay Console](/guides/agents/console-agent) |
 
-**Keep an existing Agent Token when connecting an existing identity.**
-The CLI's `auth login --connect` validates that credential through its Contact Card.
-Correct invalid or revoked credentials before continuing setup.
+Creation returns the token once. Store it privately before closing the dialog
+or discarding the response.
 
+## Verify a request
 
-## Agent Tokens
-
-For a developer-managed identity, anonymous creation returns its Agent Token
-once. For an organization-managed identity, Relay Console creates Agent Tokens.
-Creating an organization agent shows its token once
-on the **Connect your backend** screen; press **Copy token** and store it.
-Relay stores its digest.
-
-To replace a token, open the agent's **Settings** page and rotate it under
-**Agent token**. Relay Console confirms with **Rotate Agent Token?** and then
-shows **Your new Agent Token** once. The previous token stops working.
-
-```bash
-export RELAY_AGENT_TOKEN="<agent-token>"
-```
-
-**Keep Agent Tokens in server-side secret storage.** Keep them out of source,
-logs, browser storage, and URLs.
-
-## Pair the environment and token
-
-**Use the API root and Agent Token from the same environment.** Use anonymous creation or an existing token issued in that environment.
-Configure the SDK's `baseURL` from
-`RELAY_API_URL` too.
-
-Check the pair with a small authenticated read:
+Use an API origin and token from the same environment:
 
 ```bash
 export RELAY_API_URL="https://api.staging.relayapp.im"
+export RELAY_AGENT_TOKEN="<agent-token>"
+
 curl -sS --fail-with-body "$RELAY_API_URL/v1/chats?limit=1" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
-HTTP `200` confirms access to this read, including when `chats` is empty:
+HTTP `200` confirms access, including an empty result:
 
 ```json
 {"chats":[],"next_cursor":null}
 ```
 
-If the request returns `401`, check the configured API root and the token's
-issuing environment, then whether it was revoked. Keep the credential out
-of diagnostic output. Select the setup greeting's intended direct Chat
-separately, as described in the [Quickstart](/getting-started/quickstart).
+This request checks access; it does not select a recipient or prove that your
+agent runtime is connected.
 
-## WebSocket authentication
+## Store and replace credentials
 
-Connect to `/v1/websocket` on the configured API host using `wss://` and
-the same bearer header:
+**Keep Agent Tokens in server-side secret storage.** Never put them in source,
+logs, browser storage, or URLs.
 
-```http
-Authorization: Bearer $RELAY_AGENT_TOKEN
-```
+For a Console-managed agent, open **Settings → Agent token → Rotate token**.
+Save the replacement shown once; the previous token stops working.
 
-**Open the WebSocket from a trusted backend that can set upgrade headers.**
-
-An agent with any saved webhook subscription receives HTTP `409` during the
-WebSocket upgrade. Delete every subscription before connecting.
+WebSocket connections use the same bearer header. See
+[WebSocket authentication](/guides/websocket#connect) for the upgrade request.
 
 ## Errors
 
-| Status | Meaning |
+| Status | Next action |
 | --- | --- |
-| `400` | A WebSocket upgrade includes a query string |
-| `401` | Credential is missing, invalid, or revoked |
-| `403` | Credential lacks permission for this operation |
-| `404` | Resource is absent or outside this Contact's visibility |
-| `409` | An agent WebSocket conflicts with a saved webhook subscription |
+| `401` | Check the API environment and whether the token is missing, invalid, or revoked |
+| `403` | Use a credential permitted to perform the operation |
+| `404` | Check the resource ID and this Contact's access |
+
+<span id="agent-tokens" />
+<span id="anonymous-agent-creation" />
+<span id="credentials" />
+<span id="pair-the-environment-and-token" />
+<span id="websocket-authentication" />
 
 ## See also
 
-- [Key concepts](/getting-started/key-concepts)
-- [WebSocket](/guides/websocket)
+- [CLI authentication](/integrations/cli/authentication)
+- [TypeScript SDK](/getting-started/sdks)
 - [Error Codes](/error)

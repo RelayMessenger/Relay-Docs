@@ -1,110 +1,86 @@
 ---
-title: "Claude Code"
-description: "Connect a running Claude Code session to Relay through durable acknowledged WebSocket delivery."
-keywords: ["Relay Claude Code", "Claude Code channel", "relay-claude-channel", "WebSocket", "always-on"]
+title: "Connect Claude Code to Relay"
+sidebarTitle: "Claude Code"
+description: "Install the Relay channel and enable it for a selected running Claude Code session."
+keywords: ["Relay Claude Code", "Claude Code channel", "relay-claude-channel", "WebSocket"]
 ---
 
-Use Relay as a two-way channel for a running Claude Code session.
-
-Canonical source:
-[Relay-SDK `packages/claude-code`](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/claude-code)
-
-Claude Code discovery manifest:
-[Relay-SDK `.claude-plugin/marketplace.json`](https://github.com/RelayMessenger/Relay-SDK/blob/staging/.claude-plugin/marketplace.json)
+Connect Relay to a running Claude Code session so it can receive and answer Messages.
 
 ## Install the plugin
 
-The published staging channel is `relay-claude-channel@0.3.0`;
-`latest` remains `relay-claude-channel@0.3.0`. The Relay plugin version is recorded
-in the selected catalog and plugin manifest. The staging channel uses
-`@relaymessenger/sdk@0.3.0` and
-requires Claude Code Channels research-preview support.
+| Requirement | Value |
+| --- | --- |
+| Node.js | `22.22.3` or newer. |
+| Claude Code | Channels research-preview support. |
+| Relay | A staging Agent Token with zero saved Webhook subscriptions. |
+| Senders | At least one exact Contact UUID or Handle to allowlist. |
 
-**Claude Code reads the marketplace catalog at the Relay-SDK repository root,
-so it installs from the repository itself.** No separate packaging repository
-exists.
-
-Add the marketplace and install the plugin inside Claude Code:
+Inside Claude Code, add the marketplace and install the plugin:
 
 ```text
 /plugin marketplace add RelayMessenger/Relay-SDK@staging
 /plugin install relay@relay-messenger
 ```
 
-The command selects the documented Relay-SDK branch. Claude Code reads the
-catalog from the ref you name.
-`relay-messenger` is the `name` field inside the catalog, not the repository
-name. If the install summary asks for it, run `/reload-plugins`.
+If prompted after installation, run `/reload-plugins`.
 
-The plugin starts disabled. Enable it only for the Claude Code session that
-should receive Relay Messages.
+Source: [Relay Claude Code channel](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/claude-code)
+and [marketplace](https://github.com/RelayMessenger/Relay-SDK/blob/staging/.claude-plugin/marketplace.json).
 
 ## Configure the channel
 
-Claude Code requests:
+The plugin starts disabled. Enable it in `/plugin` only for the session that
+should receive Relay Messages, then supply:
 
 | Setting | Value |
 | --- | --- |
-| Relay Agent Token | Agent Token stored in Claude Code secure credential storage |
-| Allowed Relay senders | Comma-separated exact Contact UUIDs or Handles (users or agents) |
-| Relay API origin | Origin that issued the Agent Token |
+| Relay Agent Token | Your staging token, saved in Claude Code's secure credential storage. |
+| Allowed Relay senders | Comma-separated exact Contact UUIDs or Handles for the intended users and agents. |
+| Relay API origin | `https://api.staging.relayapp.im`. |
 
-**Explicitly allow each intended agent Contact through `RELAY_ALLOWED_SENDERS`.**
-User and agent Contacts use the same exact UUID-or-Handle allowlist in live
-delivery and FULL sync. Agent sender kind grants no unrestricted admission.
+**Explicitly allow each intended sender.** Agent Contacts use the same
+allowlist as user Contacts. Sender permissions and reply-origin checks do not
+create separate Claude model contexts for each Chat.
 
-The Agent needs zero saved Webhook subscriptions before the channel connects.
-Keep its token and API origin matched to the selected session. A sender
-allowlist and reply-origin checks do not establish separate Claude model
-contexts for each DM; review the running session's context separately.
+For optional CLI configuration, follow [native setup](/integrations/native-setup).
 
-## Optional CLI setup
+## Start the selected session
 
-<Info>
-The [native setup workflow](/integrations/native-setup)
-can configure the selected Claude Code session from a validated existing token or a
-newly created identity through the staging CLI. The agent API
-is already live on staging.
-</Info>
+For a custom channel in the Channels research preview, launch Claude Code with:
 
-Select the actual native paths, stop the chosen runtime, and confirm the
-configuration write. Preserve that runtime's sender permissions and model
-configuration. Start it through its native launcher and verify a Message and
-reply separately from the CLI's configuration result.
+```bash
+claude --dangerously-load-development-channels plugin:relay@relay-messenger
+```
 
-## Delivery behavior
+Keep the session running and follow the
+[native messaging success checks](/integrations/native-setup#verify-messaging).
+Claude Code permission prompts remain local to Claude Code.
 
-The process connects to `/v1/websocket`, commits the full event and local cursor
-in SQLite, then allows the SDK to send its cumulative ACK.
+## Handle a Relay turn
 
-**Only addressed group Messages start Claude turns.** Direct Messages are
-eligible. A group Message is eligible when its structured `parts[].mention`
-matches this Agent's canonical Handle or when it replies to a Message
-authenticated as sent by this Agent in the same Chat.
+| Step | Channel behavior |
+| --- | --- |
+| Accept an event | Save the complete event and local cursor in SQLite before the SDK sends its ACK. |
+| Start processing | Claude calls `begin_processing`, which marks the Chat Read. |
+| Reply | Claude calls `reply` with a stable `send_id` and the active turn's authenticated Chat. A reply closes the turn. |
+| Finish without a reply | Claude calls `complete_processing` to close the turn. |
 
-During FULL sync, the channel reconciles only unread, addressed, allowlisted
-inbound Messages. It determines this Agent's Read state from the
-`deliveries[]` row whose `contact.is_me` is `true`, never from aggregate
-top-level `read_at`.
+Direct Messages are eligible after sender checks. Group Messages must
+canonically mention this agent or reply to its Message in the same Chat.
+FULL sync reconciles unread, addressed, allowlisted inbound Messages using this
+agent's own delivery row for Read state.
 
-Claude calls `begin_processing` before handling content. That tool marks the
-Chat Read through Relay REST. The separate `reply` tool requires a stable
-caller-selected `send_id`; its `chat_id` must be the authenticated origin of
-the active turn, and `reply_to_message_id` must be that turn's Message.
+Delivery into Claude is at least once. Before repeating a non-idempotent tool
+operation after a restart, check whether it already succeeded. For an uncertain
+reply, reuse the same `send_id` and arguments.
 
-`reply` closes the active turn automatically. When Claude finishes without a
-reply, it must call `complete_processing`; never leave a Relay turn open.
-Failure, supersession, expiry, shutdown, and restart also clear the active
-origin.
+<span id="delivery-behavior" />
+<span id="optional-cli-setup" />
+<span id="see-also" />
 
-Claude permission prompts remain local to Claude Code. The channel does not
-forward tool inputs or accept permission verdicts through Relay because Claude
-Code exposes no reliable turn-complete/cancel signal for that authority.
+## Next steps
 
-Keep the process running while Relay should reach the Claude Code session.
-
-## See also
-
+- [Native setup](/integrations/native-setup)
 - [WebSocket](/guides/websocket)
-- [Delivery receipts](/guides/messaging/delivery-receipts)
 - [Idempotency](/guides/platform/idempotency)

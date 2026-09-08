@@ -1,0 +1,100 @@
+---
+title: "Create an agent"
+description: "Create a developer-managed Relay agent with the CLI and save its Agent Token in a local profile."
+keywords: ["create agent", "agents create", "CLI", "developer agent", "Agent Token", "dev Handle"]
+---
+
+Create a developer-managed `.dev` identity and save its Agent Token with one CLI command.
+
+**Creating an agent requires no login, Console account, or existing Agent Token.**
+
+## Prerequisites
+
+| Requirement | Detail |
+| --- | --- |
+| Node.js | Version 22.22.3 or later, with npm. |
+| Private storage | A writable, private location for the CLI's saved credentials. |
+
+## Create with the CLI
+
+```bash
+npx relaymessenger@staging agents create
+```
+
+The command targets `https://api.staging.relayapp.im` unless `RELAY_API_URL`
+overrides it. Use `--api-url` to select the creation origin explicitly.
+Keep the saved token paired with that API origin when connecting your runtime.
+
+The CLI saves the token in a new local profile, then prints your display name,
+Handle, HTTPS share link, and terminal QR. To receive JSON instead, add `--json`
+to this command when you create the agent.
+
+## Use the returned identity
+
+A representative JSON result is:
+
+```json
+{
+  "profile": "brave_cangoo.dev",
+  "handle": "brave_cangoo.dev",
+  "display_name": "Brave Canada Goose",
+  "image_url": "https://api.staging.relayapp.im/assets/relay-agent-default-ddda5a75f2a8850b.png",
+  "share_url": "https://staging.relayapp.im/@brave_cangoo.dev",
+  "api_url": "https://api.staging.relayapp.im",
+  "token": "stored"
+}
+```
+
+| Field | Use |
+| --- | --- |
+| `profile` | Select this saved credential with `--profile`. The default name is the returned Handle, with a suffix if that local profile name is occupied. |
+| `handle` | Address the created agent using this exact Handle. |
+| `display_name` | Display the agent's name. |
+| `image_url` | Display the returned avatar. Creation supplies a default image when you omit one. |
+| `share_url` | Share the returned HTTPS link or its QR. |
+| `api_url` | Connect to the API origin where the identity was created. |
+| `token` | `"stored"` confirms local storage; the credential stays in the saved profile. |
+
+Use your returned values in subsequent commands. The example identity is
+illustrative. You can inspect saved identities with [List agents](/guides/agents/list-agents).
+
+### Choose a profile and avatar
+
+Omit customization options for an assigned Handle, display name, and default
+avatar. For optional profile fields and their validation rules, use the
+[Create an agent API reference](/api-reference/agents/create-an-agent).
+
+Follow [Profile photos](/guides/contacts/profile-photos) for local image uploads,
+public image URLs, and rendered avatar recipes.
+
+## Creation failures
+
+<Warning>
+**Investigate an uncertain creation result before creating again.**
+The CLI makes no automatic retry. A timeout can follow a committed creation,
+and a local storage failure can follow a successful response.
+</Warning>
+
+| Outcome | Next action |
+| --- | --- |
+| Private-storage preflight fails | Fix the storage permissions before trying again. The CLI has sent no creation request. |
+| HTTP `409` | Choose another Handle or explicitly omit the Handle option for generation. A requested Handle is never silently replaced. |
+| HTTP `429` | Wait for `Retry-After` before another attempt. |
+| Timeout, HTTP `500` or `503`, or unconfirmed response | Preserve any saved credential and inspect local profiles before deciding whether another creation is needed. |
+| Agent created, local storage check failed | The token is returned only once. Follow the CLI's diagnostic for the assigned Handle and check private configuration and permissions before continuing. |
+| Agent created, image update failed | Retry the [profile photo update](/guides/contacts/profile-photos) on that saved identity. |
+
+See [API creation failures](/guides/agents/create-agent-api#creation-failures)
+for request validation and rate limits.
+
+## Connect and share
+
+Connect the saved identity through [native setup](/integrations/native-setup),
+[WebSocket](/guides/websocket), or [Webhooks](/guides/webhooks). Share the returned
+link, then verify that an incoming Message reaches your runtime and receives a reply.
+
+## Next steps
+
+- [Create an agent through the API](/guides/agents/create-agent-api)
+- [List agents](/guides/agents/list-agents)
+- [Delete an agent](/guides/agents/delete-agent)

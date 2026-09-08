@@ -23,6 +23,7 @@ from origins import ROOT, TARGET_FILE, production_text
 # fails the test instead of silently leaving the table's own list shorter.
 EXPECTED_REWRITES = {
     "docs.staging.relayapp.im": "docs.relayapp.im",
+    "staging.relayapp.im/@example.dev": "go.relayapp.im/@example.dev",
     "api.staging.relayapp.im": "api.relayapp.im",
     "cdn.staging.relayapp.im": "cdn.relayapp.im",
     "console.staging.relayapp.im": "console.relayapp.im",

@@ -27,6 +27,11 @@ Conventions this site follows. They apply to people and to coding agents.
 
 ## Page anatomy
 
+Give each page one reader task or one reference subject. Put independent
+operations on their own pages, and link to the owner instead of repeating its
+setup, payloads, or policy. A shorter paragraph is not a substitute for a
+clear page boundary.
+
 Start every page with valid frontmatter. `title`, `description`, and `keywords`
 are required; `keywords` feeds search and the assistant index.
 
@@ -42,7 +47,7 @@ Then follow the shape for the page type:
 
 | Page type | Shape |
 | --- | --- |
-| Task guide | Outcome sentence → prerequisites → first runnable `curl` → real response → failure and retry behavior → `Next steps` |
+| Task guide | Outcome sentence → required inputs → first runnable command or request → success check → relevant failure handling → `Next steps` |
 | Concept | Definition and ownership boundary → smallest wire example → lifecycle and invariants → `See also` |
 | Reference | Canonical shape first → field, limit, and error tables → `See also` |
 
@@ -57,7 +62,9 @@ Then follow the shape for the page type:
 - Keep the navbar limited to **Copy agent prompt** and the primary **Console**
   action. The logo owns the `https://relayapp.im` website link.
 - `agent-prompt.js` copies `skill.md` exactly. Its link falls back to the full
-  prompt code block when JavaScript or clipboard access is unavailable.
+  prompt code block on `agent-reference/prompt.mdx` when JavaScript or
+  clipboard access is unavailable. Do not embed that block in a human
+  onboarding or installation page.
 - Keep Mintlify's native **Copy page** label honest.
 - Use `https://api.staging.relayapp.im` and `$RELAY_AGENT_TOKEN` in examples.
 - Show the maintained TypeScript SDK and equivalent raw HTTPS side by side,
@@ -74,13 +81,21 @@ Then follow the shape for the page type:
 - Open with one sentence naming the outcome. No framing essay.
 - Cap paragraphs at three sentences. If it will not split, it is a list or a table.
 - Second person, active voice, sentence case headings.
-- Every field, limit, error, status, or comparison list is a table. A field list
-  written as prose is a defect.
+- Use tables for field references, limits, and comparisons. Do not add a field
+  table to a task guide when a link to its reference is sufficient.
 - End every page in `Next steps` or `See also` with real links, never a summary
   paragraph restating the page.
 - No em dashes. Use commas, colons, or a period.
 - No marketing language, filler ("it's important to note", "in order to"), or
   editorializing ("simply", "just", "obviously").
+- Keep ordinary task pages to five top-level sections before related links.
+  Count examples and tables as part of the reader's workload. Full protocol
+  reference and machine instructions have separate, explicit homes.
+- Keep package provenance, registry inventories, deployment status, test
+  receipts, and publishing instructions in maintainer tooling. They are not
+  steps for someone installing an integration.
+- Do not add a generic integration audit to every guide. Link to the shared
+  coding-agent audit when useful.
 
 ## Components
 

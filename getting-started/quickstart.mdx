@@ -1,291 +1,60 @@
 ---
 title: "Quickstart"
-description: "Create an agent in Relay Console, connect your backend to its events, and reply to Messages."
-keywords: ["quickstart", "Relay Console", "Agent Token", "WebSocket", "webhook", "reply"]
+description: "Create a Relay agent, connect your runtime, and exchange your first Message."
+keywords: ["quickstart", "first Message", "agent", "connect"]
 ---
 
-Create an agent in Relay Console, connect your backend to its events, mark Messages Read, and reply.
+Connect an existing OpenClaw, Hermes, or Claude Code runtime and talk to it in Relay.
 
-<Info>
-The [developer-managed agent workflow](/guides/agents/lifecycle) uses anonymous creation in the staging API. Use the staging CLI for that path. This Quickstart keeps the existing Console path for creating an
-identity and connecting your backend.
-</Info>
+## 1. Create your agent
 
-## Prerequisites
-
-- A [Relay Console](https://console.staging.relayapp.im) account
-- An always-on backend for WebSocket, or a public HTTPS endpoint for Webhooks
-- A durable database or queue for incoming events
-
-## 1. Create the agent and copy its token
-
-In [Relay Console](https://console.staging.relayapp.im), open **Create agent**.
-The dialog asks for a **Name** and a **Handle**.
-
-| Field | Rule |
-| --- | --- |
-| Name | The display name users see in Relay |
-| Handle | The agent's public address. Type the local part only: 3 to 32 lowercase letters, numbers, or underscores, starting with a letter. Relay Console appends your organization's namespace, so `forecast` becomes `forecast.yourorg`. |
-
-Press **Create agent**. The next screen, **Connect your backend**, shows the
-Agent Token once. Press **Copy token** and store it in server-side secret
-storage before you close the dialog. To replace a lost token, open the agent's
-**Settings** page and rotate it under **Agent token**; the new token is shown
-once.
-
-The same dialog then asks you to **Choose your connection**: **WebSocket** for
-an always-on backend, or **Webhook** for a public HTTPS receiver. Step 4
-connects either one.
-
-## 2. Set your credentials
+With Node.js 22.22.3 or newer, run:
 
 ```bash
-export RELAY_API_URL="https://api.staging.relayapp.im"
-export RELAY_AGENT_TOKEN="<agent-token>"
+npx relaymessenger@staging agents create --api-url https://api.staging.relayapp.im
 ```
 
-**Pair the API root with an Agent Token from that environment's Console.**
-The root above is staging; use a staging token. Read the matching local docs
-and current Server `contracts/developer/openapi.yaml` for your checkout.
+The CLI saves the Agent Token and prints your agent's Handle, share link, and QR.
+Keep that profile for the remaining steps.
 
-Verify access with a small read:
+Already have an agent? [Use its existing token](/integrations/cli/authentication)
+instead of creating another one. For organization-managed agents, use
+[Relay Console](/guides/agents/console-agent).
 
-```bash
-curl -sS --fail-with-body "$RELAY_API_URL/v1/chats?limit=1" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-```
+## 2. Connect your runtime
 
-HTTP `200` verifies this read even if `chats` is empty. Select the greeting's
-recipient separately with the setup prompt in step 7. For `401`, check the
-environment/token pair and token validity before continuing.
+**Creating the identity does not start an agent runtime.** Use
+[native setup](/integrations/native-setup) to connect the saved profile to your
+selected OpenClaw account, Hermes profile, or Claude Code session.
 
-## 3. Choose the SDK or HTTPS
+That guide reuses the saved token without printing it. Keep the token and API
+origin in the same environment, and start only the runtime you configured.
 
-<Tabs>
-  <Tab title="TypeScript SDK">
-    ```bash
-    npm install @relaymessenger/sdk@staging
-    ```
+## 3. Send a Message
 
-    ```typescript
-    import Relay from "@relaymessenger/sdk";
+Open the share link on your phone, or scan the QR with Relay's Add scanner.
+Add the agent, start its configured runtime, and send it a Message.
 
-    const relay = new Relay({
-      apiKey: process.env.RELAY_AGENT_TOKEN!,
-      baseURL: process.env.RELAY_API_URL ?? "https://api.staging.relayapp.im",
-    });
-    ```
-  </Tab>
-  <Tab title="cURL">
-    Use `$RELAY_API_URL` and `$RELAY_AGENT_TOKEN` from step 1.
-  </Tab>
-</Tabs>
+**A reply in the Chat confirms the complete path.** A saved token, configured
+runtime, or open connection alone does not.
 
-## 4. Connect the event path
+If you use a coding agent to finish setup, the
+[setup agent performs its greeting step once](/agent-reference/prompt#relay-agent-prompt).
+It is not a backend startup action.
 
-Relay delivers every event over one WebSocket or to saved webhook
-subscriptions. An agent is in exactly one mode: a WebSocket upgrade returns
-HTTP `409` while the agent has any saved webhook subscription, and saving the
-first subscription closes every connected socket with code `4410`.
-
-<Tabs>
-  <Tab title="WebSocket">
-    Use WebSocket for an always-on backend. The saved subscription list must
-    be empty; the HTTPS call below reads it.
-
-    <CodeGroup>
-    ```typescript TypeScript SDK
-    await relay.websocket.run({
-      async onEvent(event) {
-        await inbox.insertOnce(event.event_id, event);
-      },
-      async onFullSync({ throughSequence }) {
-        const snapshot = await readRelaySnapshot(relay);
-        await inbox.replaceSnapshot(throughSequence, snapshot);
-      },
-    });
-    ```
-
-    ```bash cURL
-    curl -sS "$RELAY_API_URL/v1/webhook-subscriptions" \
-      -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-    ```
-    </CodeGroup>
-
-    The SDK upgrades `wss://api.staging.relayapp.im/v1/websocket` with the
-    bearer header, answers heartbeats, reconnects with backoff, and sends a
-    cumulative ACK after `onEvent` returns. A raw client sends the same
-    `Authorization` header on the upgrade. The [WebSocket guide](/guides/websocket)
-    covers frames, ACKs, and FULL sync.
-  </Tab>
-  <Tab title="Webhooks">
-    Use Webhooks for a public HTTPS receiver. Create a subscription:
-
-    <CodeGroup>
-    ```typescript TypeScript SDK
-    const subscription = await relay.webhookSubscriptions.create({
-      target_url: "https://agent.example/webhooks/relay",
-      subscribed_events: ["message.received"],
-    });
-    ```
-
-    ```bash cURL
-    curl -sS -X POST "$RELAY_API_URL/v1/webhook-subscriptions" \
-      -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-      -H "Content-Type: application/json" \
-      -d '{
-        "target_url":"https://agent.example/webhooks/relay",
-        "subscribed_events":["message.received"]
-      }'
-    ```
-    </CodeGroup>
-
-    Save `signing_secret` from the response. Relay returns it once. Relay
-    moves matching pending events to this subscription with the same
-    `event_id`.
-
-    ```json
-    {
-      "id":"01993d50-34ca-7613-8df2-d3f8cc975d04",
-      "target_url":"https://agent.example/webhooks/relay",
-      "subscribed_events":["message.received"],
-      "is_active":true,
-      "signing_secret":"whsec_<base64-key>",
-      "created_at":"2026-08-29T06:20:00.000Z",
-      "updated_at":"2026-08-29T06:20:00.000Z"
-    }
-    ```
-
-    To move the receiver later, update the subscription with
-    `PUT /v1/webhook-subscriptions/{subscriptionId}` instead of creating a
-    second one.
-  </Tab>
-</Tabs>
-
-## 5. Accept the event durably
-
-<Steps>
-  <Step title="Verify">
-    Webhooks only: verify the Standard Webhooks signature against the exact
-    raw request body.
-  </Step>
-  <Step title="Deduplicate">
-    Insert `event_id` under a unique constraint.
-  </Step>
-  <Step title="Commit">
-    Save the event or a durable job before acknowledging.
-  </Step>
-  <Step title="Acknowledge">
-    Webhooks: return `200` or `204` within 10 seconds. WebSocket: let
-    `onEvent` return, and the SDK sends the cumulative ACK.
-  </Step>
-  <Step title="Mark Read, then process">
-    After the acknowledgement, mark the Chat Read, run the model, and send the
-    reply, as in step 6.
-  </Step>
-</Steps>
-
-**A webhook `2xx` is a transport acknowledgement only, and so is a WebSocket
-ACK.** Send it after the event commits durably. It does not advance Message
-Delivered or Read state.
-
-Relay retries `429`, `5xx`, timeouts, and connection failures. Other `4xx`
-responses end delivery, so reject only requests that must not be retried.
-
-The SDK verifies and unwraps the unmodified webhook body:
-
-```typescript
-const relay = new Relay({
-  apiKey: process.env.RELAY_AGENT_TOKEN!,
-  baseURL: process.env.RELAY_API_URL ?? "https://api.staging.relayapp.im",
-  webhookSecret: process.env.RELAY_WEBHOOK_SECRET!,
-});
-
-const event = relay.webhooks.unwrap(rawBody, {
-  headers: request.headers,
-});
-
-await inbox.insertOnce(event.event_id, event);
-return new Response(null, { status: 204 });
-```
-
-## 6. Mark Read, then reply
-
-Read is optional. It advances only through
-`POST /v1/chats/{chatId}/read`. Mark it before model or tool work, so the
-user sees Read while the reply is being produced, then send the reply with a
-stable idempotency key.
-
-<CodeGroup>
-```typescript TypeScript SDK
-await relay.chats.markAsRead(chatId);
-
-// Model and tool work run after the Read mark.
-const text = await produceReply(event);
-
-await relay.chats.messages.send(chatId, {
-  message: {
-    parts: [{ type: "text", value: text }],
-    reply_to: { message_id: messageId, part_index: 0 },
-    idempotency_key: `reply-${eventId}`,
-  },
-});
-```
-
-```bash cURL
-curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/read" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-
-# Model and tool work run here, after the Read mark.
-
-curl -sS -X POST "$RELAY_API_URL/v1/chats/$CHAT_ID/messages" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: reply-$EVENT_ID" \
-  --data-binary @- <<JSON
-{
-  "message": {
-    "parts": [{"type":"text","value":"Tomorrow at 2:00 PM works."}],
-    "reply_to": {"message_id":"$MESSAGE_ID","part_index":0}
-  }
-}
-JSON
-```
-</CodeGroup>
-
-The Read call returns `204`. The send returns `202` with the stored Message,
-and a repeat with the same `Idempotency-Key` returns the same Message ID.
-
-## 7. Finish setup with your coding agent
-
-Use the [Relay agent prompt](/getting-started/ai-agents#relay-agent-prompt)
-to finish setup and send one greeting to your intended direct Chat. The
-setup agent performs this step once; your backend handles incoming Messages.
-
-## Review with an agent
-
-**Audit this event consumer against the current contract.** Copy this prompt into your coding agent.
-
-<CodeGroup>
-```text Audit a Relay event consumer
-Audit this Relay event consumer without changing code.
-
-1. Read https://docs.staging.relayapp.im/llms.txt and the current Relay OpenAPI first.
-2. Locate Agent Token authentication and the webhook receiver or WebSocket runner.
-3. For webhooks, prove the signature is verified against the raw body.
-4. Prove event_id is committed under a uniqueness rule before the 2xx response or ACK.
-5. Prove the Chat is marked Read through POST /v1/chats/{chatId}/read before model work.
-6. Prove model work happens after the acknowledgement.
-7. Prove replies use POST /v1/chats/{chatId}/messages with a stable idempotency key.
-8. Report Check | Status | file:line evidence | Fix.
-9. Mark anything you cannot prove as unknown.
-```
-</CodeGroup>
+<span id="1-create-the-agent-and-copy-its-token" />
+<span id="2-set-your-credentials" />
+<span id="3-choose-the-sdk-or-https" />
+<span id="4-connect-the-event-path" />
+<span id="5-accept-the-event-durably" />
+<span id="6-mark-read-then-reply" />
+<span id="7-finish-setup-with-your-coding-agent" />
+<span id="prerequisites" />
+<span id="review-with-an-agent" />
 
 ## Next steps
 
-- [Authentication](/getting-started/authentication)
-- [Client SDKs](/getting-started/sdks)
-- [Sending Messages](/guides/messaging/sending-messages)
-- [Webhooks](/guides/webhooks)
-- [WebSocket](/guides/websocket)
+- [Customize the agent's profile](/guides/contact-cards)
+- [Build your own backend](/integrations)
+- [Send Messages from your code](/guides/messaging/sending-messages)
+- [Check integration reliability](/getting-started/best-practices)

@@ -1,118 +1,39 @@
 ---
 title: "Key concepts"
-description: "Understand Contacts, Handles, Chats, Messages, and Attachments."
-keywords: ["Contact", "Handle", "Chat", "Message", "Attachment"]
+description: "Learn the resource names used by the Relay API."
+keywords: ["Contact", "Handle", "Chat", "Message", "Attachment", "event"]
 ---
 
-Relay uses these terms in every guide and endpoint.
+Relay represents messaging with these resources.
 
-## Contacts and Handles
-
-A **Contact** is a user or agent profile. Every Contact owns one public **Handle**.
-
-| Field | Meaning |
-| --- | --- |
-| `id` | Stable opaque UUIDv7 Contact ID |
-| `handle` | Public messaging address, such as `weather.acme` |
-| `kind` | `user` or `agent` |
-| `display_name` | Current profile name |
-| `image_url` | Current profile image |
-
-An agent Handle has one of two shapes. Relay Console appends the namespace;
-you type only the local part.
-
-| Handle | Shape | Example |
+| Resource | Meaning | Learn more |
 | --- | --- | --- |
-| Username-scoped | `local.namespace`: a local part of 3 to 32 lowercase letters, numbers, or underscores starting with a letter, exactly one dot, then your organization's namespace | `forecast.acme` |
-| Premium | One word of 3 to 32 lowercase letters, numbers, or underscores, with no dot | `forecast` |
+| Contact | A user or agent profile | [Contact Cards](/guides/contact-cards) |
+| Handle | A Contact's public messaging address, such as `weather.acme` | [Add requests](/guides/contacts/add-requests) |
+| Chat | A direct or group container for Messages and membership | [Chats](/guides/chats) |
+| Message | One ordered set of content parts in a Chat | [Messaging](/guides/messaging) |
+| part | A text, media, or link unit within a Message | [Message parts](/guides/messaging/message-parts) |
+| Attachment | An uploaded file referenced by a media part | [Attachments](/guides/messaging/attachments) |
+| Event | A notification about a change, delivered to your backend | [Event types](/guides/webhooks/events) |
 
-Handles can change. Relationships such as membership, delivery, reactions,
-and blocks use stable Contact IDs internally.
+A user-facing Chat contains one user and one or more agents. The developer API
+also supports agent-to-agent Chats. Your backend supplies the agent's behavior;
+Relay supplies messaging.
 
-When a user adds an agent, Relay creates or reuses their direct Chat and sends
-the agent backend `contact.added`. The agent can Message that user while the
-user keeps it added and unblocked.
+**Keep resource IDs when storing relationships.** A Handle can change; the
+Contact ID remains its stable identity.
 
-## Chats
+<span id="attachments" />
+<span id="chats" />
+<span id="contacts-and-handles" />
+<span id="delivery" />
+<span id="events" />
+<span id="idempotency" />
+<span id="messages-and-parts" />
+<span id="related" />
 
-A **Chat** is a Message container whose members are Contacts. A user-facing
-Chat contains one user and one or more agents. Developer Chats can also contain
-only agents.
+## See also
 
-**The user remains a Contact, a Chat member, and a Message sender.** Contacts
-keep their public Handles and the same membership model in either Chat type.
-
-| Property | Rule |
-| --- | --- |
-| Direct Chat | One user and one agent, or two agents |
-| Group Chat | 3 to 7 active Contacts, including at least one agent and at most one user |
-| Creation and reuse | Count the authenticated sender in the complete set of Contacts |
-| Chat management | Both the user and an authorized agent can create and manage Chats; management of an existing Chat requires active membership |
-| Admission eligibility | On creation or reuse of a Chat containing a user, every selected agent must already be in that user's Contacts and unblocked |
-| Adding an agent | The added target and any acting agent must be in the user's Contacts and unblocked |
-| Maximum size | 7 active Contacts total, the sender plus at most 6 others |
-| Membership changes | Agent Contacts can join, leave, or be removed; the user stays for the Chat's lifetime |
-| Membership history | Records when a Contact joined, left, or was removed |
-| Newly added Contact | Visible history starts at `joined_at` |
-
-Contacts relationships and Chat membership have separate lifecycles. History
-visibility follows the recorded membership periods.
-
-## Messages and parts
-
-A **Message** belongs to one Chat and contains 1 to 100 ordered `parts`.
-
-| Part | Purpose |
-| --- | --- |
-| `text` | Plain text, optionally with one structured mention |
-| `media` | An image, video, audio file, or document |
-| `link` | One URL that renders as a rich preview |
-| `system` | Visible Chat events such as group history or Contact Card sharing |
-
-Parts are addressed by zero-based `part_index`. Replies and reactions can target an exact part.
-
-## Attachments
-
-An **Attachment** is an uploaded file up to 100 MB. Allocate it and upload the
-declared bytes before using its `attachment_id` in a Message. The Contact that
-allocated it remains its owner.
-
-## Delivery
-
-| State | Meaning |
-| --- | --- |
-| Sent | The client handed the Message to Relay, a client-only state |
-| Delivered | Relay accepted and stored the Message |
-| Read | Every snapshotted recipient explicitly marked the Chat Read |
-
-Relay stamps every recipient Delivered at the Message commit time. Recipient
-devices and agent transports do not advance Delivered.
-
-Webhook `2xx` responses and WebSocket ACKs acknowledge event transport only.
-They do not advance Delivered or Read. For an agent, Read is optional and
-advances only through `POST /v1/chats/{chatId}/read`.
-
-## Events
-
-Saved webhook subscriptions determine event delivery:
-
-| Configuration | Path |
-| --- | --- |
-| One or more webhook subscriptions | Matching active Webhooks |
-| Zero webhook subscriptions | WebSocket |
-
-Pending events retain the same `event_id` when the first subscription is
-created or the last is deleted.
-
-## Idempotency
-
-Message sends accept an idempotency key up to 255 characters. The same key and
-body return the original Message. The same key with different content returns
-`409`.
-
-## Related
-
-- [Messaging overview](/guides/messaging)
-- [Chats overview](/guides/chats)
-- [Add requests](/guides/contacts/add-requests)
-- [Webhook Event Types](/guides/webhooks/events)
+- [Create an agent](/guides/agents/create-agent)
+- [Chat membership and history](/guides/chats/participants)
+- [Delivered and Read](/guides/messaging/delivery-receipts)

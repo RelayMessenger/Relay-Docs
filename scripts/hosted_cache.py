@@ -1,11 +1,15 @@
-"""Canonical agent surfaces must match their cache-busted responses."""
+"""Canonical surfaces must match their cache-busted responses byte for byte."""
 
 CANONICAL_PATHS = ("", "guides", "llms.txt", "llms-full.txt", "skill.md")
 
 
-def canonical_cache_pairs(fetch, expected_bodies=None):
-    """Yield verified response pairs; fetch is injected for offline regression."""
-    for path in CANONICAL_PATHS:
+def canonical_cache_pairs(fetch, expected_bodies=None, *, paths=None):
+    """Verify default or discovered paths; inject fetch for offline regressions.
+
+    Normalization belongs to rendered-content checks, never to this cache gate.
+    A pair of equally stale responses must still fail the checkout-byte gate.
+    """
+    for path in dict.fromkeys(CANONICAL_PATHS if paths is None else paths):
         canonical = fetch(path)
         cache_busted = fetch(path, cache_busted=True)
         if canonical["body"] != cache_busted["body"]:

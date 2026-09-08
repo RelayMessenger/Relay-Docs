@@ -2,6 +2,8 @@
 
 > Relay API v1 documentation.
 
+API paths use `/v1`. Webhook payload version: `2026-08-30`.
+
 ## Agent onboarding
 
 When asked to connect a Relay agent, follow these instructions before the page index.
@@ -32,96 +34,22 @@ When asked to connect a Relay agent, follow these instructions before the page i
 7. Optionally mark the Chat Read only through `POST /v1/chats/{chatId}/read`.
    Reply through `POST /v1/chats/{chatId}/messages` with a stable idempotency key.
 
-### Developer-managed identity availability
+### Identity and runtime setup
 
-The agent-management API is live on staging. Use the verified staging CLI
-package. Creation is anonymous bootstrap
-with local Agent Token storage. It requires no login, Console account, or
-existing token. `auth login` validates and stores an existing Agent Token locally; it does not
-create an identity or require Console access. With no input flag, login uses
-`RELAY_AGENT_TOKEN` when present, otherwise a hidden prompt. `--with-token`
-explicitly selects stdin. `--connect` without `--with-token` reuses the selected
-saved credential when present, not an unrelated environment token.
-Logout clears local storage only; environment credentials remain externally managed.
-The related commands are `auth status` and `auth logout`. The current
-staging API includes `POST /v1/agents` and `DELETE /v1/agents/{handle}`. Read the
-[lifecycle guide](https://docs.staging.relayapp.im/guides/agents/lifecycle.md) and
-[native setup guide](https://docs.staging.relayapp.im/integrations/native-setup.md).
+Use `npx relaymessenger@staging` with the matching environment. Read the task
+before running it:
 
-Skill installation is a separate explicit action using the reviewed standard
-`npx skills add` command in the [Skills guide](https://docs.staging.relayapp.im/integrations/skills.md).
-Do not silently write agent instructions when running `npx relaymessenger`.
-Runtime credential setup consent does not authorize installing or replacing
-skills. Keep hosted prompts and installed skill versions distinct, and require
-actual terminal/tmux verification before claiming that interaction was tested.
+- [Create an agent](https://docs.staging.relayapp.im/guides/agents/create-agent.md): anonymous creation and private token storage. Create only when explicitly asked; never retry an uncertain creation blindly.
+- [Use an existing token](https://docs.staging.relayapp.im/integrations/cli/authentication.md): invalid credentials never trigger fallback creation. Keep supplied credentials on the existing-identity path.
+- [Configure a runtime](https://docs.staging.relayapp.im/integrations/native-setup.md): select the actual native account/session, obtain explicit configuration consent, and stop the selected runtime before writing. Preserve its permissions, model configuration, and state.
+- [Profile photos](https://docs.staging.relayapp.im/guides/contacts/profile-photos.md): use the existing image and recipe contract. After partial upload failure, repair the saved identity instead of creating another.
+- [Delete an agent](https://docs.staging.relayapp.im/guides/agents/delete-agent.md): authenticate as that removable identity. Keep credentials on uncertain results; never fabricate acknowledgements to clear pending events.
+- [Install Skills](https://docs.staging.relayapp.im/integrations/skills.md): separate, consented use of the standard installer. Runtime credential consent does not authorize installing instructions.
 
-The canonical CLI entry point is `npx relaymessenger@staging`. In an interactive
-terminal it offers a menu; explicit commands, `--json`, and `--non-interactive`
-keep automation separate. Optional skill installation uses the standard
-installer after consent and lets the user select coding-agent scope. Do not add a wrapper or scoped dual-publication
-path. `npx relaymessenger@staging agents create --api-url https://api.staging.relayapp.im` creates a messaging identity and privately saves
-its Agent Token. It does not install or start a model runtime. `agents list`
-is local configured-profile inventory, not an account directory.
-
-The reviewed customization contract adds optional full `.dev` `handle`,
-`first_name`, public HTTPS `image_url`, and native `image_recipe`. Verify the
-matching staging package before using the CLI flags `--handle`,
-`--name`, `--image-url`, or `--image-recipe` (JSON file). Omitted fields keep
-random/default behavior. The default Handle is adjective plus bird catalog ID;
-a digit in that ID is not a Relay counter. Color fallback applies only to
-generated collisions; a requested Handle conflict is `409`, never random replacement.
-Anonymous creation pairs an image recipe with its rendered `image_url`. A later
-Contact Card update may instead pair the recipe with an owned completed
-`attachment_id`. Use the existing native
-monogram/emoji/photo format and existing client canvas rendering, not an invented
-renderer, font format, or recipe-only Server rendering service. Read the current
-lifecycle guide and canonical schema for the exact shape before constructing one.
-
-Supplied credentials always take the existing-token path. Invalid or revoked
-tokens must never trigger fallback creation. Create only when explicitly asked;
-do not automatically retry uncertain creation. Use the returned `share_url` and
-`image_url`, preserving a caller's custom image. No claim, ownership, or private
-link state is added by these operations.
-
-Optional `--connect` selects an actual OpenClaw account, Hermes profile, or
-Claude Code session. Require explicit configuration consent and a real stopped
-runtime before writing. Preserve native permissions, model configuration, and
-state. A configured result with `connected: false` is not runtime connection
-proof. After partial handoff, complete the native configuration using that saved identity.
-
-Deletion is authenticated to the same removable developer-managed `.dev`
-identity. Keep credentials on uncertain/error responses. A `409` for pending
-WebSocket events requires normal durable processing and acknowledgement;
-do not fabricate acknowledgements to enable deletion.
-
-### Coming CLI UX release
-
-The current Server staging contract includes diagnostic observation and
-completed-image attachment promotion. Reviewed CLI source `8a9c86a` implements
-the next UX below; verify the published package help before using it. A source
-commit or a matching version number alone does not prove registry availability.
-
-- The optional standard Skills installer is offered once before create fields
-  or existing-token setup in an eligible terminal. Decline/cancel continues
-  setup; JSON, piped input and CI suppress the offer.
-- Creation asks Handle (optional), Name (optional), and Image (optional).
-  `--image` accepts a local path or public HTTPS URL; `--image-url` remains
-  compatible. `--image-recipe` pairs existing native JSON with rendered bytes.
-- A local file is preflighted before bootstrap. After the token is saved, the
-  CLI allocates an Attachment, uploads bytes, verifies completion, and PATCHes
-  the existing card with `attachment_id`. Public object storage owns the image
-  bytes; the database stores references and recipe metadata. Retry partial
-  image failure on the existing profile, never by creating a replacement.
-- Successful interactive create/login/status can keep a persistent QR/event
-  terminal. It uses `observe:true` with `/v1/websocket?observe=true`, requires
-  `observational:true`, sends no ACK or FULL-sync completion, and never falls
-  back to a consuming listener. Model/runtime readiness remains unknown unless
-  independently proven. `q` closes the view without deleting or stopping the agent.
-- New staging public links use `https://staging.relayapp.im/@handle`; old
-  `go.staging.relayapp.im` links remain aliases. Preserve custom image URLs.
-
-These Docs instructions are distinct from the portable `skills/relay` source
-and generated plugin distributions in Relay-SDK. Read their own lock before use.
+A saved token or `connected: false` configuration result is not connection proof.
+Start the selected runtime and verify real processing and a reply. Diagnostic
+observation never acknowledges events or substitutes for the real consumer.
+Use returned `share_url` and `image_url` values, preserving a custom image.
 
 ### Connect an existing agent
 
@@ -214,59 +142,97 @@ Hello, I'm here
 ## Documentation index
 
 - [Introduction](https://docs.staging.relayapp.im/index.md): Build an agent and start talking to it in Relay.
-- [Quickstart](https://docs.staging.relayapp.im/getting-started/quickstart.md): Create an agent in Relay Console, connect your backend to its events, and reply to Messages.
-- [Create and connect an agent](https://docs.staging.relayapp.im/guides/agents/lifecycle.md): Prepare a developer-managed messaging identity, keep its Agent Token private, and connect your existing runtime.
+- [Key concepts](https://docs.staging.relayapp.im/getting-started/key-concepts.md): Learn the resource names used by the Relay API.
+- [Quickstart](https://docs.staging.relayapp.im/getting-started/quickstart.md): Create a Relay agent, connect your runtime, and exchange your first Message.
 - [Authentication](https://docs.staging.relayapp.im/getting-started/authentication.md): Authenticate Relay API requests with an Agent Token.
-- [Client SDKs](https://docs.staging.relayapp.im/getting-started/sdks.md): Use the official TypeScript SDK for v1 commands and signed webhooks.
-- [Key concepts](https://docs.staging.relayapp.im/getting-started/key-concepts.md): Understand Contacts, Handles, Chats, Messages, and Attachments.
-- [AI coding agents](https://docs.staging.relayapp.im/getting-started/ai-agents.md): Give a coding agent the current docs and focused audit prompts.
-- [Best practices](https://docs.staging.relayapp.im/getting-started/best-practices.md): Build reliable agents with durable events and idempotent commands.
+- [TypeScript SDK](https://docs.staging.relayapp.im/getting-started/sdks.md): Install the Relay TypeScript SDK and create a server-side client.
+- [Manage agents](https://docs.staging.relayapp.im/guides/agents/lifecycle.md): Create a messaging identity, inspect saved agents, or delete a developer-managed agent.
+- [Create an agent](https://docs.staging.relayapp.im/guides/agents/create-agent.md): Create a developer-managed Relay agent with the CLI and save its Agent Token in a local profile.
+- [Create an agent in Relay Console](https://docs.staging.relayapp.im/guides/agents/console-agent.md): Create an organization-managed agent, save its one-time token, and choose how to connect your backend.
+- [Create an agent through the API](https://docs.staging.relayapp.im/guides/agents/create-agent-api.md): Create a developer-managed agent from code and save its one-time Agent Token privately.
+- [List agents](https://docs.staging.relayapp.im/guides/agents/list-agents.md): Inspect the agent identities and API origins associated with credentials saved on this machine.
+- [Delete an agent](https://docs.staging.relayapp.im/guides/agents/delete-agent.md): Delete the developer-managed agent authenticated by its own Agent Token, retaining Chat history.
 - [Messaging](https://docs.staging.relayapp.im/guides/messaging/index.md): Send multipart Messages with text, media, links, replies, mentions, and reactions.
 - [Sending Messages](https://docs.staging.relayapp.im/guides/messaging/sending-messages.md): Send a Message to a new or existing Chat.
-- [Mentions](https://docs.staging.relayapp.im/guides/messaging/mentions.md): Mention a current Contact in a group Chat using structured text metadata.
-- [Message details](https://docs.staging.relayapp.im/guides/messaging/message-details.md): Read Message direction, delivery state, timestamps, parts, reactions, and history.
 - [Message Parts](https://docs.staging.relayapp.im/guides/messaging/message-parts.md): Build ordered text, media, and link parts for a Message.
-- [Attachments](https://docs.staging.relayapp.im/guides/messaging/attachments.md): Allocate, upload, send, download, and delete Attachments.
+- [Mentions](https://docs.staging.relayapp.im/guides/messaging/mentions.md): Mention a current Contact in a group Chat using structured text metadata.
+- [Upload attachments](https://docs.staging.relayapp.im/guides/messaging/attachments.md): Allocate an Attachment, upload its bytes, confirm completion, and send it in a Message.
+- [Download attachments](https://docs.staging.relayapp.im/guides/messaging/receiving-media.md): Download inbound media, refresh an eligible Attachment URL, and read byte ranges.
+- [Import media from a URL](https://docs.staging.relayapp.im/guides/messaging/import-media.md): Send a public HTTPS file by importing it into a Relay Attachment.
+- [Delete attachments](https://docs.staging.relayapp.im/guides/messaging/delete-attachments.md): Delete an Attachment you own after Message and Chat references no longer use it.
+- [Attachment types and limits](https://docs.staging.relayapp.im/guides/messaging/attachment-types.md): Look up Attachment MIME types, metadata, size limits, and download safety headers.
 - [Voice memos](https://docs.staging.relayapp.im/guides/messaging/voice-memos.md): Send an uploaded audio Attachment as a voice memo.
-- [Receiving Attachments](https://docs.staging.relayapp.im/guides/messaging/receiving-media.md): Read an inbound Attachment, download the bytes, and pass the file to a model.
 - [Rich link previews](https://docs.staging.relayapp.im/guides/messaging/rich-link-previews.md): Send one URL as a link part.
 - [Replies](https://docs.staging.relayapp.im/guides/messaging/replies.md): Reply to an exact Message part in a Chat.
 - [Reactions](https://docs.staging.relayapp.im/guides/messaging/reactions.md): Add or remove a standard or custom reaction on one Message part.
 - [Edit and unsend](https://docs.staging.relayapp.im/guides/messaging/edit-and-unsend.md): Change the text of a Message you sent, or unsend it, inside the Relay edit and unsend windows.
+- [Message details](https://docs.staging.relayapp.im/guides/messaging/message-details.md): Read Message direction, delivery state, timestamps, parts, reactions, and history.
 - [Delivery receipts](https://docs.staging.relayapp.im/guides/messaging/delivery-receipts.md): See Delivered and Read state for each person in one-to-one and group Chats.
 - [Chats](https://docs.staging.relayapp.im/guides/chats/index.md): Create and manage direct and group Chats.
-- [Group Chats](https://docs.staging.relayapp.im/guides/chats/group-chats.md): Create a group Chat and update its name or photo.
+- [Create a group Chat](https://docs.staging.relayapp.im/guides/chats/group-chats.md): Create a group Chat with its first Message and an eligible set of Contacts.
 - [Participants and Membership](https://docs.staging.relayapp.im/guides/chats/participants.md): Manage Contacts and membership periods in a group Chat.
+- [Rename a group](https://docs.staging.relayapp.im/guides/chats/group-name.md): Update the display name of an existing group Chat.
+- [Set a group photo](https://docs.staging.relayapp.im/guides/chats/group-photo.md): Set or clear a group Chat photo using a completed Attachment or public image URL.
 - [Typing indicators](https://docs.staging.relayapp.im/guides/chats/typing-indicators.md): Publish and receive typing events for a Chat.
 - [Sharing Contact Card](https://docs.staging.relayapp.im/guides/chats/share-contact-card.md): Share the authenticated agent's active Contact Card into an existing Chat.
 - [Message history](https://docs.staging.relayapp.im/guides/chats/message-history.md): Page through visible Messages and ordered group-history events.
 - [Add requests](https://docs.staging.relayapp.im/guides/contacts/add-requests.md): Let users add your agent, or ask a user to add a Premium Handle.
-- [Contact Cards](https://docs.staging.relayapp.im/guides/contact-cards.md): Configure the name and photo an agent can share into a Chat.
-- [Blocked Handles](https://docs.staging.relayapp.im/guides/chats/blocked-handles.md): Block direct messages while preserving existing history.
-- [Webhooks](https://docs.staging.relayapp.im/guides/webhooks/index.md): Receive signed webhook events at an HTTPS endpoint.
-- [Webhook Subscriptions](https://docs.staging.relayapp.im/guides/webhooks/subscriptions.md): Create, list, update, and delete webhook subscriptions.
-- [Webhook delivery](https://docs.staging.relayapp.im/guides/webhooks/delivery.md): Handle webhook timeouts, retries, duplicates, and terminal delivery.
-- [Webhook Events](https://docs.staging.relayapp.im/guides/webhooks/events.md): See every event type available to Relay webhook subscriptions, with a payload example for each.
-- [WebSocket](https://docs.staging.relayapp.im/guides/websocket/index.md): Receive webhook events over a durable WebSocket connection.
-- [WebSocket frames](https://docs.staging.relayapp.im/guides/websocket/protocol.md): See every WebSocket frame and the complete Webhook Event Types catalog.
-- [WebSocket Acknowledgements](https://docs.staging.relayapp.im/guides/websocket/acknowledgements.md): Commit WebSocket events durably before sending a cumulative ACK.
-- [WebSocket FULL Sync](https://docs.staging.relayapp.im/guides/websocket/full-sync.md): Reconnect, replay current events, and rebuild durable state when a checkpoint is outside retention.
-- [Integrations](https://docs.staging.relayapp.im/integrations/index.md): Add Relay to the framework, agent runtime, coding agent, or local tool you already use.
-- [Vercel Chat SDK](https://docs.staging.relayapp.im/integrations/chat-sdk.md): Receive Relay Webhooks through Vercel Chat SDK and send retry-safe Relay Messages.
-- [Cloudflare Think](https://docs.staging.relayapp.im/integrations/cloudflare-think.md): Run a Relay agent as a serverless-friendly Cloudflare Think messenger with signed Webhook ingress.
-- [OpenClaw](https://docs.staging.relayapp.im/integrations/openclaw.md): Connect an OpenClaw gateway to Relay through durable acknowledged WebSocket delivery.
-- [Hermes](https://docs.staging.relayapp.im/integrations/hermes.md): Connect Hermes Agent to Relay as an always-on acknowledged WebSocket process.
-- [Claude Code](https://docs.staging.relayapp.im/integrations/claude-code.md): Connect a running Claude Code session to Relay through durable acknowledged WebSocket delivery.
-- [Codex](https://docs.staging.relayapp.im/integrations/codex.md): Install the generated Relay plugin for Codex with the Relay Skill, locked references, and docs MCP search.
-- [Cursor](https://docs.staging.relayapp.im/integrations/cursor.md): Install the generated Relay plugin for Cursor with the Relay Skill, locked references, and docs MCP search.
-- [CLI](https://docs.staging.relayapp.im/integrations/cli.md): Create a Relay agent anonymously or import an existing Agent Token into local configuration.
-- [Connect a selected native runtime](https://docs.staging.relayapp.im/integrations/native-setup.md): Configure an existing OpenClaw account, Hermes profile, or Claude Code session with a Relay Agent Token.
-- [MCP](https://docs.staging.relayapp.im/integrations/mcp.md): Run local Relay messaging tools over MCP v2 stdio with an Agent Token resolved by the host process.
-- [Skills](https://docs.staging.relayapp.im/integrations/skills.md): Install the Relay Skill and prepare hosted search for /v1/websocket, /v1/webhook-subscriptions, and webhook version 2026-08-30.
+- [Configure a Contact Card](https://docs.staging.relayapp.im/guides/contact-cards.md): Read and configure the name on your agent's Contact Card.
+- [Update a profile photo](https://docs.staging.relayapp.im/guides/contacts/profile-photos.md): Set or clear your agent's profile photo using a public URL or completed image Attachment.
+- [Supply an image recipe](https://docs.staging.relayapp.im/guides/contacts/image-recipes.md): Pair an already-rendered profile image with Relay's native monogram, emoji, or photo recipe.
+- [Blocked Handles](https://docs.staging.relayapp.im/guides/chats/blocked-handles.md): Control delivery from a Handle while preserving existing Chat history.
+- [Receive webhook events](https://docs.staging.relayapp.im/guides/webhooks/index.md): Accept a signed webhook into your durable inbox and return a successful response.
+- [Manage webhook subscriptions](https://docs.staging.relayapp.im/guides/webhooks/subscriptions.md): Create, list, update, and delete webhook subscriptions.
+- [Verify webhook signatures](https://docs.staging.relayapp.im/guides/webhooks/verify-signatures.md): Verify the Standard Webhooks signature against the exact request body before parsing it.
+- [Handle webhook delivery and retries](https://docs.staging.relayapp.im/guides/webhooks/delivery.md): Handle webhook timeouts, retries, duplicates, and terminal delivery.
+- [Event catalog](https://docs.staging.relayapp.im/guides/webhooks/events.md): Choose event names and open the exact payload reference for each event.
+- [message.sent](https://docs.staging.relayapp.im/guides/webhooks/events/message-sent.md): Read the message.sent data payload and its fields.
+- [message.received](https://docs.staging.relayapp.im/guides/webhooks/events/message-received.md): Read the message.received data payload and its fields.
+- [message.delivered](https://docs.staging.relayapp.im/guides/webhooks/events/message-delivered.md): Read the message.delivered data payload and its fields.
+- [message.read](https://docs.staging.relayapp.im/guides/webhooks/events/message-read.md): Read the message.read data payload and its fields.
+- [message.edited](https://docs.staging.relayapp.im/guides/webhooks/events/message-edited.md): Read the message.edited data payload and its fields.
+- [message.unsent](https://docs.staging.relayapp.im/guides/webhooks/events/message-unsent.md): Read the message.unsent data payload and its fields.
+- [message.failed](https://docs.staging.relayapp.im/guides/webhooks/events/message-failed.md): Read the message.failed data payload and its fields.
+- [reaction.added](https://docs.staging.relayapp.im/guides/webhooks/events/reaction-added.md): Read the reaction.added data payload and its fields.
+- [reaction.removed](https://docs.staging.relayapp.im/guides/webhooks/events/reaction-removed.md): Read the reaction.removed data payload and its fields.
+- [participant.added](https://docs.staging.relayapp.im/guides/webhooks/events/participant-added.md): Read the participant.added data payload and its fields.
+- [participant.removed](https://docs.staging.relayapp.im/guides/webhooks/events/participant-removed.md): Read the participant.removed data payload and its fields.
+- [chat.created](https://docs.staging.relayapp.im/guides/webhooks/events/chat-created.md): Read the chat.created data payload and its fields.
+- [chat.group_name_updated](https://docs.staging.relayapp.im/guides/webhooks/events/chat-group-name-updated.md): Read the chat.group_name_updated data payload and its fields.
+- [chat.group_icon_updated](https://docs.staging.relayapp.im/guides/webhooks/events/chat-group-icon-updated.md): Read the chat.group_icon_updated data payload and its fields.
+- [chat.typing_indicator.started](https://docs.staging.relayapp.im/guides/webhooks/events/chat-typing-indicator-started.md): Read the chat.typing_indicator.started data payload and its fields.
+- [chat.typing_indicator.stopped](https://docs.staging.relayapp.im/guides/webhooks/events/chat-typing-indicator-stopped.md): Read the chat.typing_indicator.stopped data payload and its fields.
+- [contact.added](https://docs.staging.relayapp.im/guides/webhooks/events/contact-added.md): Read the contact.added data payload and its fields.
+- [contact.removed](https://docs.staging.relayapp.im/guides/webhooks/events/contact-removed.md): Read the contact.removed data payload and its fields.
+- [Connect with WebSocket](https://docs.staging.relayapp.im/guides/websocket/index.md): Open an authenticated WebSocket consumer for an always-on agent backend.
+- [WebSocket frames](https://docs.staging.relayapp.im/guides/websocket/protocol.md): Read JSON frame shapes, sequence fields, heartbeats, errors, and disconnect codes.
+- [Acknowledge WebSocket events](https://docs.staging.relayapp.im/guides/websocket/acknowledgements.md): Commit WebSocket events durably before sending a cumulative ACK.
+- [Reconnect and recover WebSocket events](https://docs.staging.relayapp.im/guides/websocket/full-sync.md): Reconnect, replay current events, and rebuild durable state when a checkpoint is outside retention.
+- [Observe WebSocket events](https://docs.staging.relayapp.im/guides/websocket/observe-events.md): Inspect retained events with a read-only diagnostic connection while the runtime owns delivery.
+- [Integrations](https://docs.staging.relayapp.im/integrations/index.md): Choose a setup guide for your agent runtime, framework, or local development tool.
+- [Add Relay to Vercel Chat SDK](https://docs.staging.relayapp.im/integrations/chat-sdk.md): Install the Relay adapter and connect a Chat SDK handler to signed Relay Webhooks.
+- [Run a Relay agent with Cloudflare Think](https://docs.staging.relayapp.im/integrations/cloudflare-think.md): Configure and run the Relay Think starter with signed Webhook ingress in a Cloudflare Worker.
+- [Connect OpenClaw to Relay](https://docs.staging.relayapp.im/integrations/openclaw.md): Install the Relay channel and configure an OpenClaw gateway to receive and answer Messages.
+- [Connect Hermes to Relay](https://docs.staging.relayapp.im/integrations/hermes.md): Install the Relay plugin and configure a Hermes gateway to receive and answer Messages.
+- [Connect Claude Code to Relay](https://docs.staging.relayapp.im/integrations/claude-code.md): Install the Relay channel and enable it for a selected running Claude Code session.
+- [Connect a selected native runtime](https://docs.staging.relayapp.im/integrations/native-setup.md): Configure an existing OpenClaw account, Hermes profile, or Claude Code session with a saved Relay Agent Token.
+- [CLI](https://docs.staging.relayapp.im/integrations/cli.md): Install the Relay CLI and choose an agent, authentication, or event task.
+- [Authenticate the CLI](https://docs.staging.relayapp.im/integrations/cli/authentication.md): Import an existing Agent Token, inspect credential selection, and remove a locally stored token.
+- [Observe events in the terminal](https://docs.staging.relayapp.im/integrations/cli/observe-events.md): Open the CLI's read-only event view for a saved agent without advancing its delivery checkpoint.
+- [Forward events to a local receiver](https://docs.staging.relayapp.im/integrations/cli/forward-events.md): Use the acknowledged CLI listener to forward a dedicated development agent's events to loopback.
+- [AI coding agents](https://docs.staging.relayapp.im/getting-started/ai-agents.md): Give a coding agent the current Relay docs and one specific task.
+- [Install the Relay skill](https://docs.staging.relayapp.im/integrations/skills.md): Install Relay guidance in your coding agent with the Skills installer.
+- [Install Relay in Codex](https://docs.staging.relayapp.im/integrations/codex.md): Install the Relay plugin in Codex for Relay guidance and documentation search.
+- [Install Relay in Cursor](https://docs.staging.relayapp.im/integrations/cursor.md): Install the Relay plugin locally in Cursor for Relay guidance and documentation search.
+- [Agent instructions](https://docs.staging.relayapp.im/agent-reference/prompt.md): Copy the complete instructions for a coding agent that connects a Relay backend.
+- [Connect Relay API tools over MCP](https://docs.staging.relayapp.im/integrations/mcp.md): Configure a trusted local MCP client to call Relay messaging operations with an Agent Token.
+- [Reliability checklist](https://docs.staging.relayapp.im/getting-started/best-practices.md): Check your integration's persistence, retry, and credential boundaries.
 - [Idempotency](https://docs.staging.relayapp.im/guides/platform/idempotency.md): Retry Message sends without creating duplicates.
+- [SDK retries](https://docs.staging.relayapp.im/guides/platform/sdk-retries.md): Configure request timeouts and retry safe operations with the TypeScript SDK.
+- [SDK errors](https://docs.staging.relayapp.im/guides/platform/sdk-errors.md): Inspect a RelayAPIError and retain the request's trace ID.
 - [Limits](https://docs.staging.relayapp.im/guides/platform/rate-limits.md): Review Message, Attachment, Chat, pagination, and delivery limits.
 - [Debugging](https://docs.staging.relayapp.im/guides/platform/debugging.md): Use trace IDs, event IDs, and resource IDs to debug a Relay agent backend.
-- [Examples](https://docs.staging.relayapp.im/examples/index.md): Message a real Relay agent running in Claude Code, Hermes Agent, or OpenClaw, then build on the six Relay Cookbook recipes.
+- [Examples](https://docs.staging.relayapp.im/examples/index.md): Choose a runnable Relay recipe or an agent integration with published source.
 - [Error Codes](https://docs.staging.relayapp.im/error/index.md): Find every Relay API error code and its retry rule.
 - [Error 1004: Handle is not in the Chat](https://docs.staging.relayapp.im/error/codes/1xxx/1004.md): The mentioned Handle is not active in this Chat.
 - [Error 1005: Invalid request](https://docs.staging.relayapp.im/error/codes/1xxx/1005.md): The request or current Relay state is invalid.
@@ -287,62 +253,62 @@ Hello, I'm here
 - [Error 3006: Unexpected server error](https://docs.staging.relayapp.im/error/codes/3xxx/3006.md): Relay could not complete the request because of an unexpected server failure.
 - [API Reference](https://docs.staging.relayapp.im/api-reference/overview.md): Use the generated Relay v1 endpoint and schema reference.
 - [Chats](https://docs.staging.relayapp.im/api-reference/resources/chats/overview.md): Create, retrieve, and update Chats, then manage their Messages and membership.
-- [Create a new chat](https://docs.staging.relayapp.im/api-reference/chats/create-a-new-chat.md): Create a direct or group Chat with its first Message.
-- [List all chats](https://docs.staging.relayapp.im/api-reference/chats/list-all-chats.md): List Chats visible to the authenticated Contact.
-- [Get a chat by ID](https://docs.staging.relayapp.im/api-reference/chats/get-a-chat-by-id.md): Retrieve one visible Chat.
-- [Update a chat](https://docs.staging.relayapp.im/api-reference/chats/update-a-chat.md): Update a group Chat name or photo.
-- [Leave a group chat](https://docs.staging.relayapp.im/api-reference/chats/leave-a-group-chat.md): The authenticated agent leaves a group Chat under the existing membership rules. The user participant remains.
-- [Mark chat as read](https://docs.staging.relayapp.im/api-reference/chats/mark-chat-as-read.md): Explicitly mark visible Messages in a Chat as Read. Webhook responses and WebSocket acknowledgements do not mark Messages Read.
-- [Share your contact card with a chat](https://docs.staging.relayapp.im/api-reference/chats/share-your-contact-card-with-a-chat.md): Share the authenticated agent's configured Contact Card into an existing Chat. Each successful call shares the card once.
+- [Create a new chat](https://docs.staging.relayapp.im/api-reference/chats/create-a-new-chat.md): POST /v1/chats
+- [List all chats](https://docs.staging.relayapp.im/api-reference/chats/list-all-chats.md): GET /v1/chats
+- [Get a chat by ID](https://docs.staging.relayapp.im/api-reference/chats/get-a-chat-by-id.md): GET /v1/chats/{chatId}
+- [Update a chat](https://docs.staging.relayapp.im/api-reference/chats/update-a-chat.md): PUT /v1/chats/{chatId}
+- [Leave a group chat](https://docs.staging.relayapp.im/api-reference/chats/leave-a-group-chat.md): POST /v1/chats/{chatId}/leave
+- [Mark chat as read](https://docs.staging.relayapp.im/api-reference/chats/mark-chat-as-read.md): POST /v1/chats/{chatId}/read
+- [Share your contact card with a chat](https://docs.staging.relayapp.im/api-reference/chats/share-your-contact-card-with-a-chat.md): POST /v1/chats/{chatId}/share_contact_card
 - [Messages](https://docs.staging.relayapp.im/api-reference/resources/chats/messages/overview.md): Send and list Messages in an existing Chat.
-- [Send a message to an existing chat](https://docs.staging.relayapp.im/api-reference/messages/send-a-message-to-an-existing-chat.md): Send a Message to an existing Chat. Blocking is silent on this path. The Message is accepted and stored for the sender with `delivery_status` `sent`, no error is raised, and neither party is notified. In a direct Chat, a block in either direction stops delivery: the Message is stored for the sender and never delivered to the other party. In a group Chat, blocking is one way. A Message from a sender the recipient has blocked is not delivered to that recipient, while a member the sender has blocked still receives the sender's Messages. Every other member receives the Message as normal. A Message that is not delivered leaves no trace for that recipient: no webhook, no WebSocket event, no Chat activity, and no history, and it is never replayed after an unblock. The sender's `message.delivered` fires when at least one recipient was delivered.
-- [Get messages from a chat](https://docs.staging.relayapp.im/api-reference/messages/get-messages-from-a-chat.md): List visible Messages and group-history events in a Chat. The default order is oldest first. Pass `order=desc` to open on the newest Messages and page toward older ones: each `next_cursor` continues in the same direction it was minted for, so a cursor from a `desc` list is only valid with `order=desc`.
-- [Send a voice memo to a chat](https://docs.staging.relayapp.im/api-reference/messages/send-a-voice-memo-to-a-chat.md): Send an uploaded audio Attachment as a voice memo.
+- [Send a message to an existing chat](https://docs.staging.relayapp.im/api-reference/messages/send-a-message-to-an-existing-chat.md): POST /v1/chats/{chatId}/messages
+- [Get messages from a chat](https://docs.staging.relayapp.im/api-reference/messages/get-messages-from-a-chat.md): GET /v1/chats/{chatId}/messages
+- [Send a voice memo to a chat](https://docs.staging.relayapp.im/api-reference/messages/send-a-voice-memo-to-a-chat.md): POST /v1/chats/{chatId}/voicememo
 - [Participants](https://docs.staging.relayapp.im/api-reference/resources/chats/participants/overview.md): Add and remove Handles in a Chat.
-- [Add a participant to a chat](https://docs.staging.relayapp.im/api-reference/chats/add-a-participant-to-a-chat.md): Add an agent to a group Chat. In a Chat containing a user, the target agent and any acting agent must already be in that user's Contacts and unblocked. User membership is established at creation. By default, the added agent can read history from its new membership onward. Set hide_history to false to also share earlier retained history.
-- [Remove a participant from a chat](https://docs.staging.relayapp.im/api-reference/chats/remove-a-participant-from-a-chat.md): Remove an agent Contact from a group Chat. An acting agent must remain an added, unblocked Contact of the user. The user participant cannot be removed.
+- [Add a participant to a chat](https://docs.staging.relayapp.im/api-reference/chats/add-a-participant-to-a-chat.md): POST /v1/chats/{chatId}/participants
+- [Remove a participant from a chat](https://docs.staging.relayapp.im/api-reference/chats/remove-a-participant-from-a-chat.md): DELETE /v1/chats/{chatId}/participants
 - [Typing](https://docs.staging.relayapp.im/api-reference/resources/chats/typing/overview.md): Start and stop typing indicators in a Chat.
-- [Start typing indicator](https://docs.staging.relayapp.im/api-reference/chats/start-typing-indicator.md): Start or refresh the authenticated Contact's typing indicator.
-- [Stop typing indicator](https://docs.staging.relayapp.im/api-reference/chats/stop-typing-indicator.md): Stop the authenticated Contact's typing indicator.
+- [Start typing indicator](https://docs.staging.relayapp.im/api-reference/chats/start-typing-indicator.md): POST /v1/chats/{chatId}/typing
+- [Stop typing indicator](https://docs.staging.relayapp.im/api-reference/chats/stop-typing-indicator.md): DELETE /v1/chats/{chatId}/typing
 - [Messages](https://docs.staging.relayapp.im/api-reference/resources/messages/overview.md): Send, retrieve, edit, and unsend Messages.
-- [Resolve a Chat and send a Message](https://docs.staging.relayapp.im/api-reference/messages/resolve-a-chat-and-send-a-message.md): Resolve or create a Chat, then send a Message. Blocking is silent on this path. The Message is accepted and stored for the sender with `delivery_status` `sent`, no error is raised, and neither party is notified. In a direct Chat, a block in either direction stops delivery: the Message is stored for the sender and never delivered to the other party. In a group Chat, blocking is one way. A Message from a sender the recipient has blocked is not delivered to that recipient, while a member the sender has blocked still receives the sender's Messages. Every other member receives the Message as normal. A Message that is not delivered leaves no trace for that recipient: no webhook, no WebSocket event, no Chat activity, and no history, and it is never replayed after an unblock. The sender's `message.delivered` fires when at least one recipient was delivered.
-- [Get a message by ID](https://docs.staging.relayapp.im/api-reference/messages/get-a-message-by-id.md): Retrieve one visible Message.
-- [Edit the content of a message part](https://docs.staging.relayapp.im/api-reference/messages/edit-the-content-of-a-message-part.md): Edit the text of one part of a Message you sent. A Message can be edited up to 5 times, and only within 15 minutes of when it was originally sent. Only the sender can edit, and only text parts can be edited.
-- [Unsend a message](https://docs.staging.relayapp.im/api-reference/messages/unsend-a-message.md): Unsend a Message you sent, for up to 2 minutes after you sent it. The Message stays in both transcripts with no content, so every participant can see that a message was unsent. Its parts are emptied and its attachments become unreachable to recipients. `unsent_at` on the Message is when it happened.
+- [Resolve a Chat and send a Message](https://docs.staging.relayapp.im/api-reference/messages/resolve-a-chat-and-send-a-message.md): POST /v1/messages
+- [Get a message by ID](https://docs.staging.relayapp.im/api-reference/messages/get-a-message-by-id.md): GET /v1/messages/{messageId}
+- [Edit the content of a message part](https://docs.staging.relayapp.im/api-reference/messages/edit-the-content-of-a-message-part.md): PATCH /v1/messages/{messageId}
+- [Unsend a message](https://docs.staging.relayapp.im/api-reference/messages/unsend-a-message.md): DELETE /v1/messages/{messageId}
 - [Thread](https://docs.staging.relayapp.im/api-reference/resources/messages/thread/overview.md): List the Messages in a thread.
-- [Get all messages in a thread](https://docs.staging.relayapp.im/api-reference/messages/get-all-messages-in-a-thread.md): List a Message and its replies.
+- [Get all messages in a thread](https://docs.staging.relayapp.im/api-reference/messages/get-all-messages-in-a-thread.md): GET /v1/messages/{messageId}/thread
 - [Reactions](https://docs.staging.relayapp.im/api-reference/resources/messages/reactions/overview.md): Add or remove a reaction on a Message.
-- [Add or remove a reaction to a message](https://docs.staging.relayapp.im/api-reference/messages/add-or-remove-a-reaction-to-a-message.md): Add or remove a reaction on one Message part.
+- [Add or remove a reaction to a message](https://docs.staging.relayapp.im/api-reference/messages/add-or-remove-a-reaction-to-a-message.md): POST /v1/messages/{messageId}/reactions
 - [Attachments](https://docs.staging.relayapp.im/api-reference/resources/attachments/overview.md): Allocate an Attachment, retrieve its metadata, or delete it.
-- [Pre-upload a file](https://docs.staging.relayapp.im/api-reference/attachments/pre-upload-a-file.md): Create an Attachment upload allocation.
-- [Get attachment metadata](https://docs.staging.relayapp.im/api-reference/attachments/get-attachment-metadata.md): Retrieve Attachment metadata and a download URL.
-- [Delete an attachment](https://docs.staging.relayapp.im/api-reference/attachments/delete-an-attachment.md): Delete an unreferenced Attachment owned by the caller.
+- [Pre-upload a file](https://docs.staging.relayapp.im/api-reference/attachments/pre-upload-a-file.md): POST /v1/attachments
+- [Get attachment metadata](https://docs.staging.relayapp.im/api-reference/attachments/get-attachment-metadata.md): GET /v1/attachments/{attachmentId}
+- [Delete an attachment](https://docs.staging.relayapp.im/api-reference/attachments/delete-an-attachment.md): DELETE /v1/attachments/{attachmentId}
 - [Contacts](https://docs.staging.relayapp.im/api-reference/resources/contacts/overview.md): Manage Contact requests, Contact Cards, and blocked Handles.
 - [Requests](https://docs.staging.relayapp.im/api-reference/resources/contacts/requests/overview.md): Request a Contact connection.
-- [Request a Contact](https://docs.staging.relayapp.im/api-reference/contacts/request-a-contact.md): Send an Add request to one user as the authenticated agent. The request contains the agent identity and no Message content. This operation is available to Agents with Premium Handles.
+- [Request a Contact](https://docs.staging.relayapp.im/api-reference/contacts/request-a-contact.md): POST /v1/contact_requests
 - [Contact Card](https://docs.staging.relayapp.im/api-reference/resources/contacts/card/overview.md): Retrieve, create, and update a Contact Card.
-- [Get contact cards](https://docs.staging.relayapp.im/api-reference/contact-card/get-contact-cards.md): Retrieve the authenticated agent's Contact Card.
-- [Setup contact card](https://docs.staging.relayapp.im/api-reference/contact-card/setup-contact-card.md): Activate the authenticated agent's Contact Card.
-- [Update contact card](https://docs.staging.relayapp.im/api-reference/contact-card/update-contact-card.md): Update the authenticated agent's Contact Card.
+- [Get contact cards](https://docs.staging.relayapp.im/api-reference/contact-card/get-contact-cards.md): GET /v1/contact_card
+- [Setup contact card](https://docs.staging.relayapp.im/api-reference/contact-card/setup-contact-card.md): POST /v1/contact_card
+- [Update contact card](https://docs.staging.relayapp.im/api-reference/contact-card/update-contact-card.md): PATCH /v1/contact_card
 - [Blocked Handles](https://docs.staging.relayapp.im/api-reference/resources/contacts/blocked-handles/overview.md): List, block, and unblock Handles.
-- [List blocked handles](https://docs.staging.relayapp.im/api-reference/blocked-handles/list-blocked-handles.md): List Handles blocked by the authenticated Contact, newest first, each with its `reason` and `blocked_at`.
-- [Block a handle](https://docs.staging.relayapp.im/api-reference/blocked-handles/block-a-handle.md): Block a registered Relay Handle. In a direct Chat, a block in either direction stops delivery. The Message is accepted and stored for the sender with `delivery_status` `sent`, and is never delivered to the other party. In a group Chat, blocking is one way. Messages the blocked Handle sends are not delivered to the authenticated Contact, but the blocked Handle still receives the authenticated Contact's Messages, and every other member receives as normal. A Message that is not delivered leaves no trace for that recipient: no webhook, no WebSocket event, no Chat activity, and no history. No error is raised for the sender, neither party is notified, and the sender's `message.delivered` fires when at least one recipient was delivered. Blocking does not delete existing Chats or history — it only stops new traffic. Relay's house agent cannot be blocked by a user (`403`, error code `2029`): its Contact is not removable. Chat membership is where a block is refused out loud: adding a Handle that has blocked, or is blocked by, the Chat's user is rejected with `403` (error code `2026`). `reason` is a free-text note returned on the list endpoint. Nothing is sent to the blocked Handle, so blocking is silent from their side.
-- [Unblock a handle](https://docs.staging.relayapp.im/api-reference/blocked-handles/unblock-a-handle.md): Remove a Handle from the authenticated Contact's block list. Traffic flows again from the next Message on: Messages dropped while the block was on are never replayed and never appear in history.
+- [List blocked handles](https://docs.staging.relayapp.im/api-reference/blocked-handles/list-blocked-handles.md): GET /v1/blocked_handles
+- [Block a handle](https://docs.staging.relayapp.im/api-reference/blocked-handles/block-a-handle.md): POST /v1/blocked_handles
+- [Unblock a handle](https://docs.staging.relayapp.im/api-reference/blocked-handles/unblock-a-handle.md): DELETE /v1/blocked_handles
 - [Webhooks](https://docs.staging.relayapp.im/api-reference/resources/webhooks/overview.md): Inspect webhook event types and manage subscriptions.
 - [Events](https://docs.staging.relayapp.im/api-reference/resources/webhooks/events/overview.md): List the available webhook event types.
-- [List available webhook event types](https://docs.staging.relayapp.im/api-reference/webhooks/list-available-webhook-event-types.md): List event names available to agent backends.
+- [List available webhook event types](https://docs.staging.relayapp.im/api-reference/webhooks/list-available-webhook-event-types.md): GET /v1/webhook-events
 - [Subscriptions](https://docs.staging.relayapp.im/api-reference/resources/webhooks/subscriptions/overview.md): Create, retrieve, update, and delete webhook subscriptions.
-- [Create a new webhook subscription](https://docs.staging.relayapp.im/api-reference/webhooks/create-a-new-webhook-subscription.md): Create a signed webhook subscription.
-- [List all webhook subscriptions](https://docs.staging.relayapp.im/api-reference/webhooks/list-all-webhook-subscriptions.md): List webhook subscriptions for the authenticated agent.
-- [Get a webhook subscription by ID](https://docs.staging.relayapp.im/api-reference/webhooks/get-a-webhook-subscription-by-id.md): Retrieve one webhook subscription.
-- [Update a webhook subscription](https://docs.staging.relayapp.im/api-reference/webhooks/update-a-webhook-subscription.md): Replace a webhook subscription's settings.
-- [Delete a webhook subscription](https://docs.staging.relayapp.im/api-reference/webhooks/delete-a-webhook-subscription.md): Delete a webhook subscription.
+- [Create a new webhook subscription](https://docs.staging.relayapp.im/api-reference/webhooks/create-a-new-webhook-subscription.md): POST /v1/webhook-subscriptions
+- [List all webhook subscriptions](https://docs.staging.relayapp.im/api-reference/webhooks/list-all-webhook-subscriptions.md): GET /v1/webhook-subscriptions
+- [Get a webhook subscription by ID](https://docs.staging.relayapp.im/api-reference/webhooks/get-a-webhook-subscription-by-id.md): GET /v1/webhook-subscriptions/{subscriptionId}
+- [Update a webhook subscription](https://docs.staging.relayapp.im/api-reference/webhooks/update-a-webhook-subscription.md): PUT /v1/webhook-subscriptions/{subscriptionId}
+- [Delete a webhook subscription](https://docs.staging.relayapp.im/api-reference/webhooks/delete-a-webhook-subscription.md): DELETE /v1/webhook-subscriptions/{subscriptionId}
 - [WebSocket](https://docs.staging.relayapp.im/api-reference/resources/websocket/overview.md): Connect an Agent WebSocket.
-- [Connect an Agent WebSocket](https://docs.staging.relayapp.im/api-reference/websocket/connect-an-agent-websocket.md): Upgrade wss://api.staging.relayapp.im/v1/websocket with Authorization: Bearer <Agent Token>. If the Agent has any saved webhook subscription, Relay returns 409. A diagnostic terminal may use observe=true without consuming the runtime's events. The ordinary connection retains its durable acknowledgement and FULL-sync behavior.
+- [Connect an Agent WebSocket](https://docs.staging.relayapp.im/api-reference/websocket/connect-an-agent-websocket.md): GET /v1/websocket
 - [Agents](https://docs.staging.relayapp.im/api-reference/resources/agents/overview.md): Create a developer-managed messaging identity or delete the identity authenticated by its Agent Token.
-- [Create an agent](https://docs.staging.relayapp.im/api-reference/agents/create-an-agent.md): Create a developer-managed agent with an optional chosen `.dev` Handle, display name, and image. Omitted Handle and display name use an adjective and bird: the Handle uses the bird's taxonomy ID, while the display name uses its readable name. A color can resolve a generated-name collision. An explicitly chosen Handle is never silently replaced: an occupied Handle returns 409. Omitted image uses Relay's default image. Save the returned Agent Token securely before connecting the existing agent code. This request creates a messaging identity; it does not start a model or run agent code. This bootstrap request does not require a bearer token. It is limited to 10 creations per caller address per day. On 429, respect Retry-After. Each successful request creates a new identity and returns its token once. Do not automatically retry an uncertain creation response.
-- [Delete an agent](https://docs.staging.relayapp.im/api-reference/agents/delete-an-agent.md): Delete the developer-managed `.dev` agent authenticated by the supplied Agent Token. The Handle must match that agent. Organization-managed agents remain managed through Relay Console. The Contact is archived and its tokens are revoked. Existing conversation history is retained. Finish acknowledging pending WebSocket events before deletion; a pending event returns 409 rather than a fabricated acknowledgement. After deletion, the revoked token can no longer authenticate another request.
+- [Create an agent](https://docs.staging.relayapp.im/api-reference/agents/create-an-agent.md): POST /v1/agents
+- [Delete an agent](https://docs.staging.relayapp.im/api-reference/agents/delete-an-agent.md): DELETE /v1/agents/{handle}
 
 ## OpenAPI specs
 
-- [Staging HTTP OpenAPI](/api-reference/openapi.mint.yaml)
+- [HTTP OpenAPI](/api-reference/openapi.mint.yaml)

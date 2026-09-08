@@ -1,19 +1,24 @@
 ---
-title: "Receiving Attachments"
-description: "Read an inbound Attachment, download the bytes, and pass the file to a model."
-keywords: ["inbound attachments", "message.received", "signed URL", "download", "model input"]
+title: "Download attachments"
+description: "Download inbound media, refresh an eligible Attachment URL, and read byte ranges."
+keywords: ["inbound attachments", "message.received", "signed URL", "download", "refresh"]
 ---
 
-A user sends an image, voice memo, video, or document as an Attachment in a
-`media` part on a `message.received` event. Download the bytes from the part's
-signed URL, then pass them to your model.
+Download an Attachment from a Message's media URL, or retrieve a fresh URL using its Attachment ID.
 
-## Inbound attachments
+## Prerequisites
 
-Every inbound `media` part carries the Attachment identity, one signed download
-URL, and the file metadata:
+| Input | Requirement |
+| --- | --- |
+| Media | A media part from a Message or `message.received` event |
+| Refresh | An Agent Token authorized to read that Attachment |
+| SDK | A [configured client](/getting-started/sdks) for metadata retrieval |
 
-```json
+## Read the media part
+
+A media part contains the download URL and metadata:
+
+```json Media part
 {
   "type": "media",
   "id": "01993d50-d263-7d6b-87ce-90aba89b7815",
@@ -27,90 +32,127 @@ URL, and the file metadata:
 
 | Field | Meaning |
 | --- | --- |
-| `id` | Permanent Attachment ID |
-| `url` | Signed link that returns the raw bytes |
-| `filename` | File name the sender supplied |
-| `mime_type` | IANA media type of the bytes |
-| `size_bytes` | Exact byte length |
+| `id` | Attachment ID to retain for later retrieval |
+| `url` | Signed bearer URL for the bytes |
+| `filename` | File name |
+| `mime_type` | Declared MIME type, not a guarantee about the contents |
+| `size_bytes` | Stored byte length |
 
-The full event envelope is on [Webhook Events](/guides/webhooks/events).
+See [Message parts](/guides/messaging/message-parts) for optional dimensions and duration.
 
 ## Download the bytes
 
-The signature inside `url` is the whole credential. Send the request with no
-`Authorization` header.
+**The signed URL supplies access. Keep your Agent Token on authenticated API requests.**
+Use the URL unchanged and keep it out of logs.
+
+The TypeScript example starts with a parsed `message.received` event. Set
+`$MEDIA_URL` to the part's `url` for cURL.
 
 <CodeGroup>
 ```typescript TypeScript
 const part = event.data.parts.find((item) => item.type === "media");
+if (!part) throw new Error("This Message has no media part.");
 
 const response = await fetch(part.url);
 if (!response.ok) {
   throw new Error(`Attachment download returned ${response.status}.`);
 }
-
 const bytes = new Uint8Array(await response.arrayBuffer());
 ```
 
 ```bash cURL
-curl -sS "$MEDIA_URL" --output inbound-media
+curl -sS --fail-with-body "$MEDIA_URL" --output inbound-media
 ```
 </CodeGroup>
 
-The response carries the Attachment `Content-Type` and `Content-Length`, and
-returns the complete file in one body.
+A complete download returns `200`, the stored `Content-Type` and
+`Content-Length`, and the raw bytes. Treat filenames and downloaded contents
+as untrusted input to your application.
 
-## URL lifetime
+## Refresh an expired URL
 
-`url` is valid for 60 minutes from the moment Relay builds the event.
+A download URL expires 60 minutes after Relay issues it. An older event can
+therefore carry an expired URL when you receive or replay it.
 
-Relay stores the event body once. A retried webhook delivery, a WebSocket
-replay, and a FULL sync all carry the same `url`, so the 60 minutes run from
-the moment Relay built the event, not from the moment your receiver read it.
+Retrieve the Attachment using the media part's `id`:
 
-<Info>
-`GET /v1/attachments/{id}` answers every Contact whose Chat membership covers a
-Message carrying the Attachment. Call it with your Agent Token at any time for
-a fresh `url`, so an expired link costs one request and never the file. Keep
-your own copy of the bytes only when your product wants one.
-</Info>
-
-## Pass the file to a model
-
-Relay carries the Message and never calls a model. Send the downloaded bytes to
-your own provider as a file part. This example uses the Vercel AI SDK:
-
-```typescript TypeScript
-import { generateText } from "ai";
-
-const result = await generateText({
-  model,
-  messages: [{
-    role: "user",
-    content: [
-      { type: "text", text: "Describe what the user sent." },
-      {
-        type: "file",
-        data: bytes,
-        mediaType: part.mime_type,
-        filename: part.filename,
-      },
-    ],
-  }],
-});
+<CodeGroup>
+```typescript TypeScript SDK
+const attachment = await relay.attachments.retrieve(part.id);
+if (attachment.status !== "complete" || !attachment.download_url) {
+  throw new Error("Attachment is not ready to download.");
+}
+const response = await fetch(attachment.download_url);
+if (!response.ok) {
+  throw new Error(`Attachment download returned ${response.status}.`);
+}
+const bytes = new Uint8Array(await response.arrayBuffer());
 ```
 
-`mediaType` takes `mime_type` unchanged, and `data` accepts the `Uint8Array`
-you downloaded.
+```bash cURL
+curl -sS \
+  "https://api.staging.relayapp.im/v1/attachments/$ATTACHMENT_ID" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+</CodeGroup>
 
-A Relay Attachment runs to 100 MB, which can exceed the inline request limit of
-the model you call. Read the limit your provider publishes and upload larger
-files through that provider's own file API. Google's Gemini API accepts up to
-100 MB of inline data per request, and 50 MB for a PDF.
+The `200` response uses `download_url`, rather than the media part's `url`:
 
-## Related
+```json Attachment metadata
+{
+  "id": "01993d50-d263-7d6b-87ce-90aba89b7815",
+  "filename": "report.pdf",
+  "content_type": "application/pdf",
+  "size_bytes": 48291,
+  "status": "complete",
+  "download_url": "https://cdn.staging.relayapp.im/attachments/<fresh-token>",
+  "created_at": "2026-09-08T14:00:00.000Z",
+  "duration_ms": null,
+  "width": null,
+  "height": null
+}
+```
 
-- [Webhook Events](/guides/webhooks/events)
-- [Attachments](/guides/messaging/attachments)
-- [Message Parts](/guides/messaging/message-parts)
-- [Voice memos](/guides/messaging/voice-memos)
+### Refresh eligibility
+
+**Refresh follows Message visibility, including for media sent by a user.**
+
+| Attachment use | Who can retrieve metadata and a fresh URL |
+| --- | --- |
+| No Message references the Attachment | Its owner |
+| At least one Message references it | A Contact with a visible Message carrying it, including the owner when eligible |
+| Outside the caller's visible history | Retrieval returns `404` |
+
+Visibility follows membership periods, the history-sharing choice, cleared
+history, and delivery filtering. Read [Message history](/guides/chats/message-history#membership-visibility)
+for the history boundaries.
+
+## Read a byte range
+
+Downloads support one byte range at a time:
+
+```bash cURL
+curl -sS --fail-with-body "$MEDIA_URL" \
+  -H "Range: bytes=0-1048575" \
+  --output attachment.part
+```
+
+| Request or outcome | Result or handling |
+| --- | --- |
+| `HEAD` on the signed URL | `200` with headers and no body |
+| Valid single range | `206` with `Content-Range` |
+| Invalid or multiple ranges | `416`; correct the range |
+| Download `404` | Retrieve a fresh URL; expiry, deletion, or incomplete upload can make the old URL unavailable |
+| Metadata `404` | The Attachment is missing or outside your read access; check the ID, credential, and visible Message |
+
+<span id="inbound-attachments" />
+<span id="pass-the-file-to-a-model" />
+<span id="related" />
+<span id="url-lifetime" />
+
+## Next steps
+
+- [Upload attachments](/guides/messaging/attachments)
+- [Attachment types and limits](/guides/messaging/attachment-types)
+- [Delete attachments](/guides/messaging/delete-attachments)
+- [Webhook events](/guides/webhooks/events)

@@ -138,10 +138,16 @@ def render_index(
     entries: list[tuple[str, str, str]],
     operations: dict[str, dict[str, str]],
 ) -> str:
+    contract = (ROOT / "api-reference/openapi.yaml").read_text()
+    version = re.search(r"webhook_version:\n.*?enum:\n\s+- (\d{4}-\d{2}-\d{2})", contract, re.S)
+    if version is None:
+        raise SystemExit("Webhook payload version missing from the canonical contract")
     lines = [
         f"# {config['name']}",
         "",
         f"> {config['description']}",
+        "",
+        f"API paths use `/v1`. Webhook payload version: `{version.group(1)}`.",
         "",
         "## Agent onboarding",
         "",
@@ -164,7 +170,7 @@ def render_index(
                 raise SystemExit(f"navigation endpoint missing from OpenAPI: {page}")
             path = f"{endpoint_urls[page]}.md"
             title = operation["summary"]
-            description = operation["description"]
+            description = page  # Keep endpoint indexes atomic; full schemas remain in llms-full.txt.
         else:
             _, title, description, _ = authored_page(page)
             path = f"{page}.md"
@@ -176,7 +182,7 @@ def render_index(
             "",
             "## OpenAPI specs",
             "",
-            "- [Staging HTTP OpenAPI](/api-reference/openapi.mint.yaml)",
+            "- [HTTP OpenAPI](/api-reference/openapi.mint.yaml)",
             "",
         ]
     )

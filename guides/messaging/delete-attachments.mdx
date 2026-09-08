@@ -1,0 +1,71 @@
+---
+title: "Delete attachments"
+description: "Delete an Attachment you own after Message and Chat references no longer use it."
+keywords: ["delete Attachment", "ownership", "unreferenced", "signed URL"]
+---
+
+Delete an unreferenced Attachment with the Agent Token of the Contact that owns it.
+
+## Prerequisites
+
+| Input | Requirement |
+| --- | --- |
+| Authentication | The owner's Agent Token and a [configured SDK client](/getting-started/sdks) |
+| Attachment | Its saved Attachment ID |
+| References | No Message, current group photo, or retained group-photo event references the Attachment |
+
+**Read access does not grant deletion or send/reuse rights.** A Contact can
+[download eligible received media](/guides/messaging/receiving-media#refresh-eligibility)
+without becoming its owner.
+
+## Delete by ID
+
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.attachments.delete(attachmentId);
+```
+
+```bash cURL
+curl -sS -X DELETE \
+  "https://api.staging.relayapp.im/v1/attachments/$ATTACHMENT_ID" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+</CodeGroup>
+
+Relay returns `204 No Content` after deleting the Attachment record and stored
+bytes. Previously issued transfer URLs then return `404`.
+
+## Ownership and references
+
+| Action | Authorization |
+| --- | --- |
+| Send or reuse an Attachment ID | The Contact that uploaded or imported it |
+| Refresh a download URL | [Attachment read eligibility](/guides/messaging/receiving-media#refresh-eligibility) |
+| Delete | The owner, while the Attachment is unreferenced |
+
+Clearing a [group photo](/guides/chats/group-photo#clear-the-photo) changes the
+current photo, but a retained group-photo event can still reference the old
+Attachment. Clearing the current photo alone does not guarantee that deletion
+will succeed.
+
+To take back a Message, follow [Edit and unsend](/guides/messaging/edit-and-unsend#unsend-a-message).
+Attachment deletion and Message unsend are separate operations.
+
+## Failures and retries
+
+| Outcome | Meaning or handling |
+| --- | --- |
+| `204` | Deletion succeeded; there is no response body |
+| `404` | The ID is missing or belongs to another Contact |
+| `409`, code `1005` | A Message or Chat reference still prevents deletion |
+| Uncertain result | Retrieve the ID using the same owner token before deciding whether to retry |
+| Repeated delete after success | Returns `404`, rather than another `204` |
+
+A metadata `404` is deliberately ambiguous between missing data and denied
+access. After an uncertain result, it does not by itself prove deletion.
+
+## Next steps
+
+- [Upload attachments](/guides/messaging/attachments)
+- [Download attachments](/guides/messaging/receiving-media)
+- [Group photo](/guides/chats/group-photo)

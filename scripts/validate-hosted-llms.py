@@ -1,32 +1,34 @@
 #!/usr/bin/env python3
+"""Validate the selected environment against this checkout, without rewriting it.
+
+--production selects production checks, not a projection of staging source bytes.
+Use a derived production checkout when checking a production deployment.
+"""
 import argparse
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 import hashlib
+import html
+from html.parser import HTMLParser
 import json
+from pathlib import Path
 import re
 import secrets
 import struct
-import zlib
-from datetime import datetime, timezone
-from html.parser import HTMLParser
-from pathlib import Path
-from urllib.parse import urlencode, urljoin
+import textwrap
+from urllib.parse import urlencode, urljoin, urlsplit, unquote
 from urllib.request import Request, urlopen
+import zlib
+
+import origins
 from hosted_cache import canonical_cache_pairs
 
+ROOT = Path(__file__).resolve().parents[1]
+AGENT_SOURCES = ("skill.md", "llms.txt", "llms-full.txt")
+USER_AGENT = "Relay-Docs-Hosted-Validator/3.0"
+ENDPOINT = re.compile(r"^(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS) /v1/")
+FENCE = re.compile(r"^[ \t]*(`{3,}|~{3,})([^\n]*)\n(.*?)^[ \t]*\1[ \t]*$", re.M | re.S)
 
-parser = argparse.ArgumentParser(
-    description=(
-        "Validate Relay's canonical hosted pages and prove that generated LLM "
-        "files are not stale edge-cache variants."
-    )
-)
-parser.add_argument("base_url")
-parser.add_argument("--expected-sha")
-parser.add_argument("--receipt", type=Path)
-args = parser.parse_args()
-
-base_url = args.base_url.rstrip("/") + "/"
-probe = secrets.token_hex(12)
 deleted_wording = {
     "Socket Mode product name": re.compile(r"\bsocket mode\b", re.IGNORECASE),
     "WebSocket settings event": re.compile(
@@ -65,7 +67,8 @@ deleted_wording = {
 }
 
 
-def sha256(body: bytes) -> str:
+
+def sha256(body):
     return hashlib.sha256(body).hexdigest()
 
 
@@ -178,287 +181,372 @@ class IconLinkParser(HTMLParser):
             self.icons.append(values)
 
 
-def fetch(path: str, cache_busted: bool = False) -> dict:
-    relative_url = path
-    if cache_busted:
-        relative_url += ("&" if "?" in relative_url else "?") + urlencode(
-            {"relay_cache_probe": probe}
-        )
-    requested_url = urljoin(base_url, relative_url)
-    request = Request(
-        requested_url,
-        headers={"User-Agent": "Relay-Docs-Hosted-Validator/2.0"},
-    )
-    with urlopen(request, timeout=60) as response:
-        body = response.read()
-        status = response.status
-        headers = {key.lower(): value for key, value in response.headers.items()}
-        final_url = response.url
-    if status != 200:
-        raise SystemExit(f"/{path} returned HTTP {status}")
-    if not body.strip():
-        raise SystemExit(f"/{path} is empty")
-    return {
-        "requested_url": requested_url,
-        "final_url": final_url,
-        "status": status,
-        "bytes": len(body),
-        "sha256": sha256(body),
-        "headers": {
-            key: headers[key]
-            for key in (
-                "age",
-                "cache-control",
-                "cf-cache-status",
-                "etag",
-                "last-modified",
-                "x-served-version",
-                "x-version",
-            )
-            if key in headers
-        },
-        "body": body,
-    }
+def environment_config(production=False):
+    environment = "production" if production else origins.target()
+    favicon = "/favicon-staging.png"
+    if environment == "production":
+        favicon = origins.STAGING_TO_PRODUCTION[favicon]
+    return {"environment": environment, "favicon": favicon.lstrip("/"),
+            "color": "blue" if environment == "production" else "black"}
 
 
-pages = {}
-page_bodies = {}
-expected_agent_sources = {
-    name: (Path(__file__).resolve().parents[1] / name).read_bytes()
-    for name in ("skill.md", "llms.txt", "llms-full.txt")
-}
-for path, canonical, cache_busted in canonical_cache_pairs(fetch, expected_agent_sources):
-    text = canonical["body"].decode("utf-8")
-    for label, pattern in deleted_wording.items():
-        if pattern.search(text):
-            raise SystemExit(f"/{path} contains deleted wording: {label}")
-    pages["/" + path] = {
-        "canonical": {
-            key: value for key, value in canonical.items() if key != "body"
-        },
-        "cache_busted": {
-            key: value for key, value in cache_busted.items() if key != "body"
-        },
-    }
-    page_bodies["/" + path] = canonical["body"]
+def make_fetch(base_url, opener=urlopen):
+    probe = secrets.token_hex(12)
 
-staging_favicon = fetch("favicon-staging.png")
-expected_favicon_sha = (
-    "4b3e4b9358f35c66cec564d7ae6806b8e948a2e4dc0e1fd2eb003887ee1120be"
-)
-if staging_favicon["sha256"] != expected_favicon_sha:
-    raise SystemExit(
-        "hosted /favicon-staging.png is not the canonical black Relay mark"
-    )
+    def fetch(path, cache_busted=False):
+        url = urljoin(base_url.rstrip("/") + "/", path)
+        if cache_busted:
+            url += ("&" if "?" in url else "?") + urlencode({"relay_cache_probe": probe})
+        request = Request(url, headers={"User-Agent": USER_AGENT})
+        with opener(request, timeout=60) as response:
+            body = response.read()
+            status = response.status
+            headers = {key.lower(): value for key, value in response.headers.items()}
+            final_url = response.url
+        if status != 200 or not body.strip():
+            raise SystemExit(f"/{path} returned HTTP {status} or an empty body")
+        return {"requested_url": url, "final_url": final_url, "status": status,
+                "bytes": len(body), "sha256": sha256(body), "body": body,
+                "headers": {key: headers[key] for key in (
+                    "age", "cache-control", "cf-cache-status", "etag", "last-modified",
+                    "x-served-version", "x-version") if key in headers}}
+    return fetch
 
-icon_parser = IconLinkParser()
-icon_parser.feed(page_bodies["/"].decode("utf-8"))
-generated = next(
-    (
-        icon
-        for icon in icon_parser.icons
-        if icon.get("sizes") == "192x192"
-        and icon.get("href", "").endswith(".png")
-    ),
-    None,
-)
-if generated is None:
-    raise SystemExit("hosted Docs root has no generated 192x192 favicon")
-generated_favicon = fetch(generated["href"])
-favicon_colors = png_color_counts(generated_favicon["body"])
-if (
-    favicon_colors["opaque"] == 0
-    or favicon_colors["black"] <= favicon_colors["blue"]
-    or favicon_colors["black"] / favicon_colors["opaque"] < 0.5
-):
-    raise SystemExit(
-        "hosted Docs generated favicon is not the black staging identity: "
-        + json.dumps(favicon_colors, sort_keys=True)
-    )
-brand = {
-    "source": {
-        key: value
-        for key, value in staging_favicon.items()
-        if key != "body"
-    },
-    "generated": {
-        **{
-            key: value
-            for key, value in generated_favicon.items()
-            if key != "body"
-        },
-        "colors": favicon_colors,
-    },
-}
 
-root_headers = pages["/"]["canonical"]["headers"]
-guides_headers = pages["/guides"]["canonical"]["headers"]
-root_version = root_headers.get("x-served-version") or root_headers.get("x-version")
-guides_version = guides_headers.get("x-served-version") or guides_headers.get(
-    "x-version"
-)
-if not root_version or root_version != guides_version:
-    raise SystemExit(
-        "root and /guides are not served by the same Mintlify deployment"
-    )
+def response_pair(canonical, busted):
+    return {name: {key: value for key, value in response.items() if key != "body"}
+            for name, response in (("canonical", canonical), ("cache_busted", busted))}
 
-index = fetch("llms.txt")["body"].decode("utf-8")
-complete = fetch("llms-full.txt")["body"].decode("utf-8")
-normalized = re.sub(r"\s+", " ", complete).lower()
 
-sdk_install_commands = [
-    line.strip()
-    for line in complete.splitlines()
-    if re.match(r"^(?:npm (?:install|i)|pnpm add|yarn add|bun add)\b", line.strip())
-    and "@relaymessenger/sdk" in line
-]
-if len(sdk_install_commands) != 2:
-    raise SystemExit(
-        "llms-full.txt must contain both staging SDK installation commands"
-    )
-for command in sdk_install_commands:
-    package_tokens = [
-        token for token in command.split() if token.startswith("@relaymessenger/sdk")
-    ]
-    if package_tokens != ["@relaymessenger/sdk@staging"]:
-        raise SystemExit(
-            "llms-full.txt contains a non-staging SDK install command: "
-            f"{command}"
-        )
+def check_brand(fetch, root_html, root, settings):
+    source = settings["favicon"]
+    expected = {source: (root / source).read_bytes()}
+    _, canonical, busted = next(canonical_cache_pairs(fetch, expected, paths=[source]))
+    parser = IconLinkParser()
+    parser.feed(root_html.decode("utf-8"))
+    icon = next((item for item in parser.icons if item.get("sizes") == "192x192"
+                 and urlsplit(item.get("href", "")).path.endswith(".png")), None)
+    if icon is None:
+        raise SystemExit("hosted Docs root has no generated 192x192 favicon")
+    _, generated, generated_busted = next(canonical_cache_pairs(fetch, paths=[icon["href"]]))
+    colors = png_color_counts(generated["body"])
+    wanted = settings["color"]
+    other = "black" if wanted == "blue" else "blue"
+    if (not colors["opaque"] or colors[wanted] <= colors[other]
+            or colors[wanted] / colors["opaque"] < 0.5):
+        raise SystemExit(f"generated favicon is not the {wanted} {settings['environment']} identity: {colors}")
+    return {"source": response_pair(canonical, busted),
+            "generated": response_pair(generated, generated_busted), "colors": colors}
 
-for page in [
-    "Webhooks",
-    "Webhook Event Types",
-    "Webhook Subscriptions",
-    "Webhook delivery",
-    "WebSocket frames",
-    "WebSocket FULL Sync",
-]:
-    if page.lower() not in index.lower():
-        raise SystemExit(f"llms.txt is missing page: {page}")
 
-for rule in [
-    "one or more saved subscriptions",
-    "zero webhook subscriptions",
-    "empty subscription list",
-    "http `409`",
-    "closes connected agent sockets",
-    "deleting the last subscription",
-    "wait durably",
-    "30 days",
-    "cumulative ack",
-    "full sync",
-    "ping every 30 seconds",
-    "within 60 seconds",
-    "localhost",
-    "private",
-    "link-local",
-    "redirect is not followed",
-    "same `event_id`",
-    "relay committed the message and it is readable through the relay api",
-    "webhook `2xx` responses and websocket acks acknowledge event transport only",
-    "read is optional",
-    "the only operation that advances read is `post /v1/chats/{chatid}/read`",
-    "does not show those labels in group chats",
-]:
-    if rule not in normalized:
-        raise SystemExit(f"llms-full.txt is missing final transport rule: {rule}")
+def navigation_pages(config):
+    """Discover all pages, including arbitrarily nested navigation groups."""
+    found = []
 
-deployment = None
-if args.expected_sha:
-    if not re.fullmatch(r"[0-9a-f]{40}", args.expected_sha):
+    def walk(value, in_pages=False):
+        if isinstance(value, str) and in_pages:
+            if not urlsplit(value).scheme:
+                found.append(value)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item, in_pages)
+        elif isinstance(value, dict):
+            for key, item in value.items():
+                walk(item, key == "pages")
+    walk(config["navigation"])
+    if not found:
+        raise SystemExit("navigation contains no pages")
+    return list(dict.fromkeys(found))
+
+
+def read_page(root, page):
+    path = root / f"{page}.mdx"
+    if not path.is_file():
+        raise SystemExit(f"navigation source missing: {page}.mdx")
+    source = path.read_text()
+    match = re.match(r"\A---\n(.*?)\n---\n(.*)\Z", source, re.S)
+    if not match:
+        raise SystemExit(f"invalid frontmatter: {page}.mdx")
+    title = re.search(r"^title:\s*(.+)$", match[1], re.M)
+    if not title:
+        raise SystemExit(f"title missing: {page}.mdx")
+    value = title[1].strip()
+    if value.startswith('"'):
+        value = json.loads(value)
+    elif value.startswith("'") and value.endswith("'"):
+        value = value[1:-1].replace("''", "'")
+    return {"page": page, "title": value, "body": match[2]}
+
+
+def check_discovery(root, config, index, complete):
+    links = {unquote(urlsplit(link).path) for link in re.findall(r"\]\(([^)]+)\)", index)}
+    endpoint_map = json.loads((root / "scripts/api-page-paths.json").read_text())
+    endpoint_routes = {value["endpoint"]: value["href"] for value in endpoint_map.values()}
+    # Parse Source URLs independently of the hostname or local preview origin.
+    sources = {unquote(urlsplit(line).path) for line in re.findall(r"^Source:\s+(\S+)$", complete, re.M)}
+    authored = []
+    for page in navigation_pages(config):
+        if ENDPOINT.match(page):
+            route = endpoint_routes.get(page)
+            if route is None:
+                raise SystemExit(f"navigation endpoint has no source route: {page}")
+            markdown = route + ".md"
+        else:
+            authored.append(read_page(root, page))
+            markdown = "/" + page + ".md"
+            if markdown not in sources:
+                raise SystemExit(f"llms-full.txt is missing navigation source: {markdown}")
+        if markdown not in links:
+            raise SystemExit(f"llms.txt is missing navigation route: {markdown}")
+    contract = (root / "api-reference/openapi.yaml").read_text()
+    pattern = r"^\s+operationId:\s*[\"']?([A-Za-z0-9_.-]+)"
+    expected_ids = set(re.findall(pattern, contract, re.M))
+    carried_ids = set(re.findall(pattern, complete, re.M))
+    if not expected_ids or expected_ids - carried_ids:
+        raise SystemExit(f"llms-full.txt is missing current contract operation IDs: {sorted(expected_ids - carried_ids)}")
+    return authored, sorted(expected_ids)
+
+
+def check_sdk_installs(complete, environment):
+    """Check actual install commands, not a prescribed number of prose copies."""
+    commands = []
+    for line in re.sub(r"\\\r?\n\s*", " ", complete).splitlines():
+        line = line.strip()
+        if re.match(r"^(?:npm (?:install|i)|pnpm add|yarn add|bun add)\b", line):
+            specs = re.findall(r"@relaymessenger/sdk(?:@[^\s`\"']+)?(?=[\s`\"']|$)", line)
+            if specs:
+                commands.extend(specs)
+    expected = "@relaymessenger/sdk" + ("@staging" if environment == "staging" else "")
+    if not commands or any(spec != expected for spec in commands):
+        raise SystemExit(f"{environment} SDK install commands must use {expected}: {commands}")
+    return len(commands)
+
+
+class VisibleHTML(HTMLParser):
+    """Ignore hydration/navigation metadata; retain rendered prose and code."""
+    BLOCKS = {"p", "div", "section", "article", "main", "li", "tr", "td", "th", "pre", "br",
+              "h1", "h2", "h3", "h4", "h5", "h6"}
+    HIDDEN = {"script", "style", "svg", "noscript", "nav", "aside"}
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+        self.titles = []
+        self.hidden = 0
+        self.in_title = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self.HIDDEN:
+            self.hidden += 1
+        if not self.hidden:
+            if tag in self.BLOCKS:
+                self.parts.append("\n")
+            if tag == "h1":
+                self.in_title = True
+                self.titles.append("")
+
+    def handle_endtag(self, tag):
+        if tag in self.HIDDEN:
+            self.hidden = max(0, self.hidden - 1)
+        if not self.hidden:
+            if tag in self.BLOCKS:
+                self.parts.append("\n")
+            if tag == "h1":
+                self.in_title = False
+
+    def handle_data(self, data):
+        if not self.hidden:
+            self.parts.append(data)
+            if self.in_title:
+                self.titles[-1] += data
+
+
+def prose(text):
+    """Normalize presentation only. Keep words, case, numbers and punctuation."""
+    text = re.sub(r"\{/[\*].*?[\*]/\}|<!--.*?-->", "", text, flags=re.S)
+    text = re.sub(r"</?[A-Z][A-Za-z0-9.]*\b[^>]*>", "\n", text)
+    text = re.sub(r"</?(?:p|div|span|br|strong|em|a|code)\b[^>]*>", "", text)
+    text = re.sub(r"!?\[([^]\n]*)\]\([^\n]*?\)", r"\1", text)
+    text = re.sub(r"^\s*\|?[ :|\-]+\|\s*$", "", text, flags=re.M)
+    text = re.sub(r"^\s*(?:#{1,6}\s+|>\s*|[-*+]\s+|\d+\.\s+)", "", text, flags=re.M)
+    text = text.replace("**", "").replace("`", "").replace("|", " ")
+    text = re.sub(r"\\([`*_{}\[\]()#+.!|<>-])", r"\1", text)
+    return " ".join(html.unescape(text).split())
+
+
+def source_fragments(body):
+    without_blocks = FENCE.sub("", body)
+    without_blocks = re.sub(r"\{/[\*].*?[\*]/\}|<!--.*?-->", "", without_blocks, flags=re.S)
+    without_blocks = re.sub(r"</?[A-Z][A-Za-z0-9.]*\b[^>]*>", "\n\n", without_blocks)
+    return [value for part in re.split(r"\n\s*\n", without_blocks)
+            if len(value := prose(part)) >= 24]
+
+
+def code_blocks(body):
+    return [textwrap.dedent(match[3]).strip("\n").replace("\r\n", "\n")
+            for match in FENCE.finditer(body)]
+
+
+def check_page_content(page, body, markdown=False):
+    text = body.decode("utf-8")
+    title = prose(page["title"])
+    if markdown:
+        titles = [prose(value) for value in re.findall(r"^#\s+(.+)$", FENCE.sub("", text), re.M)]
+        front = re.match(r"\A---\n(.*?)\n---", text, re.S)
+        if front:
+            match = re.search(r"^title:\s*(.+)$", front[1], re.M)
+            if match:
+                titles.append(prose(match[1].strip().strip('\"\'')))
+        visible = prose(text)
+        hosted_blocks = code_blocks(text)
+        for block in code_blocks(page["body"]):
+            if block not in hosted_blocks:
+                raise SystemExit(f"/{page['page']}.md has a missing or stale source code block")
+    else:
+        parser = VisibleHTML()
+        parser.feed(text)
+        titles = [prose(value) for value in parser.titles]
+        visible = prose("".join(parser.parts))
+    if title not in titles:
+        raise SystemExit(f"/{page['page']} has a missing or stale title: {page['title']}")
+    fragments = source_fragments(page["body"])
+    if not fragments:
+        raise SystemExit(f"/{page['page']} has no distinctive source prose to verify")
+    for fragment in fragments:
+        if fragment not in visible:
+            raise SystemExit(f"/{page['page']} has missing or stale source content: {fragment[:140]}")
+
+
+def authored_route(page):
+    if page == "index":
+        return ""
+    return page.removesuffix("/index")
+
+
+def check_all_pages(fetch, authored, workers=6):
+    if not 1 <= workers <= 16:
+        raise SystemExit("--workers must be between 1 and 16")
+
+    def check(page):
+        route = authored_route(page["page"])
+        markdown = page["page"] + ".md"
+        receipt = {}
+        for path, canonical, busted in canonical_cache_pairs(fetch, paths=[route, markdown]):
+            check_page_content(page, canonical["body"], markdown=path == markdown)
+            receipt["/" + path] = response_pair(canonical, busted)
+        return receipt
+
+    pages = {}
+    executor = ThreadPoolExecutor(max_workers=workers)
+    try:
+        for checked in executor.map(check, authored):
+            pages.update(checked)
+    finally:
+        executor.shutdown(wait=True, cancel_futures=True)
+    return pages
+
+
+def check_authored_inventory(root, authored):
+    published = {page["page"] for page in authored}
+    existing = {path.relative_to(root).with_suffix("").as_posix()
+                for path in root.rglob("*.mdx")
+                if not any(part.startswith(".") or part == "node_modules"
+                           for part in path.relative_to(root).parts)}
+    if existing - published:
+        raise SystemExit(f"authored routes missing from navigation: {sorted(existing - published)}")
+
+
+def github_json(url, opener=urlopen):
+    request = Request(url, headers={"Accept": "application/vnd.github+json",
+                      "User-Agent": USER_AGENT, "X-GitHub-Api-Version": "2022-11-28"})
+    with opener(request, timeout=60) as response:
+        return json.load(response)
+
+
+def check_deployment(expected_sha, environment, base_url, get_json=github_json):
+    if not re.fullmatch(r"[0-9a-f]{40}", expected_sha):
         raise SystemExit("--expected-sha must be a full lowercase Git SHA")
-    deployments_url = (
-        "https://api.github.com/repos/RelayMessenger/Relay-Docs/deployments?"
-        + urlencode(
-            {
-                "sha": args.expected_sha,
-                "environment": "staging",
-                "per_page": 10,
-            }
-        )
-    )
-    request = Request(
-        deployments_url,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "Relay-Docs-Hosted-Validator/2.0",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-    )
-    with urlopen(request, timeout=60) as response:
-        deployments = json.load(response)
-    if not deployments:
-        raise SystemExit(
-            f"GitHub has no staging deployment for {args.expected_sha}"
-        )
-    for candidate in deployments:
-        statuses_url = candidate["statuses_url"]
-        status_request = Request(
-            statuses_url,
-            headers={
-                "Accept": "application/vnd.github+json",
-                "User-Agent": "Relay-Docs-Hosted-Validator/2.0",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
-        )
-        with urlopen(status_request, timeout=60) as response:
-            statuses = json.load(response)
-        successful = next(
-            (
-                status
-                for status in statuses
-                if status["state"] == "success"
-                and status.get("environment_url", "").rstrip("/")
-                == base_url.rstrip("/")
-            ),
-            None,
-        )
-        if successful:
-            deployment = {
-                "id": candidate["id"],
-                "sha": candidate["sha"],
-                "ref": candidate["ref"],
-                "environment": candidate["environment"],
-                "created_at": candidate["created_at"],
-                "status_id": successful["id"],
-                "status": successful["state"],
-                "environment_url": successful["environment_url"],
-                "updated_at": successful["updated_at"],
-            }
-            break
-    if deployment is None:
-        raise SystemExit(
-            f"GitHub has no successful {base_url.rstrip('/')} deployment "
-            f"for {args.expected_sha}"
-        )
+    url = "https://api.github.com/repos/RelayMessenger/Relay-Docs/deployments?" + urlencode(
+        {"sha": expected_sha, "environment": environment, "per_page": 100})
+    for candidate in get_json(url):
+        # Do not trust server-side filtering alone, including mocked/API-cached lists.
+        if candidate.get("sha") != expected_sha or candidate.get("environment") != environment:
+            continue
+        statuses = get_json(candidate["statuses_url"])
+        # An older success must not mask a newer failure or inactive status.
+        latest = max(statuses, key=lambda status: status.get("updated_at")
+                     or status.get("created_at") or "", default={})
+        if (latest.get("state") == "success"
+                and latest.get("environment_url", "").rstrip("/") == base_url.rstrip("/")):
+            return {"id": candidate["id"], "sha": candidate["sha"],
+                    "ref": candidate.get("ref"), "environment": environment,
+                    "status_id": latest.get("id"), "status": latest["state"],
+                    "environment_url": latest["environment_url"],
+                    "updated_at": latest.get("updated_at")}
+    raise SystemExit(f"GitHub has no current successful {environment} deployment for {expected_sha} at {base_url}")
 
-receipt = {
-    "schema_version": 1,
-    "checked_at": datetime.now(timezone.utc).isoformat(),
-    "base_url": base_url.rstrip("/"),
-    "expected_sha": args.expected_sha,
-    "mintlify_deployment_version": root_version,
-    "github_deployment": deployment,
-    "deleted_wording": list(deleted_wording),
-    "staging_brand": brand,
-    "pages": pages,
-    "verdict": "passed",
-}
-serialized = json.dumps(receipt, indent=2, sort_keys=True) + "\n"
-if args.receipt:
-    args.receipt.parent.mkdir(parents=True, exist_ok=True)
-    args.receipt.write_text(serialized)
 
-print(
-    "validated canonical root, /guides, llms.txt, llms-full.txt, and skill.md; "
-    "bare and cache-busted bodies match, the favicon is black, and "
-    "deleted wording is absent"
-)
-if deployment:
-    print(
-        f"validated staging deployment {deployment['id']} at "
-        f"{deployment['sha']}"
-    )
-if args.receipt:
-    print(f"receipt: {args.receipt}")
+def run(args, root=ROOT, fetch=None, get_json=github_json):
+    settings = environment_config(args.production)
+    config = json.loads((root / "docs.json").read_text())
+    if config.get("favicon") != "/" + settings["favicon"]:
+        raise SystemExit(f"checkout favicon does not match {settings['environment']}; use the matching derived checkout")
+    fetch = fetch or make_fetch(args.base_url)
+    expected = {name: (root / name).read_bytes() for name in AGENT_SOURCES}
+    pages, bodies = {}, {}
+    for path, canonical, busted in canonical_cache_pairs(fetch, expected):
+        text = canonical["body"].decode("utf-8")
+        for label, pattern in deleted_wording.items():
+            if pattern.search(text):
+                raise SystemExit(f"/{path} contains deleted wording: {label}")
+        pages["/" + path] = response_pair(canonical, busted)
+        bodies[path] = canonical["body"]
+    versions = [pages[path]["canonical"]["headers"].get("x-served-version")
+                or pages[path]["canonical"]["headers"].get("x-version") for path in ("/", "/guides")]
+    if not versions[0] or versions[0] != versions[1]:
+        raise SystemExit("root and /guides are not served by the same Mintlify deployment")
+    authored, contract_ids = check_discovery(root, config, bodies["llms.txt"].decode(), bodies["llms-full.txt"].decode())
+    install_count = check_sdk_installs(bodies["llms-full.txt"].decode(), settings["environment"])
+    brand = check_brand(fetch, bodies[""], root, settings)
+    if args.all_pages:
+        check_authored_inventory(root, authored)
+        pages.update(check_all_pages(fetch, authored, args.workers))
+    deployment = check_deployment(args.expected_sha, settings["environment"], args.base_url, get_json) if args.expected_sha else None
+    return {"schema_version": 2, "checked_at": datetime.now(timezone.utc).isoformat(),
+            "base_url": args.base_url.rstrip("/"), "environment": settings["environment"],
+            "expected_sha": args.expected_sha, "mintlify_deployment_version": versions[0],
+            "github_deployment": deployment, "brand": brand, "pages": pages,
+            "authored_pages": len(authored), "contract_operation_ids": contract_ids,
+            "sdk_install_commands": install_count, "all_pages": args.all_pages,
+            "deleted_wording": list(deleted_wording), "verdict": "passed"}
+
+
+def argument_parser():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("base_url")
+    parser.add_argument("--production", action="store_true", help="Select production checks; source bytes remain exact")
+    parser.add_argument("--all-pages", action="store_true", help="Check every navigation-authored route and its Markdown")
+    parser.add_argument("--workers", type=int, default=6, help="Concurrent page checks, 1–16 (default: 6)")
+    parser.add_argument("--expected-sha")
+    parser.add_argument("--receipt", type=Path)
+    return parser
+
+
+def main(argv=None):
+    args = argument_parser().parse_args(argv)
+    if not 1 <= args.workers <= 16:
+        raise SystemExit("--workers must be between 1 and 16")
+    receipt = run(args)
+    if args.receipt:
+        args.receipt.parent.mkdir(parents=True, exist_ok=True)
+        args.receipt.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
+    print(f"validated {receipt['environment']} hosted docs: exact canonical/cache-busted and checkout bytes, "
+          f"navigation, contract IDs, and {receipt['brand']['colors']} favicon colors")
+    if args.all_pages:
+        print(f"validated HTML and Markdown for {receipt['authored_pages']} authored pages")
+    if args.receipt:
+        print(f"receipt: {args.receipt}")
+
+
+if __name__ == "__main__":
+    main()
