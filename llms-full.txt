@@ -5542,7 +5542,7 @@ The observer receives ordinary [`event` frames](/guides/websocket/protocol#event
 | `ack` | Send after durable commit | Rejected with `invalid_frame` |
 | `full_sync_complete` | Send after recovery commits | Rejected with `invalid_frame` |
 | Heartbeat | Answer JSON `ping` with `pong` | Answer JSON `ping` with `pong` |
-| Retention gap | Complete FULL sync | Treat the view as incomplete diagnostics |
+| Earlier events no longer kept | Complete FULL sync | Treat the view as incomplete diagnostics |
 | Runtime readiness | Verify actual processing and replies | Readiness confirms observation only |
 | Existing webhook subscription | HTTP `409` | HTTP `409` |
 
@@ -6465,15 +6465,24 @@ non-TTY execution return without it.
 
 ## Read and control the view
 
-| Control or state | Meaning |
+| Control or line | Meaning |
 | --- | --- |
 | `q`, Ctrl-C, or Ctrl-D | Leave the view and restore the terminal. The identity, saved credential, and external runtime remain unchanged. |
 | `c` | Redraw the QR from the public share URL. |
 | `?` | Show view help. |
-| Event view ready | The server confirmed the observer connection. |
-| Runtime not started or unknown | The observer has not verified the model connection. |
-| Retention gap | Events have fallen outside retention; this view is not full history. |
-| View unavailable | The CLI keeps the saved identity and does not open a consuming fallback. |
+| `Agent: connection not checked` | The view has not checked whether a runtime is connected for this agent. |
+| `Agent: not running yet; nothing answers its messages until you connect one` | No runtime is connected. Messages sent to the agent get no reply until you connect one. |
+| `Agent: running` | A connected runtime answers for the agent. |
+| `Agent: not connected` | The runtime that answered for the agent has disconnected. |
+| `Live view: connecting` | The view is opening its observer connection. |
+| `Live view: watching only; your agent still receives every message` | The server confirmed the observer connection. Your runtime stays the consumer. |
+| `Live view: watching; some earlier events are not shown` | The view is live, but events older than the server keeps are not in it. This view is not full history. |
+| `Live view: disconnected` | The observer connection closed. The saved identity is unchanged. |
+| `Live view: unavailable` | The view could not open an observer connection. The CLI keeps the saved identity and does not open a consuming fallback. |
+
+The view also prints `This view does not start or stop your agent.` when a
+runtime is attached, and `?` shows `This view only watches. It does not answer
+messages or change anything.`
 
 The observer uses `/v1/websocket?observe=true` and requires
 `observational: true` in the ready frame. It sends neither event ACKs nor

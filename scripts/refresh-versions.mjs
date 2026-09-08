@@ -191,7 +191,11 @@ function scanPaths() {
     // the fixtures into non-staging strings and made their tests vacuous
     // (2026-09-07), so they are shapes, not version claims, and stay as-is.
     .filter((file) => file !== path.join(root, "scripts/derive-production.py"))
-    .filter((file) => file !== path.join(root, "scripts/validate-staging-origins.py"));
+    .filter((file) => file !== path.join(root, "scripts/validate-staging-origins.py"))
+    // Same class (2026-09-08): its install fixture spells a staging version
+    // that production must reject; propagating a release into it would drift
+    // the fixture on every refresh.
+    .filter((file) => file !== path.join(root, "scripts/test-hosted-environments.py"));
 }
 
 function escapeRegExp(value) {
