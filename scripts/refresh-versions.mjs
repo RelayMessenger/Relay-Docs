@@ -26,7 +26,7 @@ const checkOnly = process.argv.includes("--check");
 const NPM_PACKAGES = [
   "@relaymessenger/sdk",
   "@relaymessenger/chat-sdk-adapter",
-  "@relaymessenger/cli",
+  "relaymessenger",
   "@relaymessenger/mcp",
   "@relaymessenger/openclaw-plugin",
   "relay-claude-channel",

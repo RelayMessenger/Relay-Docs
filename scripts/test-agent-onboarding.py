@@ -31,7 +31,8 @@ class AgentOnboardingTests(unittest.TestCase):
         self.assertIn(expected("npx relaymessenger@staging --help"), cli)
         self.assertIn("no login, Console account, or existing Agent Token", cli)
         self.assertLess(cli.index("## Create an agent"), cli.index("## Authenticate an existing Agent Token"))
-        self.assertIn("Coming soon on staging", cli)
+        self.assertNotIn("Coming soon on staging", cli)
+        self.assertIn("canonical CLI package", cli)
         for marker in ("hidden Agent Token prompt", "Get-Content -Raw $TokenFile", "auth login --with-token", "auth status", "auth logout", "RELAY_AGENT_TOKEN"):
             self.assertIn(marker, cli)
         for path in ROOT.rglob("*.mdx"):
@@ -40,7 +41,7 @@ class AgentOnboardingTests(unittest.TestCase):
             text = path.read_text()
             with self.subTest(path=path.relative_to(ROOT)):
                 self.assertNotIn("@relaymessenger/cli", text)
-                self.assertNotRegex(text, r"\brelaymessenger@\d")
+                self.assertNotIn("relaymessenger@latest", text)
                 self.assertNotIn("agents setup", text)
                 self.assertNotIn("--token-stdin", text)
                 self.assertNotIn("--from-env", text)
@@ -51,7 +52,7 @@ class AgentOnboardingTests(unittest.TestCase):
 
     def test_lifecycle_boundaries_and_explicit_origin(self):
         text = (ROOT / "guides/agents/lifecycle.mdx").read_text()
-        for marker in ("CLI publication pending", "locally saved profiles", "no automatic retry",
+        for marker in ("live in the staging API", "locally saved profiles", "no automatic retry",
                        "`image_url`", "HTTP `409`", "history retained", 'token: "stored"'):
             self.assertIn(marker, text)
         self.assertIn(expected("agents create --api-url https://api.staging.relayapp.im"), text)
@@ -78,7 +79,7 @@ class AgentOnboardingTests(unittest.TestCase):
         for name in ("openclaw", "hermes", "claude-code"):
             text = (ROOT / f"integrations/{name}.mdx").read_text()
             with self.subTest(integration=name):
-                self.assertIn("staging CLI package verification", text)
+                self.assertIn("through the staging CLI", text)
                 self.assertIn("already live on staging", text)
                 self.assertNotIn("staging route and package verification", text)
 
