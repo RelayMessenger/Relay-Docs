@@ -95,6 +95,41 @@ class AgentOnboardingTests(unittest.TestCase):
             self.assertIn(marker, guide)
         self.assertIn("Server does not render a recipe-only request", guide)
 
+    def test_upcoming_ux_is_release_gated_and_preserves_script_behavior(self):
+        cli = (ROOT / "integrations/cli.mdx").read_text()
+        for marker in ("Coming soon", "8a9c86a", "--image", "path or public HTTPS URL",
+                       "Handle (optional)", "Name (optional)", "Image (optional)",
+                       "before setup", "read-only", "observational: true", "--json",
+                       "Ctrl-C", "full_sync_complete", "real consumer"):
+            self.assertIn(marker, cli)
+        self.assertIn('export RELAY_CONFIG_PATH="$(mktemp -d)/config.json"', cli)
+        self.assertLess(cli.index("## Keep the terminal open"), cli.index("## Use local event forwarding"))
+        skills = (ROOT / "integrations/skills.mdx").read_text()
+        for marker in ("Offer skills before setup", "opt-in", "Decline or cancel", "unknown detection", "provider API keys"):
+            self.assertIn(marker, skills)
+
+    def test_image_upload_uses_completed_owned_attachment_and_existing_profile_retry(self):
+        guide = (ROOT / "guides/agents/lifecycle.mdx").read_text()
+        for marker in ("--image ./avatar.png", "Coming soon", "allocates an Attachment", "verifies completion",
+                       "attachment_id", "not image binary data", "--attachment-id", "not with another create"):
+            self.assertIn(marker, guide)
+        self.assertIn(expected("https://staging.relayapp.im/@brave_cangoo.dev"), guide)
+        self.assertIn("compatible aliases", guide)
+        cards = " ".join((ROOT / "guides/contact-cards.mdx").read_text().split())
+        for marker in ("attachment must be complete", "authenticated agent", "mutually exclusive", "permanent public image storage"):
+            self.assertIn(marker, cards)
+
+    def test_observer_wire_is_canonical_and_distinct_from_ack_consumer(self):
+        spec = (ROOT / "api-reference/openapi.yaml").read_text()
+        socket = spec.split("  /v1/websocket:\n", 1)[1].split("  /v1/contact_requests:", 1)[0]
+        self.assertIn("name: observe", socket)
+        self.assertIn("observational:true", socket)
+        self.assertIn("ACK and full_sync_complete frames are rejected", socket)
+        websocket = (ROOT / "guides/websocket/index.mdx").read_text()
+        self.assertIn("observe=true", websocket)
+        self.assertIn("Connection-local transient cursor", websocket)
+        self.assertNotIn("An upgrade URL with a query string returns", websocket)
+
     def test_new_pages_and_operations_are_integrated(self):
         navigation = json.dumps(json.loads((ROOT / "docs.json").read_text())["navigation"])
         for path in ("guides/agents/lifecycle", "integrations/native-setup",
