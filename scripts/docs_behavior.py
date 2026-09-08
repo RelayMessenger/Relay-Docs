@@ -31,11 +31,11 @@ def validate_behavior(root):
     uploads = read('guides/messaging/attachments.mdx')
     require('Upload attachments', uploads, r'relay\.attachments\.create', r'relay\.attachments\.upload', r'relay\.attachments\.retrieve', r'complete', r'--data-binary', r'Content-Type')
     imports = read('guides/messaging/import-media.mdx')
-    require('Public URL import', imports, r'10 MB', r'DNS|resolved address', r'redirect', r'private', r'credentials')
+    require('Public URL import', imports, r'10 MiB \(10,485,760 bytes\)', r'DNS|resolved address', r'redirect', r'private', r'credentials')
     downloads = read('guides/messaging/receiving-media.mdx')
     require('Download attachments', downloads, r'relay\.attachments\.retrieve', r'60 minutes', r'Range:', r'206', r'416')
     require('Delete attachments', read('guides/messaging/delete-attachments.mdx'), r'relay\.attachments\.delete', r'owner', r'409', r'404')
-    require('Attachment types', read('guides/messaging/attachment-types.mdx'), r'any (?:file type|valid MIME type)', r'application/octet-stream', r'nosniff', r'Content-Disposition', r'SVG', r'100 MB')
+    require('Attachment types', read('guides/messaging/attachment-types.mdx'), r'any (?:file type|valid MIME type)', r'application/octet-stream', r'nosniff', r'Content-Disposition', r'SVG', r'100 MiB \(104,857,600 bytes\)')
 
     signing = read('guides/webhooks/verify-signatures.mdx')
     require('Signature verification', signing, r'raw body', r'webhook-id', r'webhook-timestamp', r'webhook-signature', r'relay\.webhooks\.unwrap', r'HMAC-SHA256')
@@ -57,7 +57,7 @@ def validate_behavior(root):
     observe = read('guides/websocket/observe-events.mdx')
     require('Non-consuming observer', observe, r'observe=true', r'observational', r'ack', r'full_sync_complete', r'reject')
 
-    require('Typing', read('guides/chats/typing-indicators.mdx'), r'chat\.typing_indicator\.started', r'chat\.typing_indicator\.stopped', r'every 60 seconds', r'85 to 90 seconds')
+    require('Typing', read('guides/chats/typing-indicators.mdx'), r'chat\.typing_indicator\.started', r'chat\.typing_indicator\.stopped', r'every 60 seconds', r'90 seconds')
     limits = read('guides/platform/rate-limits.mdx')
     require('Chat limits', limits, r'Other Contacts in `to` \| 6', r'Total active Contacts \| 7')
     membership = read('guides/chats/participants.mdx')

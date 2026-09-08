@@ -306,14 +306,17 @@ class AgentOnboardingTests(unittest.TestCase):
                                    "integrations/native-setup", PHOTO_PAGE, "guides/agents/delete-agent",
                                    "integrations/skills")
 
-    def test_full_prompt_has_one_generated_owner_and_keeps_greeting(self):
+    def test_full_prompt_has_one_generated_owner_and_no_greeting(self):
         skill = self.page("skill")
         prompt = self.page(PROMPT_PAGE)
         self.assertIn("## Start\n", skill)
         vocabulary = skill.split("## Vocabulary\n", 1)[1].split("\n## ", 1)[0]
         self.assert_identifiers(vocabulary, "Contact", "Handle", "Chat", "Message", "part_index")
-        self.assertIn("```text\nHello, I'm here\n```", skill)
-        self.assertIn('"value":"Hello, I\'m here"', skill)
+        # Relay Add replaced the setup greeting, so the first Message follows
+        # the user's Add and the contact.added event that reports it.
+        self.assertNotRegex(skill, r"(?i)\bgreeting")
+        self.assertNotIn("Hello, I'm here", skill)
+        self.assert_identifiers(skill, "contact.added")
         visible = re.search(r"^````text Relay agent prompt\n(.*?)^````$", prompt, re.M | re.S)
         self.assertIsNotNone(visible)
         self.assertEqual(visible.group(1), skill.rstrip("\n") + "\n")
