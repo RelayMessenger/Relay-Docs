@@ -135,6 +135,8 @@ class AgentOnboardingTests(unittest.TestCase):
     def test_released_agent_admission_keeps_authorization_and_session_caveats(self):
         openclaw = (ROOT / "integrations/openclaw.mdx").read_text()
         claude = (ROOT / "integrations/claude-code.mdx").read_text()
+        self.assertIn("`>=2026.8.1 <2026.9.0`", openclaw)
+        self.assertIn("build version `2026.8.1`", openclaw)
         for text in (openclaw, claude):
             for marker in ("agent Contact", "allowlist", "FULL sync", "session", "API origin"):
                 self.assertIn(marker, text)
