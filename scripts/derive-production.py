@@ -34,19 +34,20 @@ EXPECTED_REWRITES = {
 # dist-tag or prerelease; a bare version cell becomes the `latest` tag.
 EXPECTED_PACKAGE_REWRITES = {
     "npm install @relaymessenger/sdk@staging": "npm install @relaymessenger/sdk",
-    "npm install --global @relaymessenger/cli@staging": "npm install --global @relaymessenger/cli",
+    "npx relaymessenger@staging --help": "npx relaymessenger --help",
     "openclaw plugins install @relaymessenger/openclaw-plugin@staging":
         "openclaw plugins install @relaymessenger/openclaw-plugin",
     "`@relaymessenger/sdk@0.3.0-staging.8`": "`@relaymessenger/sdk`",
     "`relay-claude-channel@0.3.0-staging.4`": "`relay-claude-channel`",
     "| `@relaymessenger/sdk` | `0.3.0-staging.8` |": "| `@relaymessenger/sdk` | `latest` |",
-    # A git ref on the plugin marketplace is not an npm dist-tag; it stays.
     "/plugin marketplace add RelayMessenger/Relay-SDK@staging":
-        "/plugin marketplace add RelayMessenger/Relay-SDK@staging",
+        "/plugin marketplace add RelayMessenger/Relay-SDK@main",
 }
 
 CONTENT_SUFFIXES = {".mdx", ".md", ".json", ".yaml", ".yml", ".txt", ".js", ".mjs", ".svg"}
 SKIP_DIRS = {".git", "node_modules", ".mint", "scripts", ".github"}
+# Immutable contract and registry observations are inputs, not content to derive.
+SKIP_FILES = {"api-reference/openapi.yaml", "versions.json"}
 GENERATORS = (
     ["python3", "scripts/build-staging-openapi.py"],
     ["scripts/build-mint-openapi.sh"],
@@ -59,6 +60,8 @@ def content_files(root: Path):
     for path in sorted(root.rglob("*")):
         relative = path.relative_to(root)
         if SKIP_DIRS & set(relative.parts) or not path.is_file():
+            continue
+        if relative.as_posix() in SKIP_FILES:
             continue
         if path.suffix in CONTENT_SUFFIXES:
             yield path

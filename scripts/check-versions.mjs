@@ -11,8 +11,16 @@ import { readFile } from "node:fs/promises";
 import { readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { execFileSync } from "node:child_process";
 
 const root = path.resolve(import.meta.dirname, "..");
+// Share the target parser, including invalid-marker rejection, with Python.
+const target = execFileSync("python3", [
+  "-c", "from origins import target; print(target())",
+  ...process.argv.slice(2),
+], { cwd: path.join(root, "scripts"), encoding: "utf8" }).trim();
+const published = (relative) => !relative.startsWith("scripts/")
+  && !relative.startsWith(".github/");
 
 // Generated outputs are rebuilt from the pages and verified by npm run
 // check:llms, and scripts/ecosystem-hosted-lock.json is verified against the
@@ -75,6 +83,14 @@ for (const [name, version] of Object.entries(versions.pypi)) {
   expected.set(name, new Set([version]));
 }
 
+function allowedVersions(name, relative) {
+  if (target === "production" && published(relative) && versions.npm[name]) {
+    const latest = versions.npm[name].latest;
+    return new Set(latest && !latest.includes("-staging.") ? [latest] : []);
+  }
+  return expected.get(name);
+}
+
 const files = [
   ...SCAN_FILES.map((name) => path.join(root, name)),
   ...SCAN_DIRECTORIES.flatMap((name) => walk(path.join(root, name))),
@@ -108,10 +124,10 @@ for (const file of new Set(files)) {
         );
         continue;
       }
-      const allowed = named.some((name) => expected.get(name).has(match));
+      const allowed = named.some((name) => allowedVersions(name, relative).has(match));
       if (!allowed) {
         const wanted = named
-          .map((name) => `${name} is ${[...expected.get(name)].join(" or ")}`)
+          .map((name) => `${name} allows ${[...allowedVersions(name, relative)].join(" or ")} on ${target}`)
           .join("; ");
         failures.push(
           `${relative}:${index + 1} states version ${match}, but versions.json `
@@ -122,8 +138,9 @@ for (const file of new Set(files)) {
   });
 }
 
-// The manifest lives on the Relay-SDK staging branch, so it carries the
-// `staging` tag's version, which is what integrations/claude-code.mdx says.
+// The snapshot records the Relay-SDK staging manifest independently of the
+// docs target. Derivation preserves that observation instead of inventing
+// the version carried by the production catalog.
 // Plain releases (0.3.0) fall outside VERSION on purpose, so a page could
 // state `@relaymessenger/sdk@0.2.0` and nothing above would notice. Every
 // `<package>@<version>` and every `| \`<package>\` | \`<version>\` |` row
@@ -133,7 +150,8 @@ for (const file of new Set(files)) {
   const relative = path.relative(root, file);
   const lines = (await readFile(file, "utf8")).split("\n");
   lines.forEach((line, index) => {
-    for (const [name, allowed] of expected) {
+    for (const name of expected.keys()) {
+      const allowed = allowedVersions(name, relative);
       const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const claims = [
         ...line.matchAll(new RegExp(`(?<![\\w./@-])${escaped}@(${PLAIN})\\b`, "g")),
@@ -144,7 +162,7 @@ for (const file of new Set(files)) {
         if (!allowed.has(claim[1])) {
           failures.push(
             `${relative}:${index + 1} states ${name}@${claim[1]}, but versions.json `
-            + `says ${[...allowed].join(" or ")}: run npm run refresh:versions`,
+            + `allows ${[...allowed].join(" or ")} on ${target}: run npm run refresh:versions`,
           );
         }
       }
@@ -158,7 +176,7 @@ if (versions.claudeCodePluginManifest
     "versions.json says the Relay-SDK Claude Code plugin manifest "
     + `(${versions.claudeCodePluginManifest}) differs from the staging tag `
     + `relay-claude-channel@${versions.npm["relay-claude-channel"]?.staging}, but `
-    + "integrations/claude-code.mdx tells readers the staging catalog carries it",
+    + "the registry snapshot must remain internally consistent in either docs target",
   );
 }
 

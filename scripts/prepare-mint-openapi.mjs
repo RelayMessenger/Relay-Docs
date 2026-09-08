@@ -17,6 +17,8 @@ if (webhooks >= 0) {
 }
 
 const sidebarTitles = {
+  createAgent: "Create",
+  deleteAgent: "Delete",
   createChat: "Create",
   listChats: "List",
   getChat: "Retrieve",

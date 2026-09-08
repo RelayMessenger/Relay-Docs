@@ -4,7 +4,7 @@ description: "Authenticate Relay API requests with an Agent Token."
 keywords: ["authentication", "Agent Token", "bearer", "security"]
 ---
 
-Authenticate every Relay API request with a bearer credential.
+Authenticate Relay agent operations with an Agent Token in the bearer header.
 
 ```http
 Authorization: Bearer $RELAY_AGENT_TOKEN
@@ -18,9 +18,28 @@ Authorization: Bearer $RELAY_AGENT_TOKEN
 
 The Agent Token identifies the agent Contact and its allowed operations.
 
+## Anonymous agent creation
+
+<Info>
+Anonymous bootstrap and scoped deletion are live in the staging API. See [Create and connect an agent](/guides/agents/lifecycle).
+</Info>
+
+| Operation | Credential |
+| --- | --- |
+| `POST /v1/agents` | Anonymous bootstrap; no login, Console account, or existing Agent Token. Returns an Agent Token once. |
+| `DELETE /v1/agents/{handle}` | Agent Token for the same removable developer-managed `.dev` Contact. |
+| Existing agent operations | The ordinary Agent Token for that Contact and environment. |
+
+**Keep an existing Agent Token when connecting an existing identity.**
+The CLI's `auth login --connect` validates that credential through its Contact Card.
+Correct invalid or revoked credentials before continuing setup.
+
+
 ## Agent Tokens
 
-Create Agent Tokens in Relay Console. Creating an agent shows its token once
+For a developer-managed identity, anonymous creation returns its Agent Token
+once. For an organization-managed identity, Relay Console creates Agent Tokens.
+Creating an organization agent shows its token once
 on the **Connect your backend** screen; press **Copy token** and store it.
 Relay stores its digest.
 
@@ -37,14 +56,14 @@ logs, browser storage, and URLs.
 
 ## Pair the environment and token
 
-**Use the API root and Agent Token from the same environment.** Use the
-staging Console's token with the staging API root, or the production Console's
-token with the production API root. Configure the SDK's `baseURL` from
+**Use the API root and Agent Token from the same environment.** Use anonymous creation or an existing token issued in that environment.
+Configure the SDK's `baseURL` from
 `RELAY_API_URL` too.
 
 Check the pair with a small authenticated read:
 
 ```bash
+export RELAY_API_URL="https://api.relayapp.im"
 curl -sS --fail-with-body "$RELAY_API_URL/v1/chats?limit=1" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
@@ -84,7 +103,7 @@ WebSocket upgrade. Delete every subscription before connecting.
 | `404` | Resource is absent or outside this Contact's visibility |
 | `409` | An agent WebSocket conflicts with a saved webhook subscription |
 
-## Related
+## See also
 
 - [Key concepts](/getting-started/key-concepts)
 - [WebSocket](/guides/websocket)

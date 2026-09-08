@@ -10,16 +10,18 @@ import json
 import re
 import unittest
 from pathlib import Path
-from origins import STAGING_HOSTS, STAGING_PACKAGE_REFERENCE, ROOT, origin, target
+from origins import STAGING_HOSTS, STAGING_PACKAGE_REFERENCE, STAGING_INSTRUCTION_REFERENCE, ROOT, origin, target
 
-PRODUCTION = re.compile(r"(?:https|wss)://(?:api|console)\.relayapp\.im")
+PRODUCTION = re.compile(r"(?:https|wss)://(?:api|console|docs|go)\.relayapp\.im")
 STAGING = re.compile(
-    "|".join([*(re.escape(host) for host in STAGING_HOSTS), STAGING_PACKAGE_REFERENCE.pattern])
+    "|".join([*(re.escape(host) for host in STAGING_HOSTS),
+              STAGING_PACKAGE_REFERENCE.pattern, STAGING_INSTRUCTION_REFERENCE.pattern]),
+    re.I,
 )
 CONTENT_SUFFIXES = {".mdx", ".md", ".json", ".yaml", ".yml", ".txt", ".js", ".mjs"}
 # The tooling that knows both spellings is exempt from the production sweep,
 # and so is versions.json, the mirror of what the registries actually publish.
-SWEEP_EXEMPT = {".github", "node_modules", "scripts", ".git", "versions.json"}
+SWEEP_EXEMPT = {".github", "node_modules", "scripts", ".git", ".mint"}
 
 
 def example_errors(text: str, mode: str = "staging") -> list[str]:
@@ -28,7 +30,7 @@ def example_errors(text: str, mode: str = "staging") -> list[str]:
     for match in re.finditer(r"^(`{3,})[^\n]*\n(.*?)^\1[ \t]*$", text, re.M | re.S):
         block = match[2]
         if mode == "staging" and PRODUCTION.search(block):
-            errors.append("production API or Console URL in a runnable example")
+            errors.append("production API, Console, docs, or share URL in a runnable example")
         for constructor in re.finditer(r"new Relay\(\{(.*?)\}\)", block, re.S):
             if not re.search(r"\bbaseURL\s*:", constructor[1]):
                 errors.append("SDK constructor omits explicit baseURL")
@@ -40,6 +42,10 @@ def example_errors(text: str, mode: str = "staging") -> list[str]:
 class RegressionTests(unittest.TestCase):
     def test_production_curl_is_rejected(self):
         self.assertTrue(example_errors("```bash\ncurl https://api.relayapp.im/v1/chats\n```\n"))
+
+    def test_production_share_and_docs_examples_are_rejected(self):
+        for host in ("go", "docs"):
+            self.assertTrue(example_errors(f"```text\nhttps://{host}.relayapp.im/@agent.dev\n```\n"))
 
     def test_production_websocket_is_rejected(self):
         self.assertTrue(example_errors("```text\nwss://api.relayapp.im/v1/websocket\n```\n"))
@@ -72,7 +78,7 @@ class RegressionTests(unittest.TestCase):
     def test_production_mode_rejects_staging_package_references(self):
         for reference in (
             "npm install @relaymessenger/sdk@staging",
-            "npm install --global @relaymessenger/cli@staging",
+            "npx relaymessenger@staging --help",
             "`relay-claude-channel@0.3.0-staging.4`",
             "| `@relaymessenger/sdk` | `0.3.0-staging.8` |",
         ):
@@ -85,7 +91,12 @@ class RegressionTests(unittest.TestCase):
     def test_production_mode_accepts_plain_package_references(self):
         self.assertFalse(example_errors(
             "npm install @relaymessenger/sdk\n`@relaymessenger/cli` is `latest`\n"
-            "/plugin marketplace add RelayMessenger/Relay-SDK@staging\n", "production"
+            "/plugin marketplace add RelayMessenger/Relay-SDK@main\n", "production"
+        ))
+
+    def test_named_profile_suffix_is_not_token_environment_prose(self):
+        self.assertFalse(example_errors(
+            "Profile: existing-staging token source: config", "production"
         ))
 
     def test_production_mode_still_requires_explicit_base_url(self):
@@ -109,6 +120,8 @@ def validate() -> None:
         for path in sorted(ROOT.rglob("*")):
             relative = path.relative_to(ROOT)
             if not path.is_file() or path.suffix not in CONTENT_SUFFIXES:
+                continue
+            if relative.as_posix() in {"versions.json", "api-reference/openapi.yaml"}:
                 continue
             if SWEEP_EXEMPT & set(relative.parts) or path.suffix == ".mdx":
                 continue

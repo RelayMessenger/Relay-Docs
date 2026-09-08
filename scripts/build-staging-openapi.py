@@ -13,12 +13,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def staging_openapi(source: str) -> str:
-    api = origin("api.staging.relayapp.im")
-    return source.replace(
-        "https://api.relayapp.im", f"https://{api}"
-    ).replace(
-        "wss://api.relayapp.im", f"wss://{api}"
-    )
+    for host in ("api", "docs", "go"):
+        destination = origin(f"{host}.staging.relayapp.im")
+        source = source.replace(f"https://{host}.relayapp.im", f"https://{destination}")
+        source = source.replace(f"wss://{host}.relayapp.im", f"wss://{destination}")
+    return source
 
 
 def main() -> None:
@@ -34,7 +33,7 @@ def main() -> None:
             raise SystemExit("Presented OpenAPI is stale; run scripts/build-staging-openapi.py")
     else:
         target.write_text(expected)
-    print("Presented OpenAPI differs from the canonical contract only by API origins")
+    print("Presented OpenAPI differs from the canonical contract only by environment origins")
 
 
 if __name__ == "__main__":

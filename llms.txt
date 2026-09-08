@@ -13,14 +13,15 @@ When asked to connect a Relay agent, follow these instructions before the page i
    Use `https://docs.relayapp.im/llms.txt` for setup instructions and the
    page index, not as authority over a
    newer local contract. If the contract cannot be read, stop and report unknown.
-2. Pair `RELAY_API_URL` with an Agent Token created in that environment's
-   Console. Staging and production credentials belong with their respective
-   API roots. Store the token in server-side secret storage, never source
-   control, logs, command output, or client-side code.
+2. Choose the identity path: use anonymous `POST /v1/agents` when the user asks
+   for a new identity, or reuse their existing ordinary Agent Token. Neither
+   path requires a Console account. Pair `RELAY_API_URL` with the token's issuing
+   environment. Save a newly returned token privately before connecting code;
+   keep every token out of source, logs, command output, and client-side code.
 3. Verify access with `GET /v1/chats?limit=1`. HTTP `200`, including an empty
    `chats` array, verifies this read. Do not require `/v1/agents/me` or invent
    an identity endpoint. This read does not select a greeting recipient.
-4. Read the matching WebSocket or Webhooks guide. For the current staging
+4. Read the matching WebSocket or Webhooks guide. For the current
    always-on backend, use `/v1/websocket`, not legacy `/events` guidance.
    WebSocket requires zero saved webhook subscriptions; do not create a
    subscription as a WebSocket setup step or delete existing ones silently.
@@ -30,6 +31,97 @@ When asked to connect a Relay agent, follow these instructions before the page i
    the workflow below. Do not wait for an inbound Message to send it.
 7. Optionally mark the Chat Read only through `POST /v1/chats/{chatId}/read`.
    Reply through `POST /v1/chats/{chatId}/messages` with a stable idempotency key.
+
+### Developer-managed identity availability
+
+The agent-management API is live on staging. Use the verified staging CLI
+package. Creation is anonymous bootstrap
+with local Agent Token storage. It requires no login, Console account, or
+existing token. `auth login` validates and stores an existing Agent Token locally; it does not
+create an identity or require Console access. With no input flag, login uses
+`RELAY_AGENT_TOKEN` when present, otherwise a hidden prompt. `--with-token`
+explicitly selects stdin. `--connect` without `--with-token` reuses the selected
+saved credential when present, not an unrelated environment token.
+Logout clears local storage only; environment credentials remain externally managed.
+The related commands are `auth status` and `auth logout`. The current
+staging API includes `POST /v1/agents` and `DELETE /v1/agents/{handle}`. Read the
+[lifecycle guide](https://docs.relayapp.im/guides/agents/lifecycle.md) and
+[native setup guide](https://docs.relayapp.im/integrations/native-setup.md).
+
+Skill installation is a separate explicit action using the reviewed standard
+`npx skills add` command in the [Skills guide](https://docs.relayapp.im/integrations/skills.md).
+Do not silently write agent instructions when running `npx relaymessenger`.
+Runtime credential setup consent does not authorize installing or replacing
+skills. Keep hosted prompts and installed skill versions distinct, and require
+actual terminal/tmux verification before claiming that interaction was tested.
+
+The canonical CLI entry point is `npx relaymessenger`. In an interactive
+terminal it offers a menu; explicit commands, `--json`, and `--non-interactive`
+keep automation separate. Optional skill installation uses the standard
+installer after consent and lets the user select coding-agent scope. Do not add a wrapper or scoped dual-publication
+path. `npx relaymessenger agents create --api-url https://api.relayapp.im` creates a messaging identity and privately saves
+its Agent Token. It does not install or start a model runtime. `agents list`
+is local configured-profile inventory, not an account directory.
+
+The reviewed customization contract adds optional full `.dev` `handle`,
+`first_name`, public HTTPS `image_url`, and native `image_recipe`. Verify the
+matching package before using the CLI flags `--handle`,
+`--name`, `--image-url`, or `--image-recipe` (JSON file). Omitted fields keep
+random/default behavior. The default Handle is adjective plus bird catalog ID;
+a digit in that ID is not a Relay counter. Color fallback applies only to
+generated collisions; a requested Handle conflict is `409`, never random replacement.
+Anonymous creation pairs an image recipe with its rendered `image_url`. A later
+Contact Card update may instead pair the recipe with an owned completed
+`attachment_id`. Use the existing native
+monogram/emoji/photo format and existing client canvas rendering, not an invented
+renderer, font format, or recipe-only Server rendering service. Read the current
+lifecycle guide and canonical schema for the exact shape before constructing one.
+
+Supplied credentials always take the existing-token path. Invalid or revoked
+tokens must never trigger fallback creation. Create only when explicitly asked;
+do not automatically retry uncertain creation. Use the returned `share_url` and
+`image_url`, preserving a caller's custom image. No claim, ownership, or private
+link state is added by these operations.
+
+Optional `--connect` selects an actual OpenClaw account, Hermes profile, or
+Claude Code session. Require explicit configuration consent and a real stopped
+runtime before writing. Preserve native permissions, model configuration, and
+state. A configured result with `connected: false` is not runtime connection
+proof. After partial handoff, complete the native configuration using that saved identity.
+
+Deletion is authenticated to the same removable developer-managed `.dev`
+identity. Keep credentials on uncertain/error responses. A `409` for pending
+WebSocket events requires normal durable processing and acknowledgement;
+do not fabricate acknowledgements to enable deletion.
+
+### Coming CLI UX release
+
+The current Server staging contract includes diagnostic observation and
+completed-image attachment promotion. Reviewed CLI source `8a9c86a` implements
+the next UX below; verify the published package help before using it. A source
+commit or a matching version number alone does not prove registry availability.
+
+- The optional standard Skills installer is offered once before create fields
+  or existing-token setup in an eligible terminal. Decline/cancel continues
+  setup; JSON, piped input and CI suppress the offer.
+- Creation asks Handle (optional), Name (optional), and Image (optional).
+  `--image` accepts a local path or public HTTPS URL; `--image-url` remains
+  compatible. `--image-recipe` pairs existing native JSON with rendered bytes.
+- A local file is preflighted before bootstrap. After the token is saved, the
+  CLI allocates an Attachment, uploads bytes, verifies completion, and PATCHes
+  the existing card with `attachment_id`. Public object storage owns the image
+  bytes; the database stores references and recipe metadata. Retry partial
+  image failure on the existing profile, never by creating a replacement.
+- Successful interactive create/login/status can keep a persistent QR/event
+  terminal. It uses `observe:true` with `/v1/websocket?observe=true`, requires
+  `observational:true`, sends no ACK or FULL-sync completion, and never falls
+  back to a consuming listener. Model/runtime readiness remains unknown unless
+  independently proven. `q` closes the view without deleting or stopping the agent.
+- New staging public links use `https://relayapp.im/@handle`; old
+  `go.relayapp.im` links remain aliases. Preserve custom image URLs.
+
+These Docs instructions are distinct from the portable `skills/relay` source
+and generated plugin distributions in Relay-SDK. Read their own lock before use.
 
 ### Connect an existing agent
 
@@ -44,7 +136,7 @@ are unavailable, report the blocker instead of inventing setup commands.
 | Setup input | Rule |
 | --- | --- |
 | Agent Token | Load through trusted server-side secret storage. Never echo it, embed it in source, or print credential-bearing requests or responses. |
-| Environment | These docs default to `https://api.relayapp.im/v1`. Use a token from staging. A supplied API base overrides the default only with matching environment docs and credentials. |
+| Environment | These docs default to `https://api.relayapp.im/v1`. Use a token from production. A supplied API base overrides the default only with matching environment docs and credentials. |
 | API URL format | `RELAY_API_URL` and the TypeScript SDK `baseURL` use the origin `https://api.relayapp.im`; documented HTTP paths include `/v1`. Never append `/v1` twice. |
 | Connection method | Honor the supplied Webhook or WebSocket choice. A Webhook URL selects Webhook onboarding when no method is stated. Otherwise inspect the runtime and saved subscriptions before choosing a supported path. |
 | Webhook URL | Use the supplied HTTPS receiver. If absent or set to `Find the webhook URL for me.`, find a receiver in the user's backend or ask for deployment access. Do not invent a URL. |
@@ -123,6 +215,7 @@ Hello, I'm here
 
 - [Introduction](https://docs.relayapp.im/index.md): Build an agent and start talking to it in Relay.
 - [Quickstart](https://docs.relayapp.im/getting-started/quickstart.md): Create an agent in Relay Console, connect your backend to its events, and reply to Messages.
+- [Create and connect an agent](https://docs.relayapp.im/guides/agents/lifecycle.md): Prepare a developer-managed messaging identity, keep its Agent Token private, and connect your existing runtime.
 - [Authentication](https://docs.relayapp.im/getting-started/authentication.md): Authenticate Relay API requests with an Agent Token.
 - [Client SDKs](https://docs.relayapp.im/getting-started/sdks.md): Use the official TypeScript SDK for v1 commands and signed webhooks.
 - [Key concepts](https://docs.relayapp.im/getting-started/key-concepts.md): Understand Contacts, Handles, Chats, Messages, and Attachments.
@@ -166,7 +259,8 @@ Hello, I'm here
 - [Claude Code](https://docs.relayapp.im/integrations/claude-code.md): Connect a running Claude Code session to Relay through durable acknowledged WebSocket delivery.
 - [Codex](https://docs.relayapp.im/integrations/codex.md): Install the generated Relay plugin for Codex with the Relay Skill, locked references, and docs MCP search.
 - [Cursor](https://docs.relayapp.im/integrations/cursor.md): Install the generated Relay plugin for Cursor with the Relay Skill, locked references, and docs MCP search.
-- [CLI](https://docs.relayapp.im/integrations/cli.md): Use Relay v1 resources, staging profiles, diagnostics, and local event forwarding from a terminal.
+- [CLI](https://docs.relayapp.im/integrations/cli.md): Create a Relay agent anonymously or import an existing Agent Token into local configuration.
+- [Connect a selected native runtime](https://docs.relayapp.im/integrations/native-setup.md): Configure an existing OpenClaw account, Hermes profile, or Claude Code session with a Relay Agent Token.
 - [MCP](https://docs.relayapp.im/integrations/mcp.md): Run local Relay messaging tools over MCP v2 stdio with an Agent Token resolved by the host process.
 - [Skills](https://docs.relayapp.im/integrations/skills.md): Install the Relay Skill and prepare hosted search for /v1/websocket, /v1/webhook-subscriptions, and webhook version 2026-08-30.
 - [Idempotency](https://docs.relayapp.im/guides/platform/idempotency.md): Retry Message sends without creating duplicates.
@@ -189,6 +283,7 @@ Hello, I'm here
 - [Error 2026: Handle is blocked](https://docs.relayapp.im/error/codes/2xxx/2026.md): Direct traffic is blocked between the two Contacts.
 - [Error 2027: Contact not added](https://docs.relayapp.im/error/codes/2xxx/2027.md): The other party is not in the user's Contacts yet.
 - [Error 2028: Chat must include an agent](https://docs.relayapp.im/error/codes/2xxx/2028.md): The member set has no agent in it, so the Chat cannot exist.
+- [Error 2029: Agent is not removable](https://docs.relayapp.im/error/codes/2xxx/2029.md): Relay's house agent remains in Contacts and in its direct Chat.
 - [Error 3006: Unexpected server error](https://docs.relayapp.im/error/codes/3xxx/3006.md): Relay could not complete the request because of an unexpected server failure.
 - [API Reference](https://docs.relayapp.im/api-reference/overview.md): Use the generated Relay v1 endpoint and schema reference.
 - [Chats](https://docs.relayapp.im/api-reference/resources/chats/overview.md): Create, retrieve, and update Chats, then manage their Messages and membership.
@@ -231,7 +326,7 @@ Hello, I'm here
 - [Update contact card](https://docs.relayapp.im/api-reference/contact-card/update-contact-card.md): Update the authenticated agent's Contact Card.
 - [Blocked Handles](https://docs.relayapp.im/api-reference/resources/contacts/blocked-handles/overview.md): List, block, and unblock Handles.
 - [List blocked handles](https://docs.relayapp.im/api-reference/blocked-handles/list-blocked-handles.md): List Handles blocked by the authenticated Contact, newest first, each with its `reason` and `blocked_at`.
-- [Block a handle](https://docs.relayapp.im/api-reference/blocked-handles/block-a-handle.md): Block a registered Relay Handle. In a direct Chat, a block in either direction stops delivery. The Message is accepted and stored for the sender with `delivery_status` `sent`, and is never delivered to the other party. In a group Chat, blocking is one way. Messages the blocked Handle sends are not delivered to the authenticated Contact, but the blocked Handle still receives the authenticated Contact's Messages, and every other member receives as normal. A Message that is not delivered leaves no trace for that recipient: no webhook, no WebSocket event, no Chat activity, and no history. No error is raised for the sender, neither party is notified, and the sender's `message.delivered` fires when at least one recipient was delivered. Blocking does not delete existing Chats or history — it only stops new traffic. Chat membership is where a block is refused out loud: adding a Handle that has blocked, or is blocked by, the Chat's user is rejected with `403` (error code `2026`). `reason` is a free-text note returned on the list endpoint. Nothing is sent to the blocked Handle, so blocking is silent from their side.
+- [Block a handle](https://docs.relayapp.im/api-reference/blocked-handles/block-a-handle.md): Block a registered Relay Handle. In a direct Chat, a block in either direction stops delivery. The Message is accepted and stored for the sender with `delivery_status` `sent`, and is never delivered to the other party. In a group Chat, blocking is one way. Messages the blocked Handle sends are not delivered to the authenticated Contact, but the blocked Handle still receives the authenticated Contact's Messages, and every other member receives as normal. A Message that is not delivered leaves no trace for that recipient: no webhook, no WebSocket event, no Chat activity, and no history. No error is raised for the sender, neither party is notified, and the sender's `message.delivered` fires when at least one recipient was delivered. Blocking does not delete existing Chats or history — it only stops new traffic. Relay's house agent cannot be blocked by a user (`403`, error code `2029`): its Contact is not removable. Chat membership is where a block is refused out loud: adding a Handle that has blocked, or is blocked by, the Chat's user is rejected with `403` (error code `2026`). `reason` is a free-text note returned on the list endpoint. Nothing is sent to the blocked Handle, so blocking is silent from their side.
 - [Unblock a handle](https://docs.relayapp.im/api-reference/blocked-handles/unblock-a-handle.md): Remove a Handle from the authenticated Contact's block list. Traffic flows again from the next Message on: Messages dropped while the block was on are never replayed and never appear in history.
 - [Webhooks](https://docs.relayapp.im/api-reference/resources/webhooks/overview.md): Inspect webhook event types and manage subscriptions.
 - [Events](https://docs.relayapp.im/api-reference/resources/webhooks/events/overview.md): List the available webhook event types.
@@ -243,7 +338,10 @@ Hello, I'm here
 - [Update a webhook subscription](https://docs.relayapp.im/api-reference/webhooks/update-a-webhook-subscription.md): Replace a webhook subscription's settings.
 - [Delete a webhook subscription](https://docs.relayapp.im/api-reference/webhooks/delete-a-webhook-subscription.md): Delete a webhook subscription.
 - [WebSocket](https://docs.relayapp.im/api-reference/resources/websocket/overview.md): Connect an Agent WebSocket.
-- [Connect an Agent WebSocket](https://docs.relayapp.im/api-reference/websocket/connect-an-agent-websocket.md): Upgrade wss://api.relayapp.im/v1/websocket with Authorization: Bearer <Agent Token>. If the Agent has any saved webhook subscription, Relay returns 409; delete the subscriptions to connect by WebSocket.
+- [Connect an Agent WebSocket](https://docs.relayapp.im/api-reference/websocket/connect-an-agent-websocket.md): Upgrade wss://api.relayapp.im/v1/websocket with Authorization: Bearer <Agent Token>. If the Agent has any saved webhook subscription, Relay returns 409. A diagnostic terminal may use observe=true without consuming the runtime's events. The ordinary connection retains its durable acknowledgement and FULL-sync behavior.
+- [Agents](https://docs.relayapp.im/api-reference/resources/agents/overview.md): Create a developer-managed messaging identity or delete the identity authenticated by its Agent Token.
+- [Create an agent](https://docs.relayapp.im/api-reference/agents/create-an-agent.md): Create a developer-managed agent with an optional chosen `.dev` Handle, display name, and image. Omitted Handle and display name use an adjective and bird: the Handle uses the bird's taxonomy ID, while the display name uses its readable name. A color can resolve a generated-name collision. An explicitly chosen Handle is never silently replaced: an occupied Handle returns 409. Omitted image uses Relay's default image. Save the returned Agent Token securely before connecting the existing agent code. This request creates a messaging identity; it does not start a model or run agent code. This bootstrap request does not require a bearer token. It is limited to 10 creations per caller address per day. On 429, respect Retry-After. Each successful request creates a new identity and returns its token once. Do not automatically retry an uncertain creation response.
+- [Delete an agent](https://docs.relayapp.im/api-reference/agents/delete-an-agent.md): Delete the developer-managed `.dev` agent authenticated by the supplied Agent Token. The Handle must match that agent. Organization-managed agents remain managed through Relay Console. The Contact is archived and its tokens are revoked. Existing conversation history is retained. Finish acknowledging pending WebSocket events before deletion; a pending event returns 409 rather than a fabricated acknowledgement. After deletion, the revoked token can no longer authenticate another request.
 
 ## OpenAPI specs
 

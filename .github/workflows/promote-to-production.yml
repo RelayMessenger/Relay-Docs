@@ -3,10 +3,19 @@ name: Promote docs to production
 # `main` is a generated branch: staging content with every staging origin and
 # package reference rewritten to its production twin (scripts/origins.py).
 # Mintlify publishes docs.relayapp.im from `main` as-is. Production is never
-# updated by a push to staging (owner ruling, 2026-09-07): a person runs this
-# workflow, it derives the production tree from the chosen staging commit and
-# opens a pull request against `main`; a person merges it. Nothing here pushes
-# `main`.
+# updated by a push to staging (owner ruling, 2026-09-07): a person reviews the
+# staging diff and dispatches this workflow; that dispatch is the review gate.
+# The workflow derives the production tree from the chosen staging commit,
+# validates it, and pushes `main` itself. It opens no pull request: the org
+# policy forbids Actions from creating one (run 34151539786 failed on
+# createPullRequest), and a person completing the promotion by hand twice in a
+# day is the defect this shape removes.
+#
+# The push is an ours-merge whose tree is replaced by the derived tree, so
+# `main` keeps a linear-ish history that names the source staging commit and
+# a later derived tree always applies without conflicts (a plain branch merge
+# conflicted on PR 68). Requires no branch rule on `main` that blocks the
+# workflow token (none as of 2026-09-07: rules/branches/main is empty).
 
 on:
   workflow_dispatch:
@@ -18,7 +27,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 concurrency:
   group: promote-to-production
@@ -26,7 +34,7 @@ concurrency:
 
 jobs:
   promote:
-    name: Derive production content and open the PR
+    name: Derive production content and push main
     runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v7
@@ -71,31 +79,48 @@ jobs:
       - name: Validate in production mode
         run: npm run validate
 
-      - name: Open the pull request against main
+      - name: Push the derived tree to main
         env:
-          GH_TOKEN: ${{ github.token }}
           SOURCE_REF: ${{ inputs.ref }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
           source_sha=$(git rev-parse HEAD)
-          branch="promote/main-${source_sha:0:12}"
+          short=${source_sha:0:12}
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch -q origin main
           git add -A
-          if [ "$(git write-tree)" = "$(git rev-parse origin/main^{tree})" ]; then
-            echo "main already equals the derived tree; nothing to promote" >> "$GITHUB_STEP_SUMMARY"
+          derived_tree=$(git write-tree)
+          if [ "$derived_tree" = "$(git rev-parse origin/main^{tree})" ]; then
+            {
+              echo "main already equals the tree derived from staging $short; nothing to promote"
+              echo "- Production: https://docs.relayapp.im"
+              echo "- main: $(git rev-parse origin/main)"
+            } | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          git checkout -q -b "$branch"
-          git commit -q -m "Promote docs to production from staging ${source_sha:0:12}" \
+          # A commit on top of the staging commit carrying the derived tree, so
+          # the merge below records which staging commit main was derived from.
+          derived=$(git commit-tree "$derived_tree" -p "$source_sha" \
+            -m "Production tree derived from staging $short")
+          # The derived tree now lives in the object store; clear it from the
+          # working tree so the switch to main is clean, then let read-tree
+          # write it back on top of main.
+          git reset -q --hard
+          git clean -qfd
+          git checkout -q -B main origin/main
+          git merge -q -s ours --no-commit "$derived"
+          git read-tree -u --reset "$derived"
+          git commit -q --no-verify \
+            -m "Production docs are staging $short derived (promotion $RUN_URL)" \
+            -m "Source: $SOURCE_REF at $source_sha." \
             -m "Derived by .github/workflows/promote-to-production.yml; main is generated, never edit it by hand."
-          git push --force origin "HEAD:$branch"
-          existing=$(gh pr list --head "$branch" --base main --state open --json url --jq '.[0].url // empty')
-          if [ -n "$existing" ]; then
-            echo "- Pull request: $existing" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          url=$(gh pr create --base main --head "$branch" \
-            --title "Promote docs to production from staging ${source_sha:0:12}" \
-            --body "Derived from \`$SOURCE_REF\` at $source_sha by the Promote docs to production workflow. Every staging origin and npm package reference is rewritten to its production twin and the tree passed \`npm run validate\` in production mode. Merge to publish docs.relayapp.im.")
-          echo "- Pull request: $url" >> "$GITHUB_STEP_SUMMARY"
+          test "$(git rev-parse HEAD^{tree})" = "$derived_tree"
+          git push origin HEAD:main
+          {
+            echo "Promoted staging $short to production"
+            echo "- Production: https://docs.relayapp.im"
+            echo "- main: $(git rev-parse HEAD)"
+            echo "- Source staging commit: $source_sha"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
