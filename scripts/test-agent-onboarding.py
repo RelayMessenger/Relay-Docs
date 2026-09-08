@@ -74,6 +74,14 @@ class AgentOnboardingTests(unittest.TestCase):
         self.assertIn("API is live on staging", skill)
         self.assertNotIn("Agent management is coming soon", skill)
 
+    def test_native_guides_gate_cli_publication_not_live_api(self):
+        for name in ("openclaw", "hermes", "claude-code"):
+            text = (ROOT / f"integrations/{name}.mdx").read_text()
+            with self.subTest(integration=name):
+                self.assertIn("staging CLI package verification", text)
+                self.assertIn("already live on staging", text)
+                self.assertNotIn("staging route and package verification", text)
+
     def test_custom_profile_uses_existing_recipe_and_rendered_image_pair(self):
         spec = (ROOT / "api-reference/openapi.yaml").read_text()
         request = spec.split("    CreateAgentRequest:\n", 1)[1].split("    AgentImageRecipe:\n", 1)[0]
