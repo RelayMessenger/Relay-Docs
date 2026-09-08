@@ -18,6 +18,15 @@ STAGING = re.compile(
               STAGING_PACKAGE_REFERENCE.pattern, STAGING_INSTRUCTION_REFERENCE.pattern]),
     re.I,
 )
+# The server hard-codes one docs host in every error's doc_url, on staging and
+# on production alike (Relay-Server/server/src/app.ts:237, and the 404 handler
+# at :217). That single value is environment-free, so an example that quotes it
+# is correct on both branches and is exempt from the staging origin sweep.
+# The exemption is keyed on the doc_url field, so a bare production docs URL
+# anywhere else in an example is still rejected.
+ENVIRONMENT_FREE_DOC_URL = re.compile(
+    r'"doc_url"\s*:\s*"https://docs\.relayapp\.im/error/codes/[^"]*"'
+)
 CONTENT_SUFFIXES = {".mdx", ".md", ".json", ".yaml", ".yml", ".txt", ".js", ".mjs"}
 # The tooling that knows both spellings is exempt from the production sweep,
 # and so is versions.json, the mirror of what the registries actually publish.
@@ -28,7 +37,7 @@ def example_errors(text: str, mode: str = "staging") -> list[str]:
     errors = []
     # Match Markdown fences including four-backtick LLM sections.
     for match in re.finditer(r"^(`{3,})[^\n]*\n(.*?)^\1[ \t]*$", text, re.M | re.S):
-        block = match[2]
+        block = ENVIRONMENT_FREE_DOC_URL.sub("", match[2])
         if mode == "staging" and PRODUCTION.search(block):
             errors.append("production API, Console, docs, or share URL in a runnable example")
         for constructor in re.finditer(r"new Relay\(\{(.*?)\}\)", block, re.S):
@@ -42,6 +51,16 @@ def example_errors(text: str, mode: str = "staging") -> list[str]:
 class RegressionTests(unittest.TestCase):
     def test_production_curl_is_rejected(self):
         self.assertTrue(example_errors("```bash\ncurl https://api.relayapp.im/v1/chats\n```\n"))
+
+    def test_doc_url_keeps_its_one_server_value_on_staging(self):
+        self.assertFalse(example_errors(
+            '```json\n{"doc_url":"https://docs.relayapp.im/error/codes/2xxx/2001"}\n```\n'
+        ))
+
+    def test_production_docs_url_outside_doc_url_is_still_rejected(self):
+        self.assertTrue(example_errors(
+            '```json\n{"see":"https://docs.relayapp.im/error/codes/2xxx/2001"}\n```\n'
+        ))
 
     def test_production_share_and_docs_examples_are_rejected(self):
         for host in ("go", "docs"):

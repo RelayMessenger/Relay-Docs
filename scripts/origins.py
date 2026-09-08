@@ -85,6 +85,9 @@ INSTRUCTION_REWRITES = {
     "$STAGING_RELAY_AGENT_TOKEN": "$RELAY_AGENT_TOKEN",
     "## Configure staging": "## Configure production",
     "`Configure staging`": "`Configure production`",
+    '<span id="staging-package" />': '<span id="published-package" />',
+    '"profile": "staging",': '"profile": "production",',
+    "env.staging.vars": "env.production.vars",
     "## Staging package": "## Published package",
     "`Staging package`": "`Published package`",
     "staging package": "package",
@@ -112,7 +115,8 @@ STAGING_INSTRUCTION_REFERENCE = re.compile(
     r"|token\s+from\s+staging\b|staging\s+API\s+(?:root|origin)\b"
     r"|STAGING_RELAY_AGENT_TOKEN\b"
     r'|"RELAY_PROFILE":\s*"staging"'
-    r"|Configure staging\b|Staging package\b|published staging tag\b",
+    r"|Configure staging\b|Staging package\b|published staging tag\b"
+    r'|<span id="staging-package" />|"profile":\s*"staging"|\benv\.staging\.vars\b',
     re.I,
 )
 
