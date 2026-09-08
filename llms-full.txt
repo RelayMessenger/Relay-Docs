@@ -5648,11 +5648,14 @@ import { createRelayAdapter } from "@relaymessenger/chat-sdk-adapter";
 
 const chat = new Chat({
   userName: "Relay example",
+  concurrency: { strategy: "burst", debounceMs: 2000 },
   adapters: {
     relay: createRelayAdapter({
       baseUrl: "https://api.staging.relayapp.im",
       token: process.env.RELAY_AGENT_TOKEN,
       webhookSecret: process.env.RELAY_WEBHOOK_SECRET,
+      markReadOnReceipt: true,
+      abortActiveTurnOnReceipt: true,
     }),
   },
   state: createMemoryState(),
@@ -5690,6 +5693,31 @@ same Chat.
 The adapter accepts public HTTPS media URLs and file bytes. For an uncertain
 media send, preserve the prepared Attachment identity rather than allocating a
 new one on retry; see [Attachments](/guides/messaging/attachments).
+
+## Answer a second Message during a reply
+
+Chat SDK `4.39.0` defaults `concurrency` to `drop`. Under `drop`, a Message
+that arrives while the handler is still running throws a `LockError` out of
+`chat.webhooks.relay`, the Webhook fails, and Relay
+[retries the delivery](/guides/webhooks/delivery). The three settings in the
+example above replace that.
+
+| Setting | Effect |
+| --- | --- |
+| `concurrency: { strategy: "burst", debounceMs: 2000 }` | Waits 2 seconds after the first Message, then runs the handler once with the latest Message; earlier ones arrive in `context.skipped`. A Message that arrives mid-run is queued and handled when the run ends. |
+| `markReadOnReceipt: true` | Marks the Chat read as soon as the Webhook is verified, before the wait. |
+| `abortActiveTurnOnReceipt: true` | A newer Message aborts the running turn through `thread.signal`. Pass that signal to your model call, or the old turn finishes and posts. |
+
+Join the skipped Messages so one reply covers the burst:
+
+```typescript
+chat.onDirectMessage(async (thread, message, channel, context) => {
+  const text = [...(context?.skipped ?? []), message]
+    .map((m) => m.text)
+    .join("\n\n");
+  await thread.post(`Echo: ${text}`);
+});
+```
 
 <span id="delivery-behavior" />
 <span id="media-boundary" />
@@ -5774,6 +5802,26 @@ Send the agent a direct Message and confirm that its answer arrives in the same
 Chat. The starter uses a `reply`
 Action for the completed response. Preserve its idempotency handling when
 customizing the reply.
+
+## Answer a second Message during a reply
+
+Think builds the Chat SDK instance itself with
+`concurrency: { strategy: "burst", debounceMs: 600 }` and runs each reply with
+`waitForCompletion: true`, so the Chat stays locked for the whole turn. The
+starter cannot change that window.
+
+| Second Message arrives | Outcome |
+| --- | --- |
+| Within 600 ms of the first | One turn runs for the latest Message; Think's handlers never read the earlier ones. |
+| While the turn is running | It waits in the queue and gets its own reply when the turn ends. |
+| Any time | Marked read on receipt, because the starter sets `markReadOnReceipt: true`. |
+
+A newer Message never cancels a running turn. Think's handlers take only
+`(thread, message)` and never read `thread.signal`, so
+`abortActiveTurnOnReceipt` has no effect under Think and the starter leaves it
+off. The
+[starter README](https://github.com/RelayMessenger/Relay-SDK/blob/staging/cookbook/cloudflare-think-agent/README.md)
+records why.
 
 <span id="current-source" />
 <span id="delivery-behavior" />
