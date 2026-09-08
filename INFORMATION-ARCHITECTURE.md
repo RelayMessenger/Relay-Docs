@@ -445,7 +445,7 @@ the page's single job and update this inventory in the same commit.
 | Sharing Contact Card | `Before sharing` → `Share the card` → `Keep configuration separate` → `Related` |
 | Message History | `Pagination` → `Newest first` → `Group-history rows` → `Membership visibility` → `Agent recovery` → `Related` |
 | Add requests | `How Add works` → `Send an Add request` → `Read the response` → `Receive Contact events` → `Related` |
-| Contact Cards | `How Contact Cards work` → `Retrieve the card` → `Upsert the card` → `Update the card` → `Profile photo` → `Fields` → `Sharing is separate` → `Related` |
+| Contact Cards | `How Contact Cards work` → `Retrieve the card` → `Upsert the card` → `Update the card` → `Profile photo` → `Use a completed image attachment` → `Fields` → `Sharing is separate` → `Related` |
 | Blocked Handles | `Block` → `Behavior` → `List` → `Unblock` → `Related` |
 
 ### Webhooks and WebSocket
@@ -457,8 +457,8 @@ the page's single job and update this inventory in the same commit.
 | Webhook Subscriptions | `Create` → `Store the signing secret` → `List, retrieve, update, or delete` → `Related` |
 | Webhook Event Types | `Event types` → `List event types` → `Webhook envelope` → `Message events` → `Reaction events` → `Participant events` → `Chat events` → `Contact events` → `Delivery paths` → `Related` |
 | Webhook Delivery | `Delivery policy` → `Retry classes` → `Receiver pattern` → `Delivered meaning` → `Terminal delivery` → `Review with an agent` → `Related` |
-| WebSocket | `Select WebSocket delivery` → `Connect` → `Review with an agent` → `Related` |
-| WebSocket frames | `Ready frame` → `Event frame` → `Error frame` → `Backpressure` → `Heartbeats` → `Disconnects` → `Related` |
+| WebSocket | `Select WebSocket delivery` → `Connect` → `Observe events without consuming` → `Review with an agent` → `Related` |
+| WebSocket frames | `Ready frame` → `Observer readiness` → `Event frame` → `Error frame` → `Backpressure` → `Heartbeats` → `Disconnects` → `Related` |
 | Acknowledgements | `Frame` → `Safe order` → `Delivery meaning` → `Replay` → `Errors` → `Review with an agent` → `Related` |
 | FULL sync | `Normal reconnect` → `When Relay requires FULL sync` → `Commit the snapshot` → `Events during sync` → `Retention` → `Failure handling` → `Related` |
 
@@ -482,9 +482,9 @@ the page's single job and update this inventory in the same commit.
 | Claude Code | `Install the plugin` → `Configure the channel` → `Optional CLI setup` → `Delivery behavior` → `See also` |
 | Codex | `Install locally` → `Use the package` → `Prepare hosted proof` → `Related` |
 | Cursor | `Install locally` → `Use the package` → `Prepare hosted proof` → `Related` |
-| CLI | `Staging package` → `Open the interactive menu` → `Create an agent` → `Authenticate an existing Agent Token` → `List and delete configured agents` → `Use local event forwarding` → `See also` |
+| CLI | `Staging package` → `Open the interactive menu` → `Create an agent` → `Authenticate an existing Agent Token` → `List and delete configured agents` → `Keep the terminal open` → `Use local event forwarding` → `See also` |
 | MCP | `Staging package` → `Configure a local client` → `Choose the MCP surface` → `Related` |
-| Skills | `Install` → `Choose the docs MCP` → `Prepare hosted proof` → `Related` |
+| Skills | `Install` → `Offer skills before setup` → `Choose the docs MCP` → `Prepare hosted proof` → `Related` |
 
 ### Examples, errors, and reference
 
@@ -496,7 +496,7 @@ the page's single job and update this inventory in the same commit.
 | API Reference overview | `Endpoints` → `Conventions` → `Errors` → `Related` |
 
 
-| Create and connect an agent | `Choose the identity` → `Prerequisites` → `Create with the CLI` → `Choose a profile and avatar` → `Supply a rendered image with a recipe` → `Create through the API` → `Connect and share` → `List locally configured agents` → `Delete a developer-managed agent` → `Creation failures` → `Next steps` |
+| Create and connect an agent | `Choose the identity` → `Prerequisites` → `Create with the CLI` → `Choose a profile and avatar` → `Use a local image` → `Supply a rendered image with a recipe` → `Create through the API` → `Connect and share` → `List locally configured agents` → `Delete a developer-managed agent` → `Creation failures` → `Next steps` |
 
 | Connect a selected native runtime | `Prepare the selected context` → `Reuse an existing Agent Token` → `Select the runtime` → `Create and configure together` → `Inspect the result` → `Review with an agent` → `Next steps` |
 ## 17. Current page map

@@ -22,19 +22,30 @@ The published staging package is `relaymessenger@0.1.0-staging.0` and uses
 Use Node.js `22.22.3` or newer. `npx relaymessenger@staging --help` lists the
 commands in the selected staging package.
 
+<Info>
+Coming soon to the next CLI release: the skill offer before setup, `--image`
+with a local path or URL, and the persistent read-only terminal. These sections
+follow reviewed CLI source `8a9c86a`; verify the installed package's help before
+using them. The published version above is not proof of these additions.
+</Info>
+
 ## Open the interactive menu
 
-Set the staging API origin once, then open the CLI without a subcommand:
+For an isolated staging walkthrough, select a new config path once. Keep that
+path and run the remaining commands in the same shell:
 
 ```bash
+export RELAY_CONFIG_PATH="$(mktemp -d)/config.json"
 export RELAY_API_URL="https://api.staging.relayapp.im"
+unset RELAY_AGENT_TOKEN RELAY_PROFILE
 npx relaymessenger@staging
 ```
 
 In an interactive terminal, the menu offers creation, existing-token login,
-local inventory, deletion, and optional skill installation. Creation asks for
-optional profile fields and confirms the new identity request. Explicit resource
-commands remain available for scripts.
+local inventory, deletion, and optional skill installation. In the coming release, choosing Create agent or existing-token login first
+offers the optional Relay skill before setup, then continues. Declining or
+cancelling that offer leaves setup available. Explicit resource commands remain
+available for scripts.
 
 | Invocation | Behavior |
 | --- | --- |
@@ -66,9 +77,19 @@ unchanged. An explicit `--profile` on create must name a new profile.
 The CLI makes no automatic retry. If native configuration needs action after
 creation, continue with that saved identity rather than creating another one.
 
-Optional profile flags are `--handle` (full `username.dev`), `--name`,
-`--image-url`, and `--image-recipe` (a JSON file). Profile customization uses the staging API through the flags below. A recipe requires its rendered
-image URL; see [profile and avatar options](/guides/agents/lifecycle#choose-a-profile-and-avatar).
+The coming release asks three short optional questions. Leave a field blank
+to keep its generated value.
+
+| Prompt | Explicit flag | Value |
+| --- | --- | --- |
+| Handle (optional) | `--handle` | Full `username.dev`. |
+| Name (optional) | `--name` | Display name. |
+| Image (optional) | `--image` | Local image path or public HTTPS URL. |
+| Advanced recipe | `--image-recipe` | Existing recipe JSON file paired with its rendered image. |
+
+`--image-url` remains the URL-only compatibility option. See
+[profile and avatar options](/guides/agents/lifecycle#choose-a-profile-and-avatar)
+for native upload, storage, and retry behavior.
 
 ## Authenticate an existing Agent Token
 
@@ -136,6 +157,32 @@ your creation request. Resource reads print JSON.
 See [Create and connect an agent](/guides/agents/lifecycle) for SDK and HTTPS
 examples, and [native setup](/integrations/native-setup) for exact runtime flags,
 consent, and connection verification.
+
+## Keep the terminal open
+
+<Info>
+Coming soon to the next CLI release. The matching read-only observer protocol
+is in the current staging API.
+</Info>
+
+After a successful interactive create, login, or status command, the terminal
+keeps the selected saved profile's identity, QR, and event view visible.
+**The event view observes delivery; your runtime remains the real consumer.**
+
+| Control or state | Meaning |
+| --- | --- |
+| `q`, Ctrl-C, or Ctrl-D | Stop viewing and restore the terminal. Keep the identity, credential, and external runtime. |
+| `c` | Redraw the QR from the public share URL. |
+| `?` | Show view help. |
+| Event view ready | The server confirmed a read-only observer connection. |
+| Runtime not started or unknown | Model connection is not verified by the observer. |
+| Retention gap | The view missed retained events; it is not full history. |
+| `--json`, non-TTY, or `--non-interactive` | Return without the persistent view or optional prompts. |
+
+The observer requests `/v1/websocket?observe=true` and requires
+`observational: true`. It sends neither event ACKs nor `full_sync_complete`, and
+it does not fall back to a consuming socket when observation is unavailable.
+See [WebSocket observers](/guides/websocket#observe-events-without-consuming).
 
 ## Use local event forwarding
 

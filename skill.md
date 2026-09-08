@@ -75,7 +75,9 @@ matching staging package before using the CLI flags `--handle`,
 random/default behavior. The default Handle is adjective plus bird catalog ID;
 a digit in that ID is not a Relay counter. Color fallback applies only to
 generated collisions; a requested Handle conflict is `409`, never random replacement.
-An image recipe REQUIRES its rendered `image_url`. Use the existing native
+Anonymous creation pairs an image recipe with its rendered `image_url`. A later
+Contact Card update may instead pair the recipe with an owned completed
+`attachment_id`. Use the existing native
 monogram/emoji/photo format and existing client canvas rendering, not an invented
 renderer, font format, or recipe-only Server rendering service. Read the current
 lifecycle guide and canonical schema for the exact shape before constructing one.
@@ -96,6 +98,35 @@ Deletion is authenticated to the same removable developer-managed `.dev`
 identity. Keep credentials on uncertain/error responses. A `409` for pending
 WebSocket events requires normal durable processing and acknowledgement;
 do not fabricate acknowledgements to enable deletion.
+
+## Coming CLI UX release
+
+The current Server staging contract includes diagnostic observation and
+completed-image attachment promotion. Reviewed CLI source `8a9c86a` implements
+the next UX below; verify the published package help before using it. A source
+commit or a matching version number alone does not prove registry availability.
+
+- The optional standard Skills installer is offered once before create fields
+  or existing-token setup in an eligible terminal. Decline/cancel continues
+  setup; JSON, piped input and CI suppress the offer.
+- Creation asks Handle (optional), Name (optional), and Image (optional).
+  `--image` accepts a local path or public HTTPS URL; `--image-url` remains
+  compatible. `--image-recipe` pairs existing native JSON with rendered bytes.
+- A local file is preflighted before bootstrap. After the token is saved, the
+  CLI allocates an Attachment, uploads bytes, verifies completion, and PATCHes
+  the existing card with `attachment_id`. Public object storage owns the image
+  bytes; the database stores references and recipe metadata. Retry partial
+  image failure on the existing profile, never by creating a replacement.
+- Successful interactive create/login/status can keep a persistent QR/event
+  terminal. It uses `observe:true` with `/v1/websocket?observe=true`, requires
+  `observational:true`, sends no ACK or FULL-sync completion, and never falls
+  back to a consuming listener. Model/runtime readiness remains unknown unless
+  independently proven. `q` closes the view without deleting or stopping the agent.
+- New staging public links use `https://staging.relayapp.im/@handle`; old
+  `go.staging.relayapp.im` links remain aliases. Preserve custom image URLs.
+
+These Docs instructions are distinct from the portable `skills/relay` source
+and generated plugin distributions in Relay-SDK. Read their own lock before use.
 
 ## Connect an existing agent
 
