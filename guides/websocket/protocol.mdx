@@ -1,7 +1,7 @@
 ---
 title: "WebSocket frames"
 sidebarTitle: "Frames"
-description: "See every WebSocket frame and the complete Webhook Event Types catalog."
+description: "Read JSON frame shapes, sequence fields, heartbeats, errors, and disconnect codes."
 keywords: ["WebSocket frames", "WebSocket events", "ready frame", "event frame", "disconnect"]
 ---
 
@@ -44,12 +44,7 @@ The ordinary acknowledged consumer receives `ready` after the connection opens:
 | `heartbeat_interval_ms` | Server ping interval |
 | `max_in_flight` | Maximum unacknowledged events on this connection |
 
-## Observer readiness
-
-The diagnostic `observe=true` connection adds `observational: true` to its
-`ready` frame and uses a transient cursor. It rejects `ack` and
-`full_sync_complete`; the real consumer retains the durable checkpoint.
-See [read-only observation](/guides/websocket#observe-events-without-consuming).
+The diagnostic readiness variant is defined in [Observe events](/guides/websocket/observe-events#confirm-observer-readiness).
 
 ## Event frame
 
@@ -81,8 +76,7 @@ events oldest first. A replay can repeat an `event_id`. Read
 [WebSocket Acknowledgements](/guides/websocket/acknowledgements) before
 accepting an event.
 
-**An `event` frame can carry any of Relay's 18 webhook event types.** See the
-[complete event table](/guides/webhooks/events#event-types).
+Use the [event catalog](/guides/webhooks/events#event-types) to select the payload reference for `event.event_type`.
 
 ## Error frame
 
@@ -103,16 +97,14 @@ accepting an event.
 | `fatal` | Stop using the current connection when `true` |
 | `retryable` | Whether a fresh connection can retry the condition |
 
-**A fatal error ends consumption on that connection.** Correct the named
-authentication or configuration problem before reconnecting. Use backoff
-after a Relay server failure.
+**A fatal error ends consumption on that connection.** Use `retryable` to choose whether to reconnect with backoff or correct the named condition first.
 
 | Code | Action |
 | --- | --- |
 | `invalid_frame` | Correct the client frame |
 | `ack_out_of_range` | Correct the cumulative ACK |
 | `stale_connection` | Stop the connection and restore valid authentication |
-| `ack_failed` | Reconnect with backoff. Relay did not save the ACK |
+| `ack_failed` | Reconnect with backoff and deduplicate any replay |
 | `delivery_failed` | Reconnect with backoff. Relay could not load the next event |
 | `full_sync_required` | Complete recovery before sending an ACK |
 | `full_sync_mismatch` | Send the exact required recovery boundary |
@@ -150,16 +142,22 @@ timeout. Heartbeats prove connection liveness. Event ACKs advance delivery.
 | `heartbeat_timeout` | Reconnect with backoff |
 | `restart` | Reconnect with backoff |
 
-Close code `1011` is a transient delivery failure. Code `1012` is a Relay
-restart. Reconnect to either with exponential backoff and jitter. Code `4401`
-means the credential is invalid or revoked. Code `4408` means the heartbeat
-timed out. Code `4410` means the first webhook subscription closed every agent
-socket and moved matching pending events to active Webhooks.
+| Close code | Meaning | Action |
+| --- | --- | --- |
+| `1011` | Server or connection failure | Reconnect with backoff and jitter |
+| `1012` | Server restart | Reconnect with backoff and jitter |
+| `4401` | Invalid or revoked credential | Restore valid authentication |
+| `4408` | Heartbeat timeout | Reconnect with backoff and jitter |
+| `4410` | Webhook delivery configured | Review [subscription state](/guides/webhooks/subscriptions#change-delivery-paths) before reconnecting |
 
-## Related
+<span id="observer-readiness" />
+<span id="related" />
+
+## See also
 
 - [WebSocket](/guides/websocket)
 - [Webhook Event Types](/guides/webhooks/events)
 - [WebSocket Acknowledgements](/guides/websocket/acknowledgements)
 - [WebSocket FULL Sync](/guides/websocket/full-sync)
 - [Best practices](/getting-started/best-practices)
+- [Observe events](/guides/websocket/observe-events)

@@ -42,7 +42,7 @@ Use the AI SDK for layered framework documentation.
 - Raw Relay behavior appears before framework convenience.
 - Each helper name links to current documentation.
 - Stream completion, abort, retry, and storage semantics are explicit.
-- Examples use the current UIMessageStream version from Relay’s contract.
+- Examples use the actual referenced framework types and Relay's current contract.
 
 ## Sources
 

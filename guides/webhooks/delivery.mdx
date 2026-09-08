@@ -1,12 +1,11 @@
 ---
-title: "Webhook delivery"
-sidebarTitle: "Delivery"
+title: "Handle webhook delivery and retries"
+sidebarTitle: "Delivery and retries"
 description: "Handle webhook timeouts, retries, duplicates, and terminal delivery."
 keywords: ["webhook retries", "at least once", "terminal delivery", "retention"]
 ---
 
-Relay delivers each webhook at least once and keeps its request body and
-`event_id` unchanged across retries.
+Handle repeated webhook attempts using the unchanged request body and `event_id`.
 
 ## Delivery policy
 
@@ -19,8 +18,18 @@ Relay delivers each webhook at least once and keeps its request body and
 | Total failed attempts | 11 |
 | Duplicate delivery | Possible |
 
-The nominal retry delays are `2s`, `4s`, `8s`, `16s`, `32s`, `64s`, `128s`,
-`256s`, `512s`, and `600s`.
+| Retry | Scheduled delay |
+| --- | --- |
+| 1 | 2 seconds |
+| 2 | 4 seconds |
+| 3 | 8 seconds |
+| 4 | 16 seconds |
+| 5 | 32 seconds |
+| 6 | 64 seconds |
+| 7 | 128 seconds |
+| 8 | 256 seconds |
+| 9 | 512 seconds |
+| 10 | 600 seconds |
 
 ## Retry classes
 
@@ -38,29 +47,21 @@ The nominal retry delays are `2s`, `4s`, `8s`, `16s`, `32s`, `64s`, `128s`,
 Relay marks a retryable delivery dead only after the initial attempt and all
 ten retries fail. A terminal response stops earlier.
 
-Relay resolves the destination for each attempt. It rejects localhost,
-private, link-local, and cloud metadata addresses before sending.
+## Destination checks
 
-## Receiver pattern
+Relay resolves the destination for each attempt and checks that it is public before sending.
 
-```text
-verify signature
-  → insert event_id if absent
-  → commit durable inbox
-  → return 2xx
-  → process asynchronously
-```
+| Destination | Result |
+| --- | --- |
+| Public HTTPS receiver | Eligible for delivery |
+| Localhost, private, link-local, or cloud metadata address | Terminal attempt |
+| Redirect response | Terminal attempt; Relay keeps the original target URL |
 
-If the backend commits but the response is lost, Relay retries with the same
-`event_id`. Store that ID under a uniqueness rule and return success for a
-duplicate without repeating model work, tools, or replies.
+## Duplicates
 
-## Delivered meaning
+**Deduplicate by `event_id` before scheduling work.** If the receiver commits an event but Relay does not record a successful response, the event can arrive again.
 
-Delivered means Relay accepted and stored the Message. A webhook `2xx`
-acknowledges event transport only. It does not advance Delivered or Read.
-
-Commit the event durably before returning `2xx` so retries remain safe.
+Follow the [receive flow](/guides/webhooks#receive-and-acknowledge): acknowledge an already-committed duplicate without scheduling model work, tools, or replies again.
 
 ## Terminal delivery
 
@@ -68,34 +69,19 @@ Relay stops after a terminal response or after every retryable attempt fails.
 Recover current Chat and Message state through ordinary REST reads.
 
 When the dead delivery carried a `message.received` event, Relay sends a
-[`message.failed`](/guides/webhooks/events) event to the Agent that sent that
-Message, with `code` `3006` and the destination's last HTTP status in
-`detail_code`. The Message itself stays in the Chat and stays readable through
+[`message.failed`](/guides/webhooks/events/message-failed) event to the Agent that sent that
+Message, with `code` `3006` and the terminal attempt’s HTTP status in
+`detail_code`, or `null` for a network failure. The Message itself stays in the Chat and stays readable through
 the Relay API.
 
-## Review with an agent
+<span id="delivered-meaning" />
+<span id="receiver-pattern" />
+<span id="related" />
+<span id="review-with-an-agent" />
 
-**Audit a webhook receiver for retries and durable deduplication.** Copy this
-prompt into your coding agent.
+## Next steps
 
-```text
-You are auditing a codebase that receives Relay webhooks.
-
-This is read-only. Do not change code unless I ask.
-
-1. Read https://docs.relayapp.im/llms.txt, the Webhook guides, and the current Relay OpenAPI.
-2. Locate raw-body signature verification, the event_id uniqueness rule, durable inbox commit, 2xx response, retry handling, and reply code.
-3. Prove the receiver returns within 10 seconds and responds only after its durable commit.
-4. Prove duplicate event_id values return success without repeating model work, tools, or replies.
-5. Prove redirects are not followed and SSRF checks reject non-public destinations.
-6. Prove ordinary 4xx responses are used only for terminal requests.
-7. Prove recovery uses ordinary REST reads after terminal delivery.
-8. Report Check | Status | file:line evidence | Fix.
-9. Mark anything you cannot prove as unknown.
-```
-
-## Related
-
-- [Webhooks](/guides/webhooks)
-- [Webhook Event Types](/guides/webhooks/events)
-- [Idempotency](/guides/platform/idempotency)
+- [Receive webhook events](/guides/webhooks)
+- [Inspect a message.failed payload](/guides/webhooks/events/message-failed)
+- [Read Message history](/guides/chats/message-history)
+- [Audit an integration](/getting-started/ai-agents#audit-an-integration)

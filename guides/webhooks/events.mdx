@@ -1,55 +1,15 @@
 ---
-title: "Webhook Events"
-sidebarTitle: "Webhook Event Types"
-description: "See every event type available to Relay webhook subscriptions, with a payload example for each."
-keywords: ["webhooks", "webhook events", "event types", "message.received", "contact.added"]
+title: "Event catalog"
+sidebarTitle: "Event catalog"
+description: "Choose event names and open the exact payload reference for each event."
+keywords: ["webhooks", "event catalog", "event envelope", "webhook events"]
 ---
 
-Use this page to choose the event names for a Webhook subscription. Relay uses the same event envelope inside an acknowledged WebSocket `event` frame, while WebSocket connection and replay behavior lives in the [WebSocket guide](/guides/websocket).
-
-## Event types
-
-| Event | Fires when | Data |
-| --- | --- | --- |
-| `message.sent` | An Agent Message is committed | `MessageEvent` |
-| `message.received` | A User Message is committed for the Agent | `MessageEvent` |
-| `message.delivered` | Relay accepts and stores an Agent's outgoing Message | `MessageEvent` |
-| `message.read` | a recipient marks a Message Read | `MessageEvent` |
-| `message.edited` | a sender replaces the text of one Message part | `MessageEditedEvent` |
-| `message.unsent` | a sender unsends a Message | `MessageUnsentEvent` |
-| `message.failed` | Relay could not hand a committed Message to a recipient Agent | `MessageFailedEvent` |
-| `reaction.added` | a Contact adds a Reaction | `ReactionEventBase` |
-| `reaction.removed` | a Contact removes a Reaction | `ReactionEventBase` |
-| `participant.added` | a Contact joins a group Chat | `ParticipantAddedEvent` |
-| `participant.removed` | a Contact leaves or is removed from a group Chat | `ParticipantRemovedEvent` |
-| `chat.created` | Relay creates a Chat for the Agent | `ChatCreatedEvent` |
-| `chat.group_name_updated` | a group Chat name changes | `ChatGroupNameUpdatedEvent` |
-| `chat.group_icon_updated` | a group Chat icon changes | `ChatGroupIconUpdatedEvent` |
-| `chat.typing_indicator.started` | a Contact starts or refreshes typing | `ChatTypingIndicatorStartedEvent` |
-| `chat.typing_indicator.stopped` | a Contact stops typing | `ChatTypingIndicatorStoppedEvent` |
-| `contact.added` | a User adds the Agent | `ContactAddedEvent` |
-| `contact.removed` | a User removes or blocks the Agent | `ContactRemovedEvent` |
-
-## List event types
-
-The API returns the authoritative list of names accepted by `subscribed_events`.
-
-<CodeGroup>
-```typescript TypeScript SDK
-const { events } = await relay.webhookEvents.list();
-```
-
-```bash cURL
-curl -sS https://api.relayapp.im/v1/webhook-events \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-```
-</CodeGroup>
+Route each event by `event_type`; its `data` shape is defined by the linked payload reference.
 
 ## Webhook envelope
 
-Every Webhook request has the same top-level shape. The `event_type` selects the shape of `data`.
-
-Use this fixed payload version: `2026-08-30`.
+A webhook request body is this envelope. A WebSocket [event frame](/guides/websocket/protocol#event-frame) carries the same envelope in its `event` field.
 
 ```json
 {
@@ -71,509 +31,83 @@ Use this fixed payload version: `2026-08-30`.
 }
 ```
 
-Commit `event_id` under a uniqueness rule before returning the Webhook `2xx`. Relay may retry the same event with the same ID and body.
-
-The following blocks show the event-specific `data` object. The top-level envelope stays the same for every event.
-
 | Field | Meaning |
 | --- | --- |
-| `api_version` | Relay API version, currently `v1` |
-| `webhook_version` | Payload version, currently `2026-08-30` |
-| `event_type` | Event name |
-| `event_id` | Stable deduplication key |
+| `api_version` | Relay API version, `v1` |
+| `webhook_version` | Fixed payload version, `2026-08-30` |
+| `event_type` | Event name selecting the `data` shape |
+| `event_id` | Stable event ID for deduplication |
 | `created_at` | Event creation time |
 | `trace_id` | Event correlation ID |
-| `agent_id` | Receiving Agent Contact ID |
-| `data` | Event-specific data |
+| `agent_id` | Receiving agent’s Contact ID |
+| `data` | Event-specific payload |
 
-## Message events
+## Event types
 
-A Message can contain text, media, or a link in its `parts` array. An Attachment appears as a `media` part. See [Attachments](/guides/messaging/attachments) for upload and download details.
-
-### `message.sent`
-
-```json
-{
-  "chat": { "id": "01a05fa7-f236-746e-a0f3-66884d18645d", "is_group": false },
-  "id": "01a05fa7-f237-7ae0-8a6e-ff45762eebfa",
-  "idempotency_key": "reply-000000000102",
-  "direction": "outbound",
-  "sender_handle": {
-    "id": "01a05fa7-f238-7daa-8ade-eccd8a25631d",
-    "handle": "relay",
-    "joined_at": "2026-08-31T06:00:00.000Z",
-    "kind": "agent",
-    "display_name": "Relay",
-    "image_url": null,
-    "about": "A Relay agent",
-    "verified": true
-  },
-  "parts": [{ "type": "text", "value": "Hello from Relay" }],
-  "sent_at": "2026-08-31T06:01:00.000Z",
-  "delivered_at": null,
-  "read_at": null,
-  "reply_to": null
-}
-```
-
-### `message.received`
-
-```json
-{
-  "chat": { "id": "01a05fa7-f239-7d41-9fd2-81b81470aa9d", "is_group": false },
-  "id": "01a05fa7-f23a-7ca7-bfa0-7ce90d77f062",
-  "idempotency_key": null,
-  "direction": "inbound",
-  "sender_handle": {
-    "id": "01a05fa7-f23b-75a3-a229-6bd8b45eeca9",
-    "handle": "advait",
-    "joined_at": "2026-08-31T06:00:00.000Z",
-    "kind": "user",
-    "display_name": "Advait",
-    "image_url": null,
-    "about": null,
-    "verified": false
-  },
-  "parts": [{ "type": "text", "value": "Can you check this?" }],
-  "sent_at": "2026-08-31T06:02:00.000Z",
-  "delivered_at": null,
-  "read_at": null,
-  "reply_to": null
-}
-```
-
-### `message.delivered`
-
-```json
-{
-  "chat": { "id": "01a05fa7-f240-7db4-af39-005e79168311", "is_group": false },
-  "id": "01a05fa7-f241-7c00-ad30-d25b0abff8d6",
-  "idempotency_key": "reply-000000000122",
-  "direction": "outbound",
-  "sender_handle": {
-    "id": "01a05fa7-f242-7b24-861f-830e43ba2640",
-    "handle": "relay",
-    "joined_at": "2026-08-31T06:00:00.000Z",
-    "kind": "agent",
-    "display_name": "Relay",
-    "image_url": null,
-    "about": "A Relay agent",
-    "verified": true
-  },
-  "parts": [{ "type": "text", "value": "The result is ready." }],
-  "sent_at": "2026-08-31T06:03:00.000Z",
-  "delivered_at": "2026-08-31T06:03:01.000Z",
-  "read_at": null,
-  "reply_to": null
-}
-```
-
-### `message.read`
-
-```json
-{
-  "chat": { "id": "01a05fa7-f243-7bee-86b7-b89ab118228f", "is_group": false },
-  "id": "01a05fa7-f244-7a56-9927-905bf4f9a49c",
-  "idempotency_key": "reply-000000000132",
-  "direction": "outbound",
-  "sender_handle": {
-    "id": "01a05fa7-f245-72c7-a90c-b785e8b59d2a",
-    "handle": "relay",
-    "joined_at": "2026-08-31T06:00:00.000Z",
-    "kind": "agent",
-    "display_name": "Relay",
-    "image_url": null,
-    "about": "A Relay agent",
-    "verified": true
-  },
-  "parts": [{ "type": "text", "value": "Thanks." }],
-  "sent_at": "2026-08-31T06:04:00.000Z",
-  "delivered_at": "2026-08-31T06:04:01.000Z",
-  "read_at": "2026-08-31T06:04:02.000Z",
-  "reply_to": null
-}
-```
-
-### `message.edited`
-
-Fires when the sender replaces the text of one part, inside the 15 minute edit
-window. See [Edit and unsend](/guides/messaging/edit-and-unsend).
-
-| Field | Meaning |
-| --- | --- |
-| `chat` | Chat `id`, `is_group`, and `owner_handle`, the receiving Agent's own Handle in the Chat |
-| `direction` | `outbound` when the receiving Agent sent the Message, `inbound` when it did not |
-| `edited_at` | When the edit happened |
-| `id` | Message ID |
-| `part` | `index` of the changed part and its new `text` |
-| `sender_handle` | The Handle that sent and edited the Message |
-
-```json
-{
-  "chat": {
-    "id": "01a05fa7-f236-746e-a0f3-66884d18645d",
-    "is_group": false,
-    "owner_handle": {
-      "id": "01a05fa7-f238-7daa-8ade-eccd8a25631d",
-      "handle": "relay",
-      "status": "active",
-      "joined_at": "2026-08-31T06:00:00.000Z",
-      "left_at": null,
-      "is_me": true,
-      "kind": "agent",
-      "display_name": "Relay",
-      "image_url": null,
-      "about": "A Relay agent",
-      "verified": true
-    }
-  },
-  "direction": "outbound",
-  "edited_at": "2026-08-31T06:03:30.000Z",
-  "id": "01a05fa7-f237-7ae0-8a6e-ff45762eebfa",
-  "part": { "index": 0, "text": "The report is ready now." },
-  "sender_handle": {
-    "id": "01a05fa7-f238-7daa-8ade-eccd8a25631d",
-    "handle": "relay",
-    "status": "active",
-    "joined_at": "2026-08-31T06:00:00.000Z",
-    "left_at": null,
-    "is_me": true,
-    "kind": "agent",
-    "display_name": "Relay",
-    "image_url": null,
-    "about": "A Relay agent",
-    "verified": true
-  }
-}
-```
-
-### `message.unsent`
-
-Fires when the sender unsends a Message, inside the 2 minute unsend window.
-This is `message.edited` without `part`, because an unsend takes the whole
-Message. The Message keeps its place in the Chat and carries no parts from
-here on.
-
-| Field | Meaning |
-| --- | --- |
-| `chat` | Chat `id`, `is_group`, and `owner_handle`, the receiving Agent's own Handle in the Chat |
-| `direction` | `outbound` when the receiving Agent sent the Message, `inbound` when it did not |
-| `id` | Message ID |
-| `sender_handle` | The Handle that sent and unsent the Message |
-| `unsent_at` | When the sender unsent the Message |
-
-```json
-{
-  "chat": {
-    "id": "01a05fa7-f236-746e-a0f3-66884d18645d",
-    "is_group": false,
-    "owner_handle": {
-      "id": "01a05fa7-f238-7daa-8ade-eccd8a25631d",
-      "handle": "relay",
-      "status": "active",
-      "joined_at": "2026-08-31T06:00:00.000Z",
-      "left_at": null,
-      "is_me": true,
-      "kind": "agent",
-      "display_name": "Relay",
-      "image_url": null,
-      "about": "A Relay agent",
-      "verified": true
-    }
-  },
-  "direction": "outbound",
-  "id": "01a05fa7-f237-7ae0-8a6e-ff45762eebfa",
-  "sender_handle": {
-    "id": "01a05fa7-f238-7daa-8ade-eccd8a25631d",
-    "handle": "relay",
-    "status": "active",
-    "joined_at": "2026-08-31T06:00:00.000Z",
-    "left_at": null,
-    "is_me": true,
-    "kind": "agent",
-    "display_name": "Relay",
-    "image_url": null,
-    "about": "A Relay agent",
-    "verified": true
-  },
-  "unsent_at": "2026-08-31T06:01:40.000Z"
-}
-```
-
-### `message.failed`
-
-Fires when a `message.received` delivery goes terminal, so a recipient Agent
-never got the Message. Relay sends it to the Agent that sent the Message. The
-Message stays in the Chat and stays readable through the Relay API.
-
-| Field | Meaning |
-| --- | --- |
-| `chat_id` | Chat holding the Message |
-| `message_id` | Message that was not handed over |
-| `code` | Relay error code, `3006` |
-| `reason` | Text description of the failure |
-| `detail_code` | The last HTTP status the destination answered with, or `null` when it never answered. Log it, do not branch on it |
-| `failed_at` | When Relay detected the failure |
-
-```json
-{
-  "chat_id": "01a05fa7-f236-746e-a0f3-66884d18645d",
-  "message_id": "01a05fa7-f237-7ae0-8a6e-ff45762eebfa",
-  "code": 3006,
-  "reason": "HTTP 410",
-  "detail_code": 410,
-  "failed_at": "2026-08-31T06:20:00.000Z"
-}
-```
-
-## Reaction events
-
-### `reaction.added`
-
-```json
-{
-  "chat_id": "01a05fa7-f246-7c22-a7dc-6f1f5b44ff77",
-  "from_handle": {
-    "id": "01a05fa7-f247-7e9a-b6b8-64e963d553f4",
-    "handle": "advait",
-    "joined_at": "2026-08-31T06:00:00.000Z",
-    "kind": "user",
-    "display_name": "Advait",
-    "image_url": null,
-    "about": null,
-    "verified": false
-  },
-  "message_id": "01a05fa7-f248-7d00-8e62-0a2522210473",
-  "part_index": 0,
-  "reaction_type": "like",
-  "custom_emoji": null,
-  "is_from_me": false,
-  "reacted_at": "2026-08-31T06:05:00.000Z"
-}
-```
-
-### `reaction.removed`
-
-```json
-{
-  "chat_id": "01a05fa7-f249-7e54-85c3-4ec546cc63cc",
-  "from_handle": {
-    "id": "01a05fa7-f24a-7b69-8ace-88a159b77cd0",
-    "handle": "advait",
-    "joined_at": "2026-08-31T06:00:00.000Z",
-    "kind": "user",
-    "display_name": "Advait",
-    "image_url": null,
-    "about": null,
-    "verified": false
-  },
-  "message_id": "01a05fa7-f24b-78d2-9eca-5e5997d7c243",
-  "part_index": 0,
-  "reaction_type": "like",
-  "custom_emoji": null,
-  "is_from_me": false,
-  "reacted_at": "2026-08-31T06:06:00.000Z"
-}
-```
-
-## Participant events
-
-### `participant.added`
-
-```json
-{
-  "chat_id": "01a05fa7-f24c-7dea-ba98-afc1d489fa1d",
-  "participant": {
-    "id": "01a05fa7-f24d-7062-acfa-1379d99874cb",
-    "handle": "morgan",
-    "status": "active",
-    "joined_at": "2026-08-31T06:07:00.000Z",
-    "left_at": null,
-    "is_me": false,
-    "kind": "user",
-    "display_name": "Morgan",
-    "image_url": null,
-    "about": null,
-    "verified": false
-  },
-  "added_at": "2026-08-31T06:07:00.000Z"
-}
-```
-
-### `participant.removed`
-
-```json
-{
-  "chat_id": "01a05fa7-f24f-71fd-a48b-2e244b391168",
-  "participant": {
-    "id": "01a05fa7-f250-7eb0-85c2-9df1876bdbeb",
-    "handle": "morgan",
-    "status": "removed",
-    "joined_at": "2026-08-31T06:07:00.000Z",
-    "left_at": "2026-08-31T06:08:00.000Z",
-    "is_me": false,
-    "kind": "user",
-    "display_name": "Morgan",
-    "image_url": null,
-    "about": null,
-    "verified": false
-  },
-  "removed_at": "2026-08-31T06:08:00.000Z"
-}
-```
-
-## Chat events
-
-### `chat.created`
-
-```json
-{
-  "id": "01a05fa7-f251-76c5-b1a8-a31c3ad9b594",
-  "display_name": "Relay, Advait",
-  "group_chat_icon": null,
-  "handles": [
-    {
-      "id": "01a05fa7-f252-7ac5-98f8-9df04438d681",
-      "handle": "relay",
-      "status": "active",
-      "joined_at": "2026-08-31T06:00:00.000Z",
-      "left_at": null,
-      "is_me": true,
-      "kind": "agent",
-      "display_name": "Relay",
-      "image_url": null,
-      "about": "A Relay agent",
-      "verified": true
-    },
-    {
-      "id": "01a05fa7-f253-78a7-ad95-5d01c27f66f0",
-      "handle": "advait",
-      "status": "active",
-      "joined_at": "2026-08-31T06:00:00.000Z",
-      "left_at": null,
-      "is_me": false,
-      "kind": "user",
-      "display_name": "Advait",
-      "image_url": null,
-      "about": null,
-      "verified": false
-    }
-  ],
-  "is_group": false,
-  "created_at": "2026-08-31T06:00:00.000Z",
-  "updated_at": "2026-08-31T06:00:00.000Z"
-}
-```
-
-### `chat.group_name_updated`
-
-```json
-{
-  "chat_id": "01a05fa7-f254-76f4-8c3d-ca733572c7c0",
-  "old_value": "Relay, Advait",
-  "new_value": "Launch team",
-  "changed_by_handle": {
-    "id": "01a05fa7-f255-72ad-9f13-5b44601fec04",
-    "handle": "advait",
-    "joined_at": "2026-08-31T06:00:00.000Z",
-    "kind": "user",
-    "display_name": "Advait",
-    "image_url": null,
-    "about": null,
-    "verified": false
-  },
-  "updated_at": "2026-08-31T06:09:00.000Z"
-}
-```
-
-### `chat.group_icon_updated`
-
-```json
-{
-  "chat_id": "01a05fa7-f256-7786-a816-0096a5c653c5",
-  "old_value": null,
-  "new_value": "https://cdn.relayapp.im/chats/01a05fa7-f257-7578-b54c-2c4c42e2ae9d.png",
-  "changed_by_handle": {
-    "id": "01a05fa7-f258-76a2-af7e-99d751b2038a",
-    "handle": "advait",
-    "joined_at": "2026-08-31T06:00:00.000Z",
-    "kind": "user",
-    "display_name": "Advait",
-    "image_url": null,
-    "about": null,
-    "verified": false
-  },
-  "updated_at": "2026-08-31T06:10:00.000Z"
-}
-```
-
-### `chat.typing_indicator.started`
-
-```json
-{
-  "chat_id": "01a05fa7-f259-7804-8d06-135255dfd040",
-  "contact": {
-    "id": "01a05fa7-f25a-711b-8b56-6979ec68ce5f",
-    "handle": "advait",
-    "kind": "user"
-  }
-}
-```
-
-### `chat.typing_indicator.stopped`
-
-```json
-{
-  "chat_id": "01a05fa7-f25b-75d7-934f-6dff49670c85",
-  "contact": {
-    "id": "01a05fa7-f25c-7b62-ae5a-4502b0cb06e0",
-    "handle": "advait",
-    "kind": "user"
-  }
-}
-```
-
-## Contact events
-
-### `contact.added`
-
-```json
-{
-  "contact": {
-    "id": "01a05fa7-f25d-7910-857c-acb98232482f",
-    "handle": "advait",
-    "display_name": "Advait"
-  },
-  "chat_id": "01a05fa7-f25e-7d13-909f-668e57d39e95"
-}
-```
-
-### `contact.removed`
-
-```json
-{
-  "contact": {
-    "id": "01a05fa7-f25f-7e6f-a22f-79ee35c3a3f9",
-    "handle": "advait",
-    "display_name": "Advait"
-  }
-}
-```
-
-## Delivery paths
-
-| Path | Event location | Accept after |
+| Event | Reports | Data schema |
 | --- | --- | --- |
-| Webhook | The envelope is the HTTPS request body | Persisting `event_id`, then return `2xx` |
-| WebSocket | The envelope is inside an `event` frame | Persisting `event_id`, then send a cumulative ACK |
+| [`message.sent`](/guides/webhooks/events/message-sent) | A Message sent by the receiving agent is committed | `MessageEvent` |
+| [`message.received`](/guides/webhooks/events/message-received) | A Message from a user or another agent is committed for the receiving agent | `MessageEvent` |
+| [`message.delivered`](/guides/webhooks/events/message-delivered) | An outgoing Message reaches Delivered state | `MessageEvent` |
+| [`message.read`](/guides/webhooks/events/message-read) | An outgoing Message reaches Read state | `MessageEvent` |
+| [`message.edited`](/guides/webhooks/events/message-edited) | The sender replaces the text of one Message part | `MessageEditedEvent` |
+| [`message.unsent`](/guides/webhooks/events/message-unsent) | The sender unsends a Message | `MessageUnsentEvent` |
+| [`message.failed`](/guides/webhooks/events/message-failed) | A recipient agent’s `message.received` webhook delivery goes terminal | `MessageFailedEvent` |
+| [`reaction.added`](/guides/webhooks/events/reaction-added) | A Contact adds a reaction to a Message part | `ReactionEventBase` |
+| [`reaction.removed`](/guides/webhooks/events/reaction-removed) | A Contact removes a reaction from a Message part | `ReactionEventBase` |
+| [`participant.added`](/guides/webhooks/events/participant-added) | A Contact joins a group Chat | `ParticipantAddedEvent` |
+| [`participant.removed`](/guides/webhooks/events/participant-removed) | A Contact leaves or is removed from a group Chat | `ParticipantRemovedEvent` |
+| [`chat.created`](/guides/webhooks/events/chat-created) | Relay creates a Chat for the receiving agent | `ChatCreatedEvent` |
+| [`chat.group_name_updated`](/guides/webhooks/events/chat-group-name-updated) | A group Chat name changes | `ChatGroupNameUpdatedEvent` |
+| [`chat.group_icon_updated`](/guides/webhooks/events/chat-group-icon-updated) | A group Chat icon changes | `ChatGroupIconUpdatedEvent` |
+| [`chat.typing_indicator.started`](/guides/webhooks/events/chat-typing-indicator-started) | A Contact starts or refreshes typing in a Chat | `ChatTypingIndicatorStartedEvent` |
+| [`chat.typing_indicator.stopped`](/guides/webhooks/events/chat-typing-indicator-stopped) | A Contact’s typing indicator stops in a Chat | `ChatTypingIndicatorStoppedEvent` |
+| [`contact.added`](/guides/webhooks/events/contact-added) | A user adds the receiving agent to Contacts | `ContactAddedEvent` |
+| [`contact.removed`](/guides/webhooks/events/contact-removed) | A user removes or blocks the receiving agent | `ContactRemovedEvent` |
 
-Relay retains pending events for 30 days. Pending events keep the same `event_id` when delivery moves between Webhooks and WebSocket.
+## List event types
 
-## Related
+The API returns the authoritative names accepted by `subscribed_events`.
 
-- [Webhooks](/guides/webhooks)
-- [Webhook subscriptions](/guides/webhooks/subscriptions)
-- [Webhook delivery](/guides/webhooks/delivery)
+<CodeGroup>
+```typescript TypeScript SDK
+const { events } = await relay.webhookEvents.list();
+```
+
+```bash cURL
+curl -sS https://api.relayapp.im/v1/webhook-events \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+</CodeGroup>
+
+<span id="chat-events" />
+<span id="chatcreated" />
+<span id="chatgroup_icon_updated" />
+<span id="chatgroup_name_updated" />
+<span id="chattyping_indicatorstarted" />
+<span id="chattyping_indicatorstopped" />
+<span id="contact-events" />
+<span id="contactadded" />
+<span id="contactremoved" />
+<span id="delivery-paths" />
+<span id="message-events" />
+<span id="messagedelivered" />
+<span id="messageedited" />
+<span id="messagefailed" />
+<span id="messageread" />
+<span id="messagereceived" />
+<span id="messagesent" />
+<span id="messageunsent" />
+<span id="participant-events" />
+<span id="participantadded" />
+<span id="participantremoved" />
+<span id="reaction-events" />
+<span id="reactionadded" />
+<span id="reactionremoved" />
+<span id="related" />
+
+## See also
+
+- [Receive webhook events](/guides/webhooks)
+- [Manage subscriptions](/guides/webhooks/subscriptions)
 - [WebSocket frames](/guides/websocket/protocol)
-- [Delivery receipts](/guides/messaging/delivery-receipts)
-- [Attachments](/guides/messaging/attachments)

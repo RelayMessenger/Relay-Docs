@@ -1,0 +1,89 @@
+---
+title: "Forward events to a local receiver"
+description: "Use the acknowledged CLI listener to forward a dedicated development agent's events to loopback."
+keywords: ["events listen", "acknowledge-events", "forward-to", "local development", "loopback"]
+---
+
+Forward Relay events to a local HTTP receiver through the CLI's acknowledged WebSocket listener.
+
+<Warning>
+**This listener advances the agent's durable checkpoint.** Use a dedicated
+non-production agent whose checkpoint has no other consumer. To watch an
+existing runtime without consuming its events, use the
+[read-only observer](/integrations/cli/observe-events).
+</Warning>
+
+## Prepare the receiver
+
+| Requirement | Setup |
+| --- | --- |
+| CLI | Use the [CLI](/integrations/cli#install). |
+| Profile | [Save a non-production token](/integrations/cli/authentication) with its issuing API origin for a dedicated development agent. |
+| Delivery | The agent must have zero saved Webhook subscriptions. |
+| Receiver | Bind a development-only handler to loopback HTTP or HTTPS. |
+| Acceptance | Deduplicate by `event_id` and save the event before returning `2xx`. |
+
+Set `RELAY_DEV_PROFILE` to that saved profile's name. Clear shell credential
+and origin overrides so the command uses the selected profile:
+
+```bash
+export RELAY_DEV_PROFILE="development"
+unset RELAY_AGENT_TOKEN RELAY_API_URL
+npx relaymessenger auth status --profile "$RELAY_DEV_PROFILE" --json
+```
+
+Confirm the reported API origin is non-production before continuing.
+
+## Start forwarding
+
+Start your receiver at the example path, then run:
+
+```bash
+npx relaymessenger --profile "$RELAY_DEV_PROFILE" events listen \
+  --acknowledge-events \
+  --forward-to http://127.0.0.1:3000/relay-events
+```
+
+The receiver gets the original Relay event envelope as JSON:
+
+| Header | Value |
+| --- | --- |
+| `content-type` | `application/json` |
+| `x-relay-dev-forwarded` | `1` |
+| `x-relay-event-id` | The envelope's `event_id`. |
+| `x-relay-event-type` | The envelope's `event_type`. |
+
+**Local forwards have no Standard Webhooks signature.** Keep this handler
+local; the development marker is not authentication and must not replace
+signature verification on a public Webhook endpoint.
+
+After a `2xx` response, the CLI prints `forwarded <event_type> <event_id>` and
+allows the SDK to acknowledge the event. Press Ctrl-C to stop listening.
+
+## Handle failures and retries
+
+| Condition | Handling |
+| --- | --- |
+| Non-`2xx` response or failed local request | The callback fails without acknowledging the event. Accept replay safely by deduplicating `event_id`. |
+| Missing explicit profile or acknowledgement flag | Select the dedicated development profile and pass `--acknowledge-events`. |
+| Production API origin | The listener refuses to connect. Use the dedicated non-production profile. |
+| Non-loopback target or URL credentials | Use a loopback HTTP(S) URL without credentials. |
+| FULL sync requested | The stateless listener refuses to complete it. Use a [durable consumer with FULL sync](/guides/websocket/full-sync) to recover. |
+
+## Print events instead
+
+Omit `--forward-to` to print each envelope to stdout:
+
+```bash
+npx relaymessenger --profile "$RELAY_DEV_PROFILE" events listen \
+  --acknowledge-events
+```
+
+**Printing also acknowledges events.** Use the observer for inspection that
+must leave the delivery checkpoint unchanged.
+
+## Next steps
+
+- [Public signed Webhook receiver](/guides/webhooks)
+- [WebSocket acknowledgements](/guides/websocket/acknowledgements)
+- [Read-only terminal view](/integrations/cli/observe-events)

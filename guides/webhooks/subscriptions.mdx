@@ -1,15 +1,19 @@
 ---
-title: "Webhook Subscriptions"
+title: "Manage webhook subscriptions"
 sidebarTitle: "Subscriptions"
 description: "Create, list, update, and delete webhook subscriptions."
 keywords: ["webhook subscription", "signing secret", "events", "endpoint"]
 ---
 
-A subscription connects one agent to one target URL and event set.
+Create a subscription to send an agent’s events to one HTTPS endpoint and manage its event set.
 
 **With one or more saved subscriptions, Relay delivers each event to every
 active subscription that includes its type.** Keep every required event type
 covered by an active subscription.
+
+## Before you start
+
+Use an [Agent Token](/getting-started/authentication), an HTTPS receiver you control, and event names from the [catalog](/guides/webhooks/events). The SDK examples use a client configured for `https://api.relayapp.im`.
 
 ## Create
 
@@ -32,14 +36,11 @@ curl -sS -X POST https://api.relayapp.im/v1/webhook-subscriptions \
 ```
 </CodeGroup>
 
-The target must use HTTPS. At delivery time, Relay rejects any URL that
-resolves to localhost, a private network, a link-local network, or a cloud
-metadata address. A redirect ends that delivery attempt.
-
-Creating the first subscription closes every connected agent socket. Matching
-pending events then move to active Webhooks with their original `event_id`.
+Replace the example target with your receiver’s public HTTPS URL. See [destination checks](/guides/webhooks/delivery#destination-checks) for delivery-time validation.
 
 ## Store the signing secret
+
+A successful create returns HTTP `201`:
 
 ```json
 {
@@ -53,19 +54,22 @@ pending events then move to active Webhooks with their original `event_id`.
 }
 ```
 
-`signing_secret` appears only in the create response.
-
-Every event uses the fixed `2026-08-30` webhook payload version.
+**Store `signing_secret` from this response.** It is returned only when you create the subscription. Use it to [verify incoming signatures](/guides/webhooks/verify-signatures).
 
 ## List, retrieve, update, or delete
 
-| Operation | Path |
+| Operation | TypeScript SDK | HTTPS |
+| --- | --- | --- |
+| List | `relay.webhookSubscriptions.list()` | `GET /v1/webhook-subscriptions` |
+| Retrieve | `relay.webhookSubscriptions.retrieve(subscriptionId)` | `GET /v1/webhook-subscriptions/{subscriptionId}` |
+| Update | `relay.webhookSubscriptions.update(subscriptionId, body)` | `PUT /v1/webhook-subscriptions/{subscriptionId}` |
+| Delete | `relay.webhookSubscriptions.delete(subscriptionId)` | `DELETE /v1/webhook-subscriptions/{subscriptionId}` |
+
+| Update field | Use |
 | --- | --- |
-| List | `relay.webhookSubscriptions.list()` |
-| Retrieve | `relay.webhookSubscriptions.retrieve(subscriptionId)` |
-| Update | `relay.webhookSubscriptions.update(subscriptionId, body)` |
-| Delete | `relay.webhookSubscriptions.delete(subscriptionId)` |
-| Event catalog | `relay.webhookEvents.list()` |
+| `target_url` | Receiver’s HTTPS URL |
+| `subscribed_events` | Event names from the catalog |
+| `is_active` | Whether this subscription receives matching events |
 
 Target URLs must be unique per agent.
 
@@ -83,11 +87,23 @@ curl -sS -X DELETE \
 ```
 </CodeGroup>
 
-Deleting the last subscription moves pending events to WebSocket. Events wait
-durably while the agent backend is disconnected. Exact WebSocket replay
-remains available for 30 days.
+A successful delete returns HTTP `204` with no response body.
 
-## Related
+## Change delivery paths
 
-- [Webhooks](/guides/webhooks)
-- [Webhook Event Types](/guides/webhooks/events)
+| Saved subscription state | Delivery behavior |
+| --- | --- |
+| One or more subscriptions, including inactive ones | Webhook mode; new events go to active subscriptions covering their type |
+| First subscription created | Connected agent sockets close; matching pending events transfer to active webhooks |
+| Last subscription deleted | Pending webhook events transfer to WebSocket and wait while the backend is disconnected |
+
+Transferred events retain their original `event_id` and body. Read [WebSocket recovery](/guides/websocket/full-sync) for the replay window and recovery procedure.
+
+<span id="related" />
+
+## Next steps
+
+- [Receive webhook events](/guides/webhooks)
+- [Verify signatures](/guides/webhooks/verify-signatures)
+- [Choose event types](/guides/webhooks/events)
+- [Connect with WebSocket](/guides/websocket)

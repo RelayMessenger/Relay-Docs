@@ -1,77 +1,91 @@
 ---
-title: "Vercel Chat SDK"
-description: "Receive Relay Webhooks through Vercel Chat SDK and send retry-safe Relay Messages."
-keywords: ["Relay Chat SDK", "@relaymessenger/chat-sdk-adapter", "Vercel Chat SDK", "serverless webhook", "media URL"]
+title: "Add Relay to Vercel Chat SDK"
+sidebarTitle: "Vercel Chat SDK"
+description: "Install the Relay adapter and connect a Chat SDK handler to signed Relay Webhooks."
+keywords: ["Relay Chat SDK", "@relaymessenger/chat-sdk-adapter", "Vercel Chat SDK", "signed Webhooks"]
 ---
 
-Add Relay to Vercel Chat SDK with the official Relay adapter.
+Connect a Chat SDK handler to Relay with the Relay adapter and a signed Webhook subscription.
 
-**The adapter uses signed Webhooks, so it fits a serverless-friendly HTTPS
-handler.**
+## Install
 
-Source:
-[Relay-SDK `packages/chat-sdk-adapter`](https://github.com/RelayMessenger/Relay-SDK/tree/main/packages/chat-sdk-adapter)
-
-## Published package
-
-The current published package is
-`@relaymessenger/chat-sdk-adapter@0.3.0` and targets
-`chat@4.39.0`. The `latest` npm tag selects this version.
+Use Node.js `22.22.3` or newer for this setup:
 
 ```bash
 npm install chat@4.39.0 @chat-adapter/state-memory@4.39.0 \
   @relaymessenger/chat-sdk-adapter
 ```
 
-| Registry field | Current value |
+Source: [Relay Chat SDK adapter](https://github.com/RelayMessenger/Relay-SDK/tree/main/packages/chat-sdk-adapter).
+
+## Configure the handler
+
+| Input | Value |
 | --- | --- |
-| npm tag | `latest` |
-| Integrity of `@relaymessenger/chat-sdk-adapter@0.3.0` | `sha512-aslkL6r5pj/frh/3QgJ0sqPoxHK2wTSmZ2OeFsfEBfyJGsWiljlhjzTjW+rAcGmy2vy0oE4x94agvnuaMZ/PzA==` |
+| `RELAY_AGENT_TOKEN` | Agent Token issued by the production API, loaded through your secret store. |
+| `RELAY_WEBHOOK_SECRET` | The one-time signing secret from the [Webhook subscription](/guides/webhooks/subscriptions). |
+| Public endpoint | An HTTPS route that passes the original request body and headers to the adapter. |
 
-## Use the adapter
-
-Relay Chats map to stable Chat SDK thread IDs in the form
-`relay:<Chat UUID>`. Mount `chat.webhooks.relay()` at the public HTTPS
-destination saved in the Relay Webhook subscription.
+Create a Chat SDK instance and register a direct-message handler:
 
 ```typescript
-const relay = createRelayAdapter({
-  token: process.env.RELAY_AGENT_TOKEN,
-  webhookSecret: process.env.RELAY_WEBHOOK_SECRET,
+import { Chat } from "chat";
+import { createMemoryState } from "@chat-adapter/state-memory";
+import { createRelayAdapter } from "@relaymessenger/chat-sdk-adapter";
+
+const chat = new Chat({
+  userName: "Relay example",
+  adapters: {
+    relay: createRelayAdapter({
+      baseUrl: "https://api.relayapp.im",
+      token: process.env.RELAY_AGENT_TOKEN,
+      webhookSecret: process.env.RELAY_WEBHOOK_SECRET,
+    }),
+  },
+  state: createMemoryState(),
 });
+
+chat.onDirectMessage(async (thread, message) => {
+  await thread.post(`Echo: ${message.text}`);
+});
+
+export async function POST(request: Request): Promise<Response> {
+  return chat.webhooks.relay(request);
+}
 ```
 
-The adapter verifies the exact raw Webhook body. A
-`message.received` event enters the Chat SDK handler, and each non-empty
-response is buffered into one Relay Message.
+Mount `POST` at your public HTTPS Webhook route and register that exact URL in
+the subscription. This example uses in-memory Chat SDK state for local setup.
+For a standalone Node HTTP handler, use the
+[source example](https://github.com/RelayMessenger/Relay-SDK/blob/main/packages/chat-sdk-adapter/examples/server.mjs)
+and set its adapter's `baseUrl` to the production origin.
 
-## Media boundary
+**Pass the raw body unchanged so the adapter can verify the signature.**
+Send a direct Message to the agent and confirm that the echo returns in the
+same Chat.
 
-**Post a stable public HTTPS media URL through the adapter.**
+## Handle retries and media
 
-For local bytes or files:
-
-1. Allocate and upload the bytes with
-   `@relaymessenger/sdk@0.3.0`.
-2. Retain the prepared Attachment identity for recovery.
-3. Pass its stable public HTTPS URL to the adapter.
-
-The adapter rejects an automatic local byte or file upload before sending. A
-fresh Attachment allocation after an ambiguous send would change the Message
-body, so unknown-outcome retries must reuse the prepared identity and URL.
-
-## Delivery behavior
-
-| Send source | Idempotency behavior |
+| Situation | Behavior or action |
 | --- | --- |
-| Inbound Webhook turn | `relay-chat-sdk:<event_id>:<send ordinal>` |
-| Think Action or another recovered task | Supply `idempotencyKeyResolver` with the stable Action or delivery identity |
-| Empty response | Local no-op, with no Relay Message |
+| Reply during an inbound Webhook turn | The adapter derives the send key from `event_id` and the send ordinal. |
+| Send outside a Webhook turn | Supply an `idempotencyKeyResolver` based on a stable task identity. |
+| Empty response | The adapter sends no Relay Message. |
+| Invalid signature | Check the signing secret and exact request bytes before retrying delivery. |
+| Uncertain send | Reuse the same idempotency key and request content. |
 
-Disable adapter typing with `typing: false` when Think owns typing timing.
+The adapter accepts public HTTPS media URLs and file bytes. For an uncertain
+media send, preserve the prepared Attachment identity rather than allocating a
+new one on retry; see [Attachments](/guides/messaging/attachments).
 
-## Related
+<span id="delivery-behavior" />
+<span id="media-boundary" />
+<span id="related" />
+<span id="staging-package" />
+<span id="use-the-adapter" />
+
+## Next steps
 
 - [Cloudflare Think](/integrations/cloudflare-think)
-- [Attachments](/guides/messaging/attachments)
-- [Webhooks](/guides/webhooks)
+- [Webhook signature verification](/guides/webhooks/verify-signatures)
+- [Idempotency](/guides/platform/idempotency)

@@ -25,9 +25,9 @@ Keep the three top-level tabs in this order:
 2. Error Codes
 3. API Reference
 
-Within Guides, use the current `docs.json` order: Introduction, Getting
-started, Messaging, Chats, Contacts, Webhooks, WebSocket, Platform, and
-Examples.
+Within Guides, use `docs.json`. Getting started contains only Quickstart,
+Authentication, and TypeScript SDK installation. Agent management, CLI
+operations, reliability, and coding-agent instructions have their own homes.
 
 Keep pages at three navigation levels or fewer. Add a category only when a
 current, source-backed page requires it.
@@ -69,7 +69,10 @@ current, source-backed page requires it.
 - Put long complete handlers in an accordion or dedicated example.
 - Use at most five top-level sections before Next steps.
 
-Code, JSON, tables, and exact error text do not count toward prose limits.
+Code, JSON, and tables still cost the reader attention. Keep examples complete
+but task-specific; move an independent task to a linked page rather than
+excluding its example from a word count. The full machine prompt belongs in
+`agent-reference/prompt.mdx`, not in a human onboarding page.
 
 ## Writing rules
 
@@ -87,10 +90,13 @@ Code, JSON, tables, and exact error text do not count toward prose limits.
 
 1. Remove duplicated setup and product framing.
 2. Move full schemas to OpenAPI.
-3. Move optional detail below the main path.
+3. Move independent optional tasks to their owning pages; keep only relevant
+   variations and safety beside the main path.
 4. Check every linked page exists in `docs.json`.
 5. Run `mint broken-links` and `mint validate`.
-6. Preview the changed route and inspect the full viewport.
+6. Preview the changed route at desktop and narrow widths.
+7. Run the structure and internal-anchor regression checks. Do not replace
+   a task boundary with a frozen inventory of exact heading strings.
 
 ## Reference skills
 

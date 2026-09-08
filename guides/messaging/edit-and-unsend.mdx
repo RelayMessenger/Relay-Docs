@@ -12,7 +12,8 @@ back.
 - An Agent Token for the Contact that sent the Message.
 - The Message ID returned by the send, or read from a `message.sent` event.
 - A Message still inside its window: 15 minutes to edit, 2 minutes to unsend.
-- `@relaymessenger/sdk@0.3.0` or newer for the TypeScript examples.
+- A [configured SDK client](/getting-started/sdks) for the TypeScript examples.
+- Active membership and access to the Message in its Chat.
 
 ## Edit a text part
 
@@ -39,28 +40,15 @@ curl -sS -X PATCH \
 `200` returns the whole Message, and `relay.messages.edit` resolves to it. The
 part carries the new text and `edited_at` carries the time of the change.
 
-```json
+```json Updated fields, excerpt
 {
-  "id": "01a05fa7-f237-7ae0-8a6e-ff45762eebfa",
-  "chat_id": "01a05fa7-f236-746e-a0f3-66884d18645d",
-  "from": "relay",
   "parts": [{ "type": "text", "value": "The report is ready now." }],
-  "reply_to": null,
-  "is_from_me": true,
-  "delivery_status": "sent",
-  "created_at": "2026-08-31T06:01:00.000Z",
-  "updated_at": "2026-08-31T06:03:30.000Z",
-  "sent_at": "2026-08-31T06:01:00.000Z",
-  "delivered_at": null,
-  "read_at": null,
-  "edited_at": "2026-08-31T06:03:30.000Z",
-  "unsent_at": null,
-  "is_system_message": false
+  "edited_at": "2026-09-08T14:03:30.000Z"
 }
 ```
 
-Sending the text the part already carries returns the same Message and spends
-no edit.
+Within the edit window, sending the text the part already carries returns
+the same Message without spending an edit.
 
 ## Unsend a Message
 
@@ -80,34 +68,26 @@ curl -sS -X DELETE \
 ```
 </CodeGroup>
 
-The Message keeps its place in the Chat for every participant. Relay empties
-`parts`, drops the text, and removes every Attachment from the Message, so a
-recipient can no longer download those bytes. `unsent_at` carries the time.
+The Message keeps its place in visible history. Relay empties `parts`, drops
+the text, and removes the Message's Attachment references. `unsent_at` carries
+the time.
+
+Refresh access through that Message ends. Another visible Message can still
+grant Attachment access, and already-issued signed URLs retain their normal
+expiry while the Attachment exists. See [Download attachments](/guides/messaging/receiving-media#refresh-eligibility).
 
 Read the Message back to see the result:
 
-```json
+```json Retrieved fields, excerpt
 {
-  "id": "01a05fa7-f237-7ae0-8a6e-ff45762eebfa",
-  "chat_id": "01a05fa7-f236-746e-a0f3-66884d18645d",
-  "from": "relay",
   "parts": [],
-  "reply_to": null,
-  "is_from_me": true,
-  "delivery_status": "sent",
-  "created_at": "2026-08-31T06:01:00.000Z",
-  "updated_at": "2026-08-31T06:01:40.000Z",
-  "sent_at": "2026-08-31T06:01:00.000Z",
-  "delivered_at": null,
-  "read_at": null,
-  "edited_at": null,
-  "unsent_at": "2026-08-31T06:01:40.000Z",
-  "is_system_message": false
+  "unsent_at": "2026-09-08T14:01:40.000Z"
 }
 ```
 
-Send the same request again and Relay answers `204` again, including after the
-two minutes have passed. An unsent Message can no longer be edited.
+While you retain the required Chat access, repeating an already successful
+unsend returns `204`, including after the two-minute window. An unsent Message
+can no longer be edited.
 
 ## Limits and errors
 
@@ -118,7 +98,7 @@ two minutes have passed. An unsent Message can no longer be edited.
 | Unsend window | 2 minutes after the Message was sent |
 | Part types you can change | `text` |
 | Who can change a Message | Its sender |
-| `text` length | 1 to 10000 characters |
+| `text` length | 1 to 10,000 UTF-16 code units |
 
 | Status | Code | `message` | Cause |
 | --- | --- | --- | --- |
@@ -136,15 +116,15 @@ two minutes have passed. An unsent Message can no longer be edited.
 The SDK throws `RelayAPIError` for every row above. Read `status` and `code`
 from it to pick the row.
 
-**Do not retry a `403` or a `422` unchanged.** Both describe the Message, not
-the request, so the same call fails the same way. Retry a `429` or a `5xx`
-after backoff: a repeated edit that carries text the Message already holds is
-answered without spending an edit, and a repeated unsend returns `204`.
+**Inspect the current Message before retrying an uncertain edit or unsend.**
+Correct a `403` or `422` using the table above. Back off after a `429` or `5xx`;
+edit retries still require an open edit window, while a completed unsend can
+be repeated with the same authorized access.
 
 ## Events
 
-Relay tells every Agent in the Chat about the change over the event path that
-Agent already uses.
+Relay publishes the change to eligible agents through their configured event
+path. Delivery filtering continues to apply to the changed Message.
 
 | Event | Fires when | Carries |
 | --- | --- | --- |

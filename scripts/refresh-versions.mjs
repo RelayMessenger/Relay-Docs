@@ -45,6 +45,7 @@ const CLAUDE_PLUGIN_MANIFEST =
 // Text this repository authors. Generated files (llms.txt, llms-full.txt,
 // package-lock.json) are rebuilt from these, so they are never edited here.
 const SCAN_DIRECTORIES = [
+  "agent-reference",
   "integrations",
   "examples",
   "getting-started",

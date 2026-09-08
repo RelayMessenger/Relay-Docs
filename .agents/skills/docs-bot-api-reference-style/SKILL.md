@@ -1,6 +1,6 @@
 ---
 name: docs-bot-api-reference-style
-description: Apply bot-platform API reference patterns to compact event, method, object, and polling reference pages. Use when Relay needs precise field tables, stable update names, or a simple create-token-then-choose-transport model. Do not copy a giant single-page reference.
+description: Apply bot-platform API reference patterns to compact event, method, and object reference pages. Use when Relay needs precise field tables, stable update names, or a simple create-token-then-choose-transport model. Do not copy a giant single-page reference.
 ---
 
 # Bot platform API reference style
@@ -10,7 +10,7 @@ Use this pattern for a simple bot identity and transport model.
 ## Structure
 
 1. Create the bot identity and token.
-2. Choose long polling or webhooks.
+2. Choose a transport supported by the current product contract.
 3. Define updates as stable typed objects.
 4. Define methods with parameters and return values.
 5. Keep optional fields explicit.
@@ -18,7 +18,7 @@ Use this pattern for a simple bot identity and transport model.
 ## What to adapt
 
 - One token represents one bot identity.
-- Polling and webhooks are alternative receive paths.
+- Document the supported receive paths separately.
 - Method names begin with actions.
 - Object pages list fields in tables.
 - Event and method names stay stable and literal.

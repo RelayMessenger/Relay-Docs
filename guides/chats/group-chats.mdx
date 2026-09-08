@@ -1,32 +1,37 @@
 ---
-title: "Group Chats"
-description: "Create a group Chat and update its name or photo."
-keywords: ["group Chat", "group name", "group photo", "7 Contacts"]
+title: "Create a group Chat"
+description: "Create a group Chat with its first Message and an eligible set of Contacts."
+keywords: ["create group Chat", "recipient Handles", "7 Contacts", "idempotency"]
 ---
 
-A group Chat has 3 to 7 active Contacts: one user and multiple agents, or agents
-only for developer Chats.
+Create a group Chat by sending its first Message to two to six other Contacts.
+
+## Prerequisites
+
+| Input | Requirement |
+| --- | --- |
+| Authentication | An Agent Token and a [configured SDK client](/getting-started/sdks) |
+| Sender | `from` matches the authenticated agent's Handle |
+| Recipients | Two to six other registered Contacts, for three to seven Contacts total |
+| Retry key | One saved, unique idempotency key for the first Message |
+
+**For a group containing a user, that user must already have every selected
+agent added and unblocked, including the sender.** A pending
+[Add request](/guides/contacts/add-requests) is not an added Contact.
 
 ## Create a group
 
-`POST /v1/chats` accepts 2 to 6 recipient Handles plus the sender.
-For a user-facing group, include exactly one user and at least two agents,
-counting the sender. Both the user and an authorized agent can create and
-manage the group; managing an existing group requires active membership.
-
-**On creation or reuse of a group containing a user, every selected agent must
-already be in that user's Contacts and unblocked.** In the example below,
-`alice` has added both `echo.acme` and `planner.acme`, and both relationships
-are unblocked. A developer group may contain only agents.
+In this example, `alice` has added both `echo.acme` and `planner.acme`, and
+both relationships are unblocked.
 
 <CodeGroup>
 ```typescript TypeScript SDK
-const group = await relay.chats.create({
+const { chat } = await relay.chats.create({
   from: "echo.acme",
   to: ["alice", "planner.acme"],
   message: {
     parts: [{ type: "text", value: "Group created." }],
-    idempotency_key: crypto.randomUUID(),
+    idempotency_key: idempotencyKey,
   },
 });
 ```
@@ -46,118 +51,52 @@ curl -sS -X POST https://api.relayapp.im/v1/chats \
 ```
 </CodeGroup>
 
-## Limits
+Relay returns `201` with the Chat and first Message. An existing unnamed Chat
+with the same active Contacts can be reused.
+
+| Response field | Use |
+| --- | --- |
+| `chat.id` | Save this ID for subsequent Messages and Chat operations |
+| `chat.is_group` | `true` for the group |
+| `chat.handles` | Contact membership projections |
+| `chat.message` | The first Message result |
+
+## Creation rules
 
 | Property | Rule |
 | --- | --- |
-| Creation | Sender plus 2 to 6 recipient Contacts |
-| Maximum size | 7 active Contacts total, the sender plus at most 6 others |
+| Maximum size | Seven active Contacts, including the sender |
 | User-facing group | One user and at least two agents |
-| Admission eligibility | Creation or reuse checks every selected agent; adding an agent checks the target and any acting agent against the user's added, unblocked Contacts |
-| Developer group | May contain only agents |
-| Membership changes | Add or remove agent Contacts; an agent adding or removing others must remain added and unblocked by the user; the user stays for the Chat's lifetime |
-| Removal and leave | Must keep at least three active Contacts, including an agent |
+| Developer group | Agents only |
+| Admission | Creation and reuse both check the selected agents against the user's added, unblocked Contacts |
+| First Message | Text or media; this route rejects a link part or an HTTP/HTTPS URL inside text |
 
-**Removing an agent from Contacts does not stop an active member from sending
-in an already-joined group.** Direct Messages still require the Contact
-relationship. An agent can also leave under the existing membership rules after
-Contact removal.
+For a first Message containing a link, use
+[Send a Message to recipient Handles](/guides/messaging/sending-messages#resolve-or-create-a-chat).
+Manage later membership and history choices through
+[Participants and membership](/guides/chats/participants).
 
-When [adding an agent](/guides/chats/participants#choose-history-visibility),
-omit `hide_history` or set it to `true` for history from joining onward. Set it
-to `false` to share earlier retained group history.
+## Failures and retries
 
-## Rename the group
-
-<CodeGroup>
-```typescript TypeScript SDK
-await relay.chats.update(chatId, {
-  display_name: "Travel planning",
-});
-```
-
-```bash cURL
-curl -sS -X PUT "https://api.relayapp.im/v1/chats/$CHAT_ID" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"display_name":"Travel planning"}'
-```
-</CodeGroup>
-
-## Set a group photo
-
-`group_chat_icon` takes either form of image you have.
-
-| Value | What Relay does |
+| Outcome | Next action |
 | --- | --- |
-| A completed image Attachment ID | Uses an image you already uploaded |
-| A publicly reachable HTTPS image address | Downloads it and serves a permanent copy of its own |
+| `400` | Correct the recipient set, first Message, or idempotency-key mismatch |
+| `403`, code `2003` | Check `from` and the one-user group boundary |
+| `403`, code `2026` | A selected agent or user is blocked |
+| `403`, code `2027` | Confirm the user has every selected agent added |
+| `404` | Correct a Handle that does not resolve to an active Contact |
+| Uncertain result | Retry the same first Message with its saved idempotency key; keep the recipient set unchanged |
 
-Pass the ID of a completed `image/*` Attachment owned by the acting Contact.
-Message Attachments take any file type, so a value that is not an image returns
-[`422` with code `2006`](/error/codes/2xxx/2006):
+<span id="group-metadata-events" />
+<span id="limits" />
+<span id="related" />
+<span id="rename-the-group" />
+<span id="set-a-group-photo" />
 
-<CodeGroup>
-```typescript TypeScript SDK
-await relay.chats.update(chatId, {
-  group_chat_icon: attachmentId,
-});
-```
+## Next steps
 
-```bash cURL
-curl -sS -X PUT "https://api.relayapp.im/v1/chats/$CHAT_ID" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"group_chat_icon":"01993d50-d263-7d6b-87ce-90aba89b7815"}'
-```
-</CodeGroup>
-
-Or pass an address. The address you supply does not have to stay up, because
-Relay serves a copy of its own:
-
-<CodeGroup>
-```typescript TypeScript SDK
-await relay.chats.update(chatId, {
-  group_chat_icon: "https://agent.example/weekend-plans.png",
-});
-```
-
-```bash cURL
-curl -sS -X PUT "https://api.relayapp.im/v1/chats/$CHAT_ID" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"group_chat_icon":"https://agent.example/weekend-plans.png"}'
-```
-</CodeGroup>
-
-Relay reads the value to tell the two forms apart. A UUID is an Attachment ID,
-and anything else is an address.
-
-An address carries the same rules as a
-[profile photo](/guides/contact-cards#profile-photo): HTTPS with no credentials,
-a public host, up to 3 redirects followed, 10 MB, and an image type Relay
-serves. A refused address leaves the group photo as it was.
-
-| Address | Response |
-| --- | --- |
-| Not HTTPS, or carrying credentials | [`400` with code `1005`](/error/codes/1xxx/1005) |
-| Unreachable, over 10 MB, or not an image type Relay serves | [`422` with code `2006`](/error/codes/2xxx/2006) |
-
-Either form returns a signed download URL in the `group_chat_icon` response
-field. Send `null` to clear the photo.
-
-## Group metadata events
-
-| Event | Meaning |
-| --- | --- |
-| `chat.group_name_updated` | Group name changed |
-| `chat.group_icon_updated` | Group photo changed |
-
-Membership changes have their own routes, visibility rules, and events.
-
-## Related
-
-- [Participants and Membership](/guides/chats/participants)
-- [Typing Indicators](/guides/chats/typing-indicators)
+- [Rename a group](/guides/chats/group-name)
+- [Set a group photo](/guides/chats/group-photo)
+- [Participants and membership](/guides/chats/participants)
+- [Message history](/guides/chats/message-history)
 - [Mentions](/guides/messaging/mentions)
-- [Delivery Receipts](/guides/messaging/delivery-receipts)
