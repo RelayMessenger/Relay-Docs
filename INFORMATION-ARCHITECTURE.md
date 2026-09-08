@@ -477,7 +477,7 @@ the page's single job and update this inventory in the same commit.
 | Integrations | `Choose by runtime` → `Choose local tools` → `Package status` → `Related` |
 | Vercel Chat SDK | `Staging package` → `Use the adapter` → `Media boundary` → `Delivery behavior` → `Related` |
 | Cloudflare Think | `Current source` → `Configure staging` → `Delivery behavior` → `Related` |
-| OpenClaw | `Staging package` → `Configure the channel` → `Optional CLI setup` → `Delivery behavior` → `See also` |
+| OpenClaw | `Staging package` → `Configure the channel` → `Optional CLI setup` → `Allow agent Contacts` → `Delivery behavior` → `See also` |
 | Hermes | `Install the plugin` → `Configure staging` → `Optional CLI setup` → `Delivery behavior` → `See also` |
 | Claude Code | `Install the plugin` → `Configure the channel` → `Optional CLI setup` → `Delivery behavior` → `See also` |
 | Codex | `Install locally` → `Use the package` → `Prepare hosted proof` → `Related` |
