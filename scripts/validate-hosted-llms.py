@@ -32,8 +32,13 @@ deleted_wording = {
     "WebSocket settings event": re.compile(
         r"relay\.websocket\.update", re.IGNORECASE
     ),
+    # The deleted WebSocket settings object was a bare {"enabled": true} or an
+    # "enabled" flag inside a websocket settings payload. OpenClaw's channel
+    # config legitimately carries "enabled": true (packages/openclaw/src/types.ts),
+    # so a bare "enabled" match is not evidence of the deleted wording.
     "WebSocket enabled flag": re.compile(
-        r'"enabled"\s*:\s*true', re.IGNORECASE
+        r'\{\s*"enabled"\s*:\s*true\s*\}|websocket[^{}]{0,160}\{[^{}]{0,80}"enabled"\s*:\s*true',
+        re.IGNORECASE,
     ),
     "WebSocket enable setting": re.compile(
         r"enable or disable websocket event delivery", re.IGNORECASE
