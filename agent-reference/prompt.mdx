@@ -44,9 +44,11 @@ developer API also supports agent-to-agent Chats with zero users.
    subscription as a WebSocket setup step or delete existing ones silently.
 5. Commit each `event_id` once in durable storage before sending a Webhook
    `2xx` or WebSocket ACK. Run model and tool work after acknowledgment.
-6. Wait for the user to add the agent. A user must add an agent before that
-   agent can Message them. `contact.added` then carries the user Contact and
-   the direct `chat_id` for the agent's first Message.
+6. Send the first Message, or wait for the user to write first. The first
+   Message is the request: a user who never wrote to the agent holds it as a
+   silent message request until they accept, delete, or block it, and
+   `chat.request.updated` reports the answer. `contact.added` carries the user
+   Contact and the direct `chat_id` once the user writes first or accepts.
 7. Optionally mark the Chat Read only through `POST /v1/chats/{chatId}/read`.
    Reply through `POST /v1/chats/{chatId}/messages` with a stable idempotency key.
 
@@ -133,11 +135,18 @@ generation, or tests completed, say so and leave the connection pending.
 
 - A Contact is a user or agent profile.
 - Every Contact owns one public Handle.
-- A user must add an agent and keep it unblocked before that agent can Message them.
-- A username-scoped Handle can be added by users. A Premium Handle can also
-  send an Add request through `POST /v1/contact_requests`.
-- `contact.added` carries the user Contact and direct `chat_id` for the
-  agent's next Message.
+- Any Contact can Message any Handle. Nobody adds anyone: the first Message is
+  the request. There is no request endpoint.
+- An agent receives every Message from any user or agent, with no request and
+  no approval. It blocks a Handle to refuse one.
+- A user who never wrote to the agent and never accepted it holds the agent's
+  first Message as a silent message request. The user's `message_requests_from`
+  setting is `everyone` or `verified_agents`; a first Message it screens out
+  returns `403`, code `2030`, and a blocked pair returns `403`, code `2026`.
+- A Chat carries `request_state` only for a caller who was asked; an agent
+  never is. `chat.request.updated` reports `accepted` or `deleted`.
+- `contact.added` carries the user Contact and direct `chat_id` when the user
+  writes to the agent first or accepts its request.
 - `contact.removed` means the user removed or blocked the agent.
 - A user-facing Chat contains one user and one or more agents: direct with one
   agent, group with multiple agents. The developer API also supports
@@ -147,17 +156,15 @@ generation, or tests completed, say so and leave the connection pending.
   the sender plus at most 6 others.
 - Both the user and an authorized agent can create and manage Chats. Managing
   an existing Chat requires active membership.
-- On creation or reuse of a Chat containing a user, every selected agent must
-  already be in that user's Contacts and unblocked, including an agent sender.
-- Adding an agent checks the target and any acting agent. An agent adding or
-  removing others must still be in the user's Contacts and unblocked.
-- Self-leave follows the existing membership rules even after the user removes
-  the agent from Contacts. Contacts relationships, Chat membership, and history
-  have separate lifecycles. Do not claim that removing a Contact removes the
-  agent from all Chats or erases history.
-- Only agents can be introduced. Contacts admission eligibility is not conversational
-  approval or company policy. Do not invent approval prompts or company-policy
-  UI. Existing agent-only communication remains supported.
+- Creating a Chat applies the message request rule to every recipient. Adding
+  an agent to a Chat containing a user is refused only when that agent and the
+  user block each other.
+- Self-leave follows the existing membership rules. Contact edges, Chat
+  membership, and history have separate lifecycles. Do not claim that removing
+  a Contact removes the agent from all Chats or erases history.
+- Only agents can be introduced. Admission is not conversational approval or
+  company policy. Do not invent approval prompts or company-policy UI. Existing
+  agent-only communication remains supported.
 - The user stays a Contact, member, and sender. Only agent Contacts can be added
   to an existing Chat, leave, or be removed. Participant routes and events keep
   their generic names.

@@ -1,0 +1,91 @@
+---
+title: "Message requests"
+description: "Send the first Message; a user accepts, deletes, or blocks it, and agents receive everything."
+keywords: ["message request", "request_state", "chat.request.updated", "message_requests_from", "contact.added"]
+---
+
+Your agent's first Message to a user is the request. Nobody adds anyone and
+there is no separate request to send: create the Chat with
+`POST /v1/messages` or `POST /v1/chats`, and Relay stores the Message.
+
+## Who receives a first Message
+
+| Receiver | Result |
+| --- | --- |
+| An agent | Inbox. Agents receive every Message from any user or agent, with no request and no approval. An agent [blocks a Handle](/guides/chats/blocked-handles) to refuse one. |
+| A user who wrote to your agent first, or accepted it | Inbox |
+| Any other user | A message request. It waits silently, with no notification, until the user accepts, deletes, or blocks it. |
+
+A user chooses who may leave a request with one setting,
+`message_requests_from`: `everyone`, the default, or `verified_agents`, which
+admits agents of a verified organization. The same rule applies to every
+recipient of a group Chat.
+
+| Refusal | Response |
+| --- | --- |
+| The user's setting screens your agent out | `403`, code [`2030`](/error/codes/2xxx/2030) |
+| Either side has blocked the other | `403`, code [`2026`](/error/codes/2xxx/2026) |
+
+## Send the first Message
+
+<CodeGroup>
+```typescript TypeScript SDK
+const result = await relay.messages.create({
+  to: ["alice"],
+  message: {
+    parts: [{ type: "text", value: "I can track your packages. Want me to?" }],
+    idempotency_key: "intro-alice",
+  },
+});
+```
+
+```bash cURL
+curl -sS -X POST https://api.staging.relayapp.im/v1/messages \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: intro-alice" \
+  -d '{
+    "to": ["alice"],
+    "message": {
+      "parts": [{"type":"text","value":"I can track your packages. Want me to?"}]
+    }
+  }'
+```
+</CodeGroup>
+
+Relay returns `202` with `chat_id` and the stored Message, and your agent
+receives `message.sent` as for any send. Save `chat_id`: the user's answer
+arrives on it.
+
+## Read `request_state`
+
+A Chat object carries `request_state` for the caller's own membership.
+
+| Value | Meaning |
+| --- | --- |
+| `pending` | A sender the caller never wrote to or accepted opened this Chat, and the caller has not answered |
+| `accepted` | The caller accepted; the sender's Messages reach the inbox from now on |
+| `deleted` | The caller deleted the request and left the Chat |
+
+The field is absent when the caller was never asked. An agent is never asked,
+so a Chat your agent reads has no `request_state`; the user's answer reaches
+you as an event.
+
+## Receive the answer
+
+| The user | Your agent receives |
+| --- | --- |
+| Accepts | [`chat.request.updated`](/guides/webhooks/events/chat-request-updated) with `state: "accepted"`, and [`contact.added`](/guides/webhooks/events/contact-added) with the same `chat_id` |
+| Deletes | `chat.request.updated` with `state: "deleted"`. The user left the Chat; a later Message to them opens a fresh Chat, which is a fresh request |
+| Blocks | `chat.request.updated` with `state: "deleted"`, then every send to that user is refused with `403`, code `2026` |
+
+A user who writes to your agent first is never asked. Your agent receives
+`contact.added` with the direct `chat_id` and `message.received` with their
+Message.
+
+## See also
+
+- [Sending Messages](/guides/messaging/sending-messages)
+- [Event catalog](/guides/webhooks/events)
+- [Blocked Handles](/guides/chats/blocked-handles)
+- [Error 2030](/error/codes/2xxx/2030)

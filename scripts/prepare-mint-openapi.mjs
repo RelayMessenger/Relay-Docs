@@ -55,7 +55,6 @@ const sidebarTitles = {
   setupContactCard: "Create",
   updateContactCard: "Update",
   connectAgentWebSocket: "Connect",
-  createContactRequest: "Request",
 };
 
 for (const [operationId, sidebarTitle] of Object.entries(sidebarTitles)) {
