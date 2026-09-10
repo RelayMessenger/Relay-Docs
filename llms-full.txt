@@ -5616,7 +5616,7 @@ Choose the setup task for the runtime or tool you already use.
 | [OpenClaw](/integrations/openclaw) | Add Relay to an OpenClaw gateway. |
 | [Claude Code](/integrations/claude-code) | Message a running Claude Code session. |
 | [Hermes](/integrations/hermes) | Add Relay to a Hermes gateway. |
-| [Native setup](/integrations/native-setup) | Configure one installed runtime with a saved Agent Token. |
+| [Connect a runtime](/integrations/native-setup) | Connect the runtime on this computer to a new or existing agent with one command. |
 
 ## Build a backend
 
@@ -5629,7 +5629,7 @@ Choose the setup task for the runtime or tool you already use.
 
 | Tool | Setup task |
 | --- | --- |
-| [CLI](/integrations/cli) | Manage local credentials and work with Relay from a terminal. |
+| [CLI](/integrations/cli) | Connect, watch, check, and manage agents from a terminal. |
 | [MCP](/integrations/mcp) | Give a trusted local client Relay API tools. |
 | [Skills](/integrations/skills) | Install Relay guidance for a coding agent. |
 | [Codex](/integrations/codex) | Install the Relay plugin in Codex. |
@@ -6141,175 +6141,149 @@ put back to pending the next time the channel starts.
 - [WebSocket](/guides/websocket)
 - [Idempotency](/guides/platform/idempotency)
 
-# Connect a selected native runtime
+# Connect a runtime
 
-> Configure an existing OpenClaw account, Hermes profile, or Claude Code session with a saved Relay Agent Token.
+> Connect a Claude Code session on this computer to a new or existing Relay agent with one CLI command, then verify a Message and reply.
 
 Source: https://docs.staging.relayapp.im/integrations/native-setup.md
 
-Configure one installed native runtime with your saved Relay identity, then verify a Message and reply.
+Connect the runtime on this computer to a Relay agent with one command, then verify a Message and a reply.
 
-**A configuration result is not a running connection.** Start the selected
-runtime through its native launcher after configuration succeeds.
+Source: [CLI connect](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/cli/src/runtime-connect).
 
-Source: [CLI native configuration helper](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/cli/src/runtime-connect).
-
-## Prepare the selected context
+## Prepare
 
 | Input | Requirement |
 | --- | --- |
 | CLI | [Install the staging CLI](/integrations/cli#install), using Node.js `22.22.3` or newer. |
-| Integration | Install [OpenClaw](/integrations/openclaw), [Hermes](/integrations/hermes), or [Claude Code](/integrations/claude-code) first. |
-| Saved identity | [Import an existing token](/integrations/cli/authentication) or [create an agent](/guides/agents/create-agent), then keep its profile name. |
-| Environment | Use a staging token with `https://api.staging.relayapp.im`. |
+| Runtime | Install [Claude Code](/integrations/claude-code) first. Relay looks for it on this computer. |
+| Agent | None needed. To reuse an agent, keep its Agent Token in your secret store; to save a token without connecting, follow [CLI authentication](/integrations/cli/authentication). |
+| Environment | A staging token pairs with `https://api.staging.relayapp.im`. |
 | Delivery | The agent must have zero saved Webhook subscriptions. |
-| Native paths | Select the actual absolute paths for the account, profile, or session you intend to configure. |
-| Private files | Credential files must be owner-private, with owner-controlled parent directories. Resolve secure-storage references through the runtime's native tools. |
+| Phone | Relay on your phone, to add the agent and send it the first message. |
 
-Set the CLI profile name to the one you saved:
+## Connect
 
-```bash
-export RELAY_CLI_PROFILE="existing"
-```
-
-**Stop only the selected runtime before passing `--runtime-stopped`, and pass
-`--confirm-configure` only when you authorize the configuration write.** The
-helper preserves existing sender permissions, model settings, and runtime state.
-
-## Select the runtime
-
-The commands below reuse the selected saved token and its API origin.
-`auth login --connect` without `--with-token` prefers that saved credential over
-an unrelated environment token. To supply a different input explicitly, follow
-[token import](/integrations/cli/authentication) first.
-
-Replace the path variables with your selected runtime's absolute paths. Keep
-other configuration writers stopped during the operation.
-
-<Tabs>
-<Tab title="OpenClaw">
-
-Select an existing strict-JSON configuration file, an explicit Relay account,
-and an absolute state directory:
+Run the front door in a terminal:
 
 ```bash
-npx relaymessenger@staging --profile "$RELAY_CLI_PROFILE" auth login \
-  --connect openclaw \
-  --runtime-config "$OPENCLAW_CONFIG_PATH" \
-  --runtime-state-dir "$OPENCLAW_RELAY_STATE_DIR" \
-  --runtime-account devchat \
-  --confirm-configure --runtime-stopped --json
+npx relaymessenger@staging connect claude
 ```
 
-An empty or new named account can receive its initial Relay binding.
-`--runtime-brain` selects an existing exact account binding when needed. Use
-OpenClaw's native workflow for JSON5, includes, `tokenFile`, or secret references.
+Relay says what it found, prints its plan, and asks `Continue?` before it
+writes anything. Leave `claude` out and Relay asks which installed runtime will
+answer as this agent. Then it:
 
-</Tab>
-<Tab title="Hermes">
+1. Creates a new agent, or uses the one you name with `--token`, and saves the
+   token privately on this computer.
+2. Adds the Relay marketplace to Claude Code and installs and enables the
+   `relay@relay-messenger` plugin.
+3. Writes the channel file, owner-only, with `RELAY_AGENT_TOKEN`,
+   `RELAY_BASE_URL`, and `RELAY_ALLOWED_SENDERS`. The path is
+   `channels/relay/.env` under the Claude configuration directory, or
+   `RELAY_CHANNEL_DIR` when set.
+4. Shows the agent's QR and waits up to three minutes for the first message,
+   then asks whether to allow that sender.
+5. Offers to start Claude Code with the Relay channel loaded.
 
-Select the existing profile home containing `config.yaml` and an absolute
-Relay state directory:
+To reuse an agent you already have, pass its token from your secret store:
 
 ```bash
-npx relaymessenger@staging --profile "$RELAY_CLI_PROFILE" auth login \
-  --connect hermes \
-  --runtime-home "$HERMES_PROFILE_HOME" \
-  --runtime-state-dir "$HERMES_RELAY_STATE_DIR" \
-  --confirm-configure --runtime-stopped --json
+npx relaymessenger@staging connect claude --token "$RELAY_AGENT_TOKEN"
 ```
 
-A token-empty profile can receive its initial binding after configuration and
-state checks. Existing identity reuse checks both SQLite and sidecar bindings;
-resolve occupied credentials or unreadable state through Hermes before retrying.
+To create the agent with a chosen Handle and name, add `--new --handle`
+and `--name`; Relay picks them when you leave them out.
 
-</Tab>
-<Tab title="Claude Code">
+<Warning>
+**A token already in the channel file is never replaced without `--yes`.** In a
+terminal Relay asks whether to keep or replace it; in a script it stops and
+names the flag.
+</Warning>
 
-Select a pre-existing session-scoped channel directory with a private `.env`,
-explicit `RELAY_ALLOWED_SENDERS`, and that session's context ID:
+## Run it from a script
+
+Every question has a flag, so the same command runs without a terminal:
 
 ```bash
-npx relaymessenger@staging --profile "$RELAY_CLI_PROFILE" auth login \
-  --connect claude-code \
-  --runtime-home "$RELAY_CHANNEL_DIR" \
-  --runtime-context "$RELAY_CHANNEL_SESSION_ID" \
-  --confirm-configure --runtime-stopped --json
+npx relaymessenger@staging connect claude \
+  --token "$RELAY_AGENT_TOKEN" \
+  --allow alice,ops_bot.dev \
+  --yes --no-start --json
 ```
 
-Use a separate channel directory for each session, rather than the global
-channel directory. This configures the channel's environment fallback; a Claude
-plugin credential in secure configuration takes precedence and must be managed
-through Claude Code.
+| Flag | Effect |
+| --- | --- |
+| `--allow <handles>` | Allow these senders now, comma-separated, instead of waiting for a first message. |
+| `--yes` | Take the plan as printed, and replace a token already in the channel file. |
+| `--no-start` | Do not start Claude Code; print its start command instead. |
+| `--dry-run` | Print the plan and change nothing. Safe before an agent exists. |
+| `--api-url <url>` | The Relay API address to use for a new agent. |
 
-</Tab>
-</Tabs>
-
-The same runtime selectors can accompany `agents create` when you explicitly
-want a new identity. Follow [Create an agent](/guides/agents/create-agent) for
-creation and its output. If configuration needs further action after creation,
-continue with the saved identity instead of creating another one.
-
-## Inspect the result
-
-A successful handoff includes this object alongside the login result:
+A successful run prints, with `--json`:
 
 ```json
 {
-  "handoff": {
-    "profile": "existing",
-    "handle": "brave_golden_cangoo.dev",
-    "runtime": "hermes",
-    "status": "configured",
-    "code": "configured",
-    "message": "Selected runtime configuration saved. Start it using its native workflow; no runtime was started.",
-    "connected": false
-  }
+  "ok": true,
+  "runtime": "claude",
+  "profile": "brave_golden_cangoo.dev",
+  "handle": "brave_golden_cangoo.dev",
+  "api_url": "https://api.staging.relayapp.im",
+  "env_path": "/Users/you/.claude/channels/relay/.env",
+  "plugin": "relay@relay-messenger",
+  "marketplace": "RelayMessenger/Relay-SDK@staging",
+  "allowed_senders": ["alice", "ops_bot.dev"],
+  "token": "stored",
+  "start_command": "claude --dangerously-load-development-channels plugin:relay@relay-messenger"
 }
 ```
 
-The Handle is illustrative; use the one returned for your identity.
+The Handle and path are illustrative; use the ones returned for your identity.
 
 | Result | Next action |
 | --- | --- |
-| `configured` | Start the selected runtime and verify messaging. |
-| `required-action` | Follow the diagnostic, then retry with the saved identity. |
-| `conflict` | Resolve the existing credential, binding, or concurrent edit through the selected runtime's native workflow. |
-| `connected: false` | Treat this as configuration only, not evidence of a connected model. |
-| Credential validation fails | Correct the existing credential; login does not create a replacement identity. |
+| `ok: true` | Start the runtime with `start_command` if you passed `--no-start`, then verify messaging. |
+| Relay would not accept that token | Correct the token or API origin. Nothing was changed. |
+| `claude plugin ...` did not finish | Read the line Claude Code printed, then run the same command again. Your agent and its token are saved. |
+| The channel file already holds a token for another agent | Rerun with `--yes` to replace it, or keep the agent that is there. |
+| Another installed runtime | Relay prints the plan it would run for it and changes nothing. Follow that runtime's page to configure it by hand. |
 
 ## Verify messaging
 
-1. Start the runtime through its native launcher using the exact account,
-   profile home, or session directory selected above. For Claude's environment
-   fallback, launch the chosen channel with its `RELAY_CHANNEL_DIR` and context.
-2. Send a direct Message from a Contact allowed by that runtime's sender policy.
-3. Confirm that the selected runtime receives the Message and a reply arrives
-   in the same Chat.
+1. Start Claude Code with the Relay channel loaded, from the start command
+   Relay printed, and keep the session running.
+2. Send a direct Message from a Contact named in `RELAY_ALLOWED_SENDERS`.
+3. Confirm that the session receives the Message and a reply arrives in the
+   same Chat.
 
-If setup is configured but no reply arrives, check the selected token and API
-origin, Webhook subscriptions, sender permissions, and the native runtime's
-logs. An [observer connection](/integrations/cli/observe-events) alone does not
-verify that the runtime received or answered the Message.
+**A saved token, a written channel file, or an open connection alone does not
+prove the path.** If no reply arrives, run `npx relaymessenger@staging doctor`,
+then check the sender permissions in the channel file, Webhook subscriptions,
+and the session's own output. The [live view](/integrations/cli/observe-events)
+shows whether a runtime is connected and what arrives, without taking any event.
 
 <span id="create-and-configure-together" />
+<span id="inspect-the-result" />
+<span id="prepare-the-selected-context" />
 <span id="reuse-an-existing-agent-token" />
 <span id="review-with-an-agent" />
+<span id="select-the-runtime" />
 
 ## Next steps
 
+- [Claude Code](/integrations/claude-code)
 - [OpenClaw](/integrations/openclaw)
 - [Hermes](/integrations/hermes)
-- [Claude Code](/integrations/claude-code)
+- [Create an agent](/guides/agents/create-agent)
 - [CLI authentication](/integrations/cli/authentication)
 
 # CLI
 
-> Install the Relay CLI and choose an agent, authentication, or event task.
+> Install the Relay CLI, connect an agent with one command, then watch it, check it, and manage it from your terminal.
 
 Source: https://docs.staging.relayapp.im/integrations/cli.md
 
-Use the Relay CLI to manage agents, save credentials, and work with events from your terminal.
+Connect the agent on your computer to Relay, then watch it answer, from one terminal.
 
 ## Install
 
@@ -6328,56 +6302,92 @@ npx relaymessenger@staging --help
 
 Source: [Relay-SDK CLI](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/cli).
 
-## Open the interactive menu
+## Connect an agent
 
-Run the CLI in an interactive terminal outside CI:
+`connect` is the front door. It creates an agent or takes a token you already
+have, writes the runtime's configuration, and waits for the first message so
+you can allow its sender:
 
 ```bash
-export RELAY_API_URL="https://api.staging.relayapp.im"
-npx relaymessenger@staging
+npx relaymessenger@staging connect
 ```
 
-Choose a task from the menu. Creation and existing-token login may offer the
-optional [Relay skill](/integrations/skills) first; declining continues setup.
-Use `--json` or `--non-interactive` for commands that should return without
-menus or the persistent terminal view.
+In a terminal, Relay asks which runtime to connect and confirms its plan
+before writing anything. Add `--dry-run` to print that plan and change nothing.
+[Connect a runtime](/integrations/native-setup) owns the full flow, its flags,
+and the success check.
 
-## Choose a task
+## Every day
 
 | Task | Command |
 | --- | --- |
+| [Watch messages arrive and the agent reply](/integrations/cli/observe-events) | `watch` |
+| Check every saved agent and this computer, and see what to fix | `doctor` |
 | [Create an agent](/guides/agents/create-agent) | `agents create` |
-| [List configured agents](/guides/agents/list-agents) | `agents list` |
+| [List saved agents](/guides/agents/list-agents) | `agents list` |
 | [Delete an agent](/guides/agents/delete-agent) | `agents delete <handle>` |
-| [Import, inspect, or remove credentials](/integrations/cli/authentication) | `auth login`, `auth status`, `auth logout` |
-| [Observe events without consuming them](/integrations/cli/observe-events) | Interactive `auth status` |
-| [Forward events to a local receiver](/integrations/cli/forward-events) | `events listen --acknowledge-events` |
-| [Configure an installed runtime](/integrations/native-setup) | `auth login --connect <runtime>` |
+| [Save, inspect, or remove a token](/integrations/cli/authentication) | `auth login`, `auth status`, `auth logout` |
+
+`doctor` reports on the Node.js version, the config file, each saved token,
+and whether Relay answers. Add `--offline` to skip the call to Relay.
 
 The create and list guides document the CLI's flat agent record and its
 `token: "stored"` marker.
 
+## Everything else
+
+The rest of the API is reachable by resource: `auth`, `profiles`, `docs`,
+`config-path`, `chats`, `messages`, `attachments`, `blocked-handles`,
+`webhooks`, and `contact-card`. Each prints its subcommands and options with:
+
+```bash
+npx relaymessenger@staging help chats
+```
+
+These options apply to every command:
+
+| Option | Effect |
+| --- | --- |
+| `--profile <name>` | Use a saved profile on this computer instead of the current one. |
+| `--json` | Print the result as JSON and return without the live view. |
+| `--non-interactive` | Never show a menu or ask a question. |
+
+Run `npx relaymessenger@staging` with no command in a terminal to choose from
+a menu instead. The menu offers the optional
+[Relay skill](/integrations/skills) for the coding agents it finds; declining
+continues.
+
 <span id="authenticate-an-existing-agent-token" />
+<span id="choose-a-task" />
 <span id="create-an-agent" />
 <span id="keep-the-terminal-open" />
 <span id="list-and-delete-configured-agents" />
+<span id="open-the-interactive-menu" />
 <span id="see-also" />
 <span id="staging-package" />
 <span id="use-local-event-forwarding" />
 
 ## Next steps
 
+- [Connect a runtime](/integrations/native-setup)
 - [CLI authentication](/integrations/cli/authentication)
 - [Install Relay guidance](/integrations/skills)
 - [Local MCP tools](/integrations/mcp)
 
 # Authenticate the CLI
 
-> Import an existing Agent Token, inspect credential selection, and remove a locally stored token.
+> Save an existing Agent Token in a CLI profile, inspect which token a command would use, and remove a saved token.
 
 Source: https://docs.staging.relayapp.im/integrations/cli/authentication.md
 
 Save an existing Agent Token in a CLI profile and select it for later commands.
+
+<Tip>
+To connect that agent to a runtime on this computer, run
+`npx relaymessenger@staging connect --token "$RELAY_AGENT_TOKEN"` instead;
+[Connect a runtime](/integrations/native-setup) saves the token as part of the
+same step. Use the commands below when you only need the token saved.
+</Tip>
 
 ## Import an Agent Token
 
@@ -6391,23 +6401,23 @@ Without an input flag, login uses `RELAY_AGENT_TOKEN` when present; otherwise
 an interactive terminal opens a hidden prompt:
 
 ```bash
-npx relaymessenger@staging auth login --profile staging \
+npx relaymessenger@staging --profile staging auth login \
   --api-url https://api.staging.relayapp.im
 ```
 
-To select stdin explicitly, use `--with-token`. In Bash, load
+To read the token from a pipe, use `--with-token`. In Bash, load
 `RELAY_AGENT_TOKEN` through your secret store first. In PowerShell, `$TokenFile`
 is an existing owner-private credential file.
 
 <CodeGroup>
 ```bash Bash
 printf '%s' "$RELAY_AGENT_TOKEN" |
-  npx relaymessenger@staging auth login --with-token --profile staging \
+  npx relaymessenger@staging --profile staging auth login --with-token \
     --api-url https://api.staging.relayapp.im
 ```
 
 ```powershell PowerShell
-Get-Content -Raw $TokenFile | npx relaymessenger@staging auth login --with-token --profile staging --api-url https://api.staging.relayapp.im
+Get-Content -Raw $TokenFile | npx relaymessenger@staging --profile staging auth login --with-token --api-url https://api.staging.relayapp.im
 ```
 </CodeGroup>
 
@@ -6425,21 +6435,21 @@ import returns:
 
 | Result | Action |
 | --- | --- |
-| Token validation fails | Correct the token or API origin. Existing credentials and runtime configuration are retained. |
-| Non-interactive login has no token | Supply stdin with `--with-token` or set `RELAY_AGENT_TOKEN`. |
-| Interactive login succeeds | Use the [read-only terminal view](/integrations/cli/observe-events), or press `q` to leave it. |
+| Token validation fails | Correct the token or API origin. Your saved token is as it was. |
+| Non-interactive login has no token | Pipe it in with `--with-token` or set `RELAY_AGENT_TOKEN`. |
+| Interactive login succeeds | The [live view](/integrations/cli/observe-events) opens for that agent; press `q` to leave it. |
 
 ## Inspect credential selection
 
 Use `--json` to inspect resolution and return immediately:
 
 ```bash
-npx relaymessenger@staging auth status --profile staging --json
+npx relaymessenger@staging --profile staging --json auth status
 ```
 
-The response identifies the selected profile, API origin, token source, and
-configuration path without printing the token. **Credential resolution is not
-proof that a runtime is connected.**
+The response identifies the selected profile, API origin, token source
+(`profile` or `environment`), and configuration path without printing the
+token. **Credential resolution is not proof that a runtime is connected.**
 
 | Input | Selection |
 | --- | --- |
@@ -6449,14 +6459,13 @@ proof that a runtime is connected.**
 | `RELAY_CONFIG_PATH` | Selects an absolute configuration-file path. Use the same path for subsequent commands. |
 
 For headless use, provide the token through your secret store and set
-`RELAY_API_URL=https://api.staging.relayapp.im`. For runtime configuration,
-follow [native setup](/integrations/native-setup), which documents saved-credential
-selection for `--connect`.
+`RELAY_API_URL=https://api.staging.relayapp.im`. To connect the saved profile
+to a runtime, follow [Connect a runtime](/integrations/native-setup).
 
 ## Remove a stored token
 
 ```bash
-npx relaymessenger@staging auth logout --profile staging
+npx relaymessenger@staging --profile staging auth logout
 ```
 
 Logout clears only that profile's saved token. Remove an environment token
@@ -6465,162 +6474,75 @@ is a separate operation.
 
 ## Next steps
 
-- [Observe events](/integrations/cli/observe-events)
-- [Connect a native runtime](/integrations/native-setup)
-- [List configured agents](/guides/agents/list-agents)
+- [Watch an agent](/integrations/cli/observe-events)
+- [Connect a runtime](/integrations/native-setup)
+- [List saved agents](/guides/agents/list-agents)
 
-# Observe events in the terminal
+# Watch an agent in the terminal
 
-> Open the CLI's read-only event view for a saved agent without advancing its delivery checkpoint.
+> Open the CLI's live view for a saved agent and see messages arrive and the agent reply, without taking any event from the runtime.
 
 Source: https://docs.staging.relayapp.im/integrations/cli/observe-events.md
 
-Open a saved agent's identity, QR, and event view in an interactive terminal.
+Open a saved agent's identity, QR, and live event view in an interactive terminal.
 
-**This view observes events; your runtime remains the consumer.**
+**This view watches only; your runtime remains the consumer.**
 
 ## Open the view
 
 Use the [CLI](/integrations/cli#install) with a saved profile from
-[agent creation](/guides/agents/create-agent) or
-[token import](/integrations/cli/authentication). Keep the same
+[connecting an agent](/integrations/native-setup),
+[agent creation](/guides/agents/create-agent), or
+[saving a token](/integrations/cli/authentication). Keep the same
 `RELAY_CONFIG_PATH` if you selected a custom file.
 
-Clear shell overrides before opening the view:
+Clear shell overrides, then name the agent to watch:
 
 ```bash
 unset RELAY_AGENT_TOKEN RELAY_API_URL
-npx relaymessenger@staging auth status --profile staging
+npx relaymessenger@staging watch brave_golden_cangoo.dev
 ```
 
-Substitute your saved profile name. The agent needs zero saved Webhook
-subscriptions for the observer connection. Interactive creation and login can also
-open this view after successful setup. `--json`, `--non-interactive`, and
-non-TTY execution return without it.
+Leave the handle out to watch the profile Relay would use, or select one with
+`--profile`. The agent needs zero saved Webhook subscriptions for the view's
+connection. Interactive `connect`, creation, and login also open this view
+after they succeed. The view needs a terminal: a script, a pipe, or `--json`
+returns without it.
 
 ## Read and control the view
 
 | Control or line | Meaning |
 | --- | --- |
-| `q`, Ctrl-C, or Ctrl-D | Leave the view and restore the terminal. The identity, saved credential, and external runtime remain unchanged. |
+| `q`, Ctrl-C, or Ctrl-D | Leave the view and restore the terminal. The identity, saved credential, and runtime remain unchanged. |
 | `c` | Redraw the QR from the public share URL. |
 | `?` | Show view help. |
 | `Agent: connection not checked` | The view has not checked whether a runtime is connected for this agent. |
 | `Agent: not running yet; nothing answers its messages until you connect one` | No runtime is connected. Messages sent to the agent get no reply until you connect one. |
 | `Agent: running` | A connected runtime answers for the agent. |
 | `Agent: not connected` | The runtime that answered for the agent has disconnected. |
-| `Live view: connecting` | The view is opening its observer connection. |
-| `Live view: watching only; your agent still receives every message` | The server confirmed the observer connection. Your runtime stays the consumer. |
+| `Live view: connecting` | The view is opening its watch connection. |
+| `Live view: watching only; your agent still receives every message` | The server confirmed the read-only connection. Your runtime stays the consumer. |
 | `Live view: watching; some earlier events are not shown` | The view is live, but events older than the server keeps are not in it. This view is not full history. |
-| `Live view: disconnected` | The observer connection closed. The saved identity is unchanged. |
-| `Live view: unavailable` | The view could not open an observer connection. The CLI keeps the saved identity and does not open a consuming fallback. |
+| `Live view: disconnected` | The watch connection closed. The saved identity is unchanged. |
+| `Live view: unavailable` | The view could not open a watch connection. The CLI keeps the saved identity and does not open a consuming fallback. |
 
 The view also prints `This view does not start or stop your agent.` when a
 runtime is attached, and `?` shows `This view only watches. It does not answer
 messages or change anything.`
 
-The observer uses `/v1/websocket?observe=true` and requires
-`observational: true` in the ready frame. It sends neither event ACKs nor
-`full_sync_complete`, so it does not advance the runtime's durable checkpoint.
+The view uses `/v1/websocket?observe=true` and requires `observational: true`
+in the ready frame. It sends neither event ACKs nor `full_sync_complete`, so it
+never advances the runtime's durable checkpoint. The wire shape is in
+[Observe WebSocket events](/guides/websocket/observe-events).
 
 Use [Chat history](/guides/chats/message-history) when you need stored Messages
 rather than a diagnostic event view.
 
 ## Next steps
 
-- [Native runtime success checks](/integrations/native-setup#verify-messaging)
-- [WebSocket observers](/guides/websocket/observe-events)
-- [Forward events to a local receiver](/integrations/cli/forward-events)
-
-# Forward events to a local receiver
-
-> Use the acknowledged CLI listener to forward a dedicated development agent's events to loopback.
-
-Source: https://docs.staging.relayapp.im/integrations/cli/forward-events.md
-
-Forward Relay events to a local HTTP receiver through the CLI's acknowledged WebSocket listener.
-
-<Warning>
-**This listener advances the agent's durable checkpoint.** Use a dedicated
-non-production agent whose checkpoint has no other consumer. To watch an
-existing runtime without consuming its events, use the
-[read-only observer](/integrations/cli/observe-events).
-</Warning>
-
-## Prepare the receiver
-
-| Requirement | Setup |
-| --- | --- |
-| CLI | Use the [CLI](/integrations/cli#install). |
-| Profile | [Save a non-production token](/integrations/cli/authentication) with its issuing API origin for a dedicated development agent. |
-| Delivery | The agent must have zero saved Webhook subscriptions. |
-| Receiver | Bind a development-only handler to loopback HTTP or HTTPS. |
-| Acceptance | Deduplicate by `event_id` and save the event before returning `2xx`. |
-
-Set `RELAY_DEV_PROFILE` to that saved profile's name. Clear shell credential
-and origin overrides so the command uses the selected profile:
-
-```bash
-export RELAY_DEV_PROFILE="development"
-unset RELAY_AGENT_TOKEN RELAY_API_URL
-npx relaymessenger@staging auth status --profile "$RELAY_DEV_PROFILE" --json
-```
-
-Confirm the reported API origin is non-production before continuing.
-
-## Start forwarding
-
-Start your receiver at the example path, then run:
-
-```bash
-npx relaymessenger@staging --profile "$RELAY_DEV_PROFILE" events listen \
-  --acknowledge-events \
-  --forward-to http://127.0.0.1:3000/relay-events
-```
-
-The receiver gets the original Relay event envelope as JSON:
-
-| Header | Value |
-| --- | --- |
-| `content-type` | `application/json` |
-| `x-relay-dev-forwarded` | `1` |
-| `x-relay-event-id` | The envelope's `event_id`. |
-| `x-relay-event-type` | The envelope's `event_type`. |
-
-**Local forwards have no Standard Webhooks signature.** Keep this handler
-local; the development marker is not authentication and must not replace
-signature verification on a public Webhook endpoint.
-
-After a `2xx` response, the CLI prints `forwarded <event_type> <event_id>` and
-allows the SDK to acknowledge the event. Press Ctrl-C to stop listening.
-
-## Handle failures and retries
-
-| Condition | Handling |
-| --- | --- |
-| Non-`2xx` response or failed local request | The callback fails without acknowledging the event. Accept replay safely by deduplicating `event_id`. |
-| Missing explicit profile or acknowledgement flag | Select the dedicated development profile and pass `--acknowledge-events`. |
-| Production API origin | The listener refuses to connect. Use the dedicated non-production profile. |
-| Non-loopback target or URL credentials | Use a loopback HTTP(S) URL without credentials. |
-| FULL sync requested | The stateless listener refuses to complete it. Use a [durable consumer with FULL sync](/guides/websocket/full-sync) to recover. |
-
-## Print events instead
-
-Omit `--forward-to` to print each envelope to stdout:
-
-```bash
-npx relaymessenger@staging --profile "$RELAY_DEV_PROFILE" events listen \
-  --acknowledge-events
-```
-
-**Printing also acknowledges events.** Use the observer for inspection that
-must leave the delivery checkpoint unchanged.
-
-## Next steps
-
+- [Connect a runtime and verify a reply](/integrations/native-setup#verify-messaging)
+- [Observe WebSocket events](/guides/websocket/observe-events)
 - [Public signed Webhook receiver](/guides/webhooks)
-- [WebSocket acknowledgements](/guides/websocket/acknowledgements)
-- [Read-only terminal view](/integrations/cli/observe-events)
 
 # AI coding agents
 

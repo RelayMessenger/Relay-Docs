@@ -19,7 +19,7 @@ AGENT_PAGES = tuple(f"guides/agents/{name}" for name in (
     "delete-agent", "console-agent",
 ))
 CLI_TASKS = tuple(f"integrations/cli/{name}" for name in (
-    "authentication", "observe-events", "forward-events",
+    "authentication", "observe-events",
 ))
 PHOTO_PAGE = "guides/contacts/profile-photos"
 RECIPE_PAGE = "guides/contacts/image-recipes"
@@ -159,25 +159,25 @@ class AgentOnboardingTests(unittest.TestCase):
     def test_prose_checks_ignore_empty_bookmarks_not_visible_content(self):
         text = (
             '<span id="prepare-hosted-proof" />\n'
-            "<span id='token import'></span>\n"
+            "<span id='agents setup'></span>\n"
             '<span id="visible">Keep tokens private.</span>\n'
         )
         visible = visible_document_text(text)
         self.assertNotIn("prepare-hosted-proof", visible)
-        self.assertNotIn("token import", visible)
+        self.assertNotIn("agents setup", visible)
         self.assertIn("Keep tokens private.", visible)
 
     def test_command_checks_distinguish_link_labels_from_commands(self):
-        prose = "[token import](/integrations/cli/authentication)"
-        self.assertNotIn("token import", command_examples(prose))
+        prose = "[agents setup](/integrations/cli/authentication)"
+        self.assertNotIn("agents setup", command_examples(prose))
         for example in (
-            "`token import`",
-            "```bash\nnpx relaymessenger token import\n```",
-            "```powershell\nrelaymessenger token import\n```",
-            "```text\nnpx relaymessenger token import\n```",
+            "`agents setup`",
+            "```bash\nnpx relaymessenger agents setup\n```",
+            "```powershell\nrelaymessenger agents setup\n```",
+            "```text\nnpx relaymessenger agents setup\n```",
         ):
             with self.subTest(example=example):
-                self.assertIn("token import", command_examples(example))
+                self.assertIn("agents setup", command_examples(example))
 
     def test_no_invented_cli_package_or_commands(self):
         for path in ROOT.rglob("*.mdx"):
@@ -188,10 +188,17 @@ class AgentOnboardingTests(unittest.TestCase):
             with self.subTest(path=path.relative_to(ROOT)):
                 for obsolete in ("@relaymessenger/cli", "relaymessenger@latest"):
                     self.assertNotIn(obsolete, text)
+                # Retired with the 2026-09-09 CLI rebuild (Relay-SDK PR 176):
+                # the runtime-configuration flags on auth login, and the
+                # acknowledged listener. The retired top-level commands are
+                # spelled as patterns so this guard does not itself match a
+                # sweep of the docs for the retired words.
                 for obsolete in ("agents setup", "--token-stdin", "--from-env",
-                                 "token import", "token status", "token clear"):
+                                 "auth login --connect", "--confirm-configure",
+                                 "--runtime-stopped", "--acknowledge-events", "--forward-to"):
                     self.assertNotIn(obsolete, commands)
-                self.assertNotRegex(commands, r"(?m)^\s*relay (?:agents|auth|profiles|doctor|events)\b")
+                self.assertNotRegex(commands, r"\btoken (?:import|status|clear)\b|\bevents\s+listen\b")
+                self.assertNotRegex(commands, r"(?m)^\s*relay (?:agents|auth|profiles|doctor|events|connect|watch)\b")
 
     def test_agent_management_router_is_short_and_links_to_tasks(self):
         router = self.page("guides/agents/lifecycle")
@@ -282,14 +289,19 @@ class AgentOnboardingTests(unittest.TestCase):
 
     def test_native_consent_and_separate_connection_proof(self):
         native = self.page("integrations/native-setup")
-        self.assert_identifiers(native, "auth login", "--connect", "--confirm-configure", "--runtime-stopped",
-                                "--runtime-account", "--runtime-context", "RELAY_ALLOWED_SENDERS")
+        self.assert_identifiers(native, "connect claude", "--token", "--allow", "--yes", "--dry-run",
+                                "--no-start", "RELAY_ALLOWED_SENDERS", "RELAY_CHANNEL_DIR")
         self.assert_links_to_pages(native, "integrations/cli/authentication", "guides/agents/create-agent",
                                    "integrations/openclaw", "integrations/hermes", "integrations/claude-code")
-        handoffs = [node["handoff"] for example in self.json_examples(native)
-                    for node in objects(example) if "handoff" in node]
-        self.assertTrue(handoffs)
-        self.assertTrue(all(item.get("connected") is False for item in handoffs))
+        results = [node for example in self.json_examples(native)
+                   for node in objects(example) if node.get("runtime") == "claude"]
+        self.assertTrue(results)
+        for item in results:
+            self.assertEqual(item.get("token"), "stored")
+            self.assertIn("start_command", item)
+            self.assertNotIn("connected", item, "a written config is not connection proof; do not fake one")
+        self.assert_concept(native, r"(?:asks|confirms).{0,60}before.{0,40}writ")
+        self.assert_concept(native, r"never replaced without")
         self.assert_concept(native, r"(?:sender|senders).{0,25}(?:permissions|policy)")
         self.assert_concept(native, r"(?:verify|confirm).{0,160}(?:reply|messaging)")
 
@@ -404,17 +416,14 @@ class AgentOnboardingTests(unittest.TestCase):
 
     def test_released_ux_preserves_script_and_observer_behavior(self):
         observer = self.page("integrations/cli/observe-events")
-        self.assert_identifiers(observer, "auth status", "--profile", "RELAY_CONFIG_PATH", "--json",
-                                "--non-interactive", "Ctrl-C", "observe=true", "observational: true",
-                                "full_sync_complete")
-        self.assert_concept(observer, r"read.only")
+        self.assert_identifiers(observer, "watch", "--profile", "RELAY_CONFIG_PATH", "--json",
+                                "Ctrl-C", "observe=true", "observational: true", "full_sync_complete")
+        self.assert_concept(observer, r"read.only|watches only")
         self.assert_concept(observer, r"(?:neither|never|not|no).{0,45}(?:ACK|acknowledg)")
         self.assert_concept(observer, r"runtime.{0,40}consumer|consumer.{0,40}runtime")
-        self.assert_links_to_pages(observer, "integrations/cli/forward-events")
-        forwarding = self.page("integrations/cli/forward-events")
-        self.assert_identifiers(forwarding, "events listen", "--profile", "--acknowledge-events",
-                                "--forward-to", "event_id", "2xx")
-        self.assert_links_to_pages(forwarding, "integrations/cli/observe-events", "guides/websocket/full-sync")
+        self.assertTrue(any(re.match(r"\s*npx relaymessenger\S* watch\b", line)
+                            for line in command_examples(observer).splitlines()))
+        self.assert_links_to_pages(observer, "integrations/native-setup", OBSERVER_PAGE)
 
     def test_optional_skill_installation_preserves_consent_and_secret_isolation(self):
         skills = self.page("integrations/skills")

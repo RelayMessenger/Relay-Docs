@@ -28,7 +28,6 @@ ROOT = Path(__file__).resolve().parents[1]
 CLI = "integrations/cli.mdx"
 AUTH = "integrations/cli/authentication.mdx"
 OBSERVE = "integrations/cli/observe-events.mdx"
-FORWARD = "integrations/cli/forward-events.mdx"
 NATIVE = "integrations/native-setup.mdx"
 SKILLS = "integrations/skills.mdx"
 MCP = "integrations/mcp.mdx"
@@ -135,19 +134,19 @@ def local_link_error(root, source, href, redirects):
         fragment = destination.fragment or fragment
 
 
-def forwarding_command_errors(text):
+def connect_command_errors(text):
+    """`connect` writes a token into a runtime's config, so its examples must
+    never show a token as a literal argument, and never point at production."""
     errors = []
-    listeners = [line for line in commands(text) if re.search(r"\bevents listen\b", line)]
-    if not listeners:
-        errors.append("forwarding task has no listener command")
-    for command in listeners:
-        for flag in ("--profile", "--acknowledge-events"):
-            if flag not in command:
-                errors.append(f"listener lacks {flag}: {command}")
-    # The public site also documents development forwarding. Never project a
-    # non-production bridge into a command that selects the production API.
+    connects = [line for line in commands(text) if re.search(r"\bconnect\b", line)]
+    if not connects:
+        errors.append("connect task has no connect command")
+    for command in connects:
+        for value in re.findall(r"--token(?:=|\s+)(\S+)", command):
+            if not re.match(r'^["\']?[$<]', value):
+                errors.append(f"connect example carries a literal token: {command}")
     if any("https://api.relayapp.im" in line for line in commands(text)):
-        errors.append("forwarding command selects the production API")
+        errors.append("connect command selects the production API")
     return errors
 
 
@@ -247,7 +246,7 @@ class IntegrationDocsTests(unittest.TestCase):
     def test_cli_routes_to_task_owners_without_copying_agent_flows(self):
         for task in ("create-agent", "list-agents", "delete-agent"):
             self.assertLink(CLI, f"/guides/agents/{task}")
-        for page in (AUTH, OBSERVE, FORWARD, NATIVE):
+        for page in (AUTH, OBSERVE, NATIVE):
             self.assertLink(CLI, "/" + page.removesuffix(".mdx"))
         for path in ROOT.glob("integrations/**/*.mdx"):
             self.assertFalse(
@@ -285,63 +284,55 @@ class IntegrationDocsTests(unittest.TestCase):
         self.assertLink(OBSERVE, "/guides/websocket/observe-events")
         text = read(OBSERVE)
         reference = read(OBSERVER_REFERENCE)
-        self.assertTrue(any("auth status" in line and "--profile" in line for line in commands(text)))
-        self.assertConcept(text, r"read.only|without consuming", "The terminal is an observer")
-        self.assertNotIn("events listen", "\n".join(commands(text)))
+        self.assertTrue(any(re.match(r"npx relaymessenger\S* watch\b", line) for line in commands(text)))
+        self.assertConcept(text, r"read.only|without consuming|watches only", "The terminal is an observer")
+        self.assertNotRegex("\n".join(commands(text)), r"\bevents\s+listen\b|--acknowledge-events")
         for marker in ("observe=true", "observational", "full_sync_complete"):
             self.assertIn(marker, reference, "Wire details belong to the observer reference")
         self.assertConcept(reference, r"(?:neither|no|without).*ack", "An observer must never ACK")
         self.assertConcept(reference, r"without.*consuming fallback", "Observer failure must not start a consumer")
         self.assertLink(OBSERVE, "/integrations/native-setup")
 
-    def test_forwarding_retains_checkpoint_consent_and_local_receiver_safety(self):
-        text = read(FORWARD)
-        self.assertEqual(forwarding_command_errors(text), [])
-        for pattern, message in (
-            (r"dedicated.*non.production", "Use a dedicated non-production identity"),
-            (r"advance\w*.*checkpoint", "Explain that forwarding consumes delivery"),
-            (r"loopback", "Forward only to loopback"),
-            (r"deduplicat\w*.*event_id", "The receiver must tolerate replay"),
-            (r"no standard webhooks signature", "Unsigned development traffic is not a Webhook"),
-            (r"not authentication", "The forwarding marker must not grant trust"),
-            (r"production api origin.*refus", "Production listener refusal must stay explicit"),
-            (r"full sync.*stateless.*refus", "A stateless listener cannot complete recovery"),
-        ):
-            self.assertConcept(text, pattern, message)
-        self.assertIn("2xx", text)
-        self.assertLink(FORWARD, "/integrations/cli/observe-events")
-        self.assertLink(FORWARD, "/guides/websocket/full-sync")
-        self.assertLink(FORWARD, "/guides/webhooks")
+    def test_connect_examples_keep_tokens_out_of_arguments(self):
+        text = read(NATIVE)
+        self.assertEqual(connect_command_errors(text), [])
+        self.assertTrue(any("--token" in line for line in commands(text)),
+                        "Show how an existing agent is connected by token")
+        self.assertConcept(text, r"secret store", "Tokens come from a secret store")
+        self.assertConcept(text, r"owner.only", "The channel file is written owner-only")
+        self.assertConcept(text, r"dry.run.{0,60}change(?:s)? nothing", "A dry run must be described as inert")
 
     def test_native_configuration_owns_consent_selection_and_success_checks(self):
         text = read(NATIVE)
-        connections = [line for line in commands(text) if "--connect " in line]
-        self.assertEqual(
-            {re.search(r"--connect (\S+)", line).group(1) for line in connections},
-            {"openclaw", "hermes", "claude-code"},
-            "Keep configuration examples for each supported runtime",
-        )
+        connections = [line for line in commands(text) if re.search(r"\bconnect\b", line)]
+        self.assertTrue(connections, "Keep a connect example on the connect page")
         for command in connections:
-            for flag in ("--profile", "--confirm-configure", "--runtime-stopped"):
-                self.assertIn(flag, command)
-        for flag in ("--runtime-home", "--runtime-config", "--runtime-state-dir",
-                     "--runtime-account", "--runtime-context", "RELAY_ALLOWED_SENDERS"):
+            self.assertRegex(command, r"^npx relaymessenger@staging connect\b|^npx relaymessenger connect\b",
+                             "connect is the front door; examples name it directly")
+        scripted = [line for line in connections if "--json" in line]
+        self.assertTrue(scripted, "Show the scripted form")
+        for command in scripted:
+            for flag in ("--yes", "--allow"):
+                self.assertIn(flag, command, "A scripted connect needs consent and senders spelled out")
+        for flag in ("--token", "--allow", "--yes", "--dry-run", "--no-start",
+                     "RELAY_ALLOWED_SENDERS", "RELAY_CHANNEL_DIR"):
             self.assertIn(flag, text)
         for pattern, message in (
-            (r"owner.private", "Credential files remain private"),
+            (r"owner.only", "Credential files remain private"),
             (r"sender permissions", "Configuration must preserve permission policy"),
-            (r"native launcher", "The helper does not own gateway launch"),
-            (r"saved token.*api origin", "Reuse the saved credential with its origin"),
-            (r"secure configuration takes precedence", "Claude secure config outranks the environment fallback"),
+            (r"never replaced without", "An existing token is not overwritten silently"),
+            (r"first message", "Pairing waits for the first message"),
             (r"reply arrives.*same chat", "Verify an actual reply, not only configuration"),
+            (r"does not\s+prove", "A written config is not connection proof"),
         ):
             self.assertConcept(text, pattern, message)
-        self.assertIn('"connected": false', text)
+        self.assertIn('"token": "stored"', text)
+        self.assertNotIn('"connected"', text, "Do not invent a connection field the CLI does not print")
         for runtime in ("openclaw", "hermes", "claude-code"):
             page = f"integrations/{runtime}.mdx"
             self.assertLink(page, "/integrations/native-setup")
-            self.assertNotIn("--confirm-configure", read(page), "Keep CLI consent instructions canonical")
-            self.assertNotIn("--runtime-stopped", read(page), "Keep CLI runtime selection canonical")
+            self.assertNotRegex("\n".join(commands(read(page))), r"\bconnect\b.*--(?:yes|allow|token)",
+                                "Keep connect flags canonical on the connect page")
 
     def test_native_admission_stays_with_the_runtime_setup(self):
         openclaw = read("integrations/openclaw.mdx")
@@ -396,12 +387,12 @@ class IntegrationDocsTests(unittest.TestCase):
         for recipe in ("send-a-message", "send-an-image", "send-a-voice-memo"):
             self.assertIn(f"/cookbook/{recipe}", read("examples/index.mdx"))
 
-    def test_safety_guard_detects_removed_ack_or_profile(self):
-        example = "```bash\nnpx relaymessenger@staging --profile dev events listen --acknowledge-events\n```\n"
-        self.assertEqual(forwarding_command_errors(example), [])
-        self.assertTrue(forwarding_command_errors(example.replace("--acknowledge-events", "")))
-        self.assertTrue(forwarding_command_errors(example.replace("--profile dev", "")))
-        self.assertTrue(forwarding_command_errors(example.replace("--profile dev", "--api-url https://api.relayapp.im")))
+    def test_safety_guard_detects_literal_token_or_production_origin(self):
+        example = "```bash\nnpx relaymessenger@staging connect claude --token \"$RELAY_AGENT_TOKEN\" --yes\n```\n"
+        self.assertEqual(connect_command_errors(example), [])
+        self.assertTrue(connect_command_errors(example.replace('"$RELAY_AGENT_TOKEN"', "rly_live_abc123")))
+        self.assertTrue(connect_command_errors(example.replace("--yes", "--api-url https://api.relayapp.im")))
+        self.assertTrue(connect_command_errors("```bash\nnpx relaymessenger@staging doctor\n```\n"))
 
     def test_fenced_headings_do_not_inflate_the_task_budget(self):
         example = "## Install\n```bash\n## shell comment, not a section\n```\n## See also\n"
