@@ -272,12 +272,12 @@ class IntegrationDocsTests(unittest.TestCase):
         text = read(AUTH)
         for command in ("auth login", "auth status", "auth logout", "--with-token", "--profile"):
             self.assertIn(command, "\n".join(commands(text)))
-        for variable in ("RELAY_AGENT_TOKEN", "RELAY_API_URL", "RELAY_CONFIG_PATH"):
+        for variable in ("RELAY_AGENT_TOKEN", "--api-url", "--profile"):
             self.assertIn(variable, text)
         self.assertConcept(text, r"never as command arguments", "Tokens must not become shell arguments")
-        self.assertConcept(text, r"(?:validat\w+.*before saving|before saving.*validat)", "Login validates before replacement")
+        self.assertConcept(text, r"save a token for this computer", "Use the shipped login description")
         self.assertConcept(text, r"logout.*(?:only|selected|that profile)", "Logout scope is local")
-        self.assertConcept(text, r"environment token.*(?:external|secret)", "Logout cannot clear an external token")
+        self.assertConcept(text, r"relay_agent_token is honored in scripts only", "Use the shipped environment rule")
         self.assertLink(AUTH, "/guides/agents/delete-agent")
 
     def test_observation_delegates_protocol_without_becoming_a_consumer(self):
@@ -309,7 +309,7 @@ class IntegrationDocsTests(unittest.TestCase):
         for command in connections:
             self.assertRegex(command, r"^npx relaymessenger@staging connect\b|^npx relaymessenger connect\b",
                              "connect is the front door; examples name it directly")
-        scripted = [line for line in connections if "--json" in line]
+        scripted = [line for line in connections if "--json" in line and "--dry-run" not in line]
         self.assertTrue(scripted, "Show the scripted form")
         for command in scripted:
             for flag in ("--yes", "--allow"):
@@ -320,13 +320,14 @@ class IntegrationDocsTests(unittest.TestCase):
         for pattern, message in (
             (r"owner.only", "Credential files remain private"),
             (r"sender permissions", "Configuration must preserve permission policy"),
-            (r"never replaced without", "An existing token is not overwritten silently"),
+            (r"take the plan as it is", "Use the shipped consent description"),
             (r"first message", "Pairing waits for the first message"),
             (r"reply arrives.*same chat", "Verify an actual reply, not only configuration"),
             (r"does not\s+prove", "A written config is not connection proof"),
         ):
             self.assertConcept(text, pattern, message)
-        self.assertIn('"token": "stored"', text)
+        self.assertIn('"dry_run": true', text)
+        self.assertIn('"agent": "claude-code"', text)
         self.assertNotIn('"connected"', text, "Do not invent a connection field the CLI does not print")
         for runtime in ("openclaw", "hermes", "claude-code"):
             page = f"integrations/{runtime}.mdx"

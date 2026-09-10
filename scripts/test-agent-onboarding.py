@@ -211,7 +211,7 @@ class AgentOnboardingTests(unittest.TestCase):
     def test_cli_creation_and_api_storage_have_separate_owners(self):
         create = self.page("guides/agents/create-agent")
         self.assert_identifiers(create, "npx relaymessenger@staging agents create",
-                                "https://api.staging.relayapp.im", "RELAY_API_URL", "--api-url")
+                                "https://api.staging.relayapp.im", "--profile", "--api-url")
         self.assert_links_to_pages(create, "guides/agents/create-agent-api", PHOTO_PAGE)
         self.assert_operation_link(create, "createAgent")
         self.assert_concept(create, r"(?:no|without).{0,90}Console account")
@@ -257,7 +257,7 @@ class AgentOnboardingTests(unittest.TestCase):
         failures = [item for item in examples if isinstance(item, dict) and "error" in item]
         self.assertEqual(len(failures), 1)
         self.assertEqual(set(failures[0]), {"profile", "api_url", "token", "error"})
-        self.assertEqual(failures[0]["error"], "Contact Card unavailable")
+        self.assertEqual(failures[0]["error"], "Agent details unavailable")
         self.assertEqual(failures[0]["token"], "stored")
         self.assert_concept(listing, r"local\w* (?:CLI )?(?:profile|config|sav)")
         self.assert_concept(listing, r"(?:each|own).{0,90}(?:saved token|saved credential)")
@@ -265,7 +265,7 @@ class AgentOnboardingTests(unittest.TestCase):
     def test_delete_keeps_identity_authorization_history_and_retry_safety(self):
         delete = self.page("guides/agents/delete-agent")
         self.assert_identifiers(delete, "--profile", "agents delete", "relay.agents.delete",
-                                "Authorization: Bearer $RELAY_AGENT_TOKEN", "RELAY_API_URL")
+                                "Authorization: Bearer $RELAY_AGENT_TOKEN", "--json")
         self.assert_operation_link(delete, "deleteAgent")
         for concept in (r"irreversib", r"archiv", r"revok", r"history.{0,35}retain",
                         r"same (?:identity|Handle)|exact Handle", r"pending.{0,30}WebSocket|WebSocket.{0,30}pending",
@@ -280,28 +280,40 @@ class AgentOnboardingTests(unittest.TestCase):
         auth = self.page("integrations/cli/authentication")
         self.assert_identifiers(auth, "Get-Content -Raw $TokenFile", "auth login --with-token",
                                 "auth status", "auth logout", "--profile", "--json", "--api-url",
-                                "RELAY_AGENT_TOKEN", "RELAY_API_URL", "RELAY_CONFIG_PATH")
+                                "RELAY_AGENT_TOKEN", "--api-url", "--profile")
         self.assert_concept(auth, r"hidden.{0,30}prompt")
         self.assert_concept(auth, r"(?:never|not).{0,35}command arguments")
-        self.assert_concept(auth, r"Contact Card")
+        self.assert_identifiers(auth, "contact-card")
+        self.assert_concept(auth, r"the name and picture people see for this agent")
         self.assert_links_to_pages(auth, "guides/agents/create-agent", "guides/agents/delete-agent",
                                    "integrations/native-setup")
 
     def test_native_consent_and_separate_connection_proof(self):
         native = self.page("integrations/native-setup")
-        self.assert_identifiers(native, "connect claude", "--token", "--allow", "--yes", "--dry-run",
+        self.assert_identifiers(native, "connect claude-code", "--token", "--allow", "--yes", "--dry-run",
                                 "--no-start", "RELAY_ALLOWED_SENDERS", "RELAY_CHANNEL_DIR")
         self.assert_links_to_pages(native, "integrations/cli/authentication", "guides/agents/create-agent",
                                    "integrations/openclaw", "integrations/hermes", "integrations/claude-code")
-        results = [node for example in self.json_examples(native)
-                   for node in objects(example) if node.get("runtime") == "claude"]
-        self.assertTrue(results)
-        for item in results:
-            self.assertEqual(item.get("token"), "stored")
-            self.assertIn("start_command", item)
-            self.assertNotIn("connected", item, "a written config is not connection proof; do not fake one")
+        results = [example for example in self.json_examples(native)
+                   if isinstance(example, dict) and example.get("dry_run") is True]
+        self.assertEqual(len(results), 1)
+        plan = results[0]
+        self.assertEqual(set(plan), {"ok", "dry_run", "agents", "steps"})
+        self.assertIs(plan["ok"], True)
+        self.assertEqual(len(plan["agents"]), 1)
+        agent = plan["agents"][0]
+        self.assertEqual(set(agent), {"agent", "files", "commands"})
+        self.assertEqual(agent["agent"], "claude-code")
+        self.assertEqual(agent["files"], ["/Users/you/.claude/channels/relay/.env"])
+        self.assertEqual(agent["commands"], [
+            "claude plugin marketplace add RelayMessenger/Relay-SDK@staging",
+            "claude plugin install relay@relay-messenger --yes",
+            "claude plugin enable relay@relay-messenger",
+        ])
+        self.assertEqual(len(plan["steps"]), 5)
+        self.assertNotIn("connected", plan, "a plan is not connection proof")
         self.assert_concept(native, r"(?:asks|confirms).{0,60}before.{0,40}writ")
-        self.assert_concept(native, r"never replaced without")
+        self.assert_concept(native, r"take the plan as it is")
         self.assert_concept(native, r"(?:sender|senders).{0,25}(?:permissions|policy)")
         self.assert_concept(native, r"(?:verify|confirm).{0,160}(?:reply|messaging)")
 
@@ -416,7 +428,7 @@ class AgentOnboardingTests(unittest.TestCase):
 
     def test_released_ux_preserves_script_and_observer_behavior(self):
         observer = self.page("integrations/cli/observe-events")
-        self.assert_identifiers(observer, "watch", "--profile", "RELAY_CONFIG_PATH", "--json",
+        self.assert_identifiers(observer, "watch", "--profile", "--json",
                                 "Ctrl-C", "observe=true", "observational: true", "full_sync_complete")
         self.assert_concept(observer, r"read.only|watches only")
         self.assert_concept(observer, r"(?:neither|never|not|no).{0,45}(?:ACK|acknowledg)")
