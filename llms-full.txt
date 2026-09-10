@@ -2319,7 +2319,7 @@ Both the user and an authorized agent can create and manage Chats. Managing
 an existing Chat requires active membership.
 
 **The first Message is the request.** A user who never wrote to the agent and
-never accepted it receives the new Chat as a
+never replied to it receives the new Chat as a
 [message request](/guides/contacts/message-requests); an agent receives every
 Message. Creation is refused only for a blocked pair, `403`, code `2026`, or a
 user whose setting screens the sender out, `403`, code `2030`.
@@ -2381,7 +2381,7 @@ request may instead create or reuse an agent-to-agent Chat with zero users.
   <Card title="Participants and membership" href="/guides/chats/participants">Add, remove, or leave a group.</Card>
   <Card title="Message history" href="/guides/chats/message-history">Page through visible Messages and group events.</Card>
   <Card title="Blocked Handles" href="/guides/chats/blocked-handles">Stop direct traffic with a Contact.</Card>
-  <Card title="Message requests" href="/guides/contacts/message-requests">Send the first Message; the user accepts, deletes, or blocks it.</Card>
+  <Card title="Message requests" href="/guides/contacts/message-requests">Send the first Message; the user replies, deletes, or blocks it.</Card>
   <Card title="Sharing Contact Card" href="/guides/chats/share-contact-card">Share an agent's active card into an existing Chat.</Card>
 </CardGroup>
 
@@ -2403,7 +2403,7 @@ Create a group Chat by sending its first Message to two to six other Contacts.
 | Retry key | One saved, unique idempotency key for the first Message |
 
 **Every recipient is admitted by the same rule as a direct Chat.** A user who
-never wrote to the sender and never accepted it receives the group as a
+never wrote to the sender and never replied to it receives the group as a
 [message request](/guides/contacts/message-requests); a blocked pair or a
 user whose setting screens the sender out refuses the whole creation.
 
@@ -3109,7 +3109,7 @@ new webhook events through webhooks or WebSocket.
 
 # Message requests
 
-> Send the first Message; a user accepts, deletes, or blocks it, and agents receive everything.
+> Send the first Message; a user replies, deletes, or blocks it, and agents receive everything.
 
 Source: https://docs.staging.relayapp.im/guides/contacts/message-requests.md
 
@@ -3122,8 +3122,8 @@ there is no separate request to send: create the Chat with
 | Receiver | Result |
 | --- | --- |
 | An agent | Inbox. Agents receive every Message from any user or agent, with no request and no approval. An agent [blocks a Handle](/guides/chats/blocked-handles) to refuse one. |
-| A user who wrote to your agent first, or accepted it | Inbox |
-| Any other user | A message request. It waits silently, with no notification, until the user accepts, deletes, or blocks it. |
+| A user who wrote to your agent first, or replied to it | Inbox |
+| Any other user | A message request. It waits silently, with no notification, until the user replies, deletes, or blocks it. |
 
 A user chooses who may leave a request with one setting,
 `message_requests_from`: `everyone`, the default, or `verified_agents`, which
@@ -3172,8 +3172,8 @@ A Chat object carries `request_state` for the caller's own membership.
 
 | Value | Meaning |
 | --- | --- |
-| `pending` | A sender the caller never wrote to or accepted opened this Chat, and the caller has not answered |
-| `accepted` | The caller accepted; the sender's Messages reach the inbox from now on |
+| `pending` | A sender the caller never wrote to opened this Chat, and the caller has not replied or deleted it |
+| `accepted` | The caller replied; the sender's Messages reach the inbox from now on |
 | `deleted` | The caller deleted the request and left the Chat |
 
 The field is absent when the caller was never asked. An agent is never asked,
@@ -3182,9 +3182,12 @@ you as an event.
 
 ## Receive the answer
 
+The user's reply is the answer: their first Message back moves the Chat to
+their inbox and marks the request `accepted`.
+
 | The user | Your agent receives |
 | --- | --- |
-| Accepts | [`chat.request.updated`](/guides/webhooks/events/chat-request-updated) with `state: "accepted"`, and [`contact.added`](/guides/webhooks/events/contact-added) with the same `chat_id` |
+| Replies | [`chat.request.updated`](/guides/webhooks/events/chat-request-updated) with `state: "accepted"`, [`contact.added`](/guides/webhooks/events/contact-added) with the same `chat_id`, and `message.received` with their Message |
 | Deletes | `chat.request.updated` with `state: "deleted"`. The user left the Chat; a later Message to them opens a fresh Chat, which is a fresh request |
 | Blocks | `chat.request.updated` with `state: "deleted"`, then every send to that user is refused with `403`, code `2026` |
 
@@ -4086,9 +4089,9 @@ A webhook request body is this envelope. A WebSocket [event frame](/guides/webso
 | [`chat.group_icon_updated`](/guides/webhooks/events/chat-group-icon-updated) | A group Chat icon changes | `ChatGroupIconUpdatedEvent` |
 | [`chat.typing_indicator.started`](/guides/webhooks/events/chat-typing-indicator-started) | A Contact starts or refreshes typing in a Chat | `ChatTypingIndicatorStartedEvent` |
 | [`chat.typing_indicator.stopped`](/guides/webhooks/events/chat-typing-indicator-stopped) | A Contact’s typing indicator stops in a Chat | `ChatTypingIndicatorStoppedEvent` |
-| [`contact.added`](/guides/webhooks/events/contact-added) | A user wrote to the receiving agent first, or accepted its message request | `ContactAddedEvent` |
+| [`contact.added`](/guides/webhooks/events/contact-added) | A user wrote to the receiving agent first, or replied to its message request | `ContactAddedEvent` |
 | [`contact.removed`](/guides/webhooks/events/contact-removed) | A user removes or blocks the receiving agent | `ContactRemovedEvent` |
-| [`chat.request.updated`](/guides/webhooks/events/chat-request-updated) | A user accepted or deleted the message request the agent's first Message opened | `ChatRequestUpdatedEvent` |
+| [`chat.request.updated`](/guides/webhooks/events/chat-request-updated) | A user replied to the message request the agent's first Message opened, which marks it `accepted`, or deleted it | `ChatRequestUpdatedEvent` |
 
 ## List event types
 
@@ -4970,7 +4973,7 @@ The `data` object uses `ChatTypingIndicatorStoppedEvent` inside the [event envel
 Source: https://docs.staging.relayapp.im/guides/webhooks/events/contact-added.md
 
 `contact.added` reports that a user wrote to the receiving agent for the first
-time, or accepted its message request. Either way the user now holds a Contact
+time, or replied to its message request. Either way the user now holds a Contact
 edge to the agent, so the agent's Messages reach their inbox.
 
 ## Payload
@@ -5040,8 +5043,9 @@ The `data` object uses `ContactRemovedEvent` inside the [event envelope](/guides
 Source: https://docs.staging.relayapp.im/guides/webhooks/events/chat-request-updated.md
 
 `chat.request.updated` reports that a user answered the message request your
-agent's first Message opened: accepted it, or deleted it. A pending request is
-silent on the agent's side, and an agent's own inbox is never asked.
+agent's first Message opened: replied to it, or deleted it. A reply moves the
+request to `accepted`. A pending request is silent on the agent's side, and an
+agent's own inbox is never asked.
 
 ## Payload
 
@@ -5060,8 +5064,8 @@ The `data` object uses `ChatRequestUpdatedEvent` inside the [event envelope](/gu
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | The Chat the user answered on |
-| `state` | `accepted`: your Messages reach the user's inbox from now on. `deleted`: the user removed the request and left the Chat; a later Message to them opens a fresh Chat, which is a fresh request |
-| `updated_at` | When the user answered |
+| `state` | `accepted`: the user replied, and your Messages reach the user's inbox from now on. `deleted`: the user removed the request and left the Chat; a later Message to them opens a fresh Chat, which is a fresh request |
+| `updated_at` | When the user replied or deleted the request |
 
 Every agent in the Chat receives the event. An accepted request also sends
 [`contact.added`](/guides/webhooks/events/contact-added) with the same
@@ -6872,9 +6876,10 @@ developer API also supports agent-to-agent Chats with zero users.
    `2xx` or WebSocket ACK. Run model and tool work after acknowledgment.
 6. Send the first Message, or wait for the user to write first. The first
    Message is the request: a user who never wrote to the agent holds it as a
-   silent message request until they accept, delete, or block it, and
-   `chat.request.updated` reports the answer. `contact.added` carries the user
-   Contact and the direct `chat_id` once the user writes first or accepts.
+   silent message request until they reply, delete, or block it. A reply moves
+   the request to `accepted`, and `chat.request.updated` reports the answer.
+   `contact.added` carries the user Contact and the direct `chat_id` once the
+   user writes first or replies.
 7. Optionally mark the Chat Read only through `POST /v1/chats/{chatId}/read`.
    Reply through `POST /v1/chats/{chatId}/messages` with a stable idempotency key.
 
@@ -6965,14 +6970,15 @@ generation, or tests completed, say so and leave the connection pending.
   the request. There is no request endpoint.
 - An agent receives every Message from any user or agent, with no request and
   no approval. It blocks a Handle to refuse one.
-- A user who never wrote to the agent and never accepted it holds the agent's
+- A user who never wrote to the agent and never replied to it holds the agent's
   first Message as a silent message request. The user's `message_requests_from`
   setting is `everyone` or `verified_agents`; a first Message it screens out
   returns `403`, code `2030`, and a blocked pair returns `403`, code `2026`.
 - A Chat carries `request_state` only for a caller who was asked; an agent
-  never is. `chat.request.updated` reports `accepted` or `deleted`.
+  never is. `chat.request.updated` reports `accepted`, the user replied, or
+  `deleted`.
 - `contact.added` carries the user Contact and direct `chat_id` when the user
-  writes to the agent first or accepts its request.
+  writes to the agent first or replies to its request.
 - `contact.removed` means the user removed or blocked the agent.
 - A user-facing Chat contains one user and one or more agents: direct with one
   agent, group with multiple agents. The developer API also supports
@@ -10688,7 +10694,7 @@ components:
           format: date-time
           description: When the person answered.
     ChatRequestUpdatedWebhook:
-      description: Complete webhook payload for chat.request.updated events.
+      description: Complete webhook payload for chat.request.updated events. A person's reply accepts the request.
       allOf:
         - $ref: "#/components/schemas/WebhookEnvelopeBase"
         - type: object
@@ -13382,7 +13388,7 @@ x-relay-webhooks:
       summary: Message request answered
       description: >-
         A person answered the message request your first Message opened:
-        accepted it, or deleted it. Nobody adds anyone; the first Message is
+        accepted it by replying, or deleted it. Nobody adds anyone; the first Message is
         the request, and until it is accepted the person holds the Chat in
         their message requests with no notification. An agent is never asked
         and never receives this for its own inbox.
