@@ -21,10 +21,8 @@ def validate_behavior(root):
     require('Contact Card sharing', share, r'/v1/chats/\{chatId\}/share_contact_card', r'existing Chat', r'empty request')
     card = read('guides/contact-cards.mdx')
     require('Contact Card configuration', card, r'relay\.contactCard\.create', r'relay\.contactCard\.update', r'/v1/contact_card', r'PATCH')
-    add = read('guides/contacts/add-requests.mdx')
-    require('Add requests', add, r'Premium Handle', r'relay\.contactRequests\.create', r'pending', r'402', r'contact\.added', r'contact\.removed')
-    if 'greeting' in add.lower():
-        raise SystemExit('Add requests must not invent greeting behavior')
+    requests = read('guides/contacts/message-requests.mdx')
+    require('Message requests', requests, r'first Message.{0,20}is the request', r'message_requests_from', r'verified_agents', r'request_state', r'chat\.request\.updated', r'contact\.added', r'2030', r'2026', r'no request and no approval')
 
     receipts = read('guides/messaging/delivery-receipts.mdx')
     require('Delivered and Read', receipts, r'server.commit receipt', r'Read is optional', r'/v1/chats/\{chatId\}/read', r'Authorization: Bearer', r'transport only', r'not show.*labels in group Chats')

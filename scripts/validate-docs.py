@@ -28,8 +28,8 @@ root = Path(__file__).resolve().parents[1]
 config = json.loads((root / "docs.json").read_text())
 
 agent_instructions = (root / "skill.md").read_text()
-# Relay Add replaced the setup greeting, so the agent's first Message follows
-# the user's Add and its contact.added event. Nothing may teach a greeting.
+# The first Message is the request (2026-09-09); contact.added still names the
+# direct Chat once the user writes first or accepts. Nothing may teach a scripted opener.
 if not re.search(r"contact\.added", agent_instructions):
     raise SystemExit("Agent instructions lost the contact.added first-Message path")
 
@@ -246,7 +246,7 @@ required_paths = [
     root / "guides/chats/share-contact-card.mdx",
     root / "guides/chats/typing-indicators.mdx",
     root / "guides/messaging/delivery-receipts.mdx",
-    root / "guides/contacts/add-requests.mdx",
+    root / "guides/contacts/message-requests.mdx",
     root / "guides/webhooks/events.mdx",
     root / "guides/websocket/index.mdx",
     root / "guides/websocket/protocol.mdx",
@@ -271,6 +271,10 @@ for stale in [
     root / "guides/platform/errors.mdx",
     root / "guides/contacts/default-agents.mdx",
     root / "guides/contacts/agent-greetings.mdx",
+    root / "guides/contacts/add-requests.mdx",
+    root / "api-reference/resources/contacts/requests/overview.mdx",
+    root / "error/codes/2xxx/2009.mdx",
+    root / "error/codes/2xxx/2027.mdx",
     root / "ecosystem",
     root / "error/codes/2xxx/2014.mdx",
 ]:
@@ -433,8 +437,8 @@ webhook_events_text = (root / "guides/webhooks/events.mdx").read_text()
 
 expected_error_codes = {
     1004, 1005, 2001, 2003, 2004, 2005, 2006,
-    2007, 2008, 2009, 2015, 2023, 2025, 2026,
-    2027, 2028, 2029, 3006,
+    2007, 2008, 2015, 2023, 2025, 2026,
+    2028, 2029, 2030, 3006,
 }
 error_paths = sorted((root / "error/codes").rglob("*.mdx"))
 actual_error_codes = {int(path.stem) for path in error_paths}
@@ -454,16 +458,15 @@ expected_error_statuses = {
     2006: ("`413`, `415`, or `422`",),
     2007: ("`404`",),
     2008: ("`429`",),
-    # contact-add.ts:465 raises 402/2009 for a Handle that cannot send Adds.
-    2009: ("`402`",),
     2015: ("`409`",),
     2023: ("`409`",),
     2025: ("`404`",),
-    # chat-contacts.ts:51 is 403; contact-add.ts:359 is 409.
-    2026: ("`403`", "`409`"),
-    2027: ("`403`",),
+    # relationships.ts admissionError: 2026 for a block, 2030 for a setting
+    # that screens the sender out; both 403, both at Chat creation.
+    2026: ("`403`",),
     2028: ("`403`",),
     2029: ("`403`",),
+    2030: ("`403`",),
     # app.ts:225 is the 500 catch-all; images.ts:466 and :507,
     # attachments.ts:153 and developer-agents.ts:140 are 503.
     3006: ("`500`", "`503`"),
@@ -507,10 +510,12 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Error 2029 and Contact.is_removable, Relay-Server PR 185, September 7, 2026.
 # Documented 403/409/422/404/413/415 responses, request caps, nullable
 # BlockedHandleEntry.reason, UpdateChatRequest minProperties, Relay-Server PR 194, September 8, 2026.
-# Source authority: Relay-Server staging commit 1a2245dd775f781b57e0d1f6f3146ebd384c90c3; CLI publication is gated separately.
+# Message requests replace add requests: request_state, chat.request.updated,
+# error 2030, contact_requests removed, Relay-Server PR 205, September 9, 2026.
+# Source authority: Relay-Server staging commit 8247505bd5f8dffccf8047b91317a68a91632068; CLI publication is gated separately.
 # The digest pins source bytes independently of the Server release commit.
 expected_openapi_sha256 = (
-    "5458497fe8db4ee7dfe6bef67f2803137575d3ea4d835748290a5c9f8d906791"
+    "f1d3f19b12e068ad68b95b41650b62af6f921ec263e37dd2d24f59a72903ce30"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
@@ -610,44 +615,18 @@ for path in openapi_paths:
 for required_path in [
     "/v1/chats/{chatId}/share_contact_card",
     "/v1/chats/{chatId}/typing",
-    "/v1/contact_requests",
     "/v1/websocket",
 ]:
     if required_path not in openapi_paths:
         raise SystemExit(f"canonical OpenAPI path missing: {required_path}")
 if "/v1/websocket-connections" in openapi_paths:
     raise SystemExit("stale WebSocket connection-credential endpoint returned")
-contact_request_operation = openapi_path_block(
-    openapi_text,
-    "/v1/contact_requests",
-)
-contact_request_methods = re.findall(
-    r"^    (get|post|put|patch|delete):$",
-    contact_request_operation,
-    re.M,
-)
-if contact_request_methods != ["post"]:
-    raise SystemExit(
-        "public contact_requests must expose only the agent POST: "
-        f"{contact_request_methods}"
-    )
+if "/v1/contact_requests" in openapi_paths:
+    raise SystemExit("retired contact_requests endpoint returned to public OpenAPI")
 for spec_name, spec_text in [
     ("canonical", openapi_text),
     ("Mintlify", mint_openapi_text),
 ]:
-    add_request_parameters = re.findall(
-        r"^        - name: ([^\n]+)$",
-        openapi_operation_block(
-            spec_text,
-            "/v1/contact_requests",
-            "post",
-        ),
-        re.M,
-    )
-    if "Idempotency-Key" in add_request_parameters:
-        raise SystemExit(
-            f"{spec_name} Add request retained Idempotency-Key"
-        )
     for send_path in [
         "/v1/chats",
         "/v1/messages",
@@ -677,7 +656,6 @@ expected_operation_ids = {
     "addParticipant",
     "blockHandle",
     "connectAgentWebSocket",
-    "createContactRequest",
     "createChat",
     "createWebhookSubscription",
     "deleteAttachment",
@@ -919,7 +897,7 @@ for stale_hook in ["Implement this in the agent backend's connection flow", "## 
         raise SystemExit("agent instructions must not add a backend connection hook")
 for required in [
     "GET /v1/chats?limit=1", "Do not require `/v1/agents/me`",
-    "A user must add an agent before that", "`contact.added`",
+    "The first\n   Message is the request", "`contact.added`", "`chat.request.updated`",
 ]:
     if required not in skill_text:
         raise SystemExit(f"setup prompt lost safety guidance: {required}")
@@ -971,7 +949,7 @@ print(
     "focused page boundaries, "
     "frontmatter, bodyless Contact Card sharing, exact delivery states and error pages, "
     "typing, exact OpenAPI event inventory, webhook retries, transport recovery, URL safety, "
-    "Add requests and exact idempotency scope, private Contact and route exclusion, Agent Read authentication, "
+    "message requests and exact idempotency scope, private Contact and route exclusion, Agent Read authentication, "
     "final automatic event paths, WebSocket disconnects, "
     "package identity, and stale-contract bans"
 )

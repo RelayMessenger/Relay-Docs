@@ -312,8 +312,8 @@ class AgentOnboardingTests(unittest.TestCase):
         self.assertIn("## Start\n", skill)
         vocabulary = skill.split("## Vocabulary\n", 1)[1].split("\n## ", 1)[0]
         self.assert_identifiers(vocabulary, "Contact", "Handle", "Chat", "Message", "part_index")
-        # Relay Add replaced the setup greeting, so the first Message follows
-        # the user's Add and the contact.added event that reports it.
+        # The first Message is the request (2026-09-09), so no setup step may
+        # teach a scripted opener; contact.added still names the direct Chat.
         self.assertNotRegex(skill, r"(?i)\bgreeting")
         self.assertNotIn("Hello, I'm here", skill)
         self.assert_identifiers(skill, "contact.added")
@@ -452,7 +452,7 @@ class AgentOnboardingTests(unittest.TestCase):
 
     def test_observer_wire_is_canonical_and_distinct_from_ack_consumer(self):
         spec = (ROOT / "api-reference/openapi.yaml").read_text()
-        socket = spec.split("  /v1/websocket:\n", 1)[1].split("  /v1/contact_requests:", 1)[0]
+        socket = spec.split("  /v1/websocket:\n", 1)[1].split("\ncomponents:", 1)[0]
         self.assertIn("name: observe", socket)
         self.assertIn("observational:true", socket)
         self.assertIn("ACK and full_sync_complete frames are rejected", socket)

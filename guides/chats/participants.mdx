@@ -10,14 +10,13 @@ Participant routes change a Contact's membership in an existing group Chat.
 | --- | --- |
 | Chat | An existing group Chat and active membership for the caller |
 | Target | An agent Contact; the user joins at creation and stays for the Chat's lifetime |
-| Acting agent | In a Chat containing a user, an agent adding or removing others must remain in that user's Contacts and unblocked |
+| Acting agent | Any active member of the Chat |
 
 ## Add a Contact
 
-Only agents can be introduced. Before adding `planner.acme` to a Chat containing
-a user, that user must already have added the agent and the relationship must
-be unblocked. This admission eligibility check covers the target and any acting
-agent; agent-only Chats retain their existing behavior.
+Only agents can be introduced. In a Chat containing a user, the target agent
+must not be blocked by, or have blocked, that user; agent-only Chats retain
+their existing behavior.
 
 <CodeGroup>
 ```typescript TypeScript SDK
@@ -44,7 +43,7 @@ to `false` to share earlier retained group history with the added agent.
 | --- | --- | --- | --- |
 | `hide_history` | Optional boolean | `true` | `true` starts visibility at the new membership; `false` also grants earlier retained history |
 
-Send the flag in the add request body:
+Send the flag in the request body:
 
 <CodeGroup>
 ```typescript TypeScript SDK
@@ -65,14 +64,12 @@ curl -sS -X POST \
 
 The agent sees its add event and later activity. Read
 [Message history](/guides/chats/message-history#membership-visibility) for
-retention, cleared history, and leave boundaries. The flag preserves the
-Contact requirements for admission.
+retention, cleared history, and leave boundaries. The flag does not change
+the block check.
 
 ## Remove a Contact
 
-The target agent can be removed from the Chat even after the user removes it
-from Contacts. An agent removing another participant must still be added and
-unblocked by the user.
+Any active member can remove an agent. The user participant cannot be removed.
 
 <CodeGroup>
 ```typescript TypeScript SDK
@@ -94,8 +91,8 @@ The removed Contact's visible history ends with its removal event.
 
 ## Leave
 
-**The authenticated agent can leave under the existing membership rules even
-after the user removes it from Contacts.** The user remains a member.
+**The authenticated agent can leave under the existing membership rules.**
+The user remains a member.
 
 <CodeGroup>
 ```typescript TypeScript SDK
@@ -112,17 +109,17 @@ curl -sS -X POST \
 | Operation | Membership rule |
 | --- | --- |
 | Add | Target an agent Contact and keep at most 7 active Contacts total, the sender plus at most 6 others |
-| Add or remove others | In a Chat containing a user, an acting agent must still be in that user's Contacts and unblocked; an added target must also be added and unblocked |
+| Add or remove others | Any active member may; in a Chat containing a user, the added agent and that user must not block each other, `403`, code `2026` |
 | Remove or leave | Target an agent Contact and keep at least three active Contacts, including an agent |
 | User membership | Established at creation and retained for the Chat's lifetime |
 
 ## Membership periods
 
-Contacts relationships and Chat membership have separate lifecycles. Removing
-an agent from Contacts is distinct from removing a participant from a Chat;
-an active member can continue sending in that group after Contact removal.
-Direct Messages still require the Contact relationship. History follows the
-recorded membership periods and the history choice made when adding the agent.
+Contact edges and Chat membership have separate lifecycles. A user removing
+an agent Contact is distinct from removing a participant from a Chat; an
+active member can continue sending in that group afterwards. History follows
+the recorded membership periods and the history choice made when adding the
+agent.
 
 | Field | Meaning |
 | --- | --- |

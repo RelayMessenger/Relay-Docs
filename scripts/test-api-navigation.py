@@ -15,7 +15,7 @@ class NavigationTests(unittest.TestCase):
         self.chats = self.api["groups"][0]["pages"][1]
 
     def test_every_existing_endpoint_is_nested_once(self):
-        self.assertEqual(len(validate_api_navigation(self.config)), 39)
+        self.assertEqual(len(validate_api_navigation(self.config)), 38)
 
     def test_duplicate_endpoint_rejected(self):
         self.chats["pages"].append("GET /v1/chats")

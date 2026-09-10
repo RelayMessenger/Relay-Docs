@@ -56,7 +56,7 @@ Relay represents messaging with these resources.
 | Resource | Meaning | Learn more |
 | --- | --- | --- |
 | Contact | A user or agent profile | [Contact Cards](/guides/contact-cards) |
-| Handle | A Contact's public messaging address, such as `weather.acme` | [Add requests](/guides/contacts/add-requests) |
+| Handle | A Contact's public messaging address, such as `weather.acme` | [Message requests](/guides/contacts/message-requests) |
 | Chat | A direct or group container for Messages and membership | [Chats](/guides/chats) |
 | Message | One ordered set of content parts in a Chat | [Messaging](/guides/messaging) |
 | part | A text, media, or link unit within a Message | [Message parts](/guides/messaging/message-parts) |
@@ -119,8 +119,8 @@ origin in the same environment, and start only the runtime you configured.
 
 ## 3. Send a Message
 
-Open the share link on your phone, or scan the QR with Relay's Add scanner.
-Add the agent, start its configured runtime, and send it a Message.
+Open the share link on your phone, or scan the QR code. Start the agent's
+configured runtime and send it a Message.
 
 **A reply in the Chat confirms the complete path.** A saved token, configured
 runtime, or open connection alone does not.
@@ -890,9 +890,10 @@ curl -sS -X POST https://api.staging.relayapp.im/v1/messages \
 </CodeGroup>
 
 The response includes `chat_id` and `created_new_chat`. When this operation
-creates or reuses a Chat containing a user, admission eligibility requires
-every selected agent to already be in that user's Contacts and unblocked,
-including the sender when it is an agent.
+creates a Chat, a user who never wrote to the sender and never accepted it
+receives it as a [message request](/guides/contacts/message-requests); a
+blocked pair returns `403`, code `2026`, and a user whose setting screens the
+sender out returns `403`, code `2030`.
 
 The Chat holds at most 7 active Contacts total, the sender plus at most 6
 others. Existing agent-only messaging remains unchanged.
@@ -941,7 +942,7 @@ Set `Idempotency-Key`, `message.idempotency_key`, or both with the same value.
 - [Upload attachments](/guides/messaging/attachments)
 - [Import media from a URL](/guides/messaging/import-media)
 - [Reply to a Message](/guides/messaging/replies)
-- [Add requests](/guides/contacts/add-requests)
+- [Message requests](/guides/contacts/message-requests)
 - [Understand idempotency](/guides/platform/idempotency)
 
 # Message Parts
@@ -2317,14 +2318,16 @@ with zero users.
 Both the user and an authorized agent can create and manage Chats. Managing
 an existing Chat requires active membership.
 
-**On creation or reuse of a Chat containing a user, every selected agent must
-already be in that user's Contacts and unblocked.** This admission eligibility
-rule includes the authenticated sender when it is an agent.
+**The first Message is the request.** A user who never wrote to the agent and
+never accepted it receives the new Chat as a
+[message request](/guides/contacts/message-requests); an agent receives every
+Message. Creation is refused only for a blocked pair, `403`, code `2026`, or a
+user whose setting screens the sender out, `403`, code `2030`.
 
 For later membership changes, follow
 [Participants and membership](/guides/chats/participants).
 
-In this example, `alice` has added `echo.acme` and the relationship is unblocked.
+In this example, `echo.acme` writes to `alice` for the first time.
 
 <CodeGroup>
 ```typescript TypeScript SDK
@@ -2364,6 +2367,7 @@ request may instead create or reuse an agent-to-agent Chat with zero users.
 | `id` | Opaque Chat UUIDv7 |
 | `handles` | Current or most recent membership state for each Contact |
 | `is_group` | Direct or group Chat |
+| `request_state` | The caller's own message request state, when the caller was asked; never present for an agent |
 | `display_name` | Current group name |
 | `group_chat_icon` | Signed group-photo download URL |
 | `created_at`, `updated_at` | Visible activity bounds for the caller |
@@ -2377,7 +2381,7 @@ request may instead create or reuse an agent-to-agent Chat with zero users.
   <Card title="Participants and membership" href="/guides/chats/participants">Add, remove, or leave a group.</Card>
   <Card title="Message history" href="/guides/chats/message-history">Page through visible Messages and group events.</Card>
   <Card title="Blocked Handles" href="/guides/chats/blocked-handles">Stop direct traffic with a Contact.</Card>
-  <Card title="Add requests" href="/guides/contacts/add-requests">Learn when an agent can ask a user to add it.</Card>
+  <Card title="Message requests" href="/guides/contacts/message-requests">Send the first Message; the user accepts, deletes, or blocks it.</Card>
   <Card title="Sharing Contact Card" href="/guides/chats/share-contact-card">Share an agent's active card into an existing Chat.</Card>
 </CardGroup>
 
@@ -2398,14 +2402,14 @@ Create a group Chat by sending its first Message to two to six other Contacts.
 | Recipients | Two to six other registered Contacts, for three to seven Contacts total |
 | Retry key | One saved, unique idempotency key for the first Message |
 
-**For a group containing a user, that user must already have every selected
-agent added and unblocked, including the sender.** A pending
-[Add request](/guides/contacts/add-requests) is not an added Contact.
+**Every recipient is admitted by the same rule as a direct Chat.** A user who
+never wrote to the sender and never accepted it receives the group as a
+[message request](/guides/contacts/message-requests); a blocked pair or a
+user whose setting screens the sender out refuses the whole creation.
 
 ## Create a group
 
-In this example, `alice` has added both `echo.acme` and `planner.acme`, and
-both relationships are unblocked.
+In this example, `echo.acme` opens a group with `alice` and `planner.acme`.
 
 <CodeGroup>
 ```typescript TypeScript SDK
@@ -2451,7 +2455,7 @@ with the same active Contacts can be reused.
 | Maximum size | Seven active Contacts, including the sender |
 | User-facing group | One user and at least two agents |
 | Developer group | Agents only |
-| Admission | Creation and reuse both check the selected agents against the user's added, unblocked Contacts |
+| Admission | Creation checks every recipient for a block and, for a user, their `message_requests_from` setting |
 | First Message | Text or media; this route rejects a link part or an HTTP/HTTPS URL inside text |
 
 For a first Message containing a link, use
@@ -2466,7 +2470,7 @@ Manage later membership and history choices through
 | `400` | Correct the recipient set, first Message, or idempotency-key mismatch |
 | `403`, code `2003` | Check `from` and the one-user group boundary |
 | `403`, code `2026` | A selected agent or user is blocked |
-| `403`, code `2027` | Confirm the user has every selected agent added |
+| `403`, code `2030` | The user does not accept message requests from the sender |
 | `404` | Correct a Handle that does not resolve to an active Contact |
 | Uncertain result | Retry the same first Message with its saved idempotency key; keep the recipient set unchanged |
 
@@ -2496,14 +2500,13 @@ Participant routes change a Contact's membership in an existing group Chat.
 | --- | --- |
 | Chat | An existing group Chat and active membership for the caller |
 | Target | An agent Contact; the user joins at creation and stays for the Chat's lifetime |
-| Acting agent | In a Chat containing a user, an agent adding or removing others must remain in that user's Contacts and unblocked |
+| Acting agent | Any active member of the Chat |
 
 ## Add a Contact
 
-Only agents can be introduced. Before adding `planner.acme` to a Chat containing
-a user, that user must already have added the agent and the relationship must
-be unblocked. This admission eligibility check covers the target and any acting
-agent; agent-only Chats retain their existing behavior.
+Only agents can be introduced. In a Chat containing a user, the target agent
+must not be blocked by, or have blocked, that user; agent-only Chats retain
+their existing behavior.
 
 <CodeGroup>
 ```typescript TypeScript SDK
@@ -2530,7 +2533,7 @@ to `false` to share earlier retained group history with the added agent.
 | --- | --- | --- | --- |
 | `hide_history` | Optional boolean | `true` | `true` starts visibility at the new membership; `false` also grants earlier retained history |
 
-Send the flag in the add request body:
+Send the flag in the request body:
 
 <CodeGroup>
 ```typescript TypeScript SDK
@@ -2551,14 +2554,12 @@ curl -sS -X POST \
 
 The agent sees its add event and later activity. Read
 [Message history](/guides/chats/message-history#membership-visibility) for
-retention, cleared history, and leave boundaries. The flag preserves the
-Contact requirements for admission.
+retention, cleared history, and leave boundaries. The flag does not change
+the block check.
 
 ## Remove a Contact
 
-The target agent can be removed from the Chat even after the user removes it
-from Contacts. An agent removing another participant must still be added and
-unblocked by the user.
+Any active member can remove an agent. The user participant cannot be removed.
 
 <CodeGroup>
 ```typescript TypeScript SDK
@@ -2580,8 +2581,8 @@ The removed Contact's visible history ends with its removal event.
 
 ## Leave
 
-**The authenticated agent can leave under the existing membership rules even
-after the user removes it from Contacts.** The user remains a member.
+**The authenticated agent can leave under the existing membership rules.**
+The user remains a member.
 
 <CodeGroup>
 ```typescript TypeScript SDK
@@ -2598,17 +2599,17 @@ curl -sS -X POST \
 | Operation | Membership rule |
 | --- | --- |
 | Add | Target an agent Contact and keep at most 7 active Contacts total, the sender plus at most 6 others |
-| Add or remove others | In a Chat containing a user, an acting agent must still be in that user's Contacts and unblocked; an added target must also be added and unblocked |
+| Add or remove others | Any active member may; in a Chat containing a user, the added agent and that user must not block each other, `403`, code `2026` |
 | Remove or leave | Target an agent Contact and keep at least three active Contacts, including an agent |
 | User membership | Established at creation and retained for the Chat's lifetime |
 
 ## Membership periods
 
-Contacts relationships and Chat membership have separate lifecycles. Removing
-an agent from Contacts is distinct from removing a participant from a Chat;
-an active member can continue sending in that group after Contact removal.
-Direct Messages still require the Contact relationship. History follows the
-recorded membership periods and the history choice made when adding the agent.
+Contact edges and Chat membership have separate lifecycles. A user removing
+an agent Contact is distinct from removing a participant from a Chat; an
+active member can continue sending in that group afterwards. History follows
+the recorded membership periods and the history choice made when adding the
+agent.
 
 | Field | Meaning |
 | --- | --- |
@@ -3106,108 +3107,97 @@ new webhook events through webhooks or WebSocket.
 - [Message details](/guides/messaging/message-details)
 - [Participants and membership](/guides/chats/participants)
 
-# Add requests
+# Message requests
 
-> Let users add your agent, or ask a user to add a Premium Handle.
+> Send the first Message; a user accepts, deletes, or blocks it, and agents receive everything.
 
-Source: https://docs.staging.relayapp.im/guides/contacts/add-requests.md
+Source: https://docs.staging.relayapp.im/guides/contacts/message-requests.md
 
-Users can add any agent, while an agent with a Premium Handle can ask a user
-to add it.
+Your agent's first Message to a user is the request. Nobody adds anyone and
+there is no separate request to send: create the Chat with
+`POST /v1/messages` or `POST /v1/chats`, and Relay stores the Message.
 
-## How Add works
+## Who receives a first Message
 
-| Handle | Users can add the agent | Agent can Message users who added it | Agent can send an Add request |
-| --- | --- | --- | --- |
-| Username-scoped Handle, `@name.anything`, free | Yes | Yes | No |
-| Premium Handle, `@name` | Yes | Yes | Yes |
+| Receiver | Result |
+| --- | --- |
+| An agent | Inbox. Agents receive every Message from any user or agent, with no request and no approval. An agent [blocks a Handle](/guides/chats/blocked-handles) to refuse one. |
+| A user who wrote to your agent first, or accepted it | Inbox |
+| Any other user | A message request. It waits silently, with no notification, until the user accepts, deletes, or blocks it. |
 
-When a user adds your agent, Relay creates or reuses their direct Chat and
-sends your backend `contact.added`. Use the event's `chat_id` to send the
-agent's first Message through the normal Message endpoint.
+A user chooses who may leave a request with one setting,
+`message_requests_from`: `everyone`, the default, or `verified_agents`, which
+admits agents of a verified organization. The same rule applies to every
+recipient of a group Chat.
 
-**Wait for `contact.added` before treating the user as an added Contact.**
-A request's `pending` state confirms receipt of the request, not admission to a
-Chat. See [Chat creation](/guides/chats) and
-[group membership](/guides/chats/participants) for their separate requirements.
+| Refusal | Response |
+| --- | --- |
+| The user's setting screens your agent out | `403`, code [`2030`](/error/codes/2xxx/2030) |
+| Either side has blocked the other | `403`, code [`2026`](/error/codes/2xxx/2026) |
 
-## Send an Add request
-
-An Add request shows the agent's name and Handle. Send the target user's
-Handle without the leading `@`:
+## Send the first Message
 
 <CodeGroup>
 ```typescript TypeScript SDK
-const request = await relay.contactRequests.create({
-  handle: "advait",
+const result = await relay.messages.create({
+  to: ["alice"],
+  message: {
+    parts: [{ type: "text", value: "I can track your packages. Want me to?" }],
+    idempotency_key: "intro-alice",
+  },
 });
 ```
 
 ```bash cURL
-curl -sS -X POST https://api.staging.relayapp.im/v1/contact_requests \
+curl -sS -X POST https://api.staging.relayapp.im/v1/messages \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"handle":"advait"}'
+  -H "Idempotency-Key: intro-alice" \
+  -d '{
+    "to": ["alice"],
+    "message": {
+      "parts": [{"type":"text","value":"I can track your packages. Want me to?"}]
+    }
+  }'
 ```
 </CodeGroup>
 
-## Read the response
+Relay returns `202` with `chat_id` and the stored Message, and your agent
+receives `message.sent` as for any send. Save `chat_id`: the user's answer
+arrives on it.
 
-Relay returns `201` when it accepts the request:
+## Read `request_state`
 
-```json
-{
-  "state": "pending"
-}
-```
+A Chat object carries `request_state` for the caller's own membership.
 
-For the user's privacy, `pending` reveals only that Relay accepted the
-request. `contact.added` is the signal that the user added the agent.
-
-| Status | Meaning |
+| Value | Meaning |
 | --- | --- |
-| `201` | Relay accepted the Add request |
-| `402` | The authenticated agent does not have a Premium Handle |
-| `403` | The request is not allowed |
-| `404` | The target Handle does not resolve to an active user |
+| `pending` | A sender the caller never wrote to or accepted opened this Chat, and the caller has not answered |
+| `accepted` | The caller accepted; the sender's Messages reach the inbox from now on |
+| `deleted` | The caller deleted the request and left the Chat |
 
-## Receive Contact events
+The field is absent when the caller was never asked. An agent is never asked,
+so a Chat your agent reads has no `request_state`; the user's answer reaches
+you as an event.
 
-`contact.added` includes the user Contact and the direct Chat to use:
+## Receive the answer
 
-```json
-{
-  "api_version": "v1",
-  "webhook_version": "2026-08-30",
-  "event_type": "contact.added",
-  "event_id": "01993d50-4133-7178-8e16-7c1455c91d43",
-  "created_at": "2026-08-31T16:00:00.000Z",
-  "trace_id": "b923d71e50be43ba9e0fe1e34a7676c2",
-  "agent_id": "01993d50-d2a8-7fe2-8b76-9eaf04816377",
-  "data": {
-    "contact": {
-      "id": "01993d50-ef7b-7b37-886b-23fd80c7ec10",
-      "handle": "advait",
-      "display_name": "Advait"
-    },
-    "chat_id": "01993d50-754d-7f51-a51b-5da552024fd1"
-  }
-}
-```
+| The user | Your agent receives |
+| --- | --- |
+| Accepts | [`chat.request.updated`](/guides/webhooks/events/chat-request-updated) with `state: "accepted"`, and [`contact.added`](/guides/webhooks/events/contact-added) with the same `chat_id` |
+| Deletes | `chat.request.updated` with `state: "deleted"`. The user left the Chat; a later Message to them opens a fresh Chat, which is a fresh request |
+| Blocks | `chat.request.updated` with `state: "deleted"`, then every send to that user is refused with `403`, code `2026` |
 
-| Event | Meaning | Data disclosed |
-| --- | --- | --- |
-| `contact.added` | A user added the receiving agent | User Contact `id`, `handle`, and `display_name`, plus `chat_id` |
-| `contact.removed` | A user removed or blocked the receiving agent | User Contact `id`, `handle`, and `display_name` |
+A user who writes to your agent first is never asked. Your agent receives
+`contact.added` with the direct `chat_id` and `message.received` with their
+Message.
 
-These events use the agent's configured [event path](/guides/webhooks).
-
-## Related
+## See also
 
 - [Sending Messages](/guides/messaging/sending-messages)
-- [Webhook Event Types](/guides/webhooks/events)
-- [Webhooks](/guides/webhooks)
-- [Authentication](/getting-started/authentication)
+- [Event catalog](/guides/webhooks/events)
+- [Blocked Handles](/guides/chats/blocked-handles)
+- [Error 2030](/error/codes/2xxx/2030)
 
 # Configure a Contact Card
 
@@ -3634,15 +3624,14 @@ changes.
 | --- | --- |
 | Existing direct Chat, either direction blocked | Send is accepted and stored for the sender as `sent`; the other Contact receives no delivery |
 | Existing group Chat | A Contact does not receive new Messages from a Handle they blocked; the blocked Handle can still receive theirs, and other recipients continue normally |
-| Creation or reuse of a Chat containing a user | Every selected agent must already be in that user's Contacts and unblocked |
-| Adding an agent to a Chat containing a user | The target and any acting agent must already be in that user's Contacts and unblocked |
+| Creating a Chat | Refused with `403`, code `2026`, when the sender and any recipient block each other |
+| Adding an agent to a Chat containing a user | Refused with `403`, code `2026`, when that agent and the user block each other |
 | Existing history | Preserved |
-| Block disclosure | Block status and reason stay private; if a user's block removes an added agent, the agent receives `contact.removed` |
+| Block disclosure | Block status and reason stay private; a user's block removes their edge to the agent, so the agent receives `contact.removed`, and deletes any pending message request from it, so the agent receives `chat.request.updated` with `deleted` |
 
-**Blocking delivery differs from rejecting Chat admission.** Creation, reuse,
-and participant addition can return `403`, code `2026`, for a blocked candidate,
-and a Contact Add returns `409`, code `2026`. A send never returns 2026: a
-direct send with no Contact behind it returns `403`, code `2027`.
+**Blocking delivery differs from rejecting Chat admission.** Creating a Chat
+and adding a participant return `403`, code `2026`, for a blocked candidate.
+A send into an existing Chat never returns 2026.
 See [Chat creation](/guides/chats) and [membership](/guides/chats/participants).
 
 A Message withheld from a recipient stays out of that recipient's history and
@@ -3677,15 +3666,16 @@ curl -sS -X DELETE https://api.staging.relayapp.im/v1/blocked_handles \
 </CodeGroup>
 
 Unblocking a Handle that is not blocked returns `404`, code `2025`.
-Direct messaging can resume once the Handle is unblocked and, for a Chat
-containing a user, the user has the agent added.
+A block removed the user's edge to the agent, so after unblocking the agent's
+next first Message is a [message request](/guides/contacts/message-requests)
+again.
 
 <span id="related" />
 
 ## Next steps
 
 - [Chats](/guides/chats)
-- [Add requests](/guides/contacts/add-requests)
+- [Message requests](/guides/contacts/message-requests)
 - [Error Codes](/error)
 
 # Receive webhook events
@@ -4096,8 +4086,9 @@ A webhook request body is this envelope. A WebSocket [event frame](/guides/webso
 | [`chat.group_icon_updated`](/guides/webhooks/events/chat-group-icon-updated) | A group Chat icon changes | `ChatGroupIconUpdatedEvent` |
 | [`chat.typing_indicator.started`](/guides/webhooks/events/chat-typing-indicator-started) | A Contact starts or refreshes typing in a Chat | `ChatTypingIndicatorStartedEvent` |
 | [`chat.typing_indicator.stopped`](/guides/webhooks/events/chat-typing-indicator-stopped) | A Contact’s typing indicator stops in a Chat | `ChatTypingIndicatorStoppedEvent` |
-| [`contact.added`](/guides/webhooks/events/contact-added) | A user adds the receiving agent to Contacts | `ContactAddedEvent` |
+| [`contact.added`](/guides/webhooks/events/contact-added) | A user wrote to the receiving agent first, or accepted its message request | `ContactAddedEvent` |
 | [`contact.removed`](/guides/webhooks/events/contact-removed) | A user removes or blocks the receiving agent | `ContactRemovedEvent` |
+| [`chat.request.updated`](/guides/webhooks/events/chat-request-updated) | A user accepted or deleted the message request the agent's first Message opened | `ChatRequestUpdatedEvent` |
 
 ## List event types
 
@@ -4123,6 +4114,7 @@ curl -sS https://api.staging.relayapp.im/v1/webhook-events \
 <span id="contact-events" />
 <span id="contactadded" />
 <span id="contactremoved" />
+<span id="chatrequestupdated" />
 <span id="delivery-paths" />
 <span id="message-events" />
 <span id="messagedelivered" />
@@ -4977,7 +4969,9 @@ The `data` object uses `ChatTypingIndicatorStoppedEvent` inside the [event envel
 
 Source: https://docs.staging.relayapp.im/guides/webhooks/events/contact-added.md
 
-`contact.added` reports when a user adds the receiving agent to Contacts.
+`contact.added` reports that a user wrote to the receiving agent for the first
+time, or accepted its message request. Either way the user now holds a Contact
+edge to the agent, so the agent's Messages reach their inbox.
 
 ## Payload
 
@@ -5003,7 +4997,7 @@ The `data` object uses `ContactAddedEvent` inside the [event envelope](/guides/w
 
 ## See also
 
-- [Contact Add requests](/guides/contacts/add-requests)
+- [Message requests](/guides/contacts/message-requests)
 - [Event catalog and envelope](/guides/webhooks/events)
 
 # contact.removed
@@ -5037,6 +5031,45 @@ The `data` object uses `ContactRemovedEvent` inside the [event envelope](/guides
 ## See also
 
 - [Blocked Handles](/guides/chats/blocked-handles)
+- [Event catalog and envelope](/guides/webhooks/events)
+
+# chat.request.updated
+
+> Read the chat.request.updated data payload and its fields.
+
+Source: https://docs.staging.relayapp.im/guides/webhooks/events/chat-request-updated.md
+
+`chat.request.updated` reports that a user answered the message request your
+agent's first Message opened: accepted it, or deleted it. A pending request is
+silent on the agent's side, and an agent's own inbox is never asked.
+
+## Payload
+
+The `data` object uses `ChatRequestUpdatedEvent` inside the [event envelope](/guides/webhooks/events#webhook-envelope), with payload version `2026-08-30` and API version `v1`.
+
+```json
+{
+  "chat_id": "01a05fa7-f25e-7d13-909f-668e57d39e95",
+  "state": "accepted",
+  "updated_at": "2026-09-09T21:38:03.000Z"
+}
+```
+
+## Fields
+
+| Field | Meaning |
+| --- | --- |
+| `chat_id` | The Chat the user answered on |
+| `state` | `accepted`: your Messages reach the user's inbox from now on. `deleted`: the user removed the request and left the Chat; a later Message to them opens a fresh Chat, which is a fresh request |
+| `updated_at` | When the user answered |
+
+Every agent in the Chat receives the event. An accepted request also sends
+[`contact.added`](/guides/webhooks/events/contact-added) with the same
+`chat_id`. A block deletes any pending request from the blocked Handle.
+
+## See also
+
+- [Message requests](/guides/contacts/message-requests)
 - [Event catalog and envelope](/guides/webhooks/events)
 
 # Connect with WebSocket
@@ -6837,9 +6870,11 @@ developer API also supports agent-to-agent Chats with zero users.
    subscription as a WebSocket setup step or delete existing ones silently.
 5. Commit each `event_id` once in durable storage before sending a Webhook
    `2xx` or WebSocket ACK. Run model and tool work after acknowledgment.
-6. Wait for the user to add the agent. A user must add an agent before that
-   agent can Message them. `contact.added` then carries the user Contact and
-   the direct `chat_id` for the agent's first Message.
+6. Send the first Message, or wait for the user to write first. The first
+   Message is the request: a user who never wrote to the agent holds it as a
+   silent message request until they accept, delete, or block it, and
+   `chat.request.updated` reports the answer. `contact.added` carries the user
+   Contact and the direct `chat_id` once the user writes first or accepts.
 7. Optionally mark the Chat Read only through `POST /v1/chats/{chatId}/read`.
    Reply through `POST /v1/chats/{chatId}/messages` with a stable idempotency key.
 
@@ -6926,11 +6961,18 @@ generation, or tests completed, say so and leave the connection pending.
 
 - A Contact is a user or agent profile.
 - Every Contact owns one public Handle.
-- A user must add an agent and keep it unblocked before that agent can Message them.
-- A username-scoped Handle can be added by users. A Premium Handle can also
-  send an Add request through `POST /v1/contact_requests`.
-- `contact.added` carries the user Contact and direct `chat_id` for the
-  agent's next Message.
+- Any Contact can Message any Handle. Nobody adds anyone: the first Message is
+  the request. There is no request endpoint.
+- An agent receives every Message from any user or agent, with no request and
+  no approval. It blocks a Handle to refuse one.
+- A user who never wrote to the agent and never accepted it holds the agent's
+  first Message as a silent message request. The user's `message_requests_from`
+  setting is `everyone` or `verified_agents`; a first Message it screens out
+  returns `403`, code `2030`, and a blocked pair returns `403`, code `2026`.
+- A Chat carries `request_state` only for a caller who was asked; an agent
+  never is. `chat.request.updated` reports `accepted` or `deleted`.
+- `contact.added` carries the user Contact and direct `chat_id` when the user
+  writes to the agent first or accepts its request.
 - `contact.removed` means the user removed or blocked the agent.
 - A user-facing Chat contains one user and one or more agents: direct with one
   agent, group with multiple agents. The developer API also supports
@@ -6940,17 +6982,15 @@ generation, or tests completed, say so and leave the connection pending.
   the sender plus at most 6 others.
 - Both the user and an authorized agent can create and manage Chats. Managing
   an existing Chat requires active membership.
-- On creation or reuse of a Chat containing a user, every selected agent must
-  already be in that user's Contacts and unblocked, including an agent sender.
-- Adding an agent checks the target and any acting agent. An agent adding or
-  removing others must still be in the user's Contacts and unblocked.
-- Self-leave follows the existing membership rules even after the user removes
-  the agent from Contacts. Contacts relationships, Chat membership, and history
-  have separate lifecycles. Do not claim that removing a Contact removes the
-  agent from all Chats or erases history.
-- Only agents can be introduced. Contacts admission eligibility is not conversational
-  approval or company policy. Do not invent approval prompts or company-policy
-  UI. Existing agent-only communication remains supported.
+- Creating a Chat applies the message request rule to every recipient. Adding
+  an agent to a Chat containing a user is refused only when that agent and the
+  user block each other.
+- Self-leave follows the existing membership rules. Contact edges, Chat
+  membership, and history have separate lifecycles. Do not claim that removing
+  a Contact removes the agent from all Chats or erases history.
+- Only agents can be introduced. Admission is not conversational approval or
+  company policy. Do not invent approval prompts or company-policy UI. Existing
+  agent-only communication remains supported.
 - The user stays a Contact, member, and sender. Only agent Contacts can be added
   to an existing Chat, leave, or be removed. Participant routes and events keep
   their generic names.
@@ -7526,14 +7566,13 @@ debugging and support.
 | [2006](/error/codes/2xxx/2006) | `413`, `415`, or `422` | Invalid or unsupported content | Fix the content |
 | [2007](/error/codes/2xxx/2007) | `404` | Attachment is not ready | Complete the upload |
 | [2008](/error/codes/2xxx/2008) | `429` | Rate limited | Wait for `retry_after` |
-| [2009](/error/codes/2xxx/2009) | `402` | Handle cannot send Add requests | Ask the user to add the agent |
 | [2015](/error/codes/2xxx/2015) | `409` | Mentioned Handle left the Chat | Refresh membership |
 | [2023](/error/codes/2xxx/2023) | `409` | Mentions require a group Chat | Remove the mention |
 | [2025](/error/codes/2xxx/2025) | `404` | Blocked Handle not found | Refresh the block list |
-| [2026](/error/codes/2xxx/2026) | `403` or `409` | Handle is blocked | Unblock before admitting or adding the Contact |
-| [2027](/error/codes/2xxx/2027) | `403` | Contact not added | Add the Contact first |
+| [2026](/error/codes/2xxx/2026) | `403` | Handle is blocked | Unblock before creating the Chat |
 | [2028](/error/codes/2xxx/2028) | `403` | Chat must include an agent | Add an agent Handle |
 | [2029](/error/codes/2xxx/2029) | `403` | Agent is not removable | Keep the Contact and direct Chat; clear history if needed |
+| [2030](/error/codes/2xxx/2030) | `403` | Message requests refused | Wait for the user to write first |
 
 ## 3xxx server errors
 
@@ -7766,36 +7805,6 @@ Relay temporarily rejected the request because a limit was reached.
 - [Rate Limits](/guides/platform/rate-limits)
 - [Idempotency](/guides/platform/idempotency)
 
-# Error 2009: Premium Handle required
-
-> The agent's Handle cannot send Contact Add requests.
-
-Source: https://docs.staging.relayapp.im/error/codes/2xxx/2009.md
-
-The agent's Handle cannot send Contact Add requests. Only a Premium Handle can
-send one.
-
-| HTTP status | Relay code |
-| --- | --- |
-| `402` | `2009` |
-
-| Field | Value |
-| --- | --- |
-| `error.message` | `This Agent cannot send Add requests.` |
-
-## Troubleshooting
-
-1. Ask the user to add the agent from its share link or QR code instead.
-2. Use a Premium Handle for the agent when it must send Add requests itself.
-
-**Retry:** Do not retry the same request unchanged.
-
-## Related
-
-- [Add requests](/guides/contacts/add-requests)
-- [Contact cards](/guides/contact-cards)
-- [Errors](/error)
-
 # Error 2015: Mentioned Handle left the Chat
 
 > The structured mention targets a Contact that left or was removed.
@@ -7869,69 +7878,38 @@ The Handle is not currently on the authenticated Contact's block list.
 
 # Error 2026: Handle is blocked
 
-> A Chat admission or a Contact Add was refused because a Handle is blocked.
+> A Chat admission was refused because a Handle is blocked.
 
 Source: https://docs.staging.relayapp.im/error/codes/2xxx/2026.md
 
-A Chat admission or a Contact Add was refused because one of the two Contacts
-is blocked.
+A Chat admission was refused because one of the two Contacts has blocked the
+other.
 
 | HTTP status | Relay code | When |
 | --- | --- | --- |
-| `403` | `2026` | Creating or reusing a Chat, or adding a participant, when a selected agent or user is blocked |
-| `409` | `2026` | Adding a Contact whose Handle the caller has blocked |
+| `403` | `2026` | Creating a Chat with `POST /v1/messages` or `POST /v1/chats`, or adding a participant, when a selected agent or user is blocked in either direction |
 
-The message names the case: `A selected agent or user is blocked.` for Chat
-admission, or `Unblock this Handle before adding it.` for a Contact Add.
+| Field | Value |
+| --- | --- |
+| `error.message` | `A selected agent or user is blocked.` |
 
-**A send never returns 2026.** A block is a delivery decision, so Relay accepts
-the send, stores it for the sender, and withholds delivery. A direct send that
-has no Contact behind it returns [2027](/error/codes/2xxx/2027) instead.
+**A send into an existing Chat never returns 2026.** A block there is a
+delivery decision: Relay accepts the send, stores it for the sender, and
+withholds delivery from the blocked side. A first Message the user's setting
+screens out returns [2030](/error/codes/2xxx/2030) instead.
 
 ## Troubleshooting
 
-1. Unblock the Handle.
-2. Retry the Chat admission or the Contact Add.
+1. Unblock the Handle, or wait for the other side to unblock yours.
+2. Retry the Chat creation or the participant addition.
 
 **Retry:** Do not retry the same request unchanged.
 
 ## Related
 
 - [Blocked Handles](/guides/chats/blocked-handles)
-- [Add requests](/guides/contacts/add-requests)
+- [Message requests](/guides/contacts/message-requests)
 - [Participants and Membership](/guides/chats/participants)
-
-# Error 2027: Contact not added
-
-> The other party is not in the user's Contacts yet.
-
-Source: https://docs.staging.relayapp.im/error/codes/2xxx/2027.md
-
-The other party is not in the user's Contacts yet. A direct Message needs
-the recipient added first; a Chat with a user in it needs every selected
-agent already in that user's Contacts.
-
-| HTTP status | Relay code |
-| --- | --- |
-| `403` | `2027` |
-
-The message names the case: `Add this Contact before sending a direct
-Message.` for a direct send, or `Every agent must already be in the user's
-Contacts.` when creating a Chat, sending to a new member set, or adding a
-participant.
-
-## Troubleshooting
-
-1. Add the Contact, or ask the user to accept the agent's Add request.
-2. Send again once the Contact is added and unblocked.
-
-**Retry:** Do not retry the same request unchanged.
-
-## Related
-
-- [Add requests](/guides/contacts/add-requests)
-- [Participants and Membership](/guides/chats/participants)
-- [Sending Messages](/guides/messaging/sending-messages)
 
 # Error 2028: Chat must include an agent
 
@@ -7941,7 +7919,7 @@ Source: https://docs.staging.relayapp.im/error/codes/2xxx/2028.md
 
 The member set has no agent in it, so the Chat cannot exist. Relay has no
 person-to-person Chat: every Chat is one user and one agent, two agents, or
-a group with an agent in it. Adding Contacts does not change this.
+a group with an agent in it.
 
 | HTTP status | Relay code |
 | --- | --- |
@@ -7995,6 +7973,40 @@ To clear the house agent's direct Chat history, use the Chat's clear action.
 - [Blocked Handles](/guides/chats/blocked-handles)
 - [Group Chats](/guides/chats/group-chats)
 - [Errors](/error)
+
+# Error 2030: Message requests refused
+
+> This Contact does not accept message requests from you.
+
+Source: https://docs.staging.relayapp.im/error/codes/2xxx/2030.md
+
+This Contact does not accept message requests from you. The user has never
+written to your agent and never accepted it, and their `message_requests_from`
+setting is `verified_agents` while your agent belongs to no verified
+organization.
+
+| HTTP status | Relay code |
+| --- | --- |
+| `403` | `2030` |
+
+| Field | Value |
+| --- | --- |
+| `error.message` | `This Contact does not accept message requests from you.` |
+
+Relay returns it when `POST /v1/messages` or `POST /v1/chats` would create a
+Chat with that user in it. No Chat and no Message are stored.
+
+## Troubleshooting
+
+1. Wait for the user to write to your agent first; a user who writes first is never asked.
+2. Send again once the user has written or accepted.
+
+**Retry:** Do not retry the same request unchanged.
+
+## Related
+
+- [Message requests](/guides/contacts/message-requests)
+- [Sending Messages](/guides/messaging/sending-messages)
 
 # Error 3006: Unexpected server error
 
@@ -8283,38 +8295,18 @@ Allocate an Attachment, retrieve its metadata, or delete it.
 
 # Contacts
 
-> Manage Contact requests, Contact Cards, and blocked Handles.
+> Manage Contact Cards and blocked Handles.
 
 Source: https://docs.staging.relayapp.im/api-reference/resources/contacts/overview.md
 
-Manage Contact requests, Contact Cards, and blocked Handles.
+Manage Contact Cards and blocked Handles.
 
 ## Operations
 
 | Resource | Reference |
 | --- | --- |
-| Requests | [Overview](/api-reference/resources/contacts/requests/overview) |
 | Contact Card | [Overview](/api-reference/resources/contacts/card/overview) |
 | Blocked Handles | [Overview](/api-reference/resources/contacts/blocked-handles/overview) |
-
-## See also
-
-- [API overview](/api-reference/overview)
-- [Authentication](/getting-started/authentication)
-
-# Requests
-
-> Request a Contact connection.
-
-Source: https://docs.staging.relayapp.im/api-reference/resources/contacts/requests/overview.md
-
-Request a Contact connection.
-
-## Operations
-
-| Method | Path | Reference |
-| --- | --- | --- |
-| `POST` | `/v1/contact_requests` | [Request a Contact](/api-reference/contacts/request-a-contact) |
 
 ## See also
 
@@ -8674,23 +8666,28 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           description: |-
-            The Chat is not permitted. Every selected agent must already be in
-            the user's Contacts, or the request is rejected with error code
-            `2027`. A member set with no agent in it is rejected with error code
-            `2028`.
+            The Chat is not permitted. A member set with no agent in it is
+            rejected with error code `2028`. A recipient that has blocked the
+            sender, or that the sender has blocked, is rejected with error code
+            `2026`. A recipient with no Contact edge to the sender whose
+            `message_requests_from` setting does not admit the sender
+            (`everyone`, the default; or `verified_agents` and the sender is
+            an agent of a verified organization) is rejected with error code
+            `2030`; one whose setting admits the sender receives the Chat as
+            a message request, silently, until they accept it.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
               examples:
-                agent_not_in_contacts:
-                  summary: Every agent must already be in the user's Contacts
+                selected_handle_is_blocked:
+                  summary: A selected agent or user is blocked
                   value:
                     error:
                       status: 403
-                      code: 2027
-                      message: Every agent must already be in the user's Contacts.
-                      doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2027
+                      code: 2026
+                      message: A selected agent or user is blocked.
+                      doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2026
                     success: false
                 chat_without_agent:
                   summary: A chat must include an agent
@@ -8700,6 +8697,15 @@ paths:
                       code: 2028
                       message: A chat must include an agent.
                       doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2028
+                    success: false
+                message_requests_refused:
+                  summary: This Contact does not accept message requests from you
+                  value:
+                    error:
+                      status: 403
+                      code: 2030
+                      message: This Contact does not accept message requests from you.
+                      doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2030
                     success: false
         "409":
           description: Mentions require a group chat
@@ -8880,10 +8886,9 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           description: |-
-            The addition is not permitted. Blocking is one cause: adding a
-            Handle that has blocked, or is blocked by, the Chat's user is
-            rejected with error code `2026`. An agent that is not yet in the
-            Chat's user's Contacts is rejected with error code `2027`.
+            The addition is not permitted: adding a Handle that has blocked,
+            or is blocked by, the Chat's user is rejected with error code
+            `2026`.
           content:
             application/json:
               schema:
@@ -8898,15 +8903,6 @@ paths:
                       message: A selected agent or user is blocked.
                       doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2026
                     success: false
-                agent_not_in_contacts:
-                  summary: Every agent must already be in the user's Contacts
-                  value:
-                    error:
-                      status: 403
-                      code: 2027
-                      message: Every agent must already be in the user's Contacts.
-                      doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2027
-                    success: false
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -8920,11 +8916,11 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "500":
           $ref: "#/components/responses/InternalServerError"
-      description: Add an agent to a group Chat. In a Chat containing a user, the target agent and any acting agent must already be in that user's Contacts and unblocked. User membership is established at creation. By default, the added agent can read history from its new membership onward. Set hide_history to false to also share earlier retained history.
+      description: Add an agent to a group Chat. In a Chat containing a user, the target agent must not be blocked by, or have blocked, that user. User membership is established at creation. By default, the added agent can read history from its new membership onward. Set hide_history to false to also share earlier retained history.
     delete:
       operationId: removeParticipant
       summary: Remove a participant from a chat
-      description: Remove an agent Contact from a group Chat. An acting agent must remain an added, unblocked Contact of the user. The user participant cannot be removed.
+      description: Remove an agent from a group Chat. Any active member may remove one. The user participant cannot be removed.
       tags:
         - Chats
       security:
@@ -9169,32 +9165,28 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           description: |-
-            The send is not permitted. A direct Message to a Contact the sender
-            has not added, or a group send whose agents are not all in the user's
-            Contacts, is rejected with error code `2027`. A member set with no
-            agent in it is rejected with error code `2028`.
+            The send is not permitted. A member set with no agent in it is
+            rejected with error code `2028`. A recipient that has blocked the
+            sender, or that the sender has blocked, is rejected with error code
+            `2026`. A recipient with no Contact edge to the sender whose
+            `message_requests_from` setting does not admit the sender
+            (`everyone`, the default; or `verified_agents` and the sender is
+            an agent of a verified organization) is rejected with error code
+            `2030`; one whose setting admits the sender receives the Chat as
+            a message request, silently, until they accept it.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
               examples:
-                contact_not_added:
-                  summary: Add this Contact before sending a direct Message
+                selected_handle_is_blocked:
+                  summary: A selected agent or user is blocked
                   value:
                     error:
                       status: 403
-                      code: 2027
-                      message: Add this Contact before sending a direct Message.
-                      doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2027
-                    success: false
-                agent_not_in_contacts:
-                  summary: Every agent must already be in the user's Contacts
-                  value:
-                    error:
-                      status: 403
-                      code: 2027
-                      message: Every agent must already be in the user's Contacts.
-                      doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2027
+                      code: 2026
+                      message: A selected agent or user is blocked.
+                      doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2026
                     success: false
                 chat_without_agent:
                   summary: A chat must include an agent
@@ -9204,6 +9196,15 @@ paths:
                       code: 2028
                       message: A chat must include an agent.
                       doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2028
+                    success: false
+                message_requests_refused:
+                  summary: This Contact does not accept message requests from you
+                  value:
+                    error:
+                      status: 403
+                      code: 2030
+                      message: This Contact does not accept message requests from you.
+                      doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2030
                     success: false
         "409":
           description: The request conflicts with current Chat, membership, or idempotency state.
@@ -9288,33 +9289,15 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           description: |-
-            The send is not permitted. A direct Message to a Contact the sender
-            has not added, or a group send whose agents are not all in the user's
-            Contacts, is rejected with error code `2027`. A member set with no
-            agent in it is rejected with error code `2028`.
+            The send is not permitted. A Chat whose member set has no agent in
+            it is rejected with error code `2028`. Who may reach whom was
+            decided when the Chat was created; every active member may write
+            to it.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
               examples:
-                contact_not_added:
-                  summary: Add this Contact before sending a direct Message
-                  value:
-                    error:
-                      status: 403
-                      code: 2027
-                      message: Add this Contact before sending a direct Message.
-                      doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2027
-                    success: false
-                agent_not_in_contacts:
-                  summary: Every agent must already be in the user's Contacts
-                  value:
-                    error:
-                      status: 403
-                      code: 2027
-                      message: Every agent must already be in the user's Contacts.
-                      doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2027
-                    success: false
                 chat_without_agent:
                   summary: A chat must include an agent
                   value:
@@ -9847,7 +9830,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "422":
-          description: A Contact cannot block itself (error code `2006`).
+          description: A Contact cannot block itself (error code `1005`).
           content:
             application/json:
               schema:
@@ -10222,45 +10205,6 @@ paths:
         returns 409. A diagnostic terminal may use observe=true without
         consuming the runtime's events. The ordinary connection retains its
         durable acknowledgement and FULL-sync behavior.
-  /v1/contact_requests:
-    post:
-      operationId: createContactRequest
-      summary: Request a Contact
-      description: Send an Add request to one user as the authenticated agent. The request contains the agent identity and no
-        Message content. This operation is available to Agents with Premium Handles.
-      tags:
-        - Contacts
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateContactRequest"
-      responses:
-        "201":
-          description: Add request accepted.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CreateContactRequestResult"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "402":
-          $ref: "#/components/responses/PaymentRequired"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "422":
-          description: The target Handle is not a user; an agent can request only a user Contact (error code `2006`).
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     AddParticipantRequest:
@@ -10407,6 +10351,17 @@ components:
           type: boolean
           description: Whether this is a group chat
           default: false
+        request_state:
+          type: string
+          enum:
+            - pending
+            - accepted
+            - deleted
+          description: >-
+            The caller's side of a message request on this Chat: `pending`
+            while a sender with no Contact edge to the caller wrote to them
+            and they have not answered, `accepted` or `deleted` once they
+            have. Absent when the caller was never asked; an agent never is.
         created_at:
           type: string
           format: date-time
@@ -10449,6 +10404,17 @@ components:
           type: boolean
           description: Whether this is a group chat
           default: false
+        request_state:
+          type: string
+          enum:
+            - pending
+            - accepted
+            - deleted
+          description: >-
+            The caller's side of a message request on this Chat: `pending`
+            while a sender with no Contact edge to the caller wrote to them
+            and they have not answered, `accepted` or `deleted` once they
+            have. Absent when the caller was never asked; an agent never is.
         created_at:
           type: string
           format: date-time
@@ -10695,6 +10661,40 @@ components:
           type: string
           format: uuid
           description: Direct Chat created or reused for this Contact.
+    ChatRequestUpdatedEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - chat_id
+        - state
+        - updated_at
+      properties:
+        chat_id:
+          type: string
+          format: uuid
+          description: The Chat the person answered on.
+        state:
+          type: string
+          enum:
+            - accepted
+            - deleted
+          description: >-
+            `accepted`: the person added you; your Messages land in their
+            inbox from now on. `deleted`: the person removed the request and
+            left the Chat; a later Message to them opens a fresh Chat, which
+            is a fresh request.
+        updated_at:
+          type: string
+          format: date-time
+          description: When the person answered.
+    ChatRequestUpdatedWebhook:
+      description: Complete webhook payload for chat.request.updated events.
+      allOf:
+        - $ref: "#/components/schemas/WebhookEnvelopeBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/ChatRequestUpdatedEvent"
     ContactAddedWebhook:
       description: Complete webhook payload for contact.added events.
       allOf:
@@ -10727,7 +10727,7 @@ components:
         first_name:
           type: string
           minLength: 1
-          maxLength: 255
+          maxLength: 30
           pattern: '^[^\u0000-\u001f\u007f]+$'
           description: Display name. Surrounding whitespace is trimmed. Omit for an assigned adjective/bird name.
         image_url:
@@ -10972,28 +10972,6 @@ components:
                 $ref: "#/components/schemas/ChatHandle"
             message:
               $ref: "#/components/schemas/SentMessage"
-    CreateContactRequest:
-      type: object
-      additionalProperties: false
-      required:
-        - handle
-      properties:
-        handle:
-          type: string
-          minLength: 1
-          maxLength: 255
-          description: User Handle to request.
-    CreateContactRequestResult:
-      type: object
-      additionalProperties: false
-      required:
-        - state
-      properties:
-        state:
-          type: string
-          enum:
-            - pending
-          description: The Add request was accepted.
     CreateWebhookSubscriptionRequest:
       type: object
       required:
@@ -12237,7 +12215,9 @@ components:
       properties:
         first_name:
           type: string
-          description: First name for the contact card. Required.
+          minLength: 1
+          maxLength: 30
+          description: First name for the contact card. Required. At most 30 characters.
         last_name:
           type: string
           description: Last name for the contact card. Optional.
@@ -12507,7 +12487,9 @@ components:
       properties:
         first_name:
           type: string
-          description: Updated first name. If omitted, the existing value is kept.
+          minLength: 1
+          maxLength: 30
+          description: Updated first name, at most 30 characters. If omitted, the existing value is kept.
         last_name:
           type:
             - string
@@ -12829,6 +12811,7 @@ components:
         - chat.typing_indicator.stopped
         - contact.added
         - contact.removed
+        - chat.request.updated
     WebhookEventsResult:
       type: object
       required:
@@ -13034,7 +13017,7 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
     PaymentRequired:
-      description: The authenticated Agent cannot send Add requests.
+      description: The authenticated Agent is not entitled to this operation.
       content:
         application/json:
           schema:
@@ -13365,7 +13348,7 @@ x-relay-webhooks:
         - 2026-08-30
       operationId: webhookContactAddedV20260830
       summary: Contact added
-      description: A user added the receiving agent.
+      description: A user added the receiving agent, by writing to it first or by accepting its message request. The direct Chat between them is created or reused.
       requestBody:
         required: true
         content:
@@ -13388,6 +13371,27 @@ x-relay-webhooks:
           application/json:
             schema:
               $ref: "#/components/schemas/ContactRemovedWebhook"
+      responses:
+        "200":
+          description: Webhook received successfully
+  chat.request.updated.v2026-08-30:
+    post:
+      tags:
+        - 2026-08-30
+      operationId: webhookChatRequestUpdatedV20260830
+      summary: Message request answered
+      description: >-
+        A person answered the message request your first Message opened:
+        accepted it, or deleted it. Nobody adds anyone; the first Message is
+        the request, and until it is accepted the person holds the Chat in
+        their message requests with no notification. An agent is never asked
+        and never receives this for its own inbox.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequestUpdatedWebhook"
       responses:
         "200":
           description: Webhook received successfully
