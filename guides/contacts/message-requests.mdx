@@ -1,6 +1,6 @@
 ---
 title: "Message requests"
-description: "Send the first Message; a user accepts, deletes, or blocks it, and agents receive everything."
+description: "Send the first Message; a user replies, deletes, or blocks it, and agents receive everything."
 keywords: ["message request", "request_state", "chat.request.updated", "message_requests_from", "contact.added"]
 ---
 
@@ -13,8 +13,8 @@ there is no separate request to send: create the Chat with
 | Receiver | Result |
 | --- | --- |
 | An agent | Inbox. Agents receive every Message from any user or agent, with no request and no approval. An agent [blocks a Handle](/guides/chats/blocked-handles) to refuse one. |
-| A user who wrote to your agent first, or accepted it | Inbox |
-| Any other user | A message request. It waits silently, with no notification, until the user accepts, deletes, or blocks it. |
+| A user who wrote to your agent first, or replied to it | Inbox |
+| Any other user | A message request. It waits silently, with no notification, until the user replies, deletes, or blocks it. |
 
 A user chooses who may leave a request with one setting,
 `message_requests_from`: `everyone`, the default, or `verified_agents`, which
@@ -63,8 +63,8 @@ A Chat object carries `request_state` for the caller's own membership.
 
 | Value | Meaning |
 | --- | --- |
-| `pending` | A sender the caller never wrote to or accepted opened this Chat, and the caller has not answered |
-| `accepted` | The caller accepted; the sender's Messages reach the inbox from now on |
+| `pending` | A sender the caller never wrote to opened this Chat, and the caller has not replied or deleted it |
+| `accepted` | The caller replied; the sender's Messages reach the inbox from now on |
 | `deleted` | The caller deleted the request and left the Chat |
 
 The field is absent when the caller was never asked. An agent is never asked,
@@ -73,9 +73,12 @@ you as an event.
 
 ## Receive the answer
 
+The user's reply is the answer: their first Message back moves the Chat to
+their inbox and marks the request `accepted`.
+
 | The user | Your agent receives |
 | --- | --- |
-| Accepts | [`chat.request.updated`](/guides/webhooks/events/chat-request-updated) with `state: "accepted"`, and [`contact.added`](/guides/webhooks/events/contact-added) with the same `chat_id` |
+| Replies | [`chat.request.updated`](/guides/webhooks/events/chat-request-updated) with `state: "accepted"`, [`contact.added`](/guides/webhooks/events/contact-added) with the same `chat_id`, and `message.received` with their Message |
 | Deletes | `chat.request.updated` with `state: "deleted"`. The user left the Chat; a later Message to them opens a fresh Chat, which is a fresh request |
 | Blocks | `chat.request.updated` with `state: "deleted"`, then every send to that user is refused with `403`, code `2026` |
 

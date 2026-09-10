@@ -512,10 +512,12 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # BlockedHandleEntry.reason, UpdateChatRequest minProperties, Relay-Server PR 194, September 8, 2026.
 # Message requests replace add requests: request_state, chat.request.updated,
 # error 2030, contact_requests removed, Relay-Server PR 205, September 9, 2026.
-# Source authority: Relay-Server staging commit 8247505bd5f8dffccf8047b91317a68a91632068; CLI publication is gated separately.
+# A person's reply accepts a message request; the request route takes deleted
+# only, Relay-Server PR 207, September 9, 2026.
+# Source authority: Relay-Server staging commit 4a3cbbed313d9011298ae5c305bd4b3f247c2dda; CLI publication is gated separately.
 # The digest pins source bytes independently of the Server release commit.
 expected_openapi_sha256 = (
-    "f1d3f19b12e068ad68b95b41650b62af6f921ec263e37dd2d24f59a72903ce30"
+    "29ab747f1069a73fa09285400df2c6e0ce4bc3a143d94ed88fb0b5e5ecd842b4"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
