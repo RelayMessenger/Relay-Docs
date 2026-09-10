@@ -48,8 +48,8 @@ CASES = {
         "git clone --branch main \\\n  https://github.com/RelayMessenger/Relay-SDK.git",
     'relay profiles add staging --api-url https://api.staging.relayapp.im':
         'relay profiles add production --api-url https://api.relayapp.im',
-    "relay auth login --profile staging --token-stdin":
-        "relay auth login --profile production --token-stdin",
+    "npx relaymessenger@staging --profile staging auth login --with-token":
+        "npx relaymessenger --profile production auth login --with-token",
     'export RELAY_STATE_DIR="$HOME/.hermes/relay-staging"':
         'export RELAY_STATE_DIR="$HOME/.hermes/relay-production"',
     '"RELAY_PROFILE": "staging"': '"RELAY_PROFILE": "production"',
@@ -72,13 +72,13 @@ class EnvironmentTests(unittest.TestCase):
             "https://github.com/RelayMessenger/Relay-SDK/tree/staging-fix/README.md\n"
             "https://github.com/RelayMessenger/Relay-SDK --ref staging-fix\n"
             "/plugin marketplace add RelayMessenger/Relay-SDK@staging-fix\n"
-            "relay --profile staging-fix events listen --acknowledge-events\n"
+            "relay --profile staging-fix watch\n"
             "relay profiles add staging-fix\n"
             "Another repository documents its `staging` branch.\n"
             'export RELAY_STATE_DIR="$HOME/.hermes/relay-staging-fix"\n'
             "Staging and production credentials belong with their respective API roots.\n"
-            'relay --profile "$RELAY_DEV_PROFILE" events listen --acknowledge-events\n'
-            "The listener refuses the production API and FULL sync.\n"
+            'relay --profile "$RELAY_DEV_PROFILE" watch\n'
+            "The watch view never takes an event from the runtime.\n"
         )
         self.assertEqual(production_text(text), text)
         self.assertFalse(validator.example_errors(text, "production"))

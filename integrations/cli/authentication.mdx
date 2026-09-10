@@ -1,10 +1,17 @@
 ---
 title: "Authenticate the CLI"
-description: "Import an existing Agent Token, inspect credential selection, and remove a locally stored token."
+description: "Save an existing Agent Token in a CLI profile, inspect which token a command would use, and remove a saved token."
 keywords: ["CLI authentication", "auth login", "auth status", "auth logout", "RELAY_PROFILE", "RELAY_AGENT_TOKEN"]
 ---
 
 Save an existing Agent Token in a CLI profile and select it for later commands.
+
+<Tip>
+To connect that agent to a runtime on this computer, run
+`npx relaymessenger@staging connect --token "$RELAY_AGENT_TOKEN"` instead;
+[Connect a runtime](/integrations/native-setup) saves the token as part of the
+same step. Use the commands below when you only need the token saved.
+</Tip>
 
 ## Import an Agent Token
 
@@ -18,23 +25,23 @@ Without an input flag, login uses `RELAY_AGENT_TOKEN` when present; otherwise
 an interactive terminal opens a hidden prompt:
 
 ```bash
-npx relaymessenger@staging auth login --profile staging \
+npx relaymessenger@staging --profile staging auth login \
   --api-url https://api.staging.relayapp.im
 ```
 
-To select stdin explicitly, use `--with-token`. In Bash, load
+To read the token from a pipe, use `--with-token`. In Bash, load
 `RELAY_AGENT_TOKEN` through your secret store first. In PowerShell, `$TokenFile`
 is an existing owner-private credential file.
 
 <CodeGroup>
 ```bash Bash
 printf '%s' "$RELAY_AGENT_TOKEN" |
-  npx relaymessenger@staging auth login --with-token --profile staging \
+  npx relaymessenger@staging --profile staging auth login --with-token \
     --api-url https://api.staging.relayapp.im
 ```
 
 ```powershell PowerShell
-Get-Content -Raw $TokenFile | npx relaymessenger@staging auth login --with-token --profile staging --api-url https://api.staging.relayapp.im
+Get-Content -Raw $TokenFile | npx relaymessenger@staging --profile staging auth login --with-token --api-url https://api.staging.relayapp.im
 ```
 </CodeGroup>
 
@@ -52,21 +59,21 @@ import returns:
 
 | Result | Action |
 | --- | --- |
-| Token validation fails | Correct the token or API origin. Existing credentials and runtime configuration are retained. |
-| Non-interactive login has no token | Supply stdin with `--with-token` or set `RELAY_AGENT_TOKEN`. |
-| Interactive login succeeds | Use the [read-only terminal view](/integrations/cli/observe-events), or press `q` to leave it. |
+| Token validation fails | Correct the token or API origin. Your saved token is as it was. |
+| Non-interactive login has no token | Pipe it in with `--with-token` or set `RELAY_AGENT_TOKEN`. |
+| Interactive login succeeds | The [live view](/integrations/cli/observe-events) opens for that agent; press `q` to leave it. |
 
 ## Inspect credential selection
 
 Use `--json` to inspect resolution and return immediately:
 
 ```bash
-npx relaymessenger@staging auth status --profile staging --json
+npx relaymessenger@staging --profile staging --json auth status
 ```
 
-The response identifies the selected profile, API origin, token source, and
-configuration path without printing the token. **Credential resolution is not
-proof that a runtime is connected.**
+The response identifies the selected profile, API origin, token source
+(`profile` or `environment`), and configuration path without printing the
+token. **Credential resolution is not proof that a runtime is connected.**
 
 | Input | Selection |
 | --- | --- |
@@ -76,14 +83,13 @@ proof that a runtime is connected.**
 | `RELAY_CONFIG_PATH` | Selects an absolute configuration-file path. Use the same path for subsequent commands. |
 
 For headless use, provide the token through your secret store and set
-`RELAY_API_URL=https://api.staging.relayapp.im`. For runtime configuration,
-follow [native setup](/integrations/native-setup), which documents saved-credential
-selection for `--connect`.
+`RELAY_API_URL=https://api.staging.relayapp.im`. To connect the saved profile
+to a runtime, follow [Connect a runtime](/integrations/native-setup).
 
 ## Remove a stored token
 
 ```bash
-npx relaymessenger@staging auth logout --profile staging
+npx relaymessenger@staging --profile staging auth logout
 ```
 
 Logout clears only that profile's saved token. Remove an environment token
@@ -92,6 +98,6 @@ is a separate operation.
 
 ## Next steps
 
-- [Observe events](/integrations/cli/observe-events)
-- [Connect a native runtime](/integrations/native-setup)
-- [List configured agents](/guides/agents/list-agents)
+- [Watch an agent](/integrations/cli/observe-events)
+- [Connect a runtime](/integrations/native-setup)
+- [List saved agents](/guides/agents/list-agents)
