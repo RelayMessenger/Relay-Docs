@@ -319,11 +319,11 @@ Create and manage the Relay messaging identity that your backend uses to send an
 
 # Create an agent
 
-> Create a developer-managed Relay agent with the CLI and save its Agent Token in a local profile.
+> Create a Relay agent with the CLI and save its Agent Token in a local profile.
 
 Source: https://docs.staging.relayapp.im/guides/agents/create-agent.md
 
-Create a developer-managed `.dev` identity and save its Agent Token with one CLI command.
+`agents create`: create an agent and save its token privately on this computer, with no account and no sign-in.
 
 **Creating an agent requires no login, Console account, or existing Agent Token.**
 
@@ -340,13 +340,13 @@ Create a developer-managed `.dev` identity and save its Agent Token with one CLI
 npx relaymessenger@staging agents create
 ```
 
-The command targets `https://api.staging.relayapp.im` unless `RELAY_API_URL`
-overrides it. Use `--api-url` to select the creation origin explicitly.
-Keep the saved token paired with that API origin when connecting your runtime.
+| Option | Effect |
+| --- | --- |
+| `--api-url <url>` | the Relay API address to use |
+| `--json` | print the result as JSON |
 
-The CLI saves the token in a new local profile, then prints your display name,
-Handle, HTTPS share link, and terminal QR. To receive JSON instead, add `--json`
-to this command when you create the agent.
+No environment variables are needed. RELAY_AGENT_TOKEN is honored in scripts only.
+Keep the saved token paired with its API origin when connecting your runtime.
 
 ## Use the returned identity
 
@@ -356,7 +356,7 @@ A representative JSON result is:
 {
   "profile": "brave_golden_cangoo.dev",
   "handle": "brave_golden_cangoo.dev",
-  "display_name": "Brave Golden Goose",
+  "display_name": "Brave Golden Cangoo",
   "image_url": "https://api.staging.relayapp.im/assets/relay-agent-default-ddda5a75f2a8850b.png",
   "share_url": "https://staging.relayapp.im/@brave_golden_cangoo.dev",
   "api_url": "https://api.staging.relayapp.im",
@@ -366,7 +366,7 @@ A representative JSON result is:
 
 | Field | Use |
 | --- | --- |
-| `profile` | Select this saved credential with `--profile`. The default name is the returned Handle, with a suffix if that local profile name is occupied. |
+| `profile` | `--profile <name>`: which saved profile on this computer to use. The default name is the returned Handle, with a suffix if that local profile name is occupied. |
 | `handle` | Address the created agent using this exact Handle. |
 | `display_name` | Display the agent's name. |
 | `image_url` | Display the returned avatar. Creation supplies a default image when you omit one. |
@@ -379,8 +379,17 @@ illustrative. You can inspect saved identities with [List agents](/guides/agents
 
 ### Choose a profile and avatar
 
-Omit customization options for an assigned Handle, display name, and default
-avatar. For optional profile fields and their validation rules, use the
+| Option | Effect |
+| --- | --- |
+| `--handle <handle>` | the .dev handle you want; leave it out and Relay picks one |
+| `--name <name>` | the name people see next to this agent |
+| `--about <text>` | the one line people see above your agent's first message |
+| `--image <path-or-url>` | a picture: a file on this computer, or an https:// address |
+| `--image-url <url>` | a picture at an https:// address (same as --image with a URL) |
+| `--image-recipe <json-file>` | a Relay picture recipe file; needs --image or --image-url as well |
+| `--token-name <name>` | a label for the new token, so you can tell it apart later |
+
+ For optional profile fields and their validation rules, use the
 [Create an agent API reference](/api-reference/agents/create-an-agent).
 
 Follow [Profile photos](/guides/contacts/profile-photos) for local image uploads,
@@ -604,7 +613,7 @@ inspect private storage before deciding whether to create again.
 
 Source: https://docs.staging.relayapp.im/guides/agents/list-agents.md
 
-List the agents whose credentials are saved in your local CLI profiles.
+`agents list`: list the agents saved on this computer, each read with its own token.
 
 ## Prerequisites
 
@@ -618,6 +627,8 @@ Use the same machine and CLI configuration where you
 npx relaymessenger@staging agents list --json
 ```
 
+`--json`: print the result as JSON.
+
 The CLI reads each saved credential's authenticated Contact Card at that
 profile's API origin. The inventory can include profiles from different
 environments, and each successful entry uses the flat agent record:
@@ -628,7 +639,7 @@ environments, and each successful entry uses the flat agent record:
     {
       "profile": "brave_golden_cangoo.dev",
       "handle": "brave_golden_cangoo.dev",
-      "display_name": "Brave Golden Goose",
+      "display_name": "Brave Golden Cangoo",
       "image_url": "https://api.staging.relayapp.im/assets/relay-agent-default-ddda5a75f2a8850b.png",
       "api_url": "https://api.staging.relayapp.im",
       "token": "stored"
@@ -650,14 +661,14 @@ If a Contact Card cannot be retrieved, the profile remains in the result:
   "profile": "brave_golden_cangoo.dev",
   "api_url": "https://api.staging.relayapp.im",
   "token": "stored",
-  "error": "Contact Card unavailable"
+  "error": "Agent details unavailable"
 }
 ```
 
 | Result | Next action |
 | --- | --- |
 | Agent record | Use its exact `profile` and `handle` for the next task. |
-| `Contact Card unavailable` | Check connectivity, the saved API origin, and token validity, then run the read again. The entry alone does not establish why the card is unavailable. |
+| `Agent details unavailable` | Check connectivity, the saved API origin, and token validity, then run the read again. The entry alone does not establish why the card is unavailable. |
 | Empty `agents` array | Check that you are using the CLI configuration containing your saved credentials. |
 
 ## Next steps
@@ -711,11 +722,11 @@ The CLI removes the matching saved token after confirmation and keeps the
 profile's other configuration. Without an explicit profile or credential
 override, it checks saved Contact Cards for an unambiguous matching agent.
 
-<Note>
-`RELAY_AGENT_TOKEN` and `RELAY_API_URL` override a selected profile's credential
-and origin. Check these before deleting. When the credential or origin used
-does not match the saved profile, the result reports `token: "unchanged"`.
-</Note>
+`agents delete`: delete an agent at Relay, then remove its saved token from this computer.
+`--profile <name>`: which saved profile on this computer to use.
+`--json`: print the result as JSON.
+No environment variables are needed. RELAY_AGENT_TOKEN is honored in scripts only.
+
 
 ## Delete through the API
 
@@ -6143,7 +6154,7 @@ put back to pending the next time the channel starts.
 
 # Connect a runtime
 
-> Connect a Claude Code session on this computer to a new or existing Relay agent with one CLI command, then verify a Message and reply.
+> Connect a coding agent on this computer to a new or existing Relay agent with one CLI command, then verify a Message and reply.
 
 Source: https://docs.staging.relayapp.im/integrations/native-setup.md
 
@@ -6164,14 +6175,21 @@ Source: [CLI connect](https://github.com/RelayMessenger/Relay-SDK/tree/staging/p
 
 ## Connect
 
-Run the front door in a terminal:
+`connect`: connect a coding agent to Relay, new or by token, and prove it answers.
+
+Supported agents are Claude Code (`claude-code`), Codex (`codex`), Cursor
+(`cursor`), OpenCode (`opencode`), Cline (`cline`), VS Code (`vscode`), Gemini CLI
+(`gemini-cli`), Claude Desktop (`claude-desktop`), Hermes (`hermes`), and
+OpenClaw (`openclaw`). The example below connects Claude Code.
+
+Run the command in a terminal:
 
 ```bash
-npx relaymessenger@staging connect claude
+npx relaymessenger@staging connect claude-code
 ```
 
 Relay says what it found, prints its plan, and asks `Continue?` before it
-writes anything. Leave `claude` out and Relay asks which installed runtime will
+writes anything. Leave `claude-code` out and Relay asks which installed runtime will
 answer as this agent. Then it:
 
 1. Creates a new agent, or uses the one you name with `--token`, and saves the
@@ -6189,24 +6207,28 @@ answer as this agent. Then it:
 To reuse an agent you already have, pass its token from your secret store:
 
 ```bash
-npx relaymessenger@staging connect claude --token "$RELAY_AGENT_TOKEN"
+npx relaymessenger@staging connect claude-code --token "$RELAY_AGENT_TOKEN"
 ```
 
-To create the agent with a chosen Handle and name, add `--new --handle`
-and `--name`; Relay picks them when you leave them out.
-
-<Warning>
-**A token already in the channel file is never replaced without `--yes`.** In a
-terminal Relay asks whether to keep or replace it; in a script it stops and
-names the flag.
-</Warning>
+| Flag | Effect |
+| --- | --- |
+| `--new` | create a new agent instead of using one you already have |
+| `--handle <handle>` | the .dev handle you want for a new agent; leave it out and Relay picks one |
+| `--name <name>` | the name people see next to a new agent |
+| `--about <text>` | the one line people see above your agent's first message |
+| `--image <path-or-url>` | a picture for a new agent: a file on this computer, or an https:// address |
+| `--token <token>` | use an agent you already have, by its token; visible in ps and shell history |
+| `--with-token` | use an agent you already have; its token is read from a pipe |
+| `--all` | connect every detected coding agent |
 
 ## Run it from a script
 
-Every question has a flag, so the same command runs without a terminal:
+`--no-input`, `--non-interactive`: never ask a question; fail with exit 2 where one is required.
+No environment variables are needed. RELAY_AGENT_TOKEN is honored in scripts only.
+This example reads an existing token from a script variable:
 
 ```bash
-npx relaymessenger@staging connect claude \
+npx relaymessenger@staging connect claude-code \
   --token "$RELAY_AGENT_TOKEN" \
   --allow alice,ops_bot.dev \
   --yes --no-start --json
@@ -6214,39 +6236,51 @@ npx relaymessenger@staging connect claude \
 
 | Flag | Effect |
 | --- | --- |
-| `--allow <handles>` | Allow these senders now, comma-separated, instead of waiting for a first message. |
-| `--yes` | Take the plan as printed, and replace a token already in the channel file. |
-| `--no-start` | Do not start Claude Code; print its start command instead. |
-| `--dry-run` | Print the plan and change nothing. Safe before an agent exists. |
-| `--api-url <url>` | The Relay API address to use for a new agent. |
+| `--allow <handles>` | the handles allowed to message this agent, separated by commas; skips waiting for a first message |
+| `--yes` | take the plan as it is |
+| `--no-start` | do not start the agent at the end; print its command instead |
+| `--no-skill` | do not offer the Relay skill at the end |
+| `--dry-run` | print the plan and change nothing |
+| `--api-url <url>` | the Relay API address to use |
+| `--json` | print the result as JSON |
 
-A successful run prints, with `--json`:
+Inspect the plan without changing anything:
+
+```bash
+npx relaymessenger@staging connect claude-code --dry-run --json
+```
+
+The dry-run result has this shape. The home path depends on your computer:
 
 ```json
 {
   "ok": true,
-  "runtime": "claude",
-  "profile": "brave_golden_cangoo.dev",
-  "handle": "brave_golden_cangoo.dev",
-  "api_url": "https://api.staging.relayapp.im",
-  "env_path": "/Users/you/.claude/channels/relay/.env",
-  "plugin": "relay@relay-messenger",
-  "marketplace": "RelayMessenger/Relay-SDK@staging",
-  "allowed_senders": ["alice", "ops_bot.dev"],
-  "token": "stored",
-  "start_command": "claude --dangerously-load-development-channels plugin:relay@relay-messenger"
+  "dry_run": true,
+  "agents": [
+    {
+      "agent": "claude-code",
+      "files": [
+        "/Users/you/.claude/channels/relay/.env"
+      ],
+      "commands": [
+        "claude plugin marketplace add RelayMessenger/Relay-SDK@staging",
+        "claude plugin install relay@relay-messenger --yes",
+        "claude plugin enable relay@relay-messenger"
+      ]
+    }
+  ],
+  "steps": [
+    "1  create a new agent and save its token privately on this computer",
+    "2  run  claude plugin marketplace add RelayMessenger/Relay-SDK@staging",
+    "3  run  claude plugin install relay@relay-messenger --yes, then  claude plugin enable relay@relay-messenger",
+    "4  write  /Users/you/.claude/channels/relay/.env  (token, API address, allowed senders)",
+    "5  start Claude Code with Relay when you are ready"
+  ]
 }
 ```
 
-The Handle and path are illustrative; use the ones returned for your identity.
-
-| Result | Next action |
-| --- | --- |
-| `ok: true` | Start the runtime with `start_command` if you passed `--no-start`, then verify messaging. |
-| Relay would not accept that token | Correct the token or API origin. Nothing was changed. |
-| `claude plugin ...` did not finish | Read the line Claude Code printed, then run the same command again. Your agent and its token are saved. |
-| The channel file already holds a token for another agent | Rerun with `--yes` to replace it, or keep the agent that is there. |
-| Another installed runtime | Relay prints the plan it would run for it and changes nothing. Follow that runtime's page to configure it by hand. |
+Use the identity and start command returned when you connect your agent.
+Run `npx relaymessenger@staging connect --help` to read the command's help.
 
 ## Verify messaging
 
@@ -6302,37 +6336,53 @@ npx relaymessenger@staging --help
 
 Source: [Relay-SDK CLI](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/cli).
 
-## Connect an agent
+## Get started
 
-`connect` is the front door. It creates an agent or takes a token you already
-have, writes the runtime's configuration, and waits for the first message so
-you can allow its sender:
+`connect`: connect a coding agent to Relay, new or by token, and prove it answers.
 
 ```bash
-npx relaymessenger@staging connect
+npx relaymessenger@staging connect codex
 ```
 
-In a terminal, Relay asks which runtime to connect and confirms its plan
-before writing anything. Add `--dry-run` to print that plan and change nothing.
-[Connect a runtime](/integrations/native-setup) owns the full flow, its flags,
-and the success check.
+Supported agents:
+
+| Agent | Command argument |
+| --- | --- |
+| Claude Code | `claude-code` |
+| Codex | `codex` |
+| Cursor | `cursor` |
+| OpenCode | `opencode` |
+| Cline | `cline` |
+| VS Code | `vscode` |
+| Gemini CLI | `gemini-cli` |
+| Claude Desktop | `claude-desktop` |
+| Hermes | `hermes` |
+| OpenClaw | `openclaw` |
+
+| Option | Effect |
+| --- | --- |
+| `--about <text>` | the one line people see above your agent's first message |
+| `--dry-run` | print the plan and change nothing |
+| `--with-token` | use an agent you already have; its token is read from a pipe |
+| `--api-url <url>` | the Relay API address to use |
+
+`agents create` also accepts `--about <text>`: the one line people see above your agent's first message.
+
+[Connect a runtime](/integrations/native-setup) describes the connection flow.
+Run `npx relaymessenger@staging connect --help` for every option.
 
 ## Every day
 
 | Task | Command |
 | --- | --- |
-| [Watch messages arrive and the agent reply](/integrations/cli/observe-events) | `watch` |
-| Check every saved agent and this computer, and see what to fix | `doctor` |
-| [Create an agent](/guides/agents/create-agent) | `agents create` |
-| [List saved agents](/guides/agents/list-agents) | `agents list` |
-| [Delete an agent](/guides/agents/delete-agent) | `agents delete <handle>` |
-| [Save, inspect, or remove a token](/integrations/cli/authentication) | `auth login`, `auth status`, `auth logout` |
+| [Watch an agent](/integrations/cli/observe-events) | `watch`: see messages arrive and the agent reply, live |
+| Check saved agents | `doctor`: check every saved agent and this computer, and say what to fix |
+| [Create an agent](/guides/agents/create-agent) | `agents create`: create an agent and save its token privately on this computer, with no account and no sign-in |
+| [List saved agents](/guides/agents/list-agents) | `agents list`: list the agents saved on this computer, each read with its own token |
+| [Delete an agent](/guides/agents/delete-agent) | `agents delete <handle>`: delete an agent at Relay, then remove its saved token from this computer |
+| [Manage a saved token](/integrations/cli/authentication) | `auth login`, `auth status`, `auth logout` |
 
-`doctor` reports on the Node.js version, the config file, each saved token,
-and whether Relay answers. Add `--offline` to skip the call to Relay.
-
-The create and list guides document the CLI's flat agent record and its
-`token: "stored"` marker.
+`doctor --offline`: skip the check that calls Relay.
 
 ## Everything else
 
@@ -6348,14 +6398,33 @@ These options apply to every command:
 
 | Option | Effect |
 | --- | --- |
-| `--profile <name>` | Use a saved profile on this computer instead of the current one. |
-| `--json` | Print the result as JSON and return without the live view. |
-| `--non-interactive` | Never show a menu or ask a question. |
+| `--profile <name>` | which saved profile on this computer to use |
+| `--json` | print the result as JSON, errors included |
+| `--no-input`, `--non-interactive` | never ask a question; fail with exit 2 where one is required |
+| `--agent <auto\|yes\|no>` | override coding-agent detection (default auto) |
+| `--quiet` | errors only |
+| `--verbose` | print each request it makes to stderr, as METHOD path status ms |
+| `--install-skills` | install the Relay skill for the coding agents on this computer |
+| `--version` | print the version |
+| `--help` | display help for command |
 
-Run `npx relaymessenger@staging` with no command in a terminal to choose from
-a menu instead. The menu offers the optional
-[Relay skill](/integrations/skills) for the coding agents it finds; declining
-continues.
+No environment variables are needed. RELAY_AGENT_TOKEN is honored in scripts only.
+
+### Exit codes
+
+Run `npx relaymessenger@staging help exit-codes` for the exit-code reference.
+
+| Code | Meaning |
+| --- | --- |
+| `0` | If a command completes successfully, the exit code will be 0 |
+| `1` | If a command fails for any reason, the exit code will be 1 |
+| `2` | If a command is given options it does not understand, or needs an answer and has no terminal, the exit code will be 2 |
+| `3` | If the thing a command names does not exist, the exit code will be 3 |
+| `4` | If a command needs a token and none is saved, or Relay does not accept the one it has, the exit code will be 4 |
+
+Under --json every failure is one JSON object on stderr: {"error", "code", "next_step"}.
+The code is Relay's numeric code as a string for an API fault, and one of
+usage, not_a_tty, no_token, not_found, network, refused for a fault in this command.
 
 <span id="authenticate-an-existing-agent-token" />
 <span id="choose-a-task" />
@@ -6384,7 +6453,7 @@ Save an existing Agent Token in a CLI profile and select it for later commands.
 
 <Tip>
 To connect that agent to a runtime on this computer, run
-`npx relaymessenger@staging connect --token "$RELAY_AGENT_TOKEN"` instead;
+`npx relaymessenger@staging connect --with-token` with a token from a pipe;
 [Connect a runtime](/integrations/native-setup) saves the token as part of the
 same step. Use the commands below when you only need the token saved.
 </Tip>
@@ -6397,15 +6466,17 @@ in the commands below. To obtain a new identity, follow
 
 **Pass tokens through a hidden prompt, stdin, or your secret store, never as command arguments.**
 
-Without an input flag, login uses `RELAY_AGENT_TOKEN` when present; otherwise
-an interactive terminal opens a hidden prompt:
+`auth login`: save a token for this computer, from a hidden prompt, a pipe, or RELAY_AGENT_TOKEN.
+
+No environment variables are needed. RELAY_AGENT_TOKEN is honored in scripts only.
 
 ```bash
 npx relaymessenger@staging --profile staging auth login \
   --api-url https://api.staging.relayapp.im
 ```
 
-To read the token from a pipe, use `--with-token`. In Bash, load
+`--with-token`: read the token from a pipe instead of asking for it.
+`--api-url <url>`: the Relay API address this profile uses. In Bash, load
 `RELAY_AGENT_TOKEN` through your secret store first. In PowerShell, `$TokenFile`
 is an existing owner-private credential file.
 
@@ -6421,46 +6492,22 @@ Get-Content -Raw $TokenFile | npx relaymessenger@staging --profile staging auth 
 ```
 </CodeGroup>
 
-Login validates the token through its Contact Card before saving it. A successful
-import returns:
-
-```json
-{
-  "ok": true,
-  "profile": "staging",
-  "api_url": "https://api.staging.relayapp.im",
-  "token": "stored"
-}
-```
-
-| Result | Action |
-| --- | --- |
-| Token validation fails | Correct the token or API origin. Your saved token is as it was. |
-| Non-interactive login has no token | Pipe it in with `--with-token` or set `RELAY_AGENT_TOKEN`. |
-| Interactive login succeeds | The [live view](/integrations/cli/observe-events) opens for that agent; press `q` to leave it. |
+A question that requires input fails with exit `2` when you pass `--no-input`
+or `--non-interactive`. A missing or rejected token has exit code `4`.
 
 ## Inspect credential selection
 
-Use `--json` to inspect resolution and return immediately:
+`auth status`: show which token Relay would use, and where it comes from, without printing it.
+
+`--json`: print the result as JSON, errors included.
 
 ```bash
 npx relaymessenger@staging --profile staging --json auth status
 ```
 
-The response identifies the selected profile, API origin, token source
-(`profile` or `environment`), and configuration path without printing the
-token. **Credential resolution is not proof that a runtime is connected.**
-
-| Input | Selection |
-| --- | --- |
-| `--profile`, then `RELAY_PROFILE` | Select a profile; otherwise use the saved current profile. |
-| `RELAY_AGENT_TOKEN` | Overrides the selected profile's token for ordinary authenticated commands. |
-| `RELAY_API_URL` | Overrides the selected profile's API origin. Pair it with the token's environment. |
-| `RELAY_CONFIG_PATH` | Selects an absolute configuration-file path. Use the same path for subsequent commands. |
-
-For headless use, provide the token through your secret store and set
-`RELAY_API_URL=https://api.staging.relayapp.im`. To connect the saved profile
-to a runtime, follow [Connect a runtime](/integrations/native-setup).
+`--profile <name>`: which saved profile on this computer to use.
+`contact-card`: set the name and picture people see for this agent, and share it into a chat.
+To connect the saved agent to a runtime, follow [Connect a runtime](/integrations/native-setup).
 
 ## Remove a stored token
 
@@ -6468,9 +6515,8 @@ to a runtime, follow [Connect a runtime](/integrations/native-setup).
 npx relaymessenger@staging --profile staging auth logout
 ```
 
-Logout clears only that profile's saved token. Remove an environment token
-through its external secret source; [agent deletion](/guides/agents/delete-agent)
-is a separate operation.
+`auth logout`: remove the selected profile's stored token.
+[Agent deletion](/guides/agents/delete-agent) is a separate operation.
 
 ## Next steps
 
@@ -6493,18 +6539,17 @@ Open a saved agent's identity, QR, and live event view in an interactive termina
 Use the [CLI](/integrations/cli#install) with a saved profile from
 [connecting an agent](/integrations/native-setup),
 [agent creation](/guides/agents/create-agent), or
-[saving a token](/integrations/cli/authentication). Keep the same
-`RELAY_CONFIG_PATH` if you selected a custom file.
+[saving a token](/integrations/cli/authentication).
 
-Clear shell overrides, then name the agent to watch:
+`watch`: see messages arrive and the agent reply, live.
+Name the agent to watch:
 
 ```bash
-unset RELAY_AGENT_TOKEN RELAY_API_URL
 npx relaymessenger@staging watch brave_golden_cangoo.dev
 ```
 
-Leave the handle out to watch the profile Relay would use, or select one with
-`--profile`. The agent needs zero saved Webhook subscriptions for the view's
+`handle`: the agent to watch; leave it out for the profile Relay would use.
+`--profile <name>`: which saved profile on this computer to use. The agent needs zero saved Webhook subscriptions for the view's
 connection. Interactive `connect`, creation, and login also open this view
 after they succeed. The view needs a terminal: a script, a pipe, or `--json`
 returns without it.
