@@ -21,7 +21,7 @@ from urllib.request import Request, urlopen
 import zlib
 
 import origins
-from hosted_cache import canonical_cache_pairs
+from hosted_cache import CANONICAL_PATHS, canonical_cache_pairs
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENT_SOURCES = ("skill.md", "llms.txt", "llms-full.txt")
@@ -216,6 +216,30 @@ def make_fetch(base_url, opener=urlopen):
 def response_pair(canonical, busted):
     return {name: {key: value for key, value in response.items() if key != "body"}
             for name, response in (("canonical", canonical), ("cache_busted", busted))}
+
+
+def hosted_source_pairs(fetch, expected, require_edge_fresh=False):
+    """Check published source bytes; keep non-source cache checks unchanged."""
+    for path in CANONICAL_PATHS:
+        if path not in expected:
+            yield from canonical_cache_pairs(fetch, paths=[path])
+            continue
+        canonical = fetch(path)
+        busted = fetch(path, cache_busted=True)
+        if busted["body"] != expected[path]:
+            raise SystemExit(f"/{path} served body does not match expected checkout source bytes")
+        if canonical["body"] != busted["body"]:
+            if require_edge_fresh:
+                raise SystemExit(
+                    f"/{path} canonical body {canonical['sha256']} does not match "
+                    f"current origin body {busted['sha256']}"
+                )
+            headers = canonical["headers"]
+            max_age = re.search(r'(?:^|,)\s*max-age\s*=\s*"?(\d+)',
+                                headers.get("cache-control", ""), re.I)
+            print(f"/{path}: edge cache is {headers.get('age', 'unknown')} s behind origin "
+                  f"(max-age {max_age[1] if max_age else 'unknown'}); origin matches checkout")
+        yield path, canonical, busted
 
 
 def check_brand(fetch, root_html, root, settings):
@@ -494,13 +518,13 @@ def run(args, root=ROOT, fetch=None, get_json=github_json):
     fetch = fetch or make_fetch(args.base_url)
     expected = {name: (root / name).read_bytes() for name in AGENT_SOURCES}
     pages, bodies = {}, {}
-    for path, canonical, busted in canonical_cache_pairs(fetch, expected):
-        text = canonical["body"].decode("utf-8")
+    for path, canonical, busted in hosted_source_pairs(fetch, expected, args.require_edge_fresh):
+        text = busted["body"].decode("utf-8")
         for label, pattern in deleted_wording.items():
             if pattern.search(text):
                 raise SystemExit(f"/{path} contains deleted wording: {label}")
         pages["/" + path] = response_pair(canonical, busted)
-        bodies[path] = canonical["body"]
+        bodies[path] = busted["body"]
     versions = [pages[path]["canonical"]["headers"].get("x-served-version")
                 or pages[path]["canonical"]["headers"].get("x-version") for path in ("/", "/guides")]
     if not versions[0] or versions[0] != versions[1]:
@@ -525,6 +549,7 @@ def argument_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("base_url")
     parser.add_argument("--production", action="store_true", help="Select production checks; source bytes remain exact")
+    parser.add_argument("--require-edge-fresh", action="store_true", help="Also require canonical source bytes to match origin")
     parser.add_argument("--all-pages", action="store_true", help="Check every navigation-authored route and its Markdown")
     parser.add_argument("--workers", type=int, default=6, help="Concurrent page checks, 1–16 (default: 6)")
     parser.add_argument("--expected-sha")
@@ -540,7 +565,7 @@ def main(argv=None):
     if args.receipt:
         args.receipt.parent.mkdir(parents=True, exist_ok=True)
         args.receipt.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
-    print(f"validated {receipt['environment']} hosted docs: exact canonical/cache-busted and checkout bytes, "
+    print(f"validated {receipt['environment']} hosted docs: exact origin and checkout bytes, "
           f"navigation, contract IDs, and {receipt['brand']['colors']} favicon colors")
     if args.all_pages:
         print(f"validated HTML and Markdown for {receipt['authored_pages']} authored pages")

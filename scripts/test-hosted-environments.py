@@ -3,7 +3,8 @@
 import argparse
 import hashlib
 import importlib.util
-from io import BytesIO
+from contextlib import redirect_stdout
+from io import BytesIO, StringIO
 import json
 from pathlib import Path
 import tempfile
@@ -82,7 +83,7 @@ class HostedEnvironmentTests(unittest.TestCase):
 
     def args(self, **overrides):
         values = dict(base_url="https://docs.test", production=False, all_pages=False,
-                      workers=2, expected_sha=None, receipt=None)
+                      workers=2, expected_sha=None, receipt=None, require_edge_fresh=False)
         values.update(overrides)
         return argparse.Namespace(**values)
 
@@ -231,6 +232,62 @@ class HostedEnvironmentTests(unittest.TestCase):
                     if url.endswith("/status") else [candidate])
             with self.assertRaises(SystemExit):
                 hosted.check_deployment(sha, environment, "https://other.test", get_json)
+
+    def run_origin_fixture(self, edge_stale=False, origin_stale=False, strict=False):
+        self.fixture()
+        class HTTPResponse(BytesIO):
+            status = 200
+            headers = {"X-Version": "same-deployment", "Age": "20179",
+                       "Cache-Control": "public, max-age=86400"}
+
+        def opener(request, timeout):
+            url = urlsplit(request.full_url)
+            path = url.path.lstrip("/")
+            if path == "generated.png":
+                path = "/generated.png?v=1"
+            body = self.bodies[path]
+            if path == "llms-full.txt":
+                busted = "relay_cache_probe" in parse_qs(url.query)
+                if (origin_stale and busted) or (edge_stale and not busted):
+                    body = b"stale source bytes"
+            result = HTTPResponse(body)
+            result.url = request.full_url
+            return result
+
+        with patch.object(hosted.origins, "target", return_value="staging"), \
+                patch.object(hosted, "png_color_counts", return_value={"opaque": 100, "black": 100, "blue": 0}):
+            return hosted.run(self.args(require_edge_fresh=strict), self.root,
+                              hosted.make_fetch("https://docs.test", opener))
+
+    def test_origin_matches_stale_edge_passes_with_lag(self):
+        output = StringIO()
+        with redirect_stdout(output):
+            receipt = self.run_origin_fixture(edge_stale=True)
+        self.assertEqual(receipt["verdict"], "passed")
+        self.assertEqual(output.getvalue(), "/llms-full.txt: edge cache is 20179 s behind origin "
+                         "(max-age 86400); origin matches checkout\n")
+        pair = receipt["pages"]["/llms-full.txt"]
+        self.assertNotEqual(pair["canonical"]["sha256"], pair["cache_busted"]["sha256"])
+
+    def test_origin_mismatch_fails_with_existing_message(self):
+        for edge_stale in (False, True):
+            with self.subTest(edge_stale=edge_stale), self.assertRaisesRegex(
+                    SystemExit, r"^/llms-full.txt served body does not match expected checkout source bytes$"):
+                self.run_origin_fixture(edge_stale=edge_stale, origin_stale=True)
+
+    def test_matching_origin_and_edge_pass_silently(self):
+        output = StringIO()
+        with redirect_stdout(output):
+            receipt = self.run_origin_fixture()
+        self.assertEqual(receipt["verdict"], "passed")
+        self.assertEqual(output.getvalue(), "")
+
+    def test_require_edge_fresh_rejects_stale_edge(self):
+        self.assertFalse(hosted.argument_parser().parse_args(["https://docs.test"]).require_edge_fresh)
+        self.assertTrue(hosted.argument_parser().parse_args(
+            ["https://docs.test", "--require-edge-fresh"]).require_edge_fresh)
+        with self.assertRaisesRegex(SystemExit, "canonical body .* does not match current origin body"):
+            self.run_origin_fixture(edge_stale=True, strict=True)
 
     def test_http_errors_and_empty_bodies_fail_and_query_is_cache_busted(self):
         calls = []
