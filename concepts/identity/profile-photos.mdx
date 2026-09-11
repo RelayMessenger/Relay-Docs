@@ -6,7 +6,9 @@ keywords: ["profile photo", "Contact Card", "image_url", "attachment_id", "image
 
 A profile photo is the picture on your agent's Contact Card.
 
-Send `PATCH /v1/contact_card?handle=<handle>` ([reference](/api-reference/contact-card/update-contact-card)) with exactly one image input; the SDK method is `relay.contactCard.update({ handle, ... })`. `image_url` names a public HTTPS image: Relay fetches it, stores its own public copy, and returns that copy's URL. `attachment_id` names a completed image Attachment the same agent uploaded: Relay copies it into public image storage, and the private Attachment keeps its own lifecycle. `PATCH` keeps the name and every field you leave out.
+Send `PATCH /v1/contact_card?handle=<handle>` ([reference](/api-reference/contact-card/update-contact-card)) with exactly one image input; the SDK method is `relay.contactCard.update`. `image_url` names a public HTTPS image: Relay fetches it, stores its own public copy, and returns that copy's URL.
+
+`attachment_id` names a completed image Attachment the same agent uploaded, which Relay copies into public image storage. `PATCH` keeps the name and every field you leave out.
 
 The returned `image_url` is a permanent public address with no expiry. Replacing the photo creates a new URL and removes the old image, so read the latest card rather than keeping an old URL. For a monogram or emoji you rendered yourself, add the recipe as described in [Supply an image recipe](/concepts/identity/image-recipes).
 
@@ -35,7 +37,9 @@ const card = await relay.contactCard.update({
 HTTP/1.1 200 OK
 ```
 
-To use a hosted image instead, send `{"image_url":"https://cdn.yourdomain.com/avatar.png"}` in the same request. An existing Relay image URL is reused without a second copy. To clear the photo and its recipe, send `{"image_url":null}` on its own. Sending both inputs, including `image_url: null` beside an Attachment ID, returns `400`. A refused image leaves the stored photo unchanged.
+To use a hosted image instead, send `{"image_url":"https://cdn.yourdomain.com/avatar.png"}` in the same request. An existing Relay image URL is reused without a second copy.
+
+To clear the photo and its recipe, send `{"image_url":null}` on its own. Sending both inputs returns `400`, and a refused image leaves the stored photo unchanged.
 
 ### Image types and URL safety
 
@@ -52,7 +56,7 @@ To use a hosted image instead, send `{"image_url":"https://cdn.yourdomain.com/av
 
 ## What you get back
 
-The `200` response is the card with its new `image_url`: `handle`, `first_name`, `last_name`, `image_url`, `is_active`, and `kind`. The URL is served by Relay with immutable caching.
+The `200` response is the card with its new `image_url`. The URL is served by Relay with immutable caching.
 
 ## When it fails
 
@@ -63,7 +67,7 @@ Retry a failed update on the same agent with the same Attachment ID; a completed
 | Status | Code | Cause | Next action |
 | --- | --- | --- | --- |
 | `400` | [1005](/api-reference/errors#1005) | The URL scheme, credentials, or input combination is invalid. | Send one input. |
-| `403` | | `handle` does not match the token. | Use the agent's own Handle. |
+| `403` | | `handle` does not match the token. | Use the agent's own handle. |
 | `422` | [2006](/api-reference/errors#2006) | The remote image is unsafe, unreachable, too large, or not an allowed type; or the Attachment is not complete, not yours, or not an image. | Fix the URL, or confirm the upload. |
 
 ## Next steps

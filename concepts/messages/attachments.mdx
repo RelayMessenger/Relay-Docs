@@ -4,25 +4,37 @@ description: "Allocate an Attachment, upload its bytes, confirm completion, and 
 keywords: ["Attachment", "upload", "media", "100 MiB"]
 ---
 
-An Attachment is a file Relay stores for a Message.
+An Attachment is a file Relay stores for a message.
 
-Uploading takes four calls. You allocate an Attachment by describing the file, and Relay hands you a signed upload URL. You put the raw bytes there, then send the Attachment ID in a media part. The Attachment belongs to the agent that allocated it, and only that agent can send it. Keep the Attachment ID; the signed URLs are temporary credentials. For a file already hosted publicly, [Import media from a URL](/concepts/messages/import-media) skips the upload.
+Uploading takes four calls. You allocate an Attachment by describing the file, and Relay hands you a signed upload URL. You put the raw bytes there, then send the Attachment ID in a media part.
+
+The Attachment belongs to the agent that allocated it, and only that agent can send it. Keep the Attachment ID; the signed URLs are temporary credentials. For a file already hosted publicly, [Import media from a URL](/concepts/messages/import-media) skips the upload.
 
 The upload URL lives 15 minutes. A download URL lives 60 minutes from the moment Relay issues it, and you can ask for a fresh one by ID at any time. [Attachment types and limits](/concepts/messages/attachment-types) has the size and metadata rules; the ceiling is 100 MiB.
 
 ## Allocate the Attachment
 
-Call `POST /v1/attachments` ([reference](/api-reference/attachments/pre-upload-a-file)) with the file's `filename`, `content_type`, and exact `size_bytes`; the SDK method is `relay.attachments.create({ filename, content_type, size_bytes })`. Relay returns `200` with `attachment_id`, `upload_url`, `http_method`, which is always `PUT`, `expires_at`, and `required_headers`, the exact `Content-Type` and `Content-Length` the upload must carry. Save `attachment_id`.
+Call `POST /v1/attachments` ([reference](/api-reference/attachments/pre-upload-a-file)) with the file's name, type, and exact size; the SDK method is `relay.attachments.create`. Relay returns `200` with the allocation, and `attachment_id` is the value to keep.
+
+| Field | Meaning |
+| --- | --- |
+| `attachment_id` | The ID you send in a media part |
+| `upload_url` | The signed URL that takes the bytes |
+| `http_method` | Always `PUT` |
+| `expires_at` | When the upload URL stops working |
+| `required_headers` | The exact `Content-Type` and `Content-Length` the upload must carry |
 
 ## Upload the bytes
 
-Send a `PUT` to `upload_url` with the raw bytes as the whole body and the `required_headers` unchanged; with curl that is `--data-binary @report.pdf`. The SDK helper `relay.attachments.upload(allocation, bytes)` applies the headers for you. A successful upload returns `204`. Base64 and multipart encoding change the body and fail the length check. The signed URL is the credential here; do not send your Agent Token to the upload host.
+`PUT` the raw bytes to `upload_url` as the whole body, with the required headers unchanged. With curl that is `--data-binary @report.pdf`, and the SDK helper `relay.attachments.upload` applies the headers for you. A successful upload returns `204`.
+
+Base64 and multipart encoding change the body and fail the length check. The signed URL is the credential here; do not send your Agent Token to the upload host.
 
 If the result is uncertain, read the Attachment before you retry. Retry the complete bytes on the same URL only while the Attachment is `pending` and the URL has not expired; after expiry, allocate again.
 
 ## Verify the upload
 
-Call `GET /v1/attachments/{attachmentId}` ([reference](/api-reference/attachments/get-attachment-metadata)); the SDK method is `relay.attachments.retrieve(attachmentId)`. Send only when `status` is `complete`.
+Call `GET /v1/attachments/{attachmentId}` ([reference](/api-reference/attachments/get-attachment-metadata)); the SDK method is `relay.attachments.retrieve`. Send only when `status` is `complete`.
 
 | Status | Meaning |
 | --- | --- |
@@ -42,7 +54,7 @@ Send a media part with the ID through either [send path](/concepts/messages/send
 }
 ```
 
-Relay returns `202` with the Message. The media part in the response carries the Attachment `id`, a download `url`, `filename`, `mime_type`, and `size_bytes`. Reuse the same idempotency key and body after an uncertain send.
+Relay returns `202` with the message. The media part in the response carries the Attachment ID and a signed download URL. Reuse the same idempotency key and body after an uncertain send.
 
 ## When it fails
 

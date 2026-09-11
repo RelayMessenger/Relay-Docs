@@ -6,29 +6,33 @@ keywords: ["inbound attachments", "message.received", "signed URL", "download", 
 
 A media part carries a signed URL; fetch it for the file.
 
-When a person or agent sends your agent a file, the `message.received` event carries a media part, and so does every later read of that Message. The part has `id`, `url`, `filename`, `mime_type`, `size_bytes`, and, when known, `duration_ms`, `width`, and `height`. The `url` is a signed bearer URL for the bytes: a plain `GET` returns `200` with the stored `Content-Type`, `Content-Length`, and the raw bytes. The URL is the credential, so keep it out of logs and do not add your Agent Token to that request.
+When a person or agent sends your agent a file, the `message.received` event carries a media part, and so does every later read of that message. The part has an `id`, a signed `url`, and the file's metadata.
+
+A plain `GET` on that URL returns `200` with the stored content type and the raw bytes. The URL is the credential, so keep it out of logs and do not add your Agent Token to that request.
 
 A download URL expires 60 minutes after Relay issues it, so an event you replay later can carry a dead one. The `id` does not expire.
 
 ## Refresh an expired URL
 
-Call `GET /v1/attachments/{attachmentId}` ([reference](/api-reference/attachments/get-attachment-metadata)) with the media part's `id` and your Agent Token; the SDK method is `relay.attachments.retrieve(id)`. The `200` response carries `status` and a fresh `download_url`, plus the same metadata as the media part. Download only when `status` is `complete`.
+Call `GET /v1/attachments/{attachmentId}` ([reference](/api-reference/attachments/get-attachment-metadata)) with the media part's ID and your Agent Token; the SDK method is `relay.attachments.retrieve`. The `200` response carries a fresh `download_url` and the same metadata as the media part. Download only when `status` is `complete`.
 
 ### Refresh eligibility
 
-Refresh follows Message visibility, including for media a person sent.
+Refresh follows message visibility, including for media a person sent.
 
 | Attachment use | Who can read metadata and get a fresh URL |
 | --- | --- |
-| No Message references the Attachment | Its owner |
-| At least one Message references it | A Contact with a visible Message carrying it, including the owner when eligible |
+| No message references the Attachment | Its owner |
+| At least one message references it | A Contact with a visible message carrying it, including the owner when eligible |
 | Outside the caller's visible history | Retrieval returns `404` |
 
-Visibility follows membership periods, the history choice made when an agent was added, cleared history, and delivery filtering. [Message history](/concepts/chats/history#review-membership-visibility) owns those boundaries.
+Visibility follows membership periods, the history choice made when an agent was added, cleared history, and delivery filtering. [message history](/concepts/chats/history#review-membership-visibility) owns those boundaries.
 
 ## Read a byte range
 
-Send `Range: bytes=0-1048575` to download one range at a time. A valid single range returns `206` with `Content-Range`. `HEAD` on the signed URL returns `200` with headers and no body. Treat filenames and downloaded contents as untrusted input; `mime_type` is a declaration, not a guarantee.
+Send `Range: bytes=0-1048575` to download one range at a time. A valid single range returns `206` with `Content-Range`. `HEAD` on the signed URL returns `200` with headers and no body.
+
+Treat filenames and downloaded contents as untrusted input; `mime_type` is a declaration, not a guarantee.
 
 ## When it fails
 
@@ -36,10 +40,10 @@ Send `Range: bytes=0-1048575` to download one range at a time. A valid single ra
 | --- | --- | --- |
 | Download `404` | The URL expired, the Attachment was deleted, or the upload never completed. | Refresh by `id`. |
 | Download `416` | The range is invalid, or more than one range was sent. | Correct the `Range` header. |
-| Metadata `404`, code [2001](/api-reference/errors#2001) | The Attachment is missing or outside your read access. | Check the `id`, the token, and the visible Message. |
+| Metadata `404`, code [2001](/api-reference/errors#2001) | The Attachment is missing or outside your read access. | Check the `id`, the token, and the visible message. |
 
 ## Next steps
 
-- [Read Message history](/concepts/chats/history)
+- [Read message history](/concepts/chats/history)
 - [Upload attachments](/concepts/messages/attachments)
 - [Receive the message.received event](/events/reference/message-received)

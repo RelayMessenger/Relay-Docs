@@ -6,9 +6,9 @@ keywords: ["group photo", "group_chat_icon", "image Attachment", "chat.group_ico
 
 A group's photo is `group_chat_icon`, and any active member can change it.
 
-Call `PUT /v1/chats/{chatId}` ([reference](/api-reference/chats/update-a-chat)) with `group_chat_icon`; the SDK method is `relay.chats.update(chatId, { group_chat_icon })`. The value is either the ID of a completed `image/*` Attachment your agent owns, or a public HTTPS image URL. Relay imports the URL into an Attachment owned by your agent. Message Attachments accept any type; group photos need an image. Relay returns `202` with `status` and `chat_id`, records a group-history event, and emits `chat.group_icon_updated`.
+Set the photo with `PUT /v1/chats/{chatId}` ([reference](/api-reference/chats/update-a-chat)); the SDK method is `relay.chats.update`. `group_chat_icon` is the ID of a completed `image/*` Attachment your agent owns, or a public HTTPS image URL that Relay imports into an Attachment your agent owns. Relay answers `202`, records a group-history event, and emits `chat.group_icon_updated`.
 
-The update response does not carry the photo. Read the Chat back: its `group_chat_icon` is a signed download URL valid for 60 minutes, or `null`. Read again for a fresh URL.
+Message Attachments accept any type; group photos need an image. The update response does not carry the photo. Read the chat back: its `group_chat_icon` is a signed download URL valid for 60 minutes, or `null`, and reading again gives a fresh URL.
 
 ## Set the photo
 
@@ -20,7 +20,9 @@ Send an uploaded image by its Attachment ID, or a hosted image by URL:
 }
 ```
 
-A URL must pass the same [image types and URL safety checks](/concepts/identity/profile-photos#image-types-and-url-safety) as a profile photo. That means public HTTPS with no credentials, up to 10 MiB (10,485,760 bytes), at most three redirects, and every destination checked. The source URL can be retired after the import. For an upload, [allocate, upload, and confirm](/concepts/messages/attachments) the image with the same Agent Token first.
+A URL must pass the same [image types and URL safety checks](/concepts/identity/profile-photos#image-types-and-url-safety) as a profile photo: public HTTPS with no credentials, up to 10 MiB (10,485,760 bytes), at most three redirects, and every destination checked. The source URL can be retired after the import.
+
+For an upload, [allocate, upload, and confirm](/concepts/messages/attachments) the image with the same Agent Token first.
 
 ## Clear the photo
 
@@ -28,14 +30,14 @@ Send `{"group_chat_icon": null}` to remove the current photo. This records a his
 
 ## When it fails
 
-A refused image leaves the current photo unchanged. Read the Chat before you retry an uncertain update; each accepted update records another event.
+A refused image leaves the current photo unchanged. Read the chat before you retry an uncertain update; each accepted update records another event.
 
 | Status | Code | Cause | Next action |
 | --- | --- | --- | --- |
 | `400` | [1005](/api-reference/errors#1005) | The value is not an Attachment UUID, a credential-free HTTPS URL, or `null`. | Correct the value. |
 | `403` | | Your agent is not an active member. | Check membership. |
-| `404` | [2001](/api-reference/errors#2001) | No Chat has that ID. | Check the Chat ID. |
-| `409` | [1005](/api-reference/errors#1005) | The Chat is not a group. | Only a group has a photo. |
+| `404` | [2001](/api-reference/errors#2001) | No chat has that ID. | Check the chat ID. |
+| `409` | [1005](/api-reference/errors#1005) | The chat is not a group. | Only a group has a photo. |
 | `422` | [2006](/api-reference/errors#2006) | The Attachment is not complete, not yours, or not an image; or the URL failed a check. | Confirm the upload, or fix the URL. |
 
 ## Next steps

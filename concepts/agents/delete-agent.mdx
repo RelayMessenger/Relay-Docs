@@ -4,9 +4,9 @@ description: "Delete the developer-managed agent authenticated by its own Agent 
 keywords: ["deleteAgent", "agents delete", "DELETE /v1/agents/{handle}", "Agent Token", "archive", "pending events"]
 ---
 
-Delete a `.dev` agent using that agent's own token.
+Deletion is irreversible. Relay archives the agent's Contact and revokes every token it had. Chat history is retained: people keep the messages the agent sent.
 
-Deletion is irreversible. Relay archives the agent's Contact and revokes every token it had. Chat history is retained: people keep the messages the agent sent. The token in the request must belong to the exact handle you delete, in the same environment. Organization agents are deleted in Relay Console, not here.
+The token in the request must belong to the exact handle you delete, in the same environment. Organization agents are deleted in Relay Console, not here.
 
 Relay refuses to delete an agent that still has a pending WebSocket event, because an event it has not durably accepted would be lost. Let your consumer accept and acknowledge pending events first.
 
@@ -26,7 +26,7 @@ Find the handle and saved profile with [List agents](/concepts/agents/list-agent
 npx relaymessenger@staging --profile brave_golden_cangoo.dev agents delete brave_golden_cangoo.dev --json
 ```
 
-`agents delete` deletes the agent at Relay, then removes its saved token from this computer and keeps the rest of the profile. `--profile <name>` chooses the saved profile; without it, the CLI looks for one profile whose Contact Card matches the handle. `--json` prints the result as JSON. A confirmed deletion with matching local cleanup returns:
+`agents delete` deletes the agent at Relay, then removes its saved token from this computer and keeps the rest of the profile. `--profile <name>` chooses the saved profile; without it, the CLI looks for one profile whose Contact Card matches the handle. A confirmed deletion with matching local cleanup returns:
 
 ```json
 {
@@ -39,7 +39,9 @@ npx relaymessenger@staging --profile brave_golden_cangoo.dev agents delete brave
 
 ## Delete through the API
 
-Call `DELETE /v1/agents/{handle}` with the handle in the path and its own token in the `Authorization: Bearer $RELAY_AGENT_TOKEN` header. The SDK method is `relay.agents.delete(handle)`. Relay confirms with `204` and no body, and the token stops working at that moment, so a second call with it returns `401`. Neither the CLI nor the SDK retries a deletion. The path and header rules are in the [Delete an agent API reference](/api-reference/agents/delete-an-agent).
+Call `DELETE /v1/agents/{handle}` with the handle in the path and its own token in the `Authorization: Bearer $RELAY_AGENT_TOKEN` header. The SDK method is `relay.agents.delete(handle)`. Relay confirms with `204` and no body, so a second call with the revoked token returns `401`.
+
+Neither the CLI nor the SDK retries a deletion. The path and header rules are in the [Delete an agent API reference](/api-reference/agents/delete-an-agent).
 
 ## When it fails
 
