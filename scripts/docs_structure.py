@@ -6,7 +6,7 @@ from pathlib import Path
 # Frame catalogs and a complete copyable agent instruction are reference, not
 # onboarding. All ordinary task guides keep five sections before related links.
 REFERENCE_PAGES = {"build/events/websocket/protocol", "connect/agent-prompt"}
-LANDING_SECTIONS = ["Give the agent on your computer a phone number.", "What you need", "Connect your coding agent", "Message it from your phone", "Or build on the API", "Group chats and mentions", "Receive events", "Your agent’s identity", "Going live", "Next"]
+LANDING_SECTIONS = ["Start here", "What you need", "Connect your coding agent", "Message it from your phone", "Or build on the API", "Group chats and mentions", "Receive events", "Your agent’s identity", "Going live", "Next"]
 START_PAGES = ["index", "start/quickstart", "start/key-concepts", "start/authentication", "start/sdks"]
 INTERNAL_PROSE = re.compile(
     r"Prepare hosted proof|only after this docs candidate is pushed|"
