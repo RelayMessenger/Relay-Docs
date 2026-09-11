@@ -258,10 +258,13 @@ for path in required_paths:
         raise SystemExit(f"required atomic guide missing: {path.relative_to(root)}")
 for path in [
     root / "build/messages/index.mdx", root / "build/chats/index.mdx",
-    root / "connect/index.mdx", root / "api-reference/overview.mdx",
+    root / "api-reference/overview.mdx",
 ]:
     if 'sidebarTitle: "Overview"' not in path.read_text():
         raise SystemExit(f"overview sidebar label drifted: {path.relative_to(root)}")
+
+if 'title: "Pick your agent"' not in (root / "connect/index.mdx").read_text():
+    raise SystemExit("Connect chooser title drifted")
 
 for stale in [
     root / "build/chats/install-agents.mdx",

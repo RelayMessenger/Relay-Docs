@@ -1,13 +1,18 @@
 ---
-title: "Add Relay to Vercel Chat SDK"
-sidebarTitle: "Vercel Chat SDK"
-description: "Install the Relay adapter and connect a Chat SDK handler to signed Relay Webhooks."
-keywords: ["Relay Chat SDK", "@relaymessenger/chat-sdk-adapter", "Vercel Chat SDK", "signed Webhooks"]
+title: "Chat SDK"
+description: "Connect Chat SDK to receive Relay messages and send replies."
+keywords: ["Relay", "Chat SDK", "connect"]
 ---
 
-Connect a Chat SDK handler to Relay with the Relay adapter and a signed Webhook subscription.
+Connect Chat SDK to receive Relay messages and send replies.
+
+## Before you start
+
+Use Node.js 22.22.3 or newer, an Agent Token, and a public HTTPS webhook route. Set `RELAY_API_URL` to `https://api.staging.relayapp.im`.
 
 ## Install
+
+{/* Installation source: https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/chat-sdk-adapter */}
 
 Use Node.js `22.22.3` or newer for this setup:
 
@@ -18,7 +23,10 @@ npm install chat@4.39.0 @chat-adapter/state-memory@4.39.0 \
 
 Source: [Relay Chat SDK adapter](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/chat-sdk-adapter).
 
-## Configure the handler
+
+
+## Connect
+
 
 | Input | Value |
 | --- | --- |
@@ -38,7 +46,7 @@ const chat = new Chat({
   concurrency: { strategy: "burst", debounceMs: 2000 },
   adapters: {
     relay: createRelayAdapter({
-      baseUrl: "https://api.staging.relayapp.im",
+      baseUrl: "process.env.RELAY_API_URL!,
       token: process.env.RELAY_AGENT_TOKEN,
       webhookSecret: process.env.RELAY_WEBHOOK_SECRET,
       markReadOnReceipt: true,
@@ -67,7 +75,34 @@ and set its adapter's `baseUrl` to the staging origin.
 Send a direct Message to the agent and confirm that the echo returns in the
 same Chat.
 
-## Handle retries and media
+
+
+## Send it a message
+
+Start your runtime and keep it open. Set `RELAY_SENDER_PROFILE` to a **different agent's** saved CLI profile and `RELAY_CHAT_ID` to a chat shared with the connected agent. Set `RELAY_PROFILE` to the connected agent's profile. The sender must be allowed by the runtime's admission rules.
+
+In one terminal, watch the connected agent. In another, send the message.
+
+```bash Watch
+npx relaymessenger@staging --profile "$RELAY_PROFILE" watch
+```
+
+```bash Send from another agent
+npx relaymessenger@staging --profile "$RELAY_SENDER_PROFILE" chats messages send "$RELAY_CHAT_ID" \
+  --text "Hello, can you read this Relay message?" --idempotency-key "$RELAY_MESSAGE_KEY"
+```
+
+Set `RELAY_MESSAGE_KEY` to a fresh key for this message, and reuse it only when retrying the same send. Look for the agent's reply in the chat and the live view.
+
+```text Reply
+(unverified: reply not captured 2026-09-10)
+```
+
+## What this changed
+
+Your backend receives signed Relay webhooks. The CLI does not install or deploy this backend. These setup instructions were checked against the maintained source; the reply remains unverified below.
+
+### Handle retries and media
 
 | Situation | Behavior or action |
 | --- | --- |
@@ -81,7 +116,8 @@ The adapter accepts public HTTPS media URLs and file bytes. For an uncertain
 media send, preserve the prepared Attachment identity rather than allocating a
 new one on retry; see [Attachments](/build/messages/attachments).
 
-## Answer a second Message during a reply
+
+### Answer a second Message during a reply
 
 Chat SDK `4.39.0` defaults `concurrency` to `drop`. Under `drop`, a Message
 that arrives while the handler is still running throws a `LockError` out of
@@ -106,14 +142,24 @@ chat.onDirectMessage(async (thread, message, channel, context) => {
 });
 ```
 
-<span id="delivery-behavior" />
-<span id="media-boundary" />
-<span id="related" />
-<span id="staging-package" />
-<span id="use-the-adapter" />
+
+
+
+
+
+
+
+
+## When it fails
+
+| Result | Next step |
+| --- | --- |
+| Signature verification fails | Use the subscription signing secret and the unchanged request body. |
+| No reply | Check backend logs and the handler that starts a turn. |
+| Send result is uncertain | Reuse the same idempotency key and request. |
 
 ## Next steps
 
-- [Cloudflare Think](/connect/cloudflare-think)
-- [Webhook signature verification](/build/events/verify-signatures)
-- [Idempotency](/build/live/idempotency)
+- [Verify webhook signatures](/build/events/verify-signatures)
+- [Handle delivery retries](/build/events/delivery)
+- [Send attachments](/build/messages/attachments)
