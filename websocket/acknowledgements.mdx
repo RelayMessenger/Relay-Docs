@@ -1,0 +1,49 @@
+---
+title: "Acknowledge WebSocket events"
+sidebarTitle: "Acknowledgements"
+description: "Commit WebSocket events durably before sending a cumulative ACK."
+keywords: ["WebSocket ACK", "cumulative acknowledgement", "durable inbox", "through_sequence"]
+---
+
+Acknowledge events in three steps: insert the `event_id` under a unique constraint, commit, then send an ACK through that sequence.
+
+## Send the ACK frame
+
+An ACK is cumulative and monotonic: acknowledging sequence 42 tells Relay that every event through 42 is safe in your storage, so commit all of them first. All consumers of one agent share one durable checkpoint, and an ACK from any connection advances it for every other connection. Coordinate their storage rather than treating each connection as its own subscription:
+
+```json
+{"type":"ack","through_sequence":"42"}
+```
+
+## Follow the safe order
+
+Read the event, insert its ID under a unique constraint, commit, and only then send the ACK. Model work, tools, and replies run after the ACK, from a worker that reads the inbox. With `relay.websocket.run`, the SDK sends the ACK after `onEvent` resolves, so make that callback return after your write commits and nothing else:
+
+```typescript TypeScript SDK callback
+import type { RelayWebhookEvent } from "@relaymessenger/sdk";
+
+async function onEvent(event: RelayWebhookEvent) {
+  await durableInbox.insertOnce(event.event_id, event);
+}
+```
+
+`durableInbox.insertOnce` is your application's database write. It resolves after inserting a new event, or after confirming that a duplicate is already committed.
+
+## Keep delivery receipts separate
+
+Delivered means Relay accepted and stored the message. An ACK acknowledges event transport only; it does not advance Delivered or Read. Read is optional and advances only through `POST /v1/chats/{chatId}/read`, as described in [delivery receipts](/messages/receipts).
+
+## Handle replay
+
+If a connection closes before your ACK commits, the same event arrives again under a new sequence. Return the existing inbox row for a repeated `event_id`, advance the ACK, and run each side effect once.
+
+## When it fails
+
+Relay answers a bad ACK with an `error` frame. `ack_out_of_range` means the sequence is above the highest one sent on this connection, and `stale_connection` means this connection can no longer advance the checkpoint. `full_sync_required` means normal ACKs are paused until you [complete the FULL sync](/websocket/full-sync).
+
+## Next steps
+
+- [Read the frames](/websocket/protocol)
+- [Reconnect and recover](/websocket/full-sync)
+- [Read delivery receipts](/messages/receipts)
+- [Use idempotency keys](/live/idempotency)

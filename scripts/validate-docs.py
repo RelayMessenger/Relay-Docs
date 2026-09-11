@@ -197,9 +197,10 @@ if navigated != files:
 
 tabs = config["navigation"]["tabs"]
 actual_tabs = [tab["tab"] for tab in tabs]
-# Owner ruling 2026-09-11: Docs with a real sidebar, Integrations, API
-# reference, CLI; the changelog is the last Docs group, not a tab.
-expected_tabs = ["Docs", "Integrations", "API reference", "CLI"]
+# Owner ruling 2026-09-11 (final tree): one guides tab, the API reference, the
+# CLI, then the changelog as its own tab. Integrations moved into the Docs
+# sidebar as the Coding agents and Integrations groups.
+expected_tabs = ["Docs", "API reference", "CLI", "Changelog"]
 if actual_tabs != expected_tabs:
     raise SystemExit(f"top tab order changed: {actual_tabs}")
 
@@ -236,29 +237,31 @@ if (root / "current-status.mdx").exists():
     raise SystemExit("Current status belongs in the evidence site, not public docs")
 
 required_paths = [
-    root / "concepts/identity/contact-card.mdx",
-    root / "concepts/chats/share-contact-card.mdx",
-    root / "concepts/chats/typing.mdx",
-    root / "concepts/messages/receipts.mdx",
-    root / "concepts/requests/message-requests.mdx",
-    root / "events/reference/index.mdx",
-    root / "events/websocket/index.mdx",
-    root / "events/websocket/protocol.mdx",
-    root / "events/websocket/full-sync.mdx",
+    root / "agents/contact-card.mdx",
+    root / "chats/share-contact-card.mdx",
+    root / "chats/typing.mdx",
+    root / "messages/receipts.mdx",
+    root / "agents/message-requests.mdx",
+    root / "events/index.mdx",
+    root / "websocket/index.mdx",
+    root / "websocket/protocol.mdx",
+    root / "websocket/full-sync.mdx",
     root / "api-reference/errors.mdx",
 ]
 for path in required_paths:
     if not path.exists():
         raise SystemExit(f"required atomic guide missing: {path.relative_to(root)}")
-for path in [
-    root / "concepts/messages/index.mdx", root / "concepts/chats/index.mdx",
-    root / "api-reference/overview.mdx",
+# Each section index carries its section name in the sidebar; the API
+# reference keeps the Overview label its generated groups use.
+for path, label in [
+    (root / "messages/index.mdx", "Messaging"), (root / "chats/index.mdx", "Chats"),
+    (root / "api-reference/overview.mdx", "Overview"),
 ]:
-    if 'sidebarTitle: "Overview"' not in path.read_text():
-        raise SystemExit(f"overview sidebar label drifted: {path.relative_to(root)}")
+    if f'sidebarTitle: "{label}"' not in path.read_text():
+        raise SystemExit(f"section sidebar label drifted: {path.relative_to(root)}")
 
 for stale in [
-    root / "concepts/chats/install-agents.mdx",
+    root / "chats/install-agents.mdx",
     root / "guides/socket-mode.mdx",
     root / "guides/socket-mode-protocol.mdx",
     root / "build/events/choose-transport.mdx",
@@ -443,7 +446,7 @@ for path in [*mdx_paths, root / "skill.md"]:
 
 from docs_behavior import validate_behavior
 validate_behavior(root)
-webhook_events_text = (root / "events/reference/index.mdx").read_text()
+webhook_events_text = (root / "events/index.mdx").read_text()
 
 # One code table replaces the former per-code page hierarchy.
 import runpy
@@ -759,13 +762,41 @@ if disconnect_reasons != [
     raise SystemExit(f"WebSocket disconnect reasons drifted: {disconnect_reasons}")
 
 handwritten_paths = [*mdx_paths, root / "skill.md", root / "README.md"]
-# Verbatim payload text is user content, not product vocabulary.
-handwritten_text = "\n".join(re.sub(r"^```json captured-output\n.*?^```\s*$", "", path.read_text(), flags=re.M | re.S) for path in handwritten_paths)
+# A migration guide quotes the other product on purpose: its routes, and the
+# "Not in Relay" list of features Relay does not have, are that product's
+# vocabulary, not ours. Everything a migration guide says about Relay is
+# scanned for drift exactly like every other page.
+FOREIGN_ROUTES = (
+    "/v3/messages",                     # Linq
+    "/v3/chats/{chatId}/voicememo",     # Linq
+    "/v3/webhook-subscriptions",        # Linq
+)
+
+
+def relay_vocabulary(text):
+    text = re.sub(r"^## Not in Relay\n.*?(?=^## |\Z)", "", text, flags=re.M | re.S)
+    for foreign in FOREIGN_ROUTES:
+        text = text.replace(foreign, "")
+    return text
+
+
+def product_prose(path):
+    # Verbatim payload text is user content, not product vocabulary.
+    text = re.sub(r"^```json captured-output\n.*?^```\s*$", "", path.read_text(), flags=re.M | re.S)
+    if not path.match("resources/migrate-from-*.mdx"):
+        return text
+    # Owner decision 2026-09-11: a migration guide names the product the reader
+    # is leaving. There the name is the subject of the page, not residue from an
+    # early draft, so it is not scanned. The ban holds on every other page.
+    return re.sub(source_company_pattern, "", relay_vocabulary(text), flags=re.I)
+
+
+handwritten_text = "\n".join(product_prose(path) for path in handwritten_paths)
 all_contract_text = handwritten_text + "\n" + openapi_text
 if target() == "production" and STAGING_INSTRUCTION_REFERENCE.search(handwritten_text):
     raise SystemExit("staging installation or credential guidance returned to production")
 generated_paths = [root / "llms.txt", root / "llms-full.txt"]
-generated_text = "\n".join(path.read_text() for path in generated_paths)
+generated_text = relay_vocabulary("\n".join(path.read_text() for path in generated_paths))
 llms_index_text = (root / "llms.txt").read_text()
 for marker in [
     "/v1/websocket",

@@ -1,0 +1,67 @@
+---
+title: "Reconnect and recover WebSocket events"
+sidebarTitle: "Reconnect and recover"
+description: "Reconnect, replay current events, and rebuild durable state when a checkpoint is outside retention."
+keywords: ["WebSocket FULL sync", "full_sync", "event replay", "checkpoint retention"]
+---
+
+Reconnect with the same Agent Token and Relay resumes from its checkpoint, or asks for a FULL sync when that checkpoint is older than the 30-day replay window.
+
+## Connect and resume
+
+Upgrade the same URL with the bearer header and read `acked_through` from the `ready` frame. Relay replays every event after that checkpoint, oldest first, with its original ID; deduplicate, commit in order, and ACK the highest committed sequence.
+
+## Read the full_sync frame
+
+When pending events fall outside the 30-day window, Relay sends a `full_sync` frame with reason `checkpoint_outside_retention` and the boundary sequence. Delivery and ACKs pause until you complete recovery.
+
+<Steps>
+  <Step title="Pause normal ACKs">
+    Send no `ack` frames until recovery has committed and its completion frame is sent.
+  </Step>
+  <Step title="Read authoritative state">
+    Page through `GET /v1/chats`, then read visible history with `GET /v1/chats/{chatId}/messages`.
+  </Step>
+  <Step title="Rebuild durably">
+    Commit the recovered chat, message, membership, reaction, and receipt state as one snapshot.
+  </Step>
+  <Step title="Complete the boundary">
+    Send the exact `through_sequence` from the `full_sync` frame.
+  </Step>
+</Steps>
+
+## Send full_sync_complete
+
+Commit the snapshot only after every chat page and every message page has been read, then send the completion frame with the exact boundary. Relay marks pending events through that boundary as superseded and resumes with events after it. Completion acknowledges transport only; it does not advance Delivered or Read:
+
+```json
+{"type":"full_sync_complete","through_sequence":"4182"}
+```
+
+## Use the SDK callback
+
+The SDK calls `onFullSync` with the boundary and sends `full_sync_complete` only after the callback resolves. If the callback throws, the SDK reconnects without completing recovery, so a partial snapshot never becomes the checkpoint:
+
+```typescript TypeScript SDK callback
+import type { WebSocketFullSyncContext } from "@relaymessenger/sdk";
+
+async function onFullSync({ throughSequence }: WebSocketFullSyncContext) {
+  const snapshot = await readRelaySnapshot(relay);
+  await durableInbox.replaceSnapshot(throughSequence, snapshot);
+}
+```
+
+## Handle events during sync
+
+Relay keeps assigning sequences while recovery runs; newer pending events resume after the boundary. When a thing appears both in the REST reads and in a later event, prefer the event.
+
+## When it fails
+
+A `full_sync_mismatch` error means the boundary you sent differs from the frame's; send the exact value. If a REST read fails, do not complete the sync: fix the read, reconnect, and start again from the new frame. An ACK sent during recovery is answered with `full_sync_required`.
+
+## Next steps
+
+- [Connect with WebSocket](/websocket)
+- [Acknowledge events](/websocket/acknowledgements)
+- [Read the frames](/websocket/protocol)
+- [Page through history](/chats/history)

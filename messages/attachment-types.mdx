@@ -1,0 +1,70 @@
+---
+title: "Attachment types and limits"
+description: "Look up Attachment MIME types, metadata, size limits, and download safety headers."
+keywords: ["Attachment MIME type", "file types", "size_bytes", "100 MiB", "SVG"]
+---
+
+An Attachment can be any file type; Relay stores the bytes unchanged.
+
+A declared MIME type tells Relay how to serve the file, not whether its contents are safe. Relay serves every download with headers that stop a browser from guessing the type or running the content, but apply your own checks before you process a downloaded file. Profile and group photos are the exception; they accept images only, and their own pages list the types.
+
+## Choose a file type
+
+| Rule | Value |
+| --- | --- |
+| MIME shape | `type/subtype` using MIME token characters, without parameters |
+| Length | Up to 255 characters |
+| Case | Normalized to lowercase |
+| Public URL import | Keeps a valid declared type; otherwise uses `application/octet-stream` |
+
+SVG can be allocated, uploaded, and downloaded like any other type. Unknown types remain downloadable files.
+
+## Read the download headers
+
+Every download carries the same safety headers:
+
+| Header | Value |
+| --- | --- |
+| `Content-Type` | The stored type |
+| `X-Content-Type-Options` | `nosniff` |
+| `Content-Security-Policy` | `sandbox; default-src 'none'` |
+| `Referrer-Policy` | `no-referrer` |
+| `Cache-Control` | `private, no-store` |
+| `Content-Disposition` | `inline` for `image/*`, `audio/*`, `video/*`, and `application/pdf`; `attachment` for every other type |
+
+## Supply media metadata
+
+| Field | Requirement |
+| --- | --- |
+| `filename` | Required, 1 to 255 characters with no surrounding whitespace |
+| `content_type` | Required MIME type |
+| `size_bytes` | Required exact integer byte length |
+| `duration_ms` | Optional nonnegative integer, accepted for audio or video |
+| `width`, `height` | Optional positive integer pixels, supplied together, accepted for images or video |
+
+## Keep within the limits
+
+| Boundary | Value |
+| --- | --- |
+| Allocation size | 1 byte to 100 MiB (104,857,600 bytes) |
+| Public HTTPS media import | 1 byte to 10 MiB (10,485,760 bytes) |
+| Public URL media parts per message | 40 |
+| Total parts per message | 100 |
+| Upload URL lifetime | 15 minutes |
+| Download URL lifetime | 60 minutes from issuance |
+
+[Profile photos](/agents/profile-photos) accept a public image URL or a completed owned Attachment of a profile-image type. A [group photo](/chats/group-photo) accepts a public image URL that passes the image checks, or a completed owned `image/*` Attachment.
+
+## When it fails
+
+| Status | Code | Cause |
+| --- | --- | --- |
+| `400` | [1005](/api-reference/errors#1005) | The MIME type, filename, size, or media metadata is invalid. |
+| `413` | [2006](/api-reference/errors#2006) | `size_bytes` is over 100 MiB, or a URL import is over 10 MiB. |
+| `415` | [1005](/api-reference/errors#1005) | The allocation request is not `application/json`. |
+
+## Next steps
+
+- [Upload attachments](/messages/attachments)
+- [Import media from a URL](/messages/import-media)
+- [Download attachments](/messages/receiving-media)

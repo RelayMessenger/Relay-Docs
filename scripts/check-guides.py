@@ -34,7 +34,7 @@ def pages(root):
 
 
 def scoped(root):
-    return [p for p in pages(root) if p.relative_to(root).parts[0] in {'start', 'integrations', 'concepts', 'events', 'live', 'cli'}]
+    return [p for p in pages(root) if p.relative_to(root).parts[0] in {'start', 'integrations', 'agents', 'chats', 'messages', 'webhooks', 'events', 'websocket', 'live', 'cli'}]
 
 
 def heads(text):
@@ -99,7 +99,7 @@ def check_03(root):
 
 
 def check_04(root):
-    for p in [q for d in ('concepts', 'events', 'live') for q in (root / d).rglob('*.mdx') if is_task_guide(q.relative_to(root).with_suffix('').as_posix())]:
+    for p in [q for d in ('agents', 'chats', 'messages', 'webhooks', 'events', 'websocket', 'live') for q in (root / d).rglob('*.mdx') if is_task_guide(q.relative_to(root).with_suffix('').as_posix())]:
         text = p.read_text(); h = heads(text)
         for heading in h:
             assert heading in FIXED or heading.split()[0] in TASK_VERBS, f'{p.relative_to(root)}: invalid H2 {heading}'
@@ -120,12 +120,24 @@ def check_06(root):
         assert len(h) == 5 and re.fullmatch(r'The .+ object', h[0]) and h[1:] == ['Example', 'Operations', 'Errors', 'Next steps'], f'{p.relative_to(root)}: reference skeleton out of order'
 
 
+def task_pages(root):
+    # Owner ruling 2026-09-11 (final tree): the main page and the migration
+    # guides show one call to orient a reader, not to be copied; both answer in
+    # prose by design, the same exemption index already holds in
+    # docs_structure. Every documented task page keeps the full request
+    # skeleton: cURL plus TypeScript in one CodeGroup, then a real response.
+    exempt = {'index.mdx'}
+    return [p for p in pages(root)
+            if p.relative_to(root).as_posix() not in exempt
+            and p.relative_to(root).parts[0] != 'resources']
+
+
 def missing_responses(root):
     """Every request needs a real response fence after it. A prose marker such as
     "(unverified: ...)" never counts: the relay-language skill bans provenance in
     prose, and a request with no real response is deleted, not hedged."""
     found = []
-    for p in pages(root):
+    for p in task_pages(root):
         text = p.read_text(); reqs = requests(text)
         for i, (_, end, _) in enumerate(reqs):
             tail = text[end:reqs[i + 1][0] if i + 1 < len(reqs) else len(text)]
@@ -149,7 +161,7 @@ def check_07(root):
 
 
 def check_08(root):
-    for p in pages(root):
+    for p in task_pages(root):
         for i, (_, _, languages) in enumerate(requests(p.read_text())):
             assert languages == {'curl', 'typescript'}, f'{p.relative_to(root)}: request {i + 1} needs cURL + TypeScript in one CodeGroup'
 

@@ -34,7 +34,7 @@ OBSERVE = "cli/watch.mdx"
 NATIVE = "integrations/claude-code.mdx"
 SKILLS = "integrations/skills.mdx"
 MCP = "integrations/mcp.mdx"
-OBSERVER_REFERENCE = "events/websocket/observe-events.mdx"
+OBSERVER_REFERENCE = "websocket/observe-events.mdx"
 FENCE = re.compile(r"^(`{3,})[^\n]*\n(.*?)^\1[ \t]*$", re.M | re.S)
 FINISH = {"Next steps", "See also", "Related"}
 SOURCES = {
@@ -259,7 +259,7 @@ class IntegrationDocsTests(unittest.TestCase):
 
     def test_cli_routes_to_task_owners_without_copying_agent_flows(self):
         for task in ("create-agent", "list-agents", "delete-agent"):
-            self.assertLink(CLI, f"/concepts/agents/{task}")
+            self.assertLink(CLI, f"/agents/{task}")
         for page in (AUTH, OBSERVE, NATIVE):
             self.assertLink(CLI, "/" + page.removesuffix(".mdx"))
         for path in ROOT.glob("integrations/**/*.mdx"):
@@ -268,7 +268,7 @@ class IntegrationDocsTests(unittest.TestCase):
                 f"Agent workflows belong to guides/agents, not {path.relative_to(ROOT)}",
             )
         # Inspect the owning guides, not a duplicated record on the CLI overview.
-        for page, is_list in (("concepts/agents/create-agent.mdx", False), ("concepts/agents/list-agents.mdx", True)):
+        for page, is_list in (("agents/create-agent.mdx", False), ("agents/list-agents.mdx", True)):
             records = []
             for block in re.findall(r"^```json\n(.*?)^```", read(page), re.M | re.S):
                 value = json.loads(block)
@@ -292,10 +292,10 @@ class IntegrationDocsTests(unittest.TestCase):
         self.assertConcept(text, r"save a token for this computer", "Use the shipped login description")
         self.assertConcept(text, r"logout.*(?:only|selected|that profile)", "Logout scope is local")
         self.assertConcept(text, r"relay_agent_token is honored in scripts only", "Use the shipped environment rule")
-        self.assertLink(AUTH, "/concepts/agents/delete-agent")
+        self.assertLink(AUTH, "/agents/delete-agent")
 
     def test_observation_delegates_protocol_without_becoming_a_consumer(self):
-        self.assertLink(OBSERVE, "/events/websocket/observe-events")
+        self.assertLink(OBSERVE, "/websocket/observe-events")
         text = read(OBSERVE)
         reference = read(OBSERVER_REFERENCE)
         self.assertTrue(any(re.match(r"npx relaymessenger\S* watch\b", line) for line in commands(text)))
@@ -358,7 +358,7 @@ class IntegrationDocsTests(unittest.TestCase):
                 self.assertNotRegex(text, r"(?i)test:live|hosted.proof|lockfile|registry integrity|sha(?:256|512)-")
                 self.assertNotRegex(text, r"(?im)^## (?:Package versions|Package status)\s*$")
                 self.assertNotRegex(text, r"(?i)\bcoming[- ]soon\b|\bsource[- ]only\b")
-        self.assertLink("integrations/chat-sdk.mdx", "/concepts/messages/attachments")
+        self.assertLink("integrations/chat-sdk.mdx", "/messages/attachments")
         self.assertNotRegex(
             normalized(read("integrations/chat-sdk.mdx")),
             r"rejects.{0,40}(?:local byte|file upload)",

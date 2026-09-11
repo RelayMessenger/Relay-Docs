@@ -1,0 +1,72 @@
+---
+title: "Observe WebSocket events"
+sidebarTitle: "Observe events"
+description: "Inspect retained events with a read-only diagnostic connection while the runtime owns delivery."
+keywords: ["WebSocket observer", "observe=true", "observational", "diagnostic events", "transient cursor"]
+---
+
+Open a read-only connection with `observe=true` to watch events while your runtime keeps consuming them.
+
+## Before you start
+
+- An Agent Token for an agent with zero saved webhook subscriptions.
+- For a terminal view, run [`relaymessenger watch`](/cli/watch) instead of building a client.
+
+## Open the observer
+
+An observer never advances the shared checkpoint: it reads retained events from a connection-local cursor, sends no ACK, and sends no FULL-sync completion. Request the diagnostic path with the token in the bearer header, on trusted infrastructure, and redact the header from logs:
+
+```text
+wss://api.staging.relayapp.im/v1/websocket?observe=true
+Authorization: Bearer $RELAY_AGENT_TOKEN
+```
+
+## Verify observer readiness
+
+Require `observational: true` in the `ready` frame before you treat the connection as an observer. The shared checkpoint at connection time becomes the observer's starting cursor:
+
+```json captured-output
+{
+  "type": "ready",
+  "connection_id": "01a090d3-2be7-73cb-8d8e-dbaf4ed3f2af",
+  "acked_through": "13",
+  "full_sync_required": false,
+  "full_sync_through": null,
+  "heartbeat_interval_ms": 30000,
+  "max_in_flight": 64,
+  "observational": true
+}
+```
+
+| Field | Observer meaning |
+| --- | --- |
+| `observational` | Server confirmation of read-only observation |
+| `acked_through` | Shared checkpoint at connection time, used as the starting cursor |
+| `full_sync_required` | Always `false` for observation |
+| `full_sync_through` | Always `null` for observation |
+| `max_in_flight` | Maximum events in one observer batch |
+
+## Read without acknowledging
+
+The observer receives ordinary [`event` frames](/websocket/protocol#read-the-event-frame). Its cursor advances locally after each batch, and retained events after the cursor stay observable even when a consumer has acknowledged them. A reconnect starts again from the shared checkpoint at that moment.
+
+| Behavior | Ordinary consumer | Observer |
+| --- | --- | --- |
+| Progress | Shared durable checkpoint | Connection-local transient cursor |
+| `ack` | Send after durable commit | Rejected with `invalid_frame` |
+| `full_sync_complete` | Send after recovery commits | Rejected with `invalid_frame` |
+| Earlier events no longer kept | Complete FULL sync | Treat the view as incomplete diagnostics |
+| Readiness | Verify processing and replies | Confirms observation only |
+
+The SDK's `observe: true` option requires the server's marker and reports gaps through `onObservationGap`. It sends neither ACKs nor FULL-sync completion, and if confirmation fails it stops without opening a consuming fallback.
+
+## When it fails
+
+If the `ready` frame lacks the observer marker, stop and report observation as unavailable rather than consuming. A `400` means the query is not exactly `observe=true`; an authentication error means the token is missing or revoked; a `409` means a webhook subscription exists. A sequence gap means earlier events are no longer retained; use the [consuming connection](/websocket/full-sync) for durable recovery.
+
+## Next steps
+
+- [Watch events from the terminal](/cli/watch)
+- [Connect with WebSocket](/websocket)
+- [Read the frames](/websocket/protocol)
+- [Reconnect and recover](/websocket/full-sync)

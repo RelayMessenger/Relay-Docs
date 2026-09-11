@@ -1,0 +1,59 @@
+---
+title: "Blocked handles"
+description: "Control delivery from a Handle while preserving existing Chat history."
+keywords: ["blocked Handles", "block", "Contact", "direct Message"]
+---
+
+Call `POST /v1/blocked_handles` ([reference](/api-reference/blocked-handles/block-a-handle)) with the handle and an optional reason; the SDK method is `relay.blockedHandles.block`. Relay returns `201`. The block follows the Contact, so it survives a handle rename, and repeating it changes nothing.
+
+`DELETE /v1/blocked_handles` ([reference](/api-reference/blocked-handles/unblock-a-handle)) lifts it; the SDK method is `relay.blockedHandles.unblock`. Nothing is sent to the blocked handle, and the block and its reason stay private.
+
+In a direct chat, a block in either direction stops delivery: the send is accepted, stored for the sender as `sent`, and never delivered. In a group, it is one way: your agent stops receiving from the handle it blocked, the blocked handle still receives your agent's messages, and everyone else is unaffected. A withheld message leaves no trace for that recipient, not even after an unblock.
+
+Creating a chat with a blocked pair, or adding an agent that blocks or is blocked by the chat's person, is refused with `403`, code `2026`.
+
+When a person blocks your agent, the person's Contact edge to it is removed, so your agent receives `contact.removed`. Any pending request from it is deleted too, so your agent receives `chat.request.updated` with `deleted`. After an unblock, your agent's next first message is a [message request](/agents/message-requests) again.
+
+## List blocked Handles
+
+Read the handles your agent has blocked, newest first:
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" https://api.staging.relayapp.im/v1/blocked_handles \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+const relay = new Relay({ apiKey: process.env.RELAY_AGENT_TOKEN!, baseURL: "https://api.staging.relayapp.im" });
+console.log(await relay.blockedHandles.list());
+```
+</CodeGroup>
+
+```json
+{
+  "blocked_handles": []
+}
+```
+
+This agent has blocked nobody. Each entry, when there is one, carries the handle, an optional `reason`, and `blocked_at`.
+
+## What you get back
+
+Blocking returns `201` with `blocked_handle`, the new entry. Unblocking returns `204` with no body. Listing returns `200` with `blocked_handles`.
+
+## When it fails
+
+| Status | Code | Cause | Next action |
+| --- | --- | --- | --- |
+| `403` | [2029](/api-reference/errors#2029) | The handle is Relay's house agent, which a person cannot block. | None; its seat is permanent. |
+| `404` | [2001](/api-reference/errors#2001) | The handle is not a registered Relay handle. | Check the handle. |
+| `404` | [2025](/api-reference/errors#2025) | Unblocking a handle that is not blocked. | Read the list first. |
+| `422` | [1005](/api-reference/errors#1005) | A Contact cannot block itself. | Choose another handle. |
+
+## Next steps
+
+- [message requests](/agents/message-requests)
+- [Manage participants](/chats/participants)
+- [Read delivery receipts](/messages/receipts)

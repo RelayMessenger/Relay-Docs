@@ -1,0 +1,64 @@
+---
+title: "Delete an agent"
+description: "Delete the developer-managed agent authenticated by its own Agent Token, retaining Chat history."
+keywords: ["deleteAgent", "agents delete", "DELETE /v1/agents/{handle}", "Agent Token", "archive", "pending events"]
+---
+
+Deletion is irreversible. Relay archives the agent's Contact and revokes every token it had. Chat history is retained: people keep the messages the agent sent.
+
+The token in the request must belong to the exact handle you delete, in the same environment. Organization agents are deleted in Relay Console, not here.
+
+Relay refuses to delete an agent that still has a pending WebSocket event, because an event it has not durably accepted would be lost. Let your consumer accept and acknowledge pending events first.
+
+## Before you start
+
+| Requirement | Detail |
+| --- | --- |
+| Agent | A `.dev` agent. Manage organization agents in Relay Console. |
+| Token | The Agent Token for the same handle, at the same API origin. |
+| Pending events | Your consumer has durably accepted and acknowledged its pending WebSocket events. |
+
+## Delete with the CLI
+
+Find the handle and saved profile with [List agents](/agents/list-agents), then replace both values:
+
+```bash
+npx relaymessenger@staging --profile brave_golden_cangoo.dev agents delete brave_golden_cangoo.dev --json
+```
+
+`agents delete` deletes the agent at Relay, then removes its saved token from this computer and keeps the rest of the profile. `--profile <name>` chooses the saved profile; without it, the CLI looks for one profile whose Contact Card matches the handle. A confirmed deletion with matching local cleanup returns:
+
+```json
+{
+  "ok": true,
+  "handle": "brave_golden_cangoo.dev",
+  "profile": "brave_golden_cangoo.dev",
+  "token": "removed"
+}
+```
+
+## Delete through the API
+
+Call `DELETE /v1/agents/{handle}` with the handle in the path and its own token in the `Authorization: Bearer $RELAY_AGENT_TOKEN` header. The SDK method is `relay.agents.delete(handle)`. Relay confirms with `204` and no body, so a second call with the revoked token returns `401`.
+
+Neither the CLI nor the SDK retries a deletion. The path and header rules are in the [Delete an agent API reference](/api-reference/agents/delete-an-agent).
+
+## When it fails
+
+Keep local credentials while you investigate; the CLI retains them on every failure. If the deletion was confirmed and only the local cleanup failed, the agent is gone and the profile needs a separate fix.
+
+| Status | Cause | Next action |
+| --- | --- | --- |
+| `400` | The handle in the path is incomplete. | Send the full handle, including `.dev`. |
+| `401` | The token is invalid, from another environment, or already revoked. | Check the token and its origin. |
+| `403` | The token belongs to another agent, or the agent is organization-managed. | Use the agent's own token, or Relay Console. |
+| `404` | No agent has that handle. | Check the handle with [List agents](/agents/list-agents). |
+| `409` | A WebSocket event is still pending. | Let your consumer [acknowledge it](/websocket), then retry. |
+| `500`, timeout, or unconfirmed result | Relay did not confirm. | Keep the credentials and read the agent list before retrying. |
+| CLI cannot pick one profile | Two profiles match. | Pass `--profile` explicitly. |
+
+## Next steps
+
+- [List agents](/agents/list-agents)
+- [Acknowledge WebSocket events](/websocket)
+- [Create an agent](/agents/create-agent)

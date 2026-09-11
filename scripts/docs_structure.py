@@ -5,16 +5,18 @@ from pathlib import Path
 
 # Frame catalogs and a complete copyable agent instruction are reference, not
 # onboarding. All ordinary task guides keep five sections before related links.
-REFERENCE_PAGES = {"events/websocket/protocol", "integrations/agent-prompt"}
-LANDING_SECTIONS = ["Start here", "What you need", "Connect your coding agent", "Message it from your phone", "Or build on the API", "Group chats and mentions", "Receive events", "Your agent’s identity", "Going live", "Next"]
-# Owner ruling 2026-09-11: the Docs tab opens with the main page, the
-# quickstart and the API walkthrough split out of the main page.
-START_PAGES = ["index", "start/quickstart", "start/build-on-the-api"]
-GUIDE_PREFIXES = ("concepts/", "events/", "live/")
-# The key concepts overview and the SDK page moved out of start/ unchanged;
-# they are concept and reference pages, not task guides, so the
-# imperative-heading rule does not apply to them.
-CONCEPT_PAGES = {"concepts/index", "live/sdks"}
+REFERENCE_PAGES = {"websocket/protocol", "integrations/agent-prompt"}
+LANDING_SECTIONS = ["Start here", "Connect a coding agent", "Build on the API", "Receive events", "Next"]
+# Owner ruling 2026-09-11 (final tree): the Docs tab opens with the main page
+# alone, then a Getting started group that runs quickstart, authentication, the
+# API walkthrough, the SDKs and the checklist in that order.
+OVERVIEW_PAGES = ["index"]
+START_PAGES = ["start/quickstart", "live/authentication", "start/build-on-the-api",
+               "live/sdks", "live/best-practices"]
+GUIDE_PREFIXES = ("agents/", "chats/", "messages/", "webhooks/", "events/", "websocket/", "live/")
+# The SDK page moved out of start/ unchanged; it is a reference page, not a
+# task guide, so the imperative-heading rule does not apply to it.
+CONCEPT_PAGES = {"live/sdks"}
 
 
 def is_task_guide(page):
@@ -61,9 +63,12 @@ def authored_paths(value):
 
 def validate_structure(root: Path, config: dict):
     groups = config["navigation"]["tabs"][0]["groups"]
-    start = next((group for group in groups if group.get("group") == "Get started"), None)
+    overview = next((group for group in groups if group.get("group") == "Overview"), None)
+    if overview is None or overview.get("pages") != OVERVIEW_PAGES:
+        raise SystemExit("Overview must stay the main page on its own")
+    start = next((group for group in groups if group.get("group") == "Getting started"), None)
     if start is None or start.get("pages") != START_PAGES:
-        raise SystemExit("Get started must stay the main page, the quickstart, and the API walkthrough")
+        raise SystemExit("Getting started must stay the quickstart, authentication, the API walkthrough, the SDKs and the checklist")
     pages = list(authored_paths(config["navigation"]))
     existing = {str(p.relative_to(root).with_suffix("")) for p in root.rglob("*.mdx") if "node_modules" not in p.parts}
     if len(pages) != len(set(pages)) or set(pages) != existing:

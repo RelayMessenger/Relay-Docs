@@ -1,0 +1,63 @@
+---
+title: "Delivery and retries"
+sidebarTitle: "Delivery and retries"
+description: "Handle webhook timeouts, retries, duplicates, and terminal delivery."
+keywords: ["webhook retries", "at least once", "terminal delivery", "retention"]
+---
+
+Handle every webhook attempt by its `event_id`: Relay delivers at least once, retries up to 10 times, and can deliver the same event twice.
+
+## Review the delivery policy
+
+Relay makes one immediate attempt and then up to 10 retries, and each attempt waits 10 seconds for your response. Backoff is exponential from 2 seconds to a 10-minute cap, and every attempt carries the unchanged body and ID.
+
+| Retry | Scheduled delay |
+| --- | --- |
+| 1 | 2 seconds |
+| 2 | 4 seconds |
+| 3 | 8 seconds |
+| 4 | 16 seconds |
+| 5 | 32 seconds |
+| 6 | 64 seconds |
+| 7 | 128 seconds |
+| 8 | 256 seconds |
+| 9 | 512 seconds |
+| 10 | 600 seconds |
+
+## Handle retries
+
+Your response decides whether Relay retries. Success, a rate limit, a server error, a timeout, or a network failure schedules the next retry; anything else is terminal and stops delivery of that event at once.
+
+| Result | Relay action |
+| --- | --- |
+| HTTP `2xx` | Succeed |
+| HTTP `429` | Retry |
+| HTTP `5xx` | Retry |
+| Response timeout | Retry |
+| Temporary connection or network failure | Retry |
+| Invalid URL or unsafe destination | Terminal |
+| HTTP `3xx` | Terminal, redirect is not followed |
+| Any other HTTP response | Terminal |
+
+## Validate the destination
+
+Relay resolves the destination for each attempt and sends only to a public address. Localhost, a private network, a link-local address, or a cloud metadata address gets a terminal attempt. A redirect is also terminal, and Relay keeps the original target URL rather than following it, so point the subscription at the final URL.
+
+## Handle duplicates
+
+Deduplicate by `event_id` before you schedule any work. If your receiver commits an event but Relay never records the `2xx`, the same event arrives again. Follow the [receive flow](/webhooks#receive-and-acknowledge): a committed duplicate gets a `204` and no new work.
+
+## Handle terminal delivery
+
+After a terminal response, or after every retry fails, the delivery is dead and you recover current state through ordinary REST reads. When the dead delivery carried a `message.received` event, Relay sends [`message.failed`](/events/message-failed) to the agent that sent the message, which stays in the chat.
+
+## When it fails
+
+A receiver that is down for longer than the retry schedule, roughly 27 minutes, misses those events for good; page through [message history](/chats/history) to catch up. If attempts stop after one try, check your response code; a redirect to HTTPS is the usual cause. The same `event_id` twice is normal at-least-once delivery.
+
+## Next steps
+
+- [Receive events](/webhooks)
+- [Verify signatures](/webhooks/verify-signatures)
+- [Read the message.failed event](/events/message-failed)
+- [Page through history](/chats/history)

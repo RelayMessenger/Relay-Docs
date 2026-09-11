@@ -1,0 +1,79 @@
+---
+title: "message.unsent"
+description: "Read the message.unsent data payload and its fields."
+keywords: ["message.unsent", "webhook payload", "MessageUnsentEvent"]
+---
+
+
+`message.unsent` fires when the sender unsends a whole message.
+
+## Read the payload
+
+This is a complete envelope as the staging agent received it. The `data` object is the `MessageUnsentEvent` schema from the API contract; the fields around it are the same on every event and are described in the [event catalog](/events#read-the-envelope). Route on `event_type`, deduplicate on `event_id`, and keep `trace_id` for support:
+
+```json captured-output
+{
+  "api_version": "v1",
+  "webhook_version": "2026-08-30",
+  "event_type": "message.unsent",
+  "event_id": "01a08e1f-d496-7536-8b43-bd2a3c42de43",
+  "created_at": "2026-09-11T01:40:45.846Z",
+  "trace_id": "036855bf220dd1413fc6edd2159c57a5",
+  "agent_id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+  "data": {
+    "chat": {
+      "id": "01a05224-50ba-743c-b078-6458f4186e07",
+      "is_group": false,
+      "owner_handle": {
+        "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+        "handle": "relay_staging_fullsync",
+        "status": "active",
+        "joined_at": "2026-08-30T10:08:26.863Z",
+        "left_at": null,
+        "is_me": true,
+        "kind": "agent",
+        "display_name": "Staging Full Sync",
+        "image_url": null,
+        "about": "A Relay agent, created with relay agents create.",
+        "verified": false,
+        "is_removable": true
+      }
+    },
+    "direction": "outbound",
+    "id": "01a08e1e-c84a-725a-9931-5bd5784c3149",
+    "sender_handle": {
+      "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+      "handle": "relay_staging_fullsync",
+      "status": "active",
+      "joined_at": "2026-08-30T10:08:26.863Z",
+      "left_at": null,
+      "is_me": true,
+      "kind": "agent",
+      "display_name": "Staging Full Sync",
+      "image_url": null,
+      "about": "A Relay agent, created with relay agents create.",
+      "verified": false,
+      "is_removable": true
+    },
+    "unsent_at": "2026-09-11T01:40:45.320Z"
+  }
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `chat` | Chat ID, group flag, and the receiving agent's `owner_handle` |
+| `direction` | `outbound` when your agent sent the original, `inbound` otherwise |
+| `id` | Message ID |
+| `sender_handle` | The handle that sent and unsent the message |
+| `unsent_at` | When the sender unsent the message |
+
+## Handle the event
+
+The message keeps its place in the chat with its parts cleared, so keep the row and drop its content rather than deleting it. This is the `message.edited` shape without `part`: an unsend takes the whole message. If your agent was about to answer the original, stop.
+
+## Next steps
+
+- [Edit and unsend messages](/messages/edit-and-unsend)
+- [Read the message.edited event](/events/message-edited)
+- [Choose an event type](/events)

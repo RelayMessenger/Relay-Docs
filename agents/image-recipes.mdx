@@ -1,0 +1,85 @@
+---
+title: "Supply an image recipe"
+description: "Pair an already-rendered profile image with Relay's native monogram, emoji, or photo recipe."
+keywords: ["image_recipe", "native recipe", "monogram", "emoji", "profile image"]
+---
+
+An image recipe records how a rendered picture was made.
+
+The Relay iOS app draws monogram and emoji pictures itself from a recipe: the initials or the emoji, on one of seven published gradients. When you render such a picture on your side, send `image_recipe` with the rendered image and Relay keeps both. The recipe never travels alone; a recipe-only update returns `400`.
+
+Send it on the same `PATCH /v1/contact_card` request as the image, following the upload and URL rules in [Profile photos](/agents/profile-photos). A new image sent without `image_recipe` is stored with a photo recipe. A name-only `PATCH` keeps the image and its recipe, and `image_url: null` clears both.
+
+## Supply a rendered image with a recipe
+
+Upload the rendered `RL` monogram on the blue gradient and confirm it is complete. Then send its Attachment ID with the recipe:
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" -X PATCH \
+  "https://api.staging.relayapp.im/v1/contact_card?handle=$RELAY_AGENT_HANDLE" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "attachment_id":"'"$ATTACHMENT_ID"'",
+    "image_recipe":{
+      "recipe":{"monogram":{"initials":"RL"}},
+      "background":{"linearGradient":{"colors":["5B9BFA","0B52C0"]}}
+    }
+  }'
+```
+
+```typescript TypeScript SDK
+await relay.contactCard.update({
+  handle: "my_assistant.dev",
+  attachment_id: completedAttachmentId,
+  image_recipe: {
+    recipe: { monogram: { initials: "RL" } },
+    background: {
+      linearGradient: { colors: ["5B9BFA", "0B52C0"] },
+    },
+  },
+});
+```
+</CodeGroup>
+
+```http
+HTTP/1.1 200 OK
+```
+
+To use a hosted image instead, send `image_url` with the same recipe, following [Profile photos](/agents/profile-photos).
+
+The recipe has one of three shapes. A monogram is `recipe.monogram.initials`: one to four graphemes without spaces, at most 16 UTF-8 bytes. An emoji is `recipe.emoji.emoji`, exactly one emoji, and a photo is `recipe.image: {}` with no background.
+
+Monogram and emoji recipes need `background.linearGradient.colors`, one published pair in top-then-base order.
+
+## Choose a gradient pair
+
+| Pair | Top | Base |
+| --- | --- | --- |
+| Orange | `EC8A3C` | `C85F1C` |
+| Pink | `E0567A` | `AD2A52` |
+| Purple | `D05FC6` | `93217E` |
+| Violet | `8F6CF2` | `5F38CF` |
+| Blue | `5B9BFA` | `0B52C0` |
+| Teal | `2596A6` | `116A79` |
+| Green | `2FA46A` | `137347` |
+
+## What you get back
+
+The `200` response is the Contact Card with its public `image_url`. The recipe is stored beside the image and is not returned on the card; the Relay iOS app reads it when it needs to redraw the picture.
+
+## When it fails
+
+Read the card before you retry an uncertain update, and keep the rendered image and its recipe together.
+
+| Status | Code | Cause | Next action |
+| --- | --- | --- | --- |
+| `400` | [1005](/api-reference/errors#1005) | The recipe names no case or more than one, lacks its required background, uses a gradient that is not a published pair in order, or came without an image input. | Correct the recipe and send it with one image. |
+| `422` | [2006](/api-reference/errors#2006) | The image input failed a check. | See [Profile photos](/agents/profile-photos#failures-and-retries). |
+
+## Next steps
+
+- [Update a profile photo](/agents/profile-photos)
+- [Configure a Contact Card](/agents/contact-card)
+- [Upload attachments](/messages/attachments)

@@ -1,0 +1,126 @@
+---
+title: "Webhook events"
+sidebarTitle: "Webhook events"
+description: "Choose event names and open the exact payload reference for each event."
+keywords: ["webhooks", "event catalog", "event envelope", "webhook events"]
+---
+
+Route each event by `event_type`, and open that event's page for the shape of `data`.
+
+## Read the envelope
+
+Every webhook request body is this envelope, and every WebSocket [event frame](/websocket/protocol#read-the-event-frame) carries the same envelope in its `event` field. Only `data` changes between event types. Deduplicate on `event_id`, which stays the same across webhook retries and WebSocket replays, and keep `trace_id` for support. This one carried a `message.failed` event:
+
+```json captured-output
+{
+  "api_version": "v1",
+  "webhook_version": "2026-08-30",
+  "event_type": "message.failed",
+  "event_id": "01a08e1e-e134-708b-afba-7e76c5567827",
+  "created_at": "2026-09-11T01:39:43.540Z",
+  "trace_id": "c86014b4778f3b556008a9e2a61a06fd",
+  "agent_id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+  "data": {
+    "chat_id": "01a05224-50ba-743c-b078-6458f4186e07",
+    "message_id": "01a08e1e-c84a-725a-9931-5bd5784c3149",
+    "code": 3006,
+    "reason": "HTTP 401",
+    "detail_code": 401,
+    "failed_at": "2026-09-11T01:39:43.043Z"
+  }
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `api_version` | Relay API version, `v1` |
+| `webhook_version` | Fixed payload version, `2026-08-30` |
+| `event_type` | Event name that selects the `data` shape |
+| `event_id` | Stable event ID for deduplication |
+| `created_at` | Event creation time |
+| `trace_id` | Event correlation ID |
+| `agent_id` | Your agent's contact ID |
+| `data` | Event-specific payload |
+
+## Choose an event type
+
+Subscribe to the events your backend acts on and ignore the rest; a webhook subscription names them in `subscribed_events`, and a WebSocket consumer receives all of them. Most agents need `message.received` first and `chat.created` second.
+
+| Event | Fires when | Data schema |
+| --- | --- | --- |
+| [`message.sent`](/events/message-sent) | A message your agent sent is committed | `MessageEvent` |
+| [`message.received`](/events/message-received) | A message from a person or another agent is committed for your agent | `MessageEvent` |
+| [`message.delivered`](/events/message-delivered) | A message your agent sent reaches Delivered | `MessageEvent` |
+| [`message.read`](/events/message-read) | A message your agent sent reaches Read | `MessageEvent` |
+| [`message.edited`](/events/message-edited) | The sender replaces the text of one message part | `MessageEditedEvent` |
+| [`message.unsent`](/events/message-unsent) | The sender unsends a message | `MessageUnsentEvent` |
+| [`message.failed`](/events/message-failed) | A recipient agent's `message.received` webhook delivery goes terminal | `MessageFailedEvent` |
+| [`reaction.added`](/events/reaction-added) | A contact adds a reaction to a message part | `ReactionEventBase` |
+| [`reaction.removed`](/events/reaction-removed) | A contact removes a reaction from a message part | `ReactionEventBase` |
+| [`participant.added`](/events/participant-added) | A contact joins a group chat | `ParticipantAddedEvent` |
+| [`participant.removed`](/events/participant-removed) | A contact leaves or is removed from a group chat | `ParticipantRemovedEvent` |
+| [`chat.created`](/events/chat-created) | Relay creates a chat that includes your agent | `ChatCreatedEvent` |
+| [`chat.group_name_updated`](/events/chat-group-name-updated) | A group chat's name changes | `ChatGroupNameUpdatedEvent` |
+| [`chat.group_icon_updated`](/events/chat-group-icon-updated) | A group chat's icon changes | `ChatGroupIconUpdatedEvent` |
+| [`chat.typing_indicator.started`](/events/chat-typing-indicator-started) | A contact starts or refreshes typing in a chat | `ChatTypingIndicatorStartedEvent` |
+| [`chat.typing_indicator.stopped`](/events/chat-typing-indicator-stopped) | A contact's typing indicator ends | `ChatTypingIndicatorStoppedEvent` |
+| [`contact.added`](/events/contact-added) | A person wrote to your agent first, or replied to its message request | `ContactAddedEvent` |
+| [`contact.removed`](/events/contact-removed) | A person removes or blocks your agent | `ContactRemovedEvent` |
+| [`chat.request.updated`](/events/chat-request-updated) | A person replied to your agent's message request, or deleted it | `ChatRequestUpdatedEvent` |
+
+## List event types
+
+Read the names the API accepts in `subscribed_events`. The list is the contract, so check a new name here before you add it to a subscription:
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" https://api.staging.relayapp.im/v1/webhook-events \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+const { events } = await relay.webhookEvents.list();
+```
+</CodeGroup>
+
+## What you get back
+
+Relay answers `200` with every event name and the URL of this catalog. The order matches the table above, and the list changes only with a new API contract version:
+
+```json captured-output
+{
+  "events": [
+    "message.sent",
+    "message.received",
+    "message.read",
+    "message.delivered",
+    "message.edited",
+    "message.unsent",
+    "message.failed",
+    "reaction.added",
+    "reaction.removed",
+    "participant.added",
+    "participant.removed",
+    "chat.created",
+    "chat.group_name_updated",
+    "chat.group_icon_updated",
+    "chat.typing_indicator.started",
+    "chat.typing_indicator.stopped",
+    "contact.added",
+    "contact.removed",
+    "chat.request.updated"
+  ],
+  "doc_url": "https://docs.relayapp.im/guides/webhooks/events"
+}
+```
+
+## When it fails
+
+A `401` means the Agent Token is missing or revoked. An event name that is not in this list is rejected by the subscription route with code `1005`, so read the list rather than typing names by hand. If an event you subscribed to never arrives, read [delivery and retries](/webhooks/delivery) before assuming it did not fire.
+
+## Next steps
+
+- [Receive events](/webhooks)
+- [Manage subscriptions](/webhooks/subscriptions)
+- [Connect with WebSocket](/websocket)
+- [Read the message.received event](/events/message-received)

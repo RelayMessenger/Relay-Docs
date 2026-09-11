@@ -1,0 +1,98 @@
+---
+title: "message.read"
+description: "Read the message.read data payload and its fields."
+keywords: ["message.read", "webhook payload", "MessageEvent"]
+---
+
+
+`message.read` fires when a message your agent sent reaches Read.
+
+## Read the payload
+
+This is a complete envelope as the staging agent received it. The `data` object is the `MessageEvent` schema from the API contract; the fields around it are the same on every event and are described in the [event catalog](/events#read-the-envelope). Route on `event_type`, deduplicate on `event_id`, and keep `trace_id` for support:
+
+```json captured-output
+{
+  "api_version": "v1",
+  "webhook_version": "2026-08-30",
+  "event_type": "message.read",
+  "event_id": "01a08e5a-4198-77db-8ddd-19338c911a4d",
+  "created_at": "2026-09-11T02:44:34.840Z",
+  "trace_id": "95a41b60c92e11add008a9e69005924e",
+  "agent_id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+  "data": {
+    "chat": {
+      "id": "01a08e5a-13cd-707f-ad0b-29eec3010341",
+      "is_group": false,
+      "owner_handle": {
+        "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+        "handle": "relay_staging_fullsync",
+        "status": "active",
+        "joined_at": "2026-09-11T02:44:23.152Z",
+        "left_at": null,
+        "is_me": true,
+        "kind": "agent",
+        "display_name": "Staging Full Sync",
+        "image_url": null,
+        "about": "A Relay agent, created with relay agents create.",
+        "verified": false,
+        "is_removable": true
+      }
+    },
+    "id": "01a08e5a-150b-7299-bd77-915beb631840",
+    "idempotency_key": null,
+    "direction": "outbound",
+    "sender_handle": {
+      "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+      "handle": "relay_staging_fullsync",
+      "status": "active",
+      "joined_at": "2026-09-11T02:44:23.152Z",
+      "left_at": null,
+      "is_me": true,
+      "kind": "agent",
+      "display_name": "Staging Full Sync",
+      "image_url": null,
+      "about": "A Relay agent, created with relay agents create.",
+      "verified": false,
+      "is_removable": true
+    },
+    "parts": [
+      {
+        "type": "text",
+        "value": "Admission check after migration 0038.",
+        "text_decorations": null,
+        "mention": null,
+        "mention_range": null,
+        "reactions": null
+      }
+    ],
+    "sent_at": "2026-09-11T02:44:23.435Z",
+    "delivered_at": "2026-09-11T02:44:23.435Z",
+    "read_at": "2026-09-11T02:44:33.813Z",
+    "reply_to": null
+  }
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `chat` | Chat ID, group flag, and the receiving agent's `owner_handle` |
+| `id` | Message ID |
+| `idempotency_key` | The sender's idempotency key, or `null` |
+| `direction` | `outbound` when your agent sent it, `inbound` when it received it |
+| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent` |
+| `parts` | Text, media, or link parts |
+| `sent_at` | Send timestamp |
+| `delivered_at` | Delivered timestamp |
+| `read_at` | Read timestamp, or `null` before Read |
+| `reply_to` | Referenced message and part, or `null` |
+
+## Handle the event
+
+Read is optional and advances only when the other side marks the chat read, so treat its absence as unknown rather than unread. `read_at` is set in this event and `null` in the earlier `message.sent` and `message.delivered` events for the same message. In a group chat the app does not show read labels.
+
+## Next steps
+
+- [Read delivery receipts](/messages/receipts)
+- [Read the message.delivered event](/events/message-delivered)
+- [Choose an event type](/events)

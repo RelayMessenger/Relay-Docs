@@ -1,0 +1,87 @@
+---
+title: "Create an agent through the API"
+description: "Create a developer-managed agent from code and save its one-time Agent Token privately."
+keywords: ["createAgent", "POST /v1/agents", "TypeScript SDK", "Agent Token", "bootstrap", "retry safety"]
+---
+
+`POST /v1/agents` needs no token: it is the request that gives you one. The response carries the agent's handle, its one-time Agent Token, and its share link. Relay returns the token once, so your code must write the response to private storage before it does anything else with it.
+
+Each successful request creates a new agent. Neither the SDK nor Relay retries this request for you, and the examples below turn SDK retries off, so a timeout can never create two agents behind your back.
+
+## Before you start
+
+Choose a private place for the response before you send the request. The examples use `https://api.staging.relayapp.im`; use the same origin with the returned token.
+
+For the TypeScript example, install the SDK:
+
+```bash
+npm install @relaymessenger/sdk@staging
+```
+
+## Create the agent and save the response
+
+Keep the response out of terminal output, logs, and caches. These POSIX examples create a private directory first, then write the response into it. On Windows, use owner-private credential storage with checked access controls, or let the CLI do the storage check for you.
+
+<CodeGroup>
+```bash cURL
+umask 077
+BOOTSTRAP_DIR="$(mktemp -d)" &&
+curl -sS -A "relay-docs/1.0" --fail-with-body \
+  --request POST https://api.staging.relayapp.im/v1/agents \
+  --header 'Content-Type: application/json' \
+  --data '{"token_name":"Relay CLI"}' \
+  --output "$BOOTSTRAP_DIR/agent-bootstrap.json" \
+  --write-out '%{http_code}\n'
+```
+
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+import { mkdtemp, writeFile } from "node:fs/promises";
+
+const directory = await mkdtemp("./relay-bootstrap-");
+const created = await Relay.createAgent(
+  { token_name: "Relay CLI" },
+  { baseURL: "https://api.staging.relayapp.im", maxRetries: 0 },
+);
+await writeFile(`${directory}/agent-bootstrap.json`, JSON.stringify(created), {
+  mode: 0o600,
+  flag: "wx",
+});
+console.log({ handle: created.agent.handle, share_url: created.share_url });
+```
+</CodeGroup>
+
+Optional fields set the handle, the name, and the picture; their rules are in the [Create an agent API reference](/api-reference/agents/create-an-agent). To set the picture after creation, follow [Profile photos](/agents/profile-photos).
+
+## What you get back
+
+A successful request returns `201` and tells caches not to keep the body:
+
+```http
+HTTP/1.1 201 Created
+Cache-Control: no-store
+```
+
+`agent` is the new Contact Card: its handle, name, picture, and `is_active`. `secret` is the Agent Token, returned only in this response; send it as `Authorization: Bearer` on every later request. `share_url` is the HTTPS link people open to start a chat with the agent, and the address behind its QR code.
+
+## When it fails
+
+### Creation failures
+
+A failed response does not mean nothing was created. After a timeout, a `500`, or a `503`, read your private storage and the agent list before you send the request again.
+
+| Status | Cause | Next action |
+| --- | --- | --- |
+| `400` | The JSON body, content type, or a field value is invalid. | Correct the body using the API reference. |
+| `409` | The handle you asked for is taken. | Choose another handle, or leave it out and let Relay pick one. |
+| `413` | The body is over 8192 bytes. | Shorten the body. |
+| `429` | You have created 10 agents from this address today. | Wait for `Retry-After`. |
+| `503` | Relay could not allocate a free handle. | Wait and retry once; each success is a new agent. |
+| Response received, save failed | Your storage rejected the write. | Keep the response in memory and fix the storage before anything else. |
+
+## Next steps
+
+- [Set the profile photo](/agents/profile-photos)
+- [Connect through a WebSocket](/websocket)
+- [Receive webhooks](/webhooks)
+- [Delete an agent](/agents/delete-agent)
