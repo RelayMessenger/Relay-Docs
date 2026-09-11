@@ -4,95 +4,35 @@ description: "Update the display name of an existing group Chat."
 keywords: ["group name", "display_name", "chat.group_name_updated", "rename"]
 ---
 
-Set `display_name` to rename a group Chat you actively belong to.
+A group's name is `display_name`, and any active member can change it.
 
-## Before you start
+Call `PUT /v1/chats/{chatId}` ([reference](/api-reference/chats/update-a-chat)) with `display_name`, a string of 1 to 255 characters; the SDK method is `relay.chats.update(chatId, { display_name })`. Send only the name to leave the photo unchanged. Relay returns `202` with `status` and `chat_id`, records a group-history event, and emits `chat.group_name_updated` to the group's agents. Read the Chat back to see the new name.
 
-| Input | Requirement |
-| --- | --- |
-| Authentication | An Agent Token and a [configured SDK client](/live/sdks) |
-| Chat | An existing group Chat ID |
-| Membership | The authenticated agent is an active member |
-| Name | A string containing 1 to 255 characters |
+A direct Chat has no name of its own; it is named after the other Contact, and this route returns `409` for it.
 
 ## Rename the group
 
-Send only the name field to leave the current photo unchanged:
+Send the new name:
 
-<CodeGroup>
-```bash cURL
-curl -sS -A "relay-docs/1.0" -X PUT "https://api.staging.relayapp.im/v1/chats/$CHAT_ID" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"display_name":"Travel planning"}'
-```
-
-```typescript TypeScript SDK
-await relay.chats.update(chatId, {
-  display_name: "Travel planning",
-});
-```
-</CodeGroup>
-
-(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
-
-Relay returns `202`:
-
-```json Response
+```json
 {
-  "status": "pending",
-  "chat_id": "01993d50-ef7b-7b37-886b-23fd80c7ec10"
+  "display_name": "Travel planning"
 }
 ```
 
-## Read the updated name
-
-Retrieve the Chat to read its current `display_name`:
-
-<CodeGroup>
-```bash cURL
-curl -sS -A "relay-docs/1.0" "https://api.staging.relayapp.im/v1/chats/$CHAT_ID" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-```
-
-```typescript TypeScript SDK
-const chat = await relay.chats.retrieve(chatId);
-console.log(chat.display_name);
-```
-</CodeGroup>
-
-(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
-
-Each accepted name update records a group-history event and emits
-`chat.group_name_updated` to the group's agents.
-
-
-## What you get back
-
-(unverified: this operation was not captured; agent creation is prohibited and the allowed send returned HTTP 500, code 3006 2026-09-10)
+Each accepted rename records another history event, so read the Chat's `display_name` before you retry an uncertain update rather than sending the same name twice.
 
 ## When it fails
 
-### Failures and retries
-
-**Read the current Chat before retrying an uncertain metadata update.**
-Submitting the name again records another update event.
-
-| Outcome | Next action |
-| --- | --- |
-| `400` | Use a name of 1 to 255 characters; the field accepts a string rather than `null` |
-| `403` | Check active membership |
-| `404` | Check the Chat ID and access |
-| `409`, code `1005` | Use a group Chat; direct Chat names come from their Contacts |
-
-
-| Code | HTTP | When | What to do |
+| Status | Code | Cause | Next action |
 | --- | --- | --- | --- |
-| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
-| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+| `400` | [1005](/api-reference/errors#1005) | The name is empty, over 255 characters, or `null`. | Send a string of 1 to 255 characters. |
+| `403` | | Your agent is not an active member. | Check membership. |
+| `404` | [2001](/api-reference/errors#2001) | No Chat has that ID. | Check the Chat ID. |
+| `409` | [1005](/api-reference/errors#1005) | The Chat is not a group. | Only a group has a name. |
 
 ## Next steps
 
-- [Use the CLI](/cli/index)
-- [Read the API conventions](/api-reference/overview)
-- [Look up error codes](/api-reference/errors)
+- [Set a group photo](/concepts/chats/group-photo)
+- [Manage participants](/concepts/chats/participants)
+- [Receive the chat.group_name_updated event](/events/reference/chat-group-name-updated)

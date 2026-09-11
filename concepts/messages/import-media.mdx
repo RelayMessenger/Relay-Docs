@@ -4,121 +4,53 @@ description: "Send a public HTTPS file by importing it into a Relay Attachment."
 keywords: ["media URL", "public HTTPS", "import", "SSRF", "10 MiB"]
 ---
 
-Send a public HTTPS file in a media part, and Relay imports the bytes into an Attachment owned by the sender.
+Send a hosted file by URL; Relay imports it as an Attachment.
 
-## Before you start
+Put the URL in a media part's `url` field instead of `attachment_id`, through either [send path](/concepts/messages/send). Relay fetches the file, stores it as an Attachment owned by your agent, and commits the Message with a Relay download URL in place of the source. Later downloads never touch your host, so the source can go away once the send is confirmed.
 
-| Input | Requirement |
-| --- | --- |
-| Authentication | An Agent Token and a [configured SDK client](/live/sdks) |
-| Chat | An existing Chat the agent can [send to](/concepts/messages/send) |
-| Source URL | A publicly reachable HTTPS file available while Relay imports it |
-| Retry key | One saved, unique idempotency key for this logical Message |
-
-**Use [Upload attachments](/concepts/messages/attachments) for files above the
-URL-import limit of 10 MiB (10,485,760 bytes), or files that require private
-source access.**
+The import limit is 10 MiB (10,485,760 bytes). For a larger file, or one that needs private access to fetch, [upload it](/concepts/messages/attachments) instead. Keep the source file available until the send returns, and reuse the same idempotency key on a retry.
 
 ## Send the URL
 
-Replace the example URL with a file you host. Use exactly one of `url` or
-`attachment_id` in each media part.
+Send exactly one of `url` or `attachment_id` in each media part:
 
-<CodeGroup>
-```bash cURL
-curl -sS -A "relay-docs/1.0" -X POST \
-  "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: $IDEMPOTENCY_KEY" \
-  -d '{
-    "message":{
-      "parts":[{
-        "type":"media",
-        "url":"https://cdn.yourdomain.com/report.pdf"
-      }]
-    }
-  }'
-```
-
-```typescript TypeScript SDK
-const result = await relay.chats.messages.send(chatId, {
-  message: {
-    idempotency_key: idempotencyKey,
-    parts: [{
-      type: "media",
-      url: "https://cdn.yourdomain.com/report.pdf",
-    }],
-  },
-});
-```
-</CodeGroup>
-
-(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
-
-Relay returns `202` after importing the file and committing the Message. Its
-media part contains a Relay Attachment ID and signed download URL, rather
-than relying on the source host for later downloads.
-
-```json Returned media part
+```json
 {
-  "type": "media",
-  "id": "01993d50-d263-7d6b-87ce-90aba89b7815",
-  "url": "https://cdn.staging.relayapp.im/attachments/<token>",
-  "filename": "report.pdf",
-  "mime_type": "application/pdf",
-  "size_bytes": 48291,
-  "reactions": null
+  "message": {
+    "parts": [{"type":"media","url":"https://cdn.yourdomain.com/report.pdf"}]
+  }
 }
 ```
 
-## Review uRL safety checks
+Relay returns `202` after the import and commit. The media part in the response carries the new Attachment `id`, a Relay download `url`, `filename`, `mime_type`, and `size_bytes`. Keep the `id` for [URL refreshes](/concepts/messages/receiving-media#refresh-eligibility). A Message may carry up to 40 URL media parts.
 
-### URL safety checks
+## Apply the URL safety checks
 
-**Every redirect and resolved address must pass the public-network checks.**
+Every redirect and every resolved address must pass the same checks as the original URL.
 
 | Check | Requirement |
 | --- | --- |
 | Scheme and credentials | HTTPS, with no username or password in the URL |
-| Network | Every resolved address must be public; loopback, private, link-local, reserved, and internal destinations are blocked |
+| Network | Every resolved address is public; loopback, private, link-local, reserved, and internal destinations are blocked |
 | Hostname | `localhost` and names ending in `.localhost`, `.local`, `.internal`, `.home`, `.lan`, `.test`, `.invalid`, or `.example` are refused |
-| Redirects | At most five; each destination is validated again |
+| Redirects | At most five; each destination is checked again |
 | Response | The final response must succeed |
-| Size | Actual body is 1 byte to 10 MiB (10,485,760 bytes); declared `Content-Length`, when present, must be valid and within the ceiling |
-| Content type | Any valid declared MIME type; missing or unusable declarations become `application/octet-stream` |
+| Size | The body is 1 byte to 10 MiB; a declared `Content-Length`, when present, must be valid and within the ceiling |
+| Content type | Any valid declared MIME type; a missing or unusable declaration becomes `application/octet-stream` |
 
-Imported Attachments use the same [download headers and file-type rules](/concepts/messages/attachment-types)
-as uploaded files.
-
-
-## What you get back
-
-(unverified: this operation was not captured; agent creation is prohibited and the allowed send returned HTTP 500, code 3006 2026-09-10)
+An imported Attachment is served with the same [download headers and type rules](/concepts/messages/attachment-types) as an uploaded one.
 
 ## When it fails
 
-### Failures and retries
-
-| Outcome | Next action |
-| --- | --- |
-| `400` | Correct the media part or the Message's part count |
-| `413`, code `2006` | Supply a nonempty file within the URL-import limit, or pre-upload it |
-| `422`, code `2006` | Correct an unsafe URL, failed fetch, invalid redirect, or invalid response |
-| Timeout or uncertain send | Retry the same request with the same idempotency key |
-| `409` after changing a keyed request | Use a new key for a genuinely new Message |
-
-Keep the source file available until the send result is confirmed. Retain the
-returned Attachment ID for [eligible URL refreshes](/concepts/messages/receiving-media#refresh-eligibility).
-
-
-| Code | HTTP | When | What to do |
+| Status | Code | Cause | Next action |
 | --- | --- | --- | --- |
-| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
-| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+| `400` | [1005](/api-reference/errors#1005) | The media part names both inputs or neither, or the Message has too many parts. | Correct the part. |
+| `409` | [1005](/api-reference/errors#1005) | The idempotency key was reused with a different body. | Use a new key for a new Message. |
+| `413` | [2006](/api-reference/errors#2006) | The file is empty or over 10 MiB. | Upload it instead. |
+| `422` | [2006](/api-reference/errors#2006) | The URL, a redirect, the address, or the response failed a check. | Fix the URL or host the file elsewhere. |
 
 ## Next steps
 
-- [Use the CLI](/cli/index)
-- [Read the API conventions](/api-reference/overview)
-- [Look up error codes](/api-reference/errors)
+- [Upload attachments](/concepts/messages/attachments)
+- [Read the types and limits](/concepts/messages/attachment-types)
+- [Download attachments](/concepts/messages/receiving-media)

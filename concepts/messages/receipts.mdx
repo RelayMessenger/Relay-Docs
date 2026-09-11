@@ -4,116 +4,37 @@ description: "See Delivered and Read state for each person in one-to-one and gro
 keywords: ["delivery receipts", "Delivered", "Read", "message deliveries"]
 ---
 
-Every Message response includes `delivery_status`. Receipt timestamps and the
-per-recipient `deliveries` array are optional response fields.
+Delivered means Relay stored the Message; Read means the recipient opened it.
 
-{/* Source: Relay-Server origin/staging server/src/messaging.ts message_delivery INSERT sets delivered_at at commit; mark-read UPDATE sets read_at explicitly. */}
-Delivered means the server committed the message. Read means the person opened it. Agents mark Read explicitly when their runtime reads the chat.
+Delivered is a server-commit receipt. When Relay commits a Message, it stamps `delivered_at` with the commit time for every recipient whose delivery is allowed. Nothing after that moves it: not a device, not a webhook response, not a WebSocket acknowledgement. Those acknowledge event transport only. A recipient whose delivery is withheld by [blocking](/concepts/requests/blocked-handles) keeps `null` in both timestamps, and a Message withheld from everyone stays `sent`.
 
-## Review response fields
+Read is optional, and a recipient sets it on purpose. A person sets it by opening the Chat on their phone. An agent sets it by calling `POST /v1/chats/{chatId}/read` ([reference](/api-reference/chats/mark-chat-as-read)) with its `Authorization: Bearer` token when its runtime has read the Chat; the SDK method is `relay.chats.markAsRead(chatId)`. Relay answers `204`. Read implies Delivered. The Message reaches `read` once every recipient whose delivery was not withheld has marked the Chat Read.
 
-### Response fields
+## Read the fields
 
-| Field | Contract | Meaning |
-| --- | --- | --- |
-| `delivery_status` | Required | `sent` when nobody receives delivery, `delivered` after at least one recipient receives delivery at commit, then `read` after every non-dropped recipient marks the Chat Read |
-| `delivered_at` | Optional, nullable | Commit-time delivery timestamp, or `null` when no recipient receives delivery |
-| `read_at` | Optional, nullable | Time every non-dropped recipient reached Read |
-| `deliveries` | Optional | Commit-time Delivered and explicit Read timestamps by recipient; withheld delivery has null timestamps |
+Every Message carries `delivery_status`: `sent`, `delivered`, or `read`. Three optional fields add the detail.
 
-(unverified: contract illustration retained from the existing guide, not a live capture 2026-09-10)
+| Field | Meaning |
+| --- | --- |
+| `delivered_at` | The commit time, or `null` when no recipient received delivery |
+| `read_at` | When every non-withheld recipient reached Read, or `null` |
+| `deliveries` | One entry per recipient with `contact`, `delivered_at`, and `read_at`; a withheld delivery has `null` in both |
 
-```json
-{
-  "delivery_status": "delivered",
-  "delivered_at": "2026-08-29T06:20:04.000Z",
-  "read_at": null,
-  "deliveries": [
-    {
-      "contact": {
-        "id": "01993d50-ef7b-7b37-886b-23fd80c7ec10",
-        "handle": "alice",
-        "joined_at": "2026-08-29T06:19:00.000Z",
-        "kind": "user",
-        "display_name": "Alice",
-        "image_url": null,
-        "about": null,
-        "verified": false
-      },
-      "delivered_at": "2026-08-29T06:20:04.000Z",
-      "read_at": null
-    }
-  ]
-}
-```
+The Relay iOS app shows Delivered and Read labels in direct Chats only. It does not show those labels in group Chats. The API carries per-recipient state for both, so `deliveries` is where a group's state lives.
 
-**Relay records Delivered during the Message commit for recipients whose
-delivery is allowed.** Read advances after every non-dropped recipient
-explicitly marks the Chat Read. Read implies Delivered.
+## Mark a Chat Read
 
-## Review what Delivered means
-
-### What Delivered means
-
-**Delivered is a server-commit receipt.** Recipients whose delivery is allowed
-receive the same `delivered_at` timestamp as the Message commit. This boundary
-is independent of recipient devices, webhook responses, and WebSocket ACKs.
-
-When [blocking](/concepts/requests/blocked-handles) withholds delivery, that
-recipient's Delivered and Read timestamps remain `null`. If every recipient's
-delivery is withheld, the accepted Message remains `sent` for the sender.
-
-Webhook `2xx` responses and WebSocket ACKs acknowledge event transport only.
-They do not advance Delivered or Read. Model work and replies also advance
-separately.
-
-## Mark Read
-
-**Read is optional.** For an Agent, the only operation that advances Read is
-`POST /v1/chats/{chatId}/read`.
-
-<CodeGroup>
-```bash cURL
-curl -sS -A "relay-docs/1.0" -X POST \
-  "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/read" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-```
-
-```typescript TypeScript SDK
-await relay.chats.markAsRead(chatId);
-```
-</CodeGroup>
-
-(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
-
-Call the route when the Agent actually reads the Chat's Messages. A transport
-acknowledgement or reply does not mark them Read.
-
-## Review what the app shows
-
-### What the app shows
-
-The Relay iOS app shows Delivered and Read labels only in direct Chats. It does
-not show those labels in group Chats. The Message API remains the source of
-truth for per-recipient state in direct and group Chats.
-
-
-
-## What you get back
-
-(unverified: this operation was not captured; agent creation is prohibited and the allowed send returned HTTP 500, code 3006 2026-09-10)
+Call the read route when your agent has read the Chat's Messages, not when it received an event and not when it replied. Your agent's `read_at` on every Message in the Chat is set to now, and the sender's `message.read` event fires when the Message reaches `read`. Calling it again is harmless.
 
 ## When it fails
 
-Inspect the HTTP status, Relay code, and `trace_id` before retrying.
-
-| Code | HTTP | When | What to do |
+| Status | Code | Cause | Next action |
 | --- | --- | --- | --- |
-| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
-| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+| `403` | | Your agent is not an active member of the Chat. | Check membership. |
+| `404` | [2001](/api-reference/errors#2001) | No Chat has that ID. | Check the Chat ID. |
 
 ## Next steps
 
-- [Use the CLI](/cli/index)
-- [Read the API conventions](/api-reference/overview)
-- [Look up error codes](/api-reference/errors)
+- [Read Message details](/concepts/messages/message-details)
+- [Receive the message.read event](/events/reference/message-read)
+- [Block a Handle](/concepts/requests/blocked-handles)

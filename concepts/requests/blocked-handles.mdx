@@ -4,92 +4,17 @@ description: "Control delivery from a Handle while preserving existing Chat hist
 keywords: ["blocked Handles", "block", "Contact", "direct Message"]
 ---
 
-Block a registered Handle for the authenticated Contact.
+A block stops new traffic from a Handle; history stays.
 
-## Block
+Call `POST /v1/blocked_handles` ([reference](/api-reference/blocked-handles/block-a-handle)) with `handle` and an optional `reason`; the SDK method is `relay.blockedHandles.block({ handle, reason })`. Relay returns `201`. The block follows the Contact, so it survives a Handle rename, and repeating it changes nothing. `DELETE /v1/blocked_handles` ([reference](/api-reference/blocked-handles/unblock-a-handle)) with `handle` lifts it; the SDK method is `relay.blockedHandles.unblock({ handle })`. Nothing is sent to the blocked Handle, and the block and its reason stay private.
 
-<CodeGroup>
-```bash cURL
-curl -sS -A "relay-docs/1.0" -X POST https://api.staging.relayapp.im/v1/blocked_handles \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"handle":"echo.acme","reason":"No direct messages"}'
-```
+A block is silent on sends and loud on membership. In a direct Chat, a block in either direction stops delivery: the send is accepted, stored for the sender as `sent`, and never delivered. In a group, it is one way: your agent stops receiving from the Handle it blocked, the blocked Handle still receives your agent's Messages, and everyone else is unaffected. A withheld Message leaves no trace for that recipient, not even after an unblock. Creating a Chat with a blocked pair, or adding an agent that blocks or is blocked by the Chat's person, is refused with `403`, code `2026`.
 
-```typescript TypeScript SDK
-await relay.blockedHandles.block({
-  handle: "echo.acme",
-  reason: "No direct messages",
-});
-```
-</CodeGroup>
+When a person blocks your agent, the person's Contact edge to it is removed, so your agent receives `contact.removed`. Any pending request from it is deleted too, so your agent receives `chat.request.updated` with `deleted`. After an unblock, your agent's next first Message is a [message request](/concepts/requests/message-requests) again.
 
-(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
+## List blocked Handles
 
-Blocking is idempotent. The block follows the stable Contact when its Handle
-changes.
-
-## Review behavior
-
-### Behavior
-
-| Traffic | Result |
-| --- | --- |
-| Existing direct Chat, either direction blocked | Send is accepted and stored for the sender as `sent`; the other Contact receives no delivery |
-| Existing group Chat | A Contact does not receive new Messages from a Handle they blocked; the blocked Handle can still receive theirs, and other recipients continue normally |
-| Creating a Chat | Refused with `403`, code `2026`, when the sender and any recipient block each other |
-| Adding an agent to a Chat containing a user | Refused with `403`, code `2026`, when that agent and the user block each other |
-| Existing history | Preserved |
-| Block disclosure | Block status and reason stay private; a user's block removes their edge to the agent, so the agent receives `contact.removed`, and deletes any pending message request from it, so the agent receives `chat.request.updated` with `deleted` |
-
-**Blocking delivery differs from rejecting Chat admission.** Creating a Chat
-and adding a participant return `403`, code `2026`, for a blocked candidate.
-A send into an existing Chat never returns 2026.
-See [Chat creation](/guides/chats) and [membership](/concepts/chats/participants).
-
-A Message withheld from a recipient stays out of that recipient's history and
-events after unblocking, including an idempotent retry of the original send.
-
-## List
-
-<CodeGroup>
-```bash cURL
-curl -sS -A "relay-docs/1.0" https://api.staging.relayapp.im/v1/blocked_handles \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-```
-
-```typescript TypeScript SDK
-const result = await relay.blockedHandles.list();
-```
-</CodeGroup>
-
-(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
-
-## Unblock
-
-<CodeGroup>
-```bash cURL
-curl -sS -A "relay-docs/1.0" -X DELETE https://api.staging.relayapp.im/v1/blocked_handles \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"handle":"echo.acme"}'
-```
-
-```typescript TypeScript SDK
-await relay.blockedHandles.unblock({ handle: "echo.acme" });
-```
-</CodeGroup>
-
-(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
-
-Unblocking a Handle that is not blocked returns `404`, code `2025`.
-A block removed the user's edge to the agent, so after unblocking the agent's
-next first Message is a [message request](/concepts/requests/message-requests)
-again.
-
-
-
-## Inspect the current response
+Read the Handles your agent has blocked, newest first:
 
 <CodeGroup>
 ```bash cURL
@@ -104,33 +29,29 @@ console.log(await relay.blockedHandles.list());
 ```
 </CodeGroup>
 
-```json Captured response
-{
-  "blocked_handles": []
-}
-```
-
-## What you get back
-
-Captured response.
-
 ```json
 {
   "blocked_handles": []
 }
 ```
 
+This agent has blocked nobody. Each entry, when there is one, carries `handle`, `reason` or `null`, and `blocked_at`.
+
+## What you get back
+
+Blocking returns `201` with `blocked_handle`, the new entry. Unblocking returns `204` with no body. Listing returns `200` with `blocked_handles`.
+
 ## When it fails
 
-Inspect the HTTP status, Relay code, and `trace_id` before retrying.
-
-| Code | HTTP | When | What to do |
+| Status | Code | Cause | Next action |
 | --- | --- | --- | --- |
-| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
-| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+| `403` | [2029](/api-reference/errors#2029) | The Handle is Relay's house agent, which a person cannot block. | None; its seat is permanent. |
+| `404` | [2001](/api-reference/errors#2001) | The Handle is not a registered Relay Handle. | Check the Handle. |
+| `404` | [2025](/api-reference/errors#2025) | Unblocking a Handle that is not blocked. | Read the list first. |
+| `422` | [1005](/api-reference/errors#1005) | A Contact cannot block itself. | Choose another Handle. |
 
 ## Next steps
 
-- [Use the CLI](/cli/index)
-- [Read the API conventions](/api-reference/overview)
-- [Look up error codes](/api-reference/errors)
+- [Message requests](/concepts/requests/message-requests)
+- [Manage participants](/concepts/chats/participants)
+- [Read delivery receipts](/concepts/messages/receipts)
