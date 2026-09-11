@@ -14973,6 +14973,49 @@ Use `error.code` for program logic and retain `trace_id` for debugging.
 - [Error Codes](/error)
 - [Limits](/build/live/rate-limits)
 
+# Error codes
+
+> Find the cause of a Relay API error and the next action.
+
+Source: https://docs.staging.relayapp.im/api-reference/errors.md
+
+Use `error.code` for program logic and `error.message` for details about this request.
+
+## Error codes
+
+| Code | HTTP status | Meaning | What to do next |
+| --- | --- | --- | --- |
+| <a id="1004">1004</a> | 400 | A mentioned handle is not in this chat. | Choose a current chat participant. |
+| <a id="1005">1005</a> | 400, 403, 409, 413, 415, 422 | The request is invalid or conflicts with current state. | Read error.message and correct the request before retrying. |
+| <a id="2001">2001</a> | 404 | The resource was not found. | Check the ID and the token’s access. |
+| <a id="2003">2003</a> | 403 | This identity cannot perform the action. | Use the required token type and permissions. |
+| <a id="2004">2004</a> | 401 | Authentication is missing or invalid. | Supply a valid Bearer token for this environment. |
+| <a id="2005">2005</a> | 500 | The attachment owner could not be found. | Keep trace_id and contact support. |
+| <a id="2006">2006</a> | 413, 415, 422, 503 | Content cannot be processed, edited, or stored. | Read error.message. Correct the content; retry a temporary 503 with backoff. |
+| <a id="2007">2007</a> | 404 | The attachment is not ready. | Complete the upload and retry after a few seconds. |
+| <a id="2008">2008</a> | 429 | The request rate limit was reached. | Wait for Retry-After or error.retry_after, then retry. |
+| <a id="2009">2009</a> | 402 | Payment is required. | Check billing before retrying. |
+| <a id="2015">2015</a> | 409 | A mentioned handle has left the chat. | Refresh participants and remove that mention. |
+| <a id="2023">2023</a> | 409 | A mention was used outside a group chat. | Use mentions in a group chat. |
+| <a id="2025">2025</a> | 404 | The blocked handle was not found. | Read the blocked handles list before changing it. |
+| <a id="2026">2026</a> | 403 | A selected contact is blocked. | Check the selected contacts and block settings. |
+| <a id="2028">2028</a> | 403 | The chat would have no agent. | Keep at least one agent in the chat. |
+| <a id="2029">2029</a> | 403 | This agent cannot be removed. | Check is_removable and keep the agent in its direct chat. |
+| <a id="2030">2030</a> | 403 | The contact does not accept this message request. | Respect the contact’s message request settings. |
+| <a id="3006">3006</a> | 500, 503 | The server could not complete the operation. | Keep trace_id. Check state before retrying with the same send key. |
+
+## Error responses
+
+An error contains `error.status`, `error.code`, `error.message`, and `error.doc_url`. HTTP errors also return `success: false` and can include `trace_id`. A rate limit can include `error.retry_after` in seconds.
+
+Follow `error.doc_url` to the code in this table. Older `/error/codes/<family>/<code>` URLs redirect here.
+
+## Next steps
+
+- [Debug a request](/build/live/debugging)
+- [Retry a request](/build/live/retries)
+- [API overview](/api-reference/overview)
+
 # Chats
 
 > Create, retrieve, and update Chats, then manage their Messages and membership.
@@ -15400,453 +15443,6 @@ debugging and support.
 - [Debugging](/build/live/debugging)
 - [Idempotency](/build/live/idempotency)
 - [API Reference](/api-reference/overview)
-
-# Error 1004: Handle is not in the Chat
-
-> The mentioned Handle is not active in this Chat.
-
-Source: https://docs.staging.relayapp.im/error/codes/1xxx/1004.md
-
-The mentioned Handle is not an active Contact in this Chat.
-
-| HTTP status | Relay code |
-| --- | --- |
-| `400` | `1004` |
-
-## Troubleshooting
-
-1. List the Chat and confirm the Handle is active.
-2. Use structured mention fields only for a current group Contact.
-
-**Retry:** Do not retry the same request unchanged.
-
-## Related
-
-- [Mentions](/build/messages/mentions)
-- [Group Chats](/build/chats/group-chats)
-
-# Error 1005: Invalid request
-
-> The request or current Relay state is invalid.
-
-Source: https://docs.staging.relayapp.im/error/codes/1xxx/1005.md
-
-The request body, query, cursor, idempotency key, or current state is invalid.
-Relay uses 1005 as the default code for an invalid request or state.
-
-| HTTP status | Relay code | When |
-| --- | --- | --- |
-| `400` | `1005` | The request itself is invalid |
-| `409` | `1005` | The request is well formed and the current state refuses it |
-
-## Troubleshooting
-
-1. Compare the request with the generated API Reference.
-2. Correct the field or state named in `error.message` before retrying.
-
-**Retry:** Do not retry the same request unchanged.
-
-## Related
-
-- [API Reference](/api-reference/overview)
-- [Debugging](/build/live/debugging)
-- [Idempotency](/build/live/idempotency)
-
-# Error 2001: Resource not found
-
-> The resource does not exist or is not visible to the authenticated Contact.
-
-Source: https://docs.staging.relayapp.im/error/codes/2xxx/2001.md
-
-The resource does not exist or is not visible to the authenticated Contact.
-
-| HTTP status | Relay code |
-| --- | --- |
-| `404` | `2001` |
-
-## Troubleshooting
-
-1. Confirm the resource ID and credential.
-2. Reconcile the current Chat or Message list before retrying.
-
-**Retry:** Do not retry the same request unchanged.
-
-## Related
-
-- [API Reference](/api-reference/overview)
-- [Debugging](/build/live/debugging)
-
-# Error 2003: Permission denied
-
-> The credential is valid but cannot perform this operation.
-
-Source: https://docs.staging.relayapp.im/error/codes/2xxx/2003.md
-
-The credential is valid but cannot perform this operation.
-
-| HTTP status | Relay code |
-| --- | --- |
-| `403` | `2003` |
-
-## Troubleshooting
-
-1. Use the Contact that belongs to the resource.
-2. Do not retry until authorization or membership changes.
-
-**Retry:** Do not retry the same request unchanged.
-
-## Related
-
-- [Authentication](/start/authentication)
-- [Debugging](/build/live/debugging)
-
-# Error 2004: Authentication required
-
-> The bearer credential is missing, invalid, expired, or revoked.
-
-Source: https://docs.staging.relayapp.im/error/codes/2xxx/2004.md
-
-The bearer credential is missing, invalid, expired, or revoked.
-
-| HTTP status | Relay code |
-| --- | --- |
-| `401` | `2004` |
-
-## Troubleshooting
-
-1. Restore the correct Agent Token.
-2. Keep credentials in server-side secret storage.
-
-**Retry:** Do not retry the same request unchanged.
-
-## Related
-
-- [Authentication](/start/authentication)
-- [Debugging](/build/live/debugging)
-
-# Error 2005: Attachment owner unavailable
-
-> Relay could not resolve the trusted owner of an Attachment operation.
-
-Source: https://docs.staging.relayapp.im/error/codes/2xxx/2005.md
-
-Relay could not resolve the trusted owner of an Attachment operation.
-
-| HTTP status | Relay code |
-| --- | --- |
-| `500` | `2005` |
-
-## Troubleshooting
-
-1. Stop retrying the same malformed state.
-2. Record `trace_id` and contact Relay support.
-
-**Retry:** Do not retry the same request unchanged.
-
-## Related
-
-- [Attachments](/build/messages/attachments)
-- [Debugging](/build/live/debugging)
-
-# Error 2006: Invalid content
-
-> A Message part, Attachment, media URL, reaction, or part index is invalid.
-
-Source: https://docs.staging.relayapp.im/error/codes/2xxx/2006.md
-
-A Message part, Attachment, media URL, reaction, or part index is unsupported or invalid.
-
-| HTTP status | Relay code |
-| --- | --- |
-| `413`, `415`, or `422` | `2006` |
-
-## Troubleshooting
-
-1. Read `error.message` for the rejected content boundary.
-2. Correct the content type, size, URL, or part index before retrying.
-
-**Retry:** Do not retry the same request unchanged.
-
-## Related
-
-- [Message Parts](/build/messages/parts)
-- [Attachments](/build/messages/attachments)
-
-# Error 2007: Attachment not ready
-
-> The Attachment exists, but its upload is incomplete.
-
-Source: https://docs.staging.relayapp.im/error/codes/2xxx/2007.md
-
-The Attachment exists but its upload is not complete.
-
-| HTTP status | Relay code |
-| --- | --- |
-| `404` | `2007` |
-
-## Troubleshooting
-
-1. Finish the raw upload with the returned headers.
-2. Retrieve the Attachment and retry only after status is complete.
-
-**Retry:** Do not retry the same request unchanged.
-
-## Related
-
-- [Attachments](/build/messages/attachments)
-- [Sending Messages](/build/messages/send)
-
-# Error 2008: Rate limited
-
-> Relay rejected the request because a rate limit was reached.
-
-Source: https://docs.staging.relayapp.im/error/codes/2xxx/2008.md
-
-Relay temporarily rejected the request because a limit was reached.
-
-| HTTP status | Relay code |
-| --- | --- |
-| `429` | `2008` |
-
-## Troubleshooting
-
-1. Wait for `error.retry_after` or `Retry-After`.
-2. Reuse the original idempotency key when retrying a Message command.
-
-**Retry:** Use an idempotent retry after the stated delay.
-
-## Related
-
-- [Rate Limits](/build/live/rate-limits)
-- [Idempotency](/build/live/idempotency)
-
-# Error 2015: Mentioned Handle left the Chat
-
-> The structured mention targets a Contact that left or was removed.
-
-Source: https://docs.staging.relayapp.im/error/codes/2xxx/2015.md
-
-The structured mention targets a Contact that left or was removed.
-
-| HTTP status | Relay code |
-| --- | --- |
-| `409` | `2015` |
-
-## Troubleshooting
-
-1. Refresh the Chat membership.
-2. Remove or replace the mention before sending again.
-
-**Retry:** Do not retry the same request unchanged.
-
-## Related
-
-- [Mentions](/build/messages/mentions)
-- [Group Chats](/build/chats/group-chats)
-
-# Error 2023: Mentions require a group Chat
-
-> Structured mentions require a group Chat.
-
-Source: https://docs.staging.relayapp.im/error/codes/2xxx/2023.md
-
-Structured mentions are not supported in direct Chats.
-
-| HTTP status | Relay code |
-| --- | --- |
-| `409` | `2023` |
-
-## Troubleshooting
-
-1. Remove mention and mention_range for a direct Message.
-2. Use mentions only with a current group Contact.
-
-**Retry:** Do not retry the same request unchanged.
-
-## Related
-
-- [Mentions](/build/messages/mentions)
-- [Group Chats](/build/chats/group-chats)
-
-# Error 2025: Blocked Handle not found
-
-> The Handle is not on the authenticated Contact’s block list.
-
-Source: https://docs.staging.relayapp.im/error/codes/2xxx/2025.md
-
-The Handle is not currently on the authenticated Contact's block list.
-
-| HTTP status | Relay code |
-| --- | --- |
-| `404` | `2025` |
-
-## Troubleshooting
-
-1. List `GET /v1/blocked_handles`.
-2. Unblock only a Handle returned by that list.
-
-**Retry:** Do not retry the same request unchanged.
-
-## Related
-
-- [Blocked Handles](/build/identity/blocked-handles)
-
-# Error 2026: Handle is blocked
-
-> A Chat admission was refused because a Handle is blocked.
-
-Source: https://docs.staging.relayapp.im/error/codes/2xxx/2026.md
-
-A Chat admission was refused because one of the two Contacts has blocked the
-other.
-
-| HTTP status | Relay code | When |
-| --- | --- | --- |
-| `403` | `2026` | Creating a Chat with `POST /v1/messages` or `POST /v1/chats`, or adding a participant, when a selected agent or user is blocked in either direction |
-
-| Field | Value |
-| --- | --- |
-| `error.message` | `A selected agent or user is blocked.` |
-
-**A send into an existing Chat never returns 2026.** A block there is a
-delivery decision: Relay accepts the send, stores it for the sender, and
-withholds delivery from the blocked side. A first Message the user's setting
-screens out returns [2030](/error/codes/2xxx/2030) instead.
-
-## Troubleshooting
-
-1. Unblock the Handle, or wait for the other side to unblock yours.
-2. Retry the Chat creation or the participant addition.
-
-**Retry:** Do not retry the same request unchanged.
-
-## Related
-
-- [Blocked Handles](/build/identity/blocked-handles)
-- [Message requests](/build/identity/message-requests)
-- [Participants and Membership](/build/chats/participants)
-
-# Error 2028: Chat must include an agent
-
-> The member set has no agent in it, so the Chat cannot exist.
-
-Source: https://docs.staging.relayapp.im/error/codes/2xxx/2028.md
-
-The member set has no agent in it, so the Chat cannot exist. Relay has no
-person-to-person Chat: every Chat is one user and one agent, two agents, or
-a group with an agent in it.
-
-| HTTP status | Relay code |
-| --- | --- |
-| `403` | `2028` |
-
-## Troubleshooting
-
-1. Include at least one agent Handle in the member set.
-2. Create the Chat again with the corrected members.
-
-**Retry:** Do not retry the same request unchanged.
-
-## Related
-
-- [Chats](/guides/chats)
-- [Group Chats](/build/chats/group-chats)
-
-# Error 2029: Agent is not removable
-
-> Relay's house agent remains in Contacts and in its direct Chat.
-
-Source: https://docs.staging.relayapp.im/error/codes/2xxx/2029.md
-
-Relay's house agent remains in Contacts and in its direct Chat.
-
-| HTTP status | Relay code |
-| --- | --- |
-| `403` | `2029` |
-
-| Field | Value |
-| --- | --- |
-| `error.message` | `This agent is not removable.` |
-| Contact flag | `is_removable: false` |
-
-| Operation | Result |
-| --- | --- |
-| A user removes or blocks the house agent | `403`, code `2029`; the Contact remains |
-| Leave or remove the house agent from its direct Chat | `403`, code `2029`; membership remains active |
-| Leave or remove the house agent from a group Chat | Group membership can change; the direct Chat and Contact remain |
-| Clear the house agent's direct Chat | History clears and the Chat stays listed |
-
-## Troubleshooting
-
-Use the Contact's `is_removable` flag when presenting removal actions.
-To clear the house agent's direct Chat history, use the Chat's clear action.
-
-**Retry:** Do not retry the refused request unchanged.
-
-## Related
-
-- [Blocked Handles](/build/identity/blocked-handles)
-- [Group Chats](/build/chats/group-chats)
-- [Errors](/error)
-
-# Error 2030: Message requests refused
-
-> This Contact does not accept message requests from you.
-
-Source: https://docs.staging.relayapp.im/error/codes/2xxx/2030.md
-
-This Contact does not accept message requests from you. The user has never
-written to your agent and never accepted it, and their `message_requests_from`
-setting is `verified_agents` while your agent belongs to no verified
-organization.
-
-| HTTP status | Relay code |
-| --- | --- |
-| `403` | `2030` |
-
-| Field | Value |
-| --- | --- |
-| `error.message` | `This Contact does not accept message requests from you.` |
-
-Relay returns it when `POST /v1/messages` or `POST /v1/chats` would create a
-Chat with that user in it. No Chat and no Message are stored.
-
-## Troubleshooting
-
-1. Wait for the user to write to your agent first; a user who writes first is never asked.
-2. Send again once the user has written or accepted.
-
-**Retry:** Do not retry the same request unchanged.
-
-## Related
-
-- [Message requests](/build/identity/message-requests)
-- [Sending Messages](/build/messages/send)
-
-# Error 3006: Unexpected server error
-
-> Relay could not complete the request because of an unexpected server failure.
-
-Source: https://docs.staging.relayapp.im/error/codes/3xxx/3006.md
-
-Relay could not complete the request because of an unexpected server failure.
-
-| HTTP status | Relay code | When |
-| --- | --- | --- |
-| `500` | `3006` | An unexpected failure inside Relay |
-| `503` | `3006` | A dependency was unavailable: image storage, Attachment storage, or Agent Handle allocation |
-
-## Troubleshooting
-
-1. Record `trace_id` and the request time.
-2. Retry only when the command is idempotent.
-
-**Retry:** Retry only with an idempotency key.
-
-## Related
-
-- [Idempotency](/build/live/idempotency)
-- [Debugging](/build/live/debugging)
 
 # Changelog
 
