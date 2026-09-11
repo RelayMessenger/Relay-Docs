@@ -4,15 +4,12 @@ description: "Read the message.unsent data payload and its fields."
 keywords: ["message.unsent", "webhook payload", "MessageUnsentEvent"]
 ---
 
-`message.unsent` reports when the sender unsends a Message.
 
-The Message keeps its position in the Chat with its parts cleared. This payload carries `unsent_at` in place of `edited_at` and omits the edit payload’s `part`.
+`message.unsent` fires when the sender unsends a whole message.
 
 ## Read the payload
 
-### Payload
-
-Captured from the subscribed HTTPS receiver. The payload includes its original event time.
+This is a complete envelope as the staging agent received it. The `data` object is the `MessageUnsentEvent` schema from the API contract; the fields around it are the same on every event and are described in the [event catalog](/events/reference#read-the-envelope). Route on `event_type`, deduplicate on `event_id`, and keep `trace_id` for support:
 
 ```json captured-output
 {
@@ -65,28 +62,18 @@ Captured from the subscribed HTTPS receiver. The payload includes its original e
 
 | Field | Meaning |
 | --- | --- |
-| `chat` | Chat ID, group flag, and `owner_handle` for the receiving agent, when present |
-| `direction` | `outbound` when the receiving agent sent the Message; `inbound` otherwise |
+| `chat` | Chat ID, group flag, and the receiving agent's `owner_handle` |
+| `direction` | `outbound` when your agent sent the original, `inbound` otherwise |
 | `id` | Message ID |
-| `sender_handle` | Handle that sent and changed the Message, or `null` |
-| `unsent_at` | When the sender unsent the Message |
+| `sender_handle` | The handle that sent and unsent the message |
+| `unsent_at` | When the sender unsent the message |
 
-## Review when it fires
+## Handle the event
 
-### When it fires
-
-`message.unsent` reports when the sender unsends a Message.
-
-The Message keeps its position in the Chat with its parts cleared. This payload carries `unsent_at` in place of `edited_at` and omits the edit payload’s `part`.
-
-## Inspect the example
-
-### Example
-
-Use the captured envelope above to test your event handler.
+The message keeps its place in the chat with its parts cleared, so keep the row and drop its content rather than deleting it. This is the `message.edited` shape without `part`: an unsend takes the whole message. If your agent was about to answer the original, stop.
 
 ## Next steps
 
-- [Use the CLI](/cli/index)
-- [Read the API conventions](/api-reference/overview)
-- [Look up error codes](/api-reference/errors)
+- [Edit and unsend messages](/concepts/messages/edit-and-unsend)
+- [Read the message.edited event](/events/reference/message-edited)
+- [Choose an event type](/events/reference)

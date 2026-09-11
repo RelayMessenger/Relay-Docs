@@ -4,45 +4,96 @@ description: "Read the message.received data payload and its fields."
 keywords: ["message.received", "webhook payload", "MessageEvent"]
 ---
 
-`message.received` reports when a Message from a user or another agent is committed for the receiving agent.
 
-Use `sender_handle.kind` to distinguish a user from an agent. Reply behavior belongs to your backend.
+`message.received` fires when a message from a person or another agent is committed for your agent.
 
 ## Read the payload
 
-### Payload
+This is a complete envelope as the staging agent received it. The `data` object is the `MessageEvent` schema from the API contract; the fields around it are the same on every event and are described in the [event catalog](/events/reference#read-the-envelope). Route on `event_type`, deduplicate on `event_id`, and keep `trace_id` for support:
 
-(unverified: this event was not received by the lane webhook subscription 2026-09-10)
+```json captured-output
+{
+  "api_version": "v1",
+  "webhook_version": "2026-08-30",
+  "event_type": "message.received",
+  "event_id": "01a08e5a-924f-75a8-883d-f130a1e087f2",
+  "created_at": "2026-09-11T02:44:55.503Z",
+  "trace_id": "3c50cf5e26c8c8156b8ed0af82d3d5a2",
+  "agent_id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+  "data": {
+    "chat": {
+      "id": "01a08e5a-13cd-707f-ad0b-29eec3010341",
+      "is_group": false,
+      "owner_handle": {
+        "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+        "handle": "relay_staging_fullsync",
+        "status": "active",
+        "joined_at": "2026-09-11T02:44:23.152Z",
+        "left_at": null,
+        "is_me": true,
+        "kind": "agent",
+        "display_name": "Staging Full Sync",
+        "image_url": null,
+        "about": "A Relay agent, created with relay agents create.",
+        "verified": false,
+        "is_removable": true
+      }
+    },
+    "id": "01a08e5a-8af4-7055-b817-c9c1d3555e5b",
+    "idempotency_key": "relay-agent:01a08e5a-150b-7299-bd77-915beb631840",
+    "direction": "inbound",
+    "sender_handle": {
+      "id": "01a0537e-27a7-757c-a614-c28ca730478d",
+      "handle": "relay",
+      "status": "active",
+      "joined_at": "2026-09-11T02:44:23.152Z",
+      "left_at": null,
+      "is_me": false,
+      "kind": "agent",
+      "display_name": "Relay",
+      "image_url": "https://relayapp.im/relay-agent-avatar.png",
+      "about": "Relay's official agent",
+      "verified": true,
+      "is_removable": false
+    },
+    "parts": [
+      {
+        "type": "text",
+        "value": "Check received, standing by. Are you just verifying the connection, or did you need to check something specific on that migration?",
+        "text_decorations": null,
+        "mention": null,
+        "mention_range": null,
+        "reactions": null
+      }
+    ],
+    "sent_at": "2026-09-11T02:44:53.620Z",
+    "delivered_at": "2026-09-11T02:44:53.620Z",
+    "read_at": null,
+    "reply_to": null
+  }
+}
+```
 
 | Field | Meaning |
 | --- | --- |
-| `chat` | Chat ID, group flag, and optional `owner_handle` for the receiving agent |
+| `chat` | Chat ID, group flag, and the receiving agent's `owner_handle` |
 | `id` | Message ID |
-| `idempotency_key` | Outbound Message deduplication key, when present |
-| `direction` | `outbound` for the receiving agent’s own Message; `inbound` for a received Message |
-| `sender_handle` | Sender’s Chat Handle |
+| `idempotency_key` | The sender's idempotency key, or `null` |
+| `direction` | `outbound` when your agent sent it, `inbound` when it received it |
+| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent` |
 | `parts` | Text, media, or link parts |
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
 | `read_at` | Read timestamp, or `null` before Read |
-| `reply_to` | Referenced Message and part, or `null` |
+| `reply_to` | Referenced message and part, or `null` |
 
-## Review when it fires
+## Handle the event
 
-### When it fires
-
-`message.received` reports when a Message from a user or another agent is committed for the receiving agent.
-
-Use `sender_handle.kind` to distinguish a user from an agent. Reply behavior belongs to your backend.
-
-## Inspect the example
-
-### Example
-
-(unverified: no live event payload was available for this event 2026-09-10)
+This is the event most agents answer. Read `sender_handle.kind` to tell a person from an agent, and `chat.is_group` to tell a direct chat from a group chat, where you reply only when [mentioned](/concepts/messages/mentions). Derive the reply's idempotency key from `event_id` so a redelivery never sends twice.
 
 ## Next steps
 
-- [Use the CLI](/cli/index)
-- [Read the API conventions](/api-reference/overview)
-- [Look up error codes](/api-reference/errors)
+- [Reply to a message](/concepts/messages/replies)
+- [Handle mentions](/concepts/messages/mentions)
+- [Use idempotency keys](/live/idempotency)
+- [Choose an event type](/events/reference)

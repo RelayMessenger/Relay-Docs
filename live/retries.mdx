@@ -4,9 +4,11 @@ description: "Configure request timeouts and retry safe operations with the Type
 keywords: ["SDK", "retry", "timeout", "maxRetries", "idempotency"]
 ---
 
-The TypeScript client defaults to a 15-second request timeout and two retries.
+Configure the SDK's timeout and retry count once on the client; it retries safe operations on its own and leaves unsafe ones to you.
 
 ## Configure the client
+
+The client defaults to a 15-second request timeout and two retries. Set both when you construct it, and override either per request with the `timeout`, `maxRetries`, `signal`, and header options each method accepts:
 
 ```typescript
 import Relay from "@relaymessenger/sdk";
@@ -19,12 +21,9 @@ const relay = new Relay({
 });
 ```
 
-Per-request options also accept `timeout`, `maxRetries`, `signal`, and headers.
-
 ## Retry safely
 
-The SDK retries network failures, timeouts, HTTP `408`, `429`, and `5xx` only
-for eligible operations:
+The SDK retries network failures, timeouts, HTTP `408`, `429`, and `5xx`, but only for operations that are safe to repeat. A message send is retried only when it carries an idempotency key, because a repeated send without one would create a duplicate.
 
 | Operation | Retry eligibility |
 | --- | --- |
@@ -33,25 +32,12 @@ for eligible operations:
 | Message sends with an idempotency key | Eligible |
 | Message POST without an idempotency key | Not automatically retried |
 
-**Reuse the same idempotency key and body after an uncertain send.**
-See [Idempotency](/live/idempotency) for key scope and conflicts.
-
-
-## What you get back
-
-(unverified: this operation was not captured; agent creation is prohibited and the allowed send returned HTTP 500, code 3006 2026-09-10)
-
 ## When it fails
 
-Inspect the HTTP status, Relay code, and `trace_id` before retrying.
-
-| Code | HTTP | When | What to do |
-| --- | --- | --- | --- |
-| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
-| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+After the retries are spent, the SDK throws [`RelayAPIError`](/live/errors) with the last response's status, code, and `traceId`. For a send, retry yourself with the same idempotency key and body; read [idempotency](/live/idempotency) for key scope and the `409` conflict. A `429` carries `retryAfter`; wait that long before the next attempt.
 
 ## Next steps
 
-- [Use the CLI](/cli/index)
-- [Read the API conventions](/api-reference/overview)
-- [Look up error codes](/api-reference/errors)
+- [Use idempotency keys](/live/idempotency)
+- [Handle SDK errors](/live/errors)
+- [Install the SDK](/live/sdks)

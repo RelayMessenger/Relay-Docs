@@ -4,7 +4,11 @@ description: "Check your integration's persistence, retry, and credential bounda
 keywords: ["best practices", "reliability", "idempotency", "delivery"]
 ---
 
-Check these boundaries before relying on your agent backend.
+Check these nine boundaries before you put your agent backend in front of people.
+
+## Review each boundary
+
+Each row is a rule the owning page explains in full. The pattern behind all of them is the same: commit before you acknowledge, retry with the same key, and keep credentials where only your server can read them.
 
 | Check | Owning guide |
 | --- | --- |
@@ -12,33 +16,19 @@ Check these boundaries before relying on your agent backend.
 | Verify the raw webhook request before accepting it | [Signature verification](/events/webhooks/verify-signatures) |
 | Commit and deduplicate events before acknowledging | [Webhook delivery](/events/webhooks/delivery) or [WebSocket ACKs](/events/websocket/acknowledgements) |
 | Run model and tool work after acknowledgment | [Webhook delivery](/events/webhooks/delivery) |
-| Retry a Message with its original key and body | [Idempotency](/live/idempotency) |
+| Retry a message with its original key and body | [Idempotency](/live/idempotency) |
 | Complete recovery before resuming WebSocket ACKs | [FULL sync](/events/websocket/full-sync) |
-| Distinguish event acknowledgment from Delivered and Read | [Delivery receipts](/concepts/messages/receipts) |
-| Store Attachment IDs rather than expiring download URLs | [Download attachments](/concepts/messages/receiving-media) |
-| Cache only history this Contact can access | [Message history](/concepts/chats/history) |
-
-
-
-## Apply the guidance
-
-Use the linked operations for each task.
-
-## What you get back
-
-(unverified: this operation was not captured; agent creation is prohibited and the allowed send returned HTTP 500, code 3006 2026-09-10)
+| Keep event acknowledgment apart from Delivered and Read | [Delivery receipts](/concepts/messages/receipts) |
+| Store attachment IDs rather than expiring download URLs | [Download attachments](/concepts/messages/receiving-media) |
+| Cache only history this contact can access | [Message history](/concepts/chats/history) |
 
 ## When it fails
 
-Inspect the HTTP status, Relay code, and `trace_id` before retrying.
-
-| Code | HTTP | When | What to do |
-| --- | --- | --- | --- |
-| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
-| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+The failures these rules prevent look alike from the outside: a reply sent twice, a reply never sent, or a message that arrived while your backend was down. Start from the identifiers on the [debugging page](/live/debugging). The `event_id` tells you whether an event was delivered twice, and the `trace_id` matches a request to Relay's own record of it.
 
 ## Next steps
 
-- [Use the CLI](/cli/index)
-- [Read the API conventions](/api-reference/overview)
-- [Look up error codes](/api-reference/errors)
+- [Debug with trace IDs](/live/debugging)
+- [Use idempotency keys](/live/idempotency)
+- [Configure SDK retries](/live/retries)
+- [Handle SDK errors](/live/errors)
