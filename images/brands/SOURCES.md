@@ -1,14 +1,17 @@
 # Brand mark sources
 
 Every file in this folder, where it came from, and the terms it is published
-under. Retrieved 2026-09-11. No mark in this folder has been drawn, recoloured,
-cropped, or otherwise edited, except where the "differs" note says so.
+under. Retrieved 2026-09-11. No mark in this folder has been drawn, cropped, or
+otherwise reshaped. The only edits are hardcoded-black to `fill="currentColor"`
+so a monochrome mark follows the light or dark theme; each such edit is named in
+the notes below.
 
 | File | Product | Source URL | Licence or brand guidelines | Retrieved |
 | --- | --- | --- | --- | --- |
 | `anthropic.svg` | Anthropic | https://github.com/simple-icons/simple-icons/blob/develop/icons/anthropic.svg | CC0 1.0, https://github.com/simple-icons/simple-icons#license | 2026-09-11 |
 | `claude.svg` | Claude | https://github.com/simple-icons/simple-icons/blob/develop/icons/claude.svg | CC0 1.0, https://github.com/simple-icons/simple-icons#license | 2026-09-11 |
 | `cline.svg` | Cline | https://cline.bot/assets/branding/brand/cline-brand-assets.zip, `General Logos/Bot/SVG/BOT_LIGHT.svg` | https://cline.bot/brand | 2026-09-11 |
+| `cloudflare.svg` | Cloudflare | https://github.com/simple-icons/simple-icons/blob/develop/icons/cloudflare.svg | CC0 1.0, https://github.com/simple-icons/simple-icons#license | 2026-09-11 |
 | `cursor.svg` | Cursor | https://ptht05hbb1ssoooe.public.blob.vercel-storage.com/assets/brand/cursor-brand-assets.zip, `General Logos/Cube/SVG/CUBE_25D.svg` | https://cursor.com/brand | 2026-09-11 |
 | `gemini.svg` | Google Gemini | https://www.gstatic.com/lamda/images/gemini_sparkle_aurora_33f86dc0c0257da337c63.svg | https://about.google/brand-resource-center/ | 2026-09-11 |
 | `hermes.png` | Hermes (Nous Research) | already in the repo, source not recorded | Nous Research | before 2026-09-11 |
@@ -27,6 +30,7 @@ cropped, or otherwise edited, except where the "differs" note says so.
 | --- | --- | --- |
 | OpenAI Codex | `openai.svg` | Codex ships no mark of its own. Its VS Code extension icon and its CLI splash both carry the OpenAI mark. |
 | Claude Desktop | `claude.svg` | Claude Desktop ships the Claude mark. |
+| Vercel Chat SDK | `vercel.svg` | The Chat SDK is a Vercel product and carries the Vercel triangle. |
 
 ## Notes on the files that were already here
 
@@ -41,21 +45,52 @@ cropped, or otherwise edited, except where the "differs" note says so.
   it refuses requests outside a browser, so the mark comes from an OpenAI
   repository instead.
 - `openclaw.png` was JPEG data under a `.png` name, 128 px. Replaced 2026-09-11
-  by `openclaw.svg`, the transparent mark both OpenClaw sites serve.
+  by `openclaw.svg`, the transparent mark both OpenClaw sites serve. Verified
+  2026-09-11 byte-identical (1194 B) to the live https://openclaw.ai/favicon.svg.
 - `anthropic.svg` keeps its `#D97757` fill. Anthropic publishes no brand page:
   `/brand`, `/brand-kit`, `/press` and `/company/brand` all return 404, and the
   site links no brand asset. There is no official file to replace it with.
-- `hermes.png` is the Nous Research seal, 128 px, not a Hermes-specific mark.
+- `openai.svg` had no `fill`, so the path drew black and vanished on dark. Set
+  `fill="currentColor"` on 2026-09-11 so the Codex mark follows the theme. Path
+  unchanged.
+- `cline.svg` is byte-identical to the Cline brand kit `BOT_LIGHT.svg`. The kit's
+  dark twin `BOT_DARK.svg` is the same path filled `#f9f9f9`. The Mintlify `icon`
+  field takes one value, not a light/dark pair, so instead of shipping two files
+  we set `fill="currentColor"` on 2026-09-11; it renders dark on light and light
+  on dark, matching the pair with one file. Path unchanged.
+- `cloudflare.svg` is the simple-icons Cloudflare cloud (CC0), added 2026-09-11
+  for the Cloudflare Think page, with `fill="currentColor"` so it follows the
+  theme. Cloudflare's official orange logomark needs the company's written
+  permission (https://www.cloudflare.com/trademark/) and ships no direct asset
+  URL, so the CC0 mark is used. Path unchanged.
+- `hermes.png` is the Nous Research seal, 128 px, not a Hermes-specific mark, and
+  is still WRONG. The real Hermes Agent mark (the project our `connect hermes`
+  targets, https://github.com/NousResearch/hermes-agent) is the black-and-white
+  "N" figure served as the site logo and favicon:
+  `website/static/img/logo.png` (1772x1799) and
+  `website/static/img/apple-touch-icon.png` (180x180). The pixel-art winged
+  knight at `apps/desktop/public/hermes.png` is an in-app sprite, not the brand
+  mark. The swap awaits the owner's pick on the review page, so `hermes.png` is
+  unchanged for now.
 
-## Marks that need a second file for dark backgrounds
+## Marks that follow the theme with `currentColor`
 
-These brands publish one mark per background. The file here is the
-light-background one, so it disappears on dark.
+These monochrome marks now carry `fill="currentColor"`, so one file renders on
+both light and dark. See the notes above for each.
+
+| File | Sourced dark twin (confirms the intent, not shipped) |
+| --- | --- |
+| `cline.svg` | `General Logos/Bot/SVG/BOT_DARK.svg` in the Cline brand kit is the same path filled `#f9f9f9`. |
+| `openai.svg` | OpenAI publishes no white twin. https://openai.com/favicon.svg is a rounded tile that inverts with the colour scheme. |
+| `cloudflare.svg` | The official orange logomark is the two-tone version; it needs Cloudflare's written permission. |
+
+## Marks that still need a second file for dark backgrounds
+
+These publish one mark per background. The file here is the light-background one,
+so it disappears on dark. Left as-is on staging.
 
 | File | Dark-background twin |
 | --- | --- |
-| `cline.svg` | `General Logos/Bot/SVG/BOT_DARK.svg` in the Cline brand kit |
-| `openai.svg` | OpenAI publishes no white twin. https://openai.com/favicon.svg is a rounded tile that inverts with the colour scheme. |
 | `photon.svg` | https://mintcdn.com/photon-6d78d87b/-Sx6UdxO4BG0ZSxk/logo/dark.svg |
 | `linq.png` | https://docs.linqapp.com/favicon-dark.png |
 
