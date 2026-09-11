@@ -110,7 +110,7 @@ def check_04(root):
 
 
 def check_05(root):
-    for p in (root / 'integrations').glob('*.mdx'):
+    for p in [q for q in (root / 'integrations').glob('*.mdx') if q.name != 'index.mdx']:  # the index is a card directory, not a connect walkthrough
         assert heads(p.read_text()) == CONNECT, f'{p.relative_to(root)}: Connect skeleton out of order'
 
 
