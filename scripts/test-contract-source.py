@@ -10,9 +10,9 @@ from origins import target
 ROOT = Path(__file__).resolve().parents[1]
 # Exact customization contract at the confirmed Server staging merge.
 # Update only after reading and synchronizing a newly agreed upstream contract.
-UPSTREAM_COMMIT = "4a3cbbed313d9011298ae5c305bd4b3f247c2dda"
-UPSTREAM_STAGING_COMMIT = "4a3cbbed313d9011298ae5c305bd4b3f247c2dda"
-UPSTREAM_SHA256 = "29ab747f1069a73fa09285400df2c6e0ce4bc3a143d94ed88fb0b5e5ecd842b4"
+UPSTREAM_COMMIT = "c5f3046368049e7d85c9d20f4bf9bfa4c742c5d6"
+UPSTREAM_STAGING_COMMIT = "c5f3046368049e7d85c9d20f4bf9bfa4c742c5d6"
+UPSTREAM_SHA256 = "ccc6eed43086ffdd9912a9d021469948128f8dee080f00f15ad2c0c269196cdc"
 
 
 class ContractSourceTests(unittest.TestCase):
