@@ -14,7 +14,7 @@ import re
 import subprocess
 from pathlib import Path
 from urllib.parse import urlsplit
-from docs_structure import TASK_VERBS, authored_paths, prose
+from docs_structure import TASK_VERBS, authored_paths, is_task_guide, prose
 
 ROOT = Path(__file__).resolve().parents[1]
 FENCES = re.compile(r'^(`{3,})([^\n]*)\n(.*?)^\1[ \t]*$', re.M | re.S)
@@ -34,7 +34,7 @@ def pages(root):
 
 
 def scoped(root):
-    return [p for p in pages(root) if p.relative_to(root).parts[0] in {'start', 'connect', 'build', 'cli'}]
+    return [p for p in pages(root) if p.relative_to(root).parts[0] in {'start', 'integrations', 'concepts', 'events', 'live', 'cli'}]
 
 
 def heads(text):
@@ -99,7 +99,7 @@ def check_03(root):
 
 
 def check_04(root):
-    for p in (root / 'build').rglob('*.mdx'):
+    for p in [q for d in ('concepts', 'events', 'live') for q in (root / d).rglob('*.mdx') if is_task_guide(q.relative_to(root).with_suffix('').as_posix())]:
         text = p.read_text(); h = heads(text)
         for heading in h:
             assert heading in FIXED or heading.split()[0] in TASK_VERBS, f'{p.relative_to(root)}: invalid H2 {heading}'
@@ -110,7 +110,7 @@ def check_04(root):
 
 
 def check_05(root):
-    for p in (root / 'connect').glob('*.mdx'):
+    for p in (root / 'integrations').glob('*.mdx'):
         assert heads(p.read_text()) == CONNECT, f'{p.relative_to(root)}: Connect skeleton out of order'
 
 

@@ -1,0 +1,93 @@
+---
+title: "Verify webhook signatures"
+sidebarTitle: "Verify signatures"
+description: "Verify the Standard Webhooks signature against the exact request body before parsing it."
+keywords: ["webhook signature", "Standard Webhooks", "signing_secret", "raw body", "HMAC"]
+---
+
+Verify each webhook with the subscription’s signing secret and the exact request body.
+
+## Before you start
+
+Save `signing_secret` from the subscription’s [create response](/events/webhooks/subscriptions#store-the-signing-secret) as `RELAY_WEBHOOK_SECRET` in your backend.
+
+**Read the raw body before any JSON middleware transforms it.** Changing whitespace changes the signed bytes.
+
+## Verify with the SDK
+
+`unwrap` verifies the request and returns its parsed event envelope:
+
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+  baseURL: "https://api.staging.relayapp.im",
+  webhookSecret: process.env.RELAY_WEBHOOK_SECRET!,
+});
+
+const rawBody = await request.text();
+const event = relay.webhooks.unwrap(rawBody, {
+  headers: request.headers,
+});
+```
+
+| SDK input or method | Use |
+| --- | --- |
+| `rawBody` | Unmodified request body as a string or Buffer |
+| `headers` | Request `Headers`, or a record with the lowercase webhook header names |
+| `webhookSecret` | Default signing secret configured on the client |
+| `key` | Optional per-call secret in `unwrap(rawBody, { headers, key })` or `verify(rawBody, { headers, key })` |
+| `relay.webhooks.verify` | Verify without returning a parsed event |
+| `relay.webhooks.unwrap` | Verify, then parse the JSON envelope |
+
+## Review signature format
+
+### Signature format
+
+Relay signs requests with Standard Webhooks:
+
+| Header | Value |
+| --- | --- |
+| `webhook-id` | Stable event ID |
+| `webhook-timestamp` | Attempt timestamp as Unix seconds |
+| `webhook-signature` | `v1,<base64-signature>` |
+
+The signing input joins the ID and timestamp with periods, followed by the raw body:
+
+```text
+webhook-id.webhook-timestamp.raw-body
+```
+
+Relay removes the `whsec_` prefix from the secret, base64-decodes the key, and computes HMAC-SHA256 over that input. The signature is the base64-encoded result.
+
+Retries reuse the event ID and body and sign them with the attempt’s timestamp. Deduplicate by `event_id`, not by the signature.
+
+
+## What you get back
+
+(unverified: this operation was not captured; agent creation is prohibited and the allowed send returned HTTP 500, code 3006 2026-09-10)
+
+## When it fails
+
+### Handle verification failures
+
+| Failure | Receiver action |
+| --- | --- |
+| Missing required header or invalid signature | Reject before storing or processing the event |
+| Missing signing secret | Restore the secret from your backend’s secret store |
+| Signature passes but JSON parsing fails | Reject the body rather than accepting a job |
+
+The [receiver example](/events/webhooks#receive-and-acknowledge) returns `401` when verification or parsing fails. [Delivery policy](/events/webhooks/delivery#retry-classes) treats that response as terminal.
+
+
+| Code | HTTP | When | What to do |
+| --- | --- | --- | --- |
+| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
+| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+
+## Next steps
+
+- [Use the CLI](/cli/index)
+- [Read the API conventions](/api-reference/overview)
+- [Look up error codes](/api-reference/errors)

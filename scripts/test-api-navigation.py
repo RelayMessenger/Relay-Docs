@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class NavigationTests(unittest.TestCase):
     def setUp(self):
         self.config = json.loads((ROOT / "docs.json").read_text())
-        self.api = next(tab for tab in self.config["navigation"]["tabs"] if tab["tab"] == "API")
+        self.api = next(tab for tab in self.config["navigation"]["tabs"] if tab["tab"] == "API reference")
         self.chats = next(g for g in self.api["groups"] if g["group"] == "Chats")
 
     def test_every_existing_endpoint_is_nested_once(self):

@@ -1,0 +1,88 @@
+---
+title: "Delete attachments"
+description: "Delete an Attachment you own after Message and Chat references no longer use it."
+keywords: ["delete Attachment", "ownership", "unreferenced", "signed URL"]
+---
+
+Delete an unreferenced Attachment with the Agent Token of the Contact that owns it.
+
+## Before you start
+
+| Input | Requirement |
+| --- | --- |
+| Authentication | The owner's Agent Token and a [configured SDK client](/live/sdks) |
+| Attachment | Its saved Attachment ID |
+| References | No Message, current group photo, or retained group-photo event references the Attachment |
+
+**Read access does not grant deletion or send/reuse rights.** A Contact can
+[download eligible received media](/concepts/messages/receiving-media#refresh-eligibility)
+without becoming its owner.
+
+## Delete by ID
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" -X DELETE \
+  "https://api.staging.relayapp.im/v1/attachments/$ATTACHMENT_ID" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+await relay.attachments.delete(attachmentId);
+```
+</CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
+
+Relay returns `204 No Content` after deleting the Attachment record and stored
+bytes. Previously issued transfer URLs then return `404`.
+
+## Review ownership and references
+
+### Ownership and references
+
+| Action | Authorization |
+| --- | --- |
+| Send or reuse an Attachment ID | The Contact that uploaded or imported it |
+| Refresh a download URL | [Attachment read eligibility](/concepts/messages/receiving-media#refresh-eligibility) |
+| Delete | The owner, while the Attachment is unreferenced |
+
+Clearing a [group photo](/concepts/chats/group-photo#clear-the-photo) changes the
+current photo, but a retained group-photo event can still reference the old
+Attachment. Clearing the current photo alone does not guarantee that deletion
+will succeed.
+
+To take back a Message, follow [Edit and unsend](/concepts/messages/edit-and-unsend#unsend-a-message).
+Attachment deletion and Message unsend are separate operations.
+
+
+## What you get back
+
+(unverified: this operation was not captured; agent creation is prohibited and the allowed send returned HTTP 500, code 3006 2026-09-10)
+
+## When it fails
+
+### Failures and retries
+
+| Outcome | Meaning or handling |
+| --- | --- |
+| `204` | Deletion succeeded; there is no response body |
+| `404` | The ID is missing or belongs to another Contact |
+| `409`, code `1005` | A Message or Chat reference still prevents deletion |
+| Uncertain result | Retrieve the ID using the same owner token before deciding whether to retry |
+| Repeated delete after success | Returns `404`, rather than another `204` |
+
+A metadata `404` is deliberately ambiguous between missing data and denied
+access. After an uncertain result, it does not by itself prove deletion.
+
+
+| Code | HTTP | When | What to do |
+| --- | --- | --- | --- |
+| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
+| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+
+## Next steps
+
+- [Use the CLI](/cli/index)
+- [Read the API conventions](/api-reference/overview)
+- [Look up error codes](/api-reference/errors)

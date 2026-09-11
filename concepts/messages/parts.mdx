@@ -1,0 +1,116 @@
+---
+title: "Message Parts"
+description: "Build ordered text, media, and link parts for a Message."
+keywords: ["Message parts", "text part", "media part", "link part"]
+---
+
+Every outbound Message contains 1 to 100 ordered `parts`.
+
+## Review part types
+
+### Part types
+
+| Type | Required content | Use |
+| --- | --- | --- |
+| `text` | `value` | Plain text and one optional structured mention |
+| `media` | `attachment_id` or HTTPS `url` | Image, video, audio, or document |
+| `link` | `value` | One URL rendered as a rich preview |
+
+### Text
+
+(unverified: contract illustration retained from the existing guide, not a live capture 2026-09-10)
+
+```json
+{
+  "type": "text",
+  "value": "Relay accepted the request."
+}
+```
+
+Text must contain 1 to 10,000 UTF-16 code units. A mention adds `mention` and
+`mention_range`; read [Mentions](/concepts/messages/mentions) before calculating
+that range.
+
+### Media
+
+Reference one completed Relay Attachment:
+
+(unverified: contract illustration retained from the existing guide, not a live capture 2026-09-10)
+
+```json
+{
+  "type": "media",
+  "attachment_id": "01993d50-d263-7d6b-87ce-90aba89b7815"
+}
+```
+
+For public files up to 10 MiB (10,485,760 bytes), use one HTTPS URL instead:
+
+(unverified: contract illustration retained from the existing guide, not a live capture 2026-09-10)
+
+```json
+{
+  "type": "media",
+  "url": "https://cdn.example.com/photo.webp"
+}
+```
+
+Use exactly one of `attachment_id` or `url`. Follow
+[Upload attachments](/concepts/messages/attachments) for files you have locally or
+[Import media from a URL](/concepts/messages/import-media) for hosted files.
+
+### Link
+
+(unverified: contract illustration retained from the existing guide, not a live capture 2026-09-10)
+
+```json
+{
+  "type": "link",
+  "value": "https://relayapp.im"
+}
+```
+
+**A link must be the only part in its Message.** Put a URL inside a text part
+when it should remain ordinary text.
+
+## Review ordering and composition
+
+### Ordering and composition
+
+`part_index` is the zero-based position in the array. Replies and reactions
+use it to target one exact part.
+
+Text and media may be mixed in order. Consecutive text parts are rejected;
+combine adjacent text into one part. A link must remain the only part in its
+Message.
+
+## Review response-only parts
+
+### Response-only parts
+
+Relay can return `type: "system"` for visible Chat history such as membership
+or group metadata changes. A developer cannot send a system part.
+
+Response parts can also contain current `reactions`. Media responses add the
+Attachment ID, opaque download URL, filename, MIME type, size, and available
+dimensions or duration.
+
+
+## What you get back
+
+(unverified: this operation was not captured; agent creation is prohibited and the allowed send returned HTTP 500, code 3006 2026-09-10)
+
+## When it fails
+
+Inspect the HTTP status, Relay code, and `trace_id` before retrying.
+
+| Code | HTTP | When | What to do |
+| --- | --- | --- | --- |
+| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
+| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+
+## Next steps
+
+- [Use the CLI](/cli/index)
+- [Read the API conventions](/api-reference/overview)
+- [Look up error codes](/api-reference/errors)

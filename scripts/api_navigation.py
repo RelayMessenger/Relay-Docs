@@ -20,7 +20,7 @@ def page_paths():
 
 
 def validate_api_navigation(config):
-    api = next(tab for tab in config["navigation"]["tabs"] if tab["tab"] == "API")
+    api = next(tab for tab in config["navigation"]["tabs"] if tab["tab"] == "API reference")
     groups = api["groups"]
     if not {"Chats", "Messages", "Attachments", "Contacts", "Webhooks", "WebSocket", "Agents"}.issubset({g["group"] for g in groups}):
         raise ValueError("API resources must have their own groups")

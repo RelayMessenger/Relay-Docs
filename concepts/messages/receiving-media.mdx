@@ -1,0 +1,183 @@
+---
+title: "Download attachments"
+description: "Download inbound media, refresh an eligible Attachment URL, and read byte ranges."
+keywords: ["inbound attachments", "message.received", "signed URL", "download", "refresh"]
+---
+
+Download an Attachment from a Message's media URL, or retrieve a fresh URL using its Attachment ID.
+
+## Before you start
+
+| Input | Requirement |
+| --- | --- |
+| Media | A media part from a Message or `message.received` event |
+| Refresh | An Agent Token authorized to read that Attachment |
+| SDK | A [configured client](/live/sdks) for metadata retrieval |
+
+## Read the media part
+
+A media part contains the download URL and metadata:
+
+```json Media part
+{
+  "type": "media",
+  "id": "01993d50-d263-7d6b-87ce-90aba89b7815",
+  "url": "https://cdn.staging.relayapp.im/attachments/<token>",
+  "filename": "report.pdf",
+  "mime_type": "application/pdf",
+  "size_bytes": 48291,
+  "reactions": null
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Attachment ID to retain for later retrieval |
+| `url` | Signed bearer URL for the bytes |
+| `filename` | File name |
+| `mime_type` | Declared MIME type, not a guarantee about the contents |
+| `size_bytes` | Stored byte length |
+
+See [Message parts](/concepts/messages/parts) for optional dimensions and duration.
+
+## Download the bytes
+
+**The signed URL supplies access. Keep your Agent Token on authenticated API requests.**
+Use the URL unchanged and keep it out of logs.
+
+The TypeScript example starts with a parsed `message.received` event. Set
+`$MEDIA_URL` to the part's `url` for cURL.
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" --fail-with-body "$MEDIA_URL" --output inbound-media
+```
+
+```typescript TypeScript
+const part = event.data.parts.find((item) => item.type === "media");
+if (!part) throw new Error("This Message has no media part.");
+
+const response = await fetch(part.url);
+if (!response.ok) {
+  throw new Error(`Attachment download returned ${response.status}.`);
+}
+const bytes = new Uint8Array(await response.arrayBuffer());
+```
+</CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
+
+A complete download returns `200`, the stored `Content-Type` and
+`Content-Length`, and the raw bytes. Treat filenames and downloaded contents
+as untrusted input to your application.
+
+## Refresh an expired URL
+
+A download URL expires 60 minutes after Relay issues it. An older event can
+therefore carry an expired URL when you receive or replay it.
+
+Retrieve the Attachment using the media part's `id`:
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" \
+  "https://api.staging.relayapp.im/v1/attachments/$ATTACHMENT_ID" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+const attachment = await relay.attachments.retrieve(part.id);
+if (attachment.status !== "complete" || !attachment.download_url) {
+  throw new Error("Attachment is not ready to download.");
+}
+const response = await fetch(attachment.download_url);
+if (!response.ok) {
+  throw new Error(`Attachment download returned ${response.status}.`);
+}
+const bytes = new Uint8Array(await response.arrayBuffer());
+```
+</CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
+
+The `200` response uses `download_url`, rather than the media part's `url`:
+
+```json Attachment metadata
+{
+  "id": "01993d50-d263-7d6b-87ce-90aba89b7815",
+  "filename": "report.pdf",
+  "content_type": "application/pdf",
+  "size_bytes": 48291,
+  "status": "complete",
+  "download_url": "https://cdn.staging.relayapp.im/attachments/<fresh-token>",
+  "created_at": "2026-09-08T14:00:00.000Z",
+  "duration_ms": null,
+  "width": null,
+  "height": null
+}
+```
+
+### Refresh eligibility
+
+**Refresh follows Message visibility, including for media sent by a user.**
+
+| Attachment use | Who can retrieve metadata and a fresh URL |
+| --- | --- |
+| No Message references the Attachment | Its owner |
+| At least one Message references it | A Contact with a visible Message carrying it, including the owner when eligible |
+| Outside the caller's visible history | Retrieval returns `404` |
+
+Visibility follows membership periods, the history-sharing choice, cleared
+history, and delivery filtering. Read [Message history](/concepts/chats/history#membership-visibility)
+for the history boundaries.
+
+## Read a byte range
+
+Downloads support one byte range at a time:
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" --fail-with-body "$MEDIA_URL" \
+  -H "Range: bytes=0-1048575" \
+  --output attachment.part
+```
+
+```typescript TypeScript
+const response = await fetch(process.env.MEDIA_URL!, {
+  headers: { Range: "bytes=0-1048575" },
+});
+if (!response.ok) throw new Error(`Download returned ${response.status}.`);
+const bytes = new Uint8Array(await response.arrayBuffer());
+```
+</CodeGroup>
+
+(unverified: these request variants have no captured response 2026-09-10)
+
+| Request or outcome | Result or handling |
+| --- | --- |
+| `HEAD` on the signed URL | `200` with headers and no body |
+| Valid single range | `206` with `Content-Range` |
+| Invalid or multiple ranges | `416`; correct the range |
+| Download `404` | Retrieve a fresh URL; expiry, deletion, or incomplete upload can make the old URL unavailable |
+| Metadata `404` | The Attachment is missing or outside your read access; check the ID, credential, and visible Message |
+
+
+
+## What you get back
+
+(unverified: this operation was not captured; agent creation is prohibited and the allowed send returned HTTP 500, code 3006 2026-09-10)
+
+## When it fails
+
+Inspect the HTTP status, Relay code, and `trace_id` before retrying.
+
+| Code | HTTP | When | What to do |
+| --- | --- | --- | --- |
+| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
+| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+
+## Next steps
+
+- [Use the CLI](/cli/index)
+- [Read the API conventions](/api-reference/overview)
+- [Look up error codes](/api-reference/errors)

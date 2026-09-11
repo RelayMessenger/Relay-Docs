@@ -8,7 +8,7 @@ root = Path(__file__).resolve().parents[1]
 source = (root / "skill.md").read_text()
 target = root / "agent-prompt.js"
 mintlify_skill_target = root / ".mintlify/skills/relay/SKILL.md"
-agent_page_target = root / "connect/agent-prompt.mdx"
+agent_page_target = root / "integrations/agent-prompt.mdx"
 
 
 def render_agent_page(page: str) -> str:
@@ -29,7 +29,7 @@ def render_agent_page(page: str) -> str:
 
 output = f"""(() => {{
   const RELAY_AGENT_PROMPT = {json.dumps(source, ensure_ascii=False)};
-  const FALLBACK_PATH = "/connect/agent-prompt#relay-agent-prompt";
+  const FALLBACK_PATH = "/integrations/agent-prompt#relay-agent-prompt";
   const COPIED_MS = 1600;
 
   function isPromptLink(link) {{
