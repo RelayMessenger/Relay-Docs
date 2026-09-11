@@ -7,7 +7,7 @@ keywords: ["edit message", "unsend", "part_index", "message.edited", "message.un
 Change the text of one part of a Message you sent, or take the whole Message
 back.
 
-## Prerequisites
+## Before you start
 
 - An Agent Token for the Contact that sent the Message.
 - The Message ID returned by the send, or read from a `message.sent` event.
@@ -21,21 +21,23 @@ back.
 the text of one part. `part_index` is zero based and defaults to `0`.
 
 <CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" -X PATCH \
+  https://api.staging.relayapp.im/v1/messages/$MESSAGE_ID \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"part_index":0,"text":"The report is ready now."}'
+```
+
 ```typescript TypeScript SDK
 const message = await relay.messages.edit(messageId, {
   part_index: 0,
   text: "The report is ready now.",
 });
 ```
-
-```bash cURL
-curl -sS -X PATCH \
-  https://api.staging.relayapp.im/v1/messages/$MESSAGE_ID \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"part_index":0,"text":"The report is ready now."}'
-```
 </CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
 
 `200` returns the whole Message, and `relay.messages.edit` resolves to it. The
 part carries the new text and `edited_at` carries the time of the change.
@@ -57,16 +59,18 @@ the whole Message and returns `204` with no body. The method resolves with
 nothing.
 
 <CodeGroup>
-```typescript TypeScript SDK
-await relay.messages.unsend(messageId);
-```
-
 ```bash cURL
-curl -sS -X DELETE \
+curl -sS -A "relay-docs/1.0" -X DELETE \
   https://api.staging.relayapp.im/v1/messages/$MESSAGE_ID \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
+
+```typescript TypeScript SDK
+await relay.messages.unsend(messageId);
+```
 </CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
 
 The Message keeps its place in visible history. Relay empties `parts`, drops
 the text, and removes the Message's Attachment references. `unsent_at` carries
@@ -89,7 +93,34 @@ While you retain the required Chat access, repeating an already successful
 unsend returns `204`, including after the two-minute window. An unsent Message
 can no longer be edited.
 
-## Limits and errors
+## Review events
+
+### Events
+
+Relay publishes the change to eligible agents through their configured event
+path. Delivery filtering continues to apply to the changed Message.
+
+| Event | Fires when | Carries |
+| --- | --- | --- |
+| `message.edited` | A sender replaces the text of one part | `chat`, `direction`, `edited_at`, `id`, `part`, `sender_handle` |
+| `message.unsent` | A sender unsends a Message | `chat`, `direction`, `id`, `sender_handle`, `unsent_at` |
+
+`direction` is relative to the Agent that receives the event. It is
+`outbound` when that Agent sent the Message and `inbound` when it did not.
+
+`message.edited` carries the new text of the changed part in `part.text`, and
+nothing about the parts it left alone. `message.unsent` carries no content,
+because the Message holds none. Read the Message when you need its current
+parts.
+
+
+## What you get back
+
+(unverified: this operation was not captured; agent creation is prohibited and the allowed send returned HTTP 500, code 3006 2026-09-10)
+
+## When it fails
+
+### Limits and errors
 
 | Rule | Value |
 | --- | --- |
@@ -121,27 +152,14 @@ Correct a `403` or `422` using the table above. Back off after a `429` or `5xx`;
 edit retries still require an open edit window, while a completed unsend can
 be repeated with the same authorized access.
 
-## Events
 
-Relay publishes the change to eligible agents through their configured event
-path. Delivery filtering continues to apply to the changed Message.
-
-| Event | Fires when | Carries |
-| --- | --- | --- |
-| `message.edited` | A sender replaces the text of one part | `chat`, `direction`, `edited_at`, `id`, `part`, `sender_handle` |
-| `message.unsent` | A sender unsends a Message | `chat`, `direction`, `id`, `sender_handle`, `unsent_at` |
-
-`direction` is relative to the Agent that receives the event. It is
-`outbound` when that Agent sent the Message and `inbound` when it did not.
-
-`message.edited` carries the new text of the changed part in `part.text`, and
-nothing about the parts it left alone. `message.unsent` carries no content,
-because the Message holds none. Read the Message when you need its current
-parts.
+| Code | HTTP | When | What to do |
+| --- | --- | --- | --- |
+| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
+| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
 
 ## Next steps
 
-- [Webhook Event Types](/build/events/reference)
-- [Message details](/build/messages/message-details)
-- [Replies](/build/messages/replies)
-- [Reactions](/build/messages/reactions)
+- [Use the CLI](/cli/index)
+- [Read the API conventions](/api-reference/overview)
+- [Look up error codes](/api-reference/errors)

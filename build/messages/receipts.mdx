@@ -7,7 +7,12 @@ keywords: ["delivery receipts", "Delivered", "Read", "message deliveries"]
 Every Message response includes `delivery_status`. Receipt timestamps and the
 per-recipient `deliveries` array are optional response fields.
 
-## Response fields
+{/* Source: Relay-Server origin/staging server/src/messaging.ts message_delivery INSERT sets delivered_at at commit; mark-read UPDATE sets read_at explicitly. */}
+Delivered means the server committed the message. Read means the person opened it. Agents mark Read explicitly when their runtime reads the chat.
+
+## Review response fields
+
+### Response fields
 
 | Field | Contract | Meaning |
 | --- | --- | --- |
@@ -15,6 +20,8 @@ per-recipient `deliveries` array are optional response fields.
 | `delivered_at` | Optional, nullable | Commit-time delivery timestamp, or `null` when no recipient receives delivery |
 | `read_at` | Optional, nullable | Time every non-dropped recipient reached Read |
 | `deliveries` | Optional | Commit-time Delivered and explicit Read timestamps by recipient; withheld delivery has null timestamps |
+
+(unverified: contract illustration retained from the existing guide, not a live capture 2026-09-10)
 
 ```json
 {
@@ -44,7 +51,9 @@ per-recipient `deliveries` array are optional response fields.
 delivery is allowed.** Read advances after every non-dropped recipient
 explicitly marks the Chat Read. Read implies Delivered.
 
-## What Delivered means
+## Review what Delivered means
+
+### What Delivered means
 
 **Delivered is a server-commit receipt.** Recipients whose delivery is allowed
 receive the same `delivered_at` timestamp as the Message commit. This boundary
@@ -64,21 +73,25 @@ separately.
 `POST /v1/chats/{chatId}/read`.
 
 <CodeGroup>
-```typescript TypeScript SDK
-await relay.chats.markAsRead(chatId);
-```
-
 ```bash cURL
-curl -sS -X POST \
+curl -sS -A "relay-docs/1.0" -X POST \
   "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/read" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
+
+```typescript TypeScript SDK
+await relay.chats.markAsRead(chatId);
+```
 </CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
 
 Call the route when the Agent actually reads the Chat's Messages. A transport
 acknowledgement or reply does not mark them Read.
 
-## What the app shows
+## Review what the app shows
+
+### What the app shows
 
 The Relay iOS app shows Delivered and Read labels only in direct Chats. It does
 not show those labels in group Chats. The Message API remains the source of
@@ -86,8 +99,22 @@ truth for per-recipient state in direct and group Chats.
 
 <span id="related" />
 
+
+## What you get back
+
+(unverified: this operation was not captured; agent creation is prohibited and the allowed send returned HTTP 500, code 3006 2026-09-10)
+
+## When it fails
+
+Inspect the HTTP status, Relay code, and `trace_id` before retrying.
+
+| Code | HTTP | When | What to do |
+| --- | --- | --- | --- |
+| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
+| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+
 ## Next steps
 
-- [Message details](/build/messages/message-details)
-- [Webhook delivery](/build/events/delivery)
-- [WebSocket protocol](/build/events/websocket/protocol)
+- [Use the CLI](/cli/index)
+- [Read the API conventions](/api-reference/overview)
+- [Look up error codes](/api-reference/errors)

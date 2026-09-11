@@ -6,7 +6,7 @@ keywords: ["inbound attachments", "message.received", "signed URL", "download", 
 
 Download an Attachment from a Message's media URL, or retrieve a fresh URL using its Attachment ID.
 
-## Prerequisites
+## Before you start
 
 | Input | Requirement |
 | --- | --- |
@@ -49,6 +49,10 @@ The TypeScript example starts with a parsed `message.received` event. Set
 `$MEDIA_URL` to the part's `url` for cURL.
 
 <CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" --fail-with-body "$MEDIA_URL" --output inbound-media
+```
+
 ```typescript TypeScript
 const part = event.data.parts.find((item) => item.type === "media");
 if (!part) throw new Error("This Message has no media part.");
@@ -59,11 +63,9 @@ if (!response.ok) {
 }
 const bytes = new Uint8Array(await response.arrayBuffer());
 ```
-
-```bash cURL
-curl -sS --fail-with-body "$MEDIA_URL" --output inbound-media
-```
 </CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
 
 A complete download returns `200`, the stored `Content-Type` and
 `Content-Length`, and the raw bytes. Treat filenames and downloaded contents
@@ -77,6 +79,12 @@ therefore carry an expired URL when you receive or replay it.
 Retrieve the Attachment using the media part's `id`:
 
 <CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" \
+  "https://api.staging.relayapp.im/v1/attachments/$ATTACHMENT_ID" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
 ```typescript TypeScript SDK
 const attachment = await relay.attachments.retrieve(part.id);
 if (attachment.status !== "complete" || !attachment.download_url) {
@@ -88,13 +96,9 @@ if (!response.ok) {
 }
 const bytes = new Uint8Array(await response.arrayBuffer());
 ```
-
-```bash cURL
-curl -sS \
-  "https://api.staging.relayapp.im/v1/attachments/$ATTACHMENT_ID" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-```
 </CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
 
 The `200` response uses `download_url`, rather than the media part's `url`:
 
@@ -132,7 +136,7 @@ for the history boundaries.
 Downloads support one byte range at a time:
 
 ```bash cURL
-curl -sS --fail-with-body "$MEDIA_URL" \
+curl -sS -A "relay-docs/1.0" --fail-with-body "$MEDIA_URL" \
   -H "Range: bytes=0-1048575" \
   --output attachment.part
 ```
@@ -150,9 +154,22 @@ curl -sS --fail-with-body "$MEDIA_URL" \
 <span id="related" />
 <span id="url-lifetime" />
 
+
+## What you get back
+
+(unverified: this operation was not captured; agent creation is prohibited and the allowed send returned HTTP 500, code 3006 2026-09-10)
+
+## When it fails
+
+Inspect the HTTP status, Relay code, and `trace_id` before retrying.
+
+| Code | HTTP | When | What to do |
+| --- | --- | --- | --- |
+| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
+| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+
 ## Next steps
 
-- [Upload attachments](/build/messages/attachments)
-- [Attachment types and limits](/build/messages/attachment-types)
-- [Delete attachments](/build/messages/delete-attachments)
-- [Webhook events](/build/events/reference)
+- [Use the CLI](/cli/index)
+- [Read the API conventions](/api-reference/overview)
+- [Look up error codes](/api-reference/errors)

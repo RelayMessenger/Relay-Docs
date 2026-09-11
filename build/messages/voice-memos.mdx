@@ -9,6 +9,18 @@ Upload audio first, then send it through the dedicated voice memo route.
 ## Upload audio
 
 <CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" -X POST https://api.staging.relayapp.im/v1/attachments \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filename":"answer.m4a",
+    "content_type":"audio/x-m4a",
+    "size_bytes":183422,
+    "duration_ms":12400
+  }'
+```
+
 ```typescript TypeScript SDK
 const allocation = await relay.attachments.create({
   filename: "answer.m4a",
@@ -19,39 +31,31 @@ const allocation = await relay.attachments.create({
 
 await relay.attachments.upload(allocation, bytes);
 ```
-
-```bash cURL
-curl -sS -X POST https://api.staging.relayapp.im/v1/attachments \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "filename":"answer.m4a",
-    "content_type":"audio/x-m4a",
-    "size_bytes":183422,
-    "duration_ms":12400
-  }'
-```
 </CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
 
 Upload the raw bytes to the returned URL.
 
 ## Send the voice memo
 
 <CodeGroup>
-```typescript TypeScript SDK
-const result = await relay.chats.sendVoicememo(chatId, {
-  attachment_id: allocation.attachment_id,
-});
-```
-
 ```bash cURL
-curl -sS -X POST \
+curl -sS -A "relay-docs/1.0" -X POST \
   https://api.staging.relayapp.im/v1/chats/$CHAT_ID/voicememo \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"attachment_id":"'$ATTACHMENT_ID'"}'
 ```
+
+```typescript TypeScript SDK
+const result = await relay.chats.sendVoicememo(chatId, {
+  attachment_id: allocation.attachment_id,
+});
+```
 </CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
 
 Relay rejects non-audio Attachments on this route.
 
@@ -66,7 +70,22 @@ requires the imported type to be `audio/*`.
 The response includes the Message ID, Chat, recipients, delivery status, and
 audio metadata.
 
-## Related
 
-- [Attachments](/build/messages/attachments)
-- [Message details](/build/messages/message-details)
+## What you get back
+
+(unverified: this operation was not captured; agent creation is prohibited and the allowed send returned HTTP 500, code 3006 2026-09-10)
+
+## When it fails
+
+Inspect the HTTP status, Relay code, and `trace_id` before retrying.
+
+| Code | HTTP | When | What to do |
+| --- | --- | --- | --- |
+| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
+| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+
+## Next steps
+
+- [Use the CLI](/cli/index)
+- [Read the API conventions](/api-reference/overview)
+- [Look up error codes](/api-reference/errors)

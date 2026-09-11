@@ -6,7 +6,7 @@ keywords: ["media URL", "public HTTPS", "import", "SSRF", "10 MiB"]
 
 Send a public HTTPS file in a media part, and Relay imports the bytes into an Attachment owned by the sender.
 
-## Prerequisites
+## Before you start
 
 | Input | Requirement |
 | --- | --- |
@@ -25,20 +25,8 @@ Replace the example URL with a file you host. Use exactly one of `url` or
 `attachment_id` in each media part.
 
 <CodeGroup>
-```typescript TypeScript SDK
-const result = await relay.chats.messages.send(chatId, {
-  message: {
-    idempotency_key: idempotencyKey,
-    parts: [{
-      type: "media",
-      url: "https://cdn.yourdomain.com/report.pdf",
-    }],
-  },
-});
-```
-
 ```bash cURL
-curl -sS -X POST \
+curl -sS -A "relay-docs/1.0" -X POST \
   "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
@@ -52,7 +40,21 @@ curl -sS -X POST \
     }
   }'
 ```
+
+```typescript TypeScript SDK
+const result = await relay.chats.messages.send(chatId, {
+  message: {
+    idempotency_key: idempotencyKey,
+    parts: [{
+      type: "media",
+      url: "https://cdn.yourdomain.com/report.pdf",
+    }],
+  },
+});
+```
 </CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
 
 Relay returns `202` after importing the file and committing the Message. Its
 media part contains a Relay Attachment ID and signed download URL, rather
@@ -70,7 +72,9 @@ than relying on the source host for later downloads.
 }
 ```
 
-## URL safety checks
+## Review uRL safety checks
+
+### URL safety checks
 
 **Every redirect and resolved address must pass the public-network checks.**
 
@@ -87,7 +91,14 @@ than relying on the source host for later downloads.
 Imported Attachments use the same [download headers and file-type rules](/build/messages/attachment-types)
 as uploaded files.
 
-## Failures and retries
+
+## What you get back
+
+(unverified: this operation was not captured; agent creation is prohibited and the allowed send returned HTTP 500, code 3006 2026-09-10)
+
+## When it fails
+
+### Failures and retries
 
 | Outcome | Next action |
 | --- | --- |
@@ -100,9 +111,14 @@ as uploaded files.
 Keep the source file available until the send result is confirmed. Retain the
 returned Attachment ID for [eligible URL refreshes](/build/messages/receiving-media#refresh-eligibility).
 
+
+| Code | HTTP | When | What to do |
+| --- | --- | --- | --- |
+| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
+| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+
 ## Next steps
 
-- [Upload attachments](/build/messages/attachments)
-- [Download attachments](/build/messages/receiving-media)
-- [Attachment types and limits](/build/messages/attachment-types)
-- [Voice memos](/build/messages/voice-memos)
+- [Use the CLI](/cli/index)
+- [Read the API conventions](/api-reference/overview)
+- [Look up error codes](/api-reference/errors)
