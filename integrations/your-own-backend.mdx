@@ -4,54 +4,29 @@ description: "Run the code that reads a Relay message and chooses its reply."
 keywords: ["Relay", "Your own backend", "connect"]
 ---
 
-Run the code that reads a Relay message and chooses its reply.
+Run your own code as the agent: read each message and choose its reply.
 
 ## Before you start
 
-Use an Agent Token from the same environment as your API address. Your backend owns model access and its execution environment.
-
-## Install
-
-Choose [Chat SDK](/integrations/chat-sdk) for an HTTP handler or [Cloudflare Think](/integrations/cloudflare-think) for a Worker with durable model turns. Follow the chosen guide's package installation steps.
+You need an Agent Token from the same environment as your API address, and a place to run code that can reach the Relay API. Your backend owns the model, the prompts, the tools, and the hosting; Relay carries the messages. This page is the map; the two pages it points to carry the code.
 
 ## Connect
 
-Register a [webhook subscription](/events/webhooks/subscriptions) for your public HTTPS route and retain its signing secret. Pass the unchanged signed body to your handler.
+Choose how your backend receives messages, then choose the code that handles them. There are two delivery paths and they are exclusive. A [webhook subscription](/events/webhooks/subscriptions) posts each event to a public HTTPS route you own and signs it; keep the signing secret and pass the request body to your handler unchanged. A [WebSocket](/events/websocket) connection is for a host that can hold a connection open; it needs zero saved webhook subscriptions. Neither is a target for `connect <agent>`: that command is for a coding agent on your computer.
 
-If your host needs a persistent connection instead, use [WebSocket delivery](/events/websocket) with zero saved webhook subscriptions. These are backend delivery paths, not targets for `connect <agent>`.
+For the handler, take [Chat SDK](/integrations/chat-sdk) when you want an HTTP handler in any Node host, or [Cloudflare Think](/integrations/cloudflare-think) when you want a Worker with durable model turns. Both pages start from an empty folder and end with a reply on your phone.
 
 ## Send it a message
 
-Start your runtime and keep it open. Set `RELAY_SENDER_PROFILE` to a **different agent's** saved CLI profile and `RELAY_CHAT_ID` to a chat shared with the connected agent. Set `RELAY_PROFILE` to the connected agent's profile. The sender must be allowed by the runtime's admission rules.
+Open Relay on your phone and send a message to your agent's handle. Relay delivers the event to your backend on the path you chose; your handler reads it, runs your model, and sends the reply through the API. The reply appears in the same chat. To watch the exchange from a terminal, run `npx relaymessenger@staging watch @<handle>`; it reads only and never consumes an event.
 
-In one terminal, watch the connected agent. In another, send the message.
+## What it can do
 
-```bash Watch
-npx relaymessenger@staging --profile "$RELAY_PROFILE" watch
-```
-
-```bash Send from another agent
-npx relaymessenger@staging --profile "$RELAY_SENDER_PROFILE" chats messages send "$RELAY_CHAT_ID" \
-  --text "Hello, can you read this Relay message?" --idempotency-key "$RELAY_MESSAGE_KEY"
-```
-
-Set `RELAY_MESSAGE_KEY` to a fresh key for this message, and reuse it only when retrying the same send. Look for the agent's reply in the chat and the live view.
-
-```text Reply
-(unverified: reply not captured 2026-09-10)
-```
-
-## What this changed
-
-Your chosen adapter receives Relay events and sends replies through the Relay API. Your application owns its model, prompts, hosting, and local configuration. The CLI does not write application code or deploy the backend.
+Your backend can do everything the API can do, because it calls the API directly. It can reply with text, send attachments, read history, react, mark a chat read, and manage the agent's contact card. The two adapters wrap the parts that are easy to get wrong: signature checks, idempotency keys, and one turn at a time per chat.
 
 ## When it fails
 
-| Result | Next step |
-| --- | --- |
-| No incoming message | Check the selected delivery path and agent identity. |
-| Webhook rejected | Verify the signing secret and original request bytes. |
-| Message arrives without a reply | Check your handler and model logs. |
+If no message arrives, the delivery path is wrong for the agent. An agent with a saved webhook subscription never gets a WebSocket, and one without never gets a webhook. If the webhook is rejected, the signing secret or the request bytes changed on the way to your handler. If the message arrives and no reply comes, the failure is in your handler or model. Read its logs, and reuse the same idempotency key when you retry a send.
 
 ## Next steps
 

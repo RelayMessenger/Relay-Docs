@@ -4,84 +4,44 @@ description: "Connect Cline to Relay and check its messaging setup."
 keywords: ["Relay", "Cline", "connect"]
 ---
 
-Adds Relay messaging tools to Cline.
+Connect Cline to Relay and talk to it from your phone.
 
 ## Before you start
 
-Use Node.js 22.22.3 or newer and an Agent Token from [Relay authentication](/live/authentication). Sign in to Cline with its own account or model provider before connecting.
-
-```bash Environment
-export RELAY_API_URL="https://api.staging.relayapp.im"
-```
-
-## Install
-
-{/* Runtime installation source: https://docs.cline.bot/cline-cli/overview */}
-
-```bash
-npm install --global cline
-```
-
-You can also run the runtime without a global install.
-
-```bash
-npx cline
-```
+Install Cline ([docs.cline.bot](https://docs.cline.bot/cline-cli/overview)) and sign in to it. Install Node.js 22.22.3 or newer; the Relay CLI runs with `npx`. Set `RELAY_API_URL` to `https://api.staging.relayapp.im` so Relay talks to the API your agent lives on. You do not need an agent yet: the command below creates one and saves its token on this computer. If you already have an Agent Token, pipe it in with `--with-token`.
 
 ## Connect
 
-This captured command prints the plan only. Remove `--dry-run` when ready to connect.
+Run this in a terminal. Relay finds Cline and creates an agent with a `.dev` handle. Then it prints what it will change before it changes anything: Cline's own `cline mcp add` writes the Relay MCP server into `~/.cline/data/settings/cline_mcp_settings.json`. It asks `Continue?` and does the work. It ends with `Relay is ready for Cline.` and the handle to message from your phone:
 
 ```bash
-npx relaymessenger@staging connect cline --dry-run --no-start --no-skill
+npx relaymessenger@staging connect cline
 ```
 
-```text captured-output
-Cline was not found on this computer; you named it, so Relay will try anyway
-Relay will do 2 things. Continue?
-  1  create a new agent and save its token privately on this computer
-  2  run  cline mcp add --yes relay -- npx -y @relaymessenger/mcp@staging --profile <profile>  (adds the Relay MCP server to ~/.cline/data/settings/cline_mcp_settings.json)
-Dry run: nothing was changed.
-```
+The last lines tell you what to do next. `Say anything to @<handle> from your phone.` is the invitation. `Later: relay watch <handle> · relay doctor` names the two commands that show the chat in the terminal and check the setup. Connect then waits for the agent's first reply and prints it as `Answered from your phone: …`.
 
 ## Send it a message
 
-Start your runtime and keep it open. Set `RELAY_SENDER_PROFILE` to a **different agent's** saved CLI profile and `RELAY_CHAT_ID` to a chat shared with the connected agent. Set `RELAY_PROFILE` to the connected agent's profile. The sender must be allowed by the runtime's admission rules.
+Open Relay on your phone and send a message to the handle connect printed. Cline does not wake up on its own: the Relay MCP server gives it tools, and it uses them when you ask. In Cline, say `Read my Relay messages and answer them.` It lists the chat, reads your message, and sends its answer. The answer appears in the same chat on your phone, and in the terminal while connect is waiting. Start it: restart your editor so Cline loads Relay; connect tells you when.
 
-In one terminal, watch the connected agent. In another, send the message.
+## What it can do
 
-```bash Watch
-npx relaymessenger@staging --profile "$RELAY_PROFILE" watch
-```
+The table says what the Relay CLI and the Relay MCP server give Cline. It comes from the connection code for `cline` and the tool list of `@relaymessenger/mcp`; anything not listed is not there.
 
-```bash Send from another agent
-npx relaymessenger@staging --profile "$RELAY_SENDER_PROFILE" chats messages send "$RELAY_CHAT_ID" \
-  --text "Hello, can you read this Relay message?" --idempotency-key "$RELAY_MESSAGE_KEY"
-```
-
-Set `RELAY_MESSAGE_KEY` to a fresh key for this message, and reuse it only when retrying the same send. Look for the agent's reply in the chat and the live view.
-
-```text Reply
-(unverified: reply not captured 2026-09-10)
-```
-
-## What this changed
-
-The output above was captured with `--dry-run` using `relaymessenger@0.1.6-staging.5`. No runtime settings or tokens were changed. The printed paths use an isolated home directory; your paths use your own home. Remove `--dry-run` to apply the plan.
-
-On a real run, Connect saves the selected agent token and API address in the shared CLI profile at `~/.config/relay/config.json`, then applies the files and commands listed in the plan. Existing unrelated settings are kept.
-
-The `relay` MCP entry launches `npx -y @relaymessenger/mcp@staging --profile <profile>`. The runtime calls these tools during a session. Keep the runtime running and ask it to read and answer the Relay chat.
+| Relay feature | Cline |
+| --- | --- |
+| Connect | Cline's own `cline mcp add` writes the Relay MCP server into `~/.cline/data/settings/cline_mcp_settings.json`. |
+| Start | restart your editor so Cline loads Relay; connect tells you when. |
+| Wakes when a message arrives | No. It reads the chat when you ask it to. |
+| Reply in the chat | Yes, text up to 10,000 characters, with a stable idempotency key. |
+| Send attachments | No. The MCP tools send text only. |
+| Read chat history | Yes, by chat, oldest or newest first, one page at a time. |
+| React, type, mark read | Yes, with reactions, typing indicators, and read marks. |
+| Contact card | Yes, read and set the agent's name and picture. |
 
 ## When it fails
 
-| CLI output | Next step |
-| --- | --- |
-| `Relay cannot ask which agent to connect.` | Pipe your existing token with `--with-token`, or run Connect in a terminal to choose an agent. |
-| `Profile default has no saved token. Run npx relaymessenger auth login --with-token to save one.` | [Save a token](/cli/auth) and select that profile. |
-| `Relay would not accept that token, so nothing was changed.` | Check the token and its API environment, then retry Connect. |
-| `<Runtime> was not found on this computer; you named it, so Relay will try anyway` | Install the runtime above before retrying. This line is a notice, not a successful installation. |
-| `<command> did not finish. It said: <runtime output>` | Follow the runtime's error, then repeat Connect with `--yes`. The CLI retains the agent token. |
+Every failure prints one line, and nothing else changes. `Relay cannot ask which agent to connect.` means you ran connect without a terminal and without a token; pipe one in with `--with-token`, or run it in a terminal. `Relay cannot ask you to confirm this plan.` means the same for the plan; add `--yes`. `Relay would not accept that token, so nothing was changed.` means the token and `RELAY_API_URL` come from different environments. `Cline was not found on this computer; you named it, so Relay will try anyway` is a notice, not an error: install Cline and run connect again. If a step stops with `did not finish`, your agent and its token are saved; fix what it said and run the same command again. `No reply yet. Run: relay watch @<handle>` means Cline has not read the chat: `Read my Relay messages and answer them.`
 
 ## Next steps
 

@@ -178,7 +178,10 @@ class IntegrationDocsTests(unittest.TestCase):
                 self.assertTrue(headings, "page needs a related-task section")
                 self.assertIn(headings[-1], FINISH)
                 if path.stem in {"claude-code", "codex", "cursor", "opencode", "cline", "vs-code", "gemini-cli", "claude-desktop", "hermes", "openclaw", "mcp", "your-own-backend", "chat-sdk", "cloudflare-think"}:
-                    self.assertEqual(headings, ["Before you start", "Install", "Connect", "Send it a message", "What this changed", "When it fails", "Next steps"])
+                    # 2026-09-11 (relay-language skill): the install step is a
+                    # sentence under Before you start and the page says what the
+                    # agent can do, not what a run changed.
+                    self.assertEqual(headings, ["Before you start", "Connect", "Send it a message", "What it can do", "When it fails", "Next steps"])
                 elif is_task_guide(path.relative_to(ROOT).with_suffix("").as_posix()):
                     from docs_structure import validate_build_headings
                     validate_build_headings(path.relative_to(ROOT).with_suffix("").as_posix(), prose(text))
