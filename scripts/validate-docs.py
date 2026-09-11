@@ -462,10 +462,10 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # error 2030, contact_requests removed, Relay-Server PR 205, September 9, 2026.
 # A person's reply accepts a message request; the request route takes deleted
 # only, Relay-Server PR 207, September 9, 2026.
-# Source authority: Relay-Server staging commit c5f3046368049e7d85c9d20f4bf9bfa4c742c5d6; CLI publication is gated separately.
+# Source authority: Relay-Server staging commit afa2b72998a90f9196a2fe573bfa943421c66e56; CLI publication is gated separately.
 # The digest pins source bytes independently of the Server release commit.
 expected_openapi_sha256 = (
-    "ccc6eed43086ffdd9912a9d021469948128f8dee080f00f15ad2c0c269196cdc"
+    "3120990c5b4ba81d7e2b733608674f006c7cc6e0f0ddae5188485ebdba5215d5"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
@@ -544,8 +544,28 @@ if not delivery_status:
 delivery_values = re.findall(r"^        - (.+)$", delivery_status.group(1), re.M)
 if delivery_values != ["sent", "delivered", "read"]:
     raise SystemExit(f"DeliveryStatus drifted: {delivery_values}")
-if re.search(r"^\s+deprecated:\s*true\s*$", openapi_text, re.M):
-    raise SystemExit("deprecated compatibility surface returned to OpenAPI")
+# PR 214 keeps exactly these response mirrors deprecated; all other legacy
+# compatibility surfaces remain forbidden.
+allowed_deprecated = {
+    (schema, field)
+    for schema in ("TextPartResponse", "schemas-TextPartResponse")
+    for field in ("mention", "mention_range")
+}
+actual_deprecated = set()
+schema = field = None
+for line in openapi_text.splitlines():
+    match = re.fullmatch(r"    ([\w-]+):", line)
+    if match:
+        schema, field = match[1], None
+    match = re.fullmatch(r"        ([\w-]+):", line)
+    if match:
+        field = match[1]
+    if re.fullmatch(r"\s+deprecated:\s*true\s*", line):
+        if line != "          deprecated: true" or (schema, field) not in allowed_deprecated:
+            raise SystemExit("deprecated compatibility surface returned to OpenAPI")
+        actual_deprecated.add((schema, field))
+if actual_deprecated != allowed_deprecated:
+    raise SystemExit("deprecated mention response mirrors missing from OpenAPI")
 chat_handle = re.search(
     r"^    ChatHandle:\n(.*?)(?=^    [A-Za-z0-9_-]+:\n)",
     openapi_text,
