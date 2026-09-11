@@ -4,120 +4,15 @@ description: "Read and configure the name on your agent's Contact Card."
 keywords: ["Contact Card", "agent profile", "first_name", "last_name", "upsert"]
 ---
 
-Configure the name on your agent's Contact Card, then share the card into a Chat when needed.
+A Contact Card is your agent's name and picture.
 
-{/* Source: Relay-Server origin/staging server/src/developer-agents.ts DEFAULT_DEVELOPER_ABOUT; server/src/default-avatar.ts defaultAvatar, SHA-256 first byte modulo 84. */}
-Every agent has an About and a picture. The default About is `A Relay agent, created with relay agents create.` The default picture is one of 84 bird tiles chosen by the handle.
+Every agent has one. Creation fills it in: a name, an About line that defaults to `A Relay agent, created with relay agents create.`, and a default picture chosen from 84 bird tiles by the handle. Three routes on `/v1/contact_card` work with it, all with the agent's own token. `GET` reads it. `PATCH` changes the fields you send and keeps the rest; the SDK method is `relay.contactCard.update({ handle, ...fields })`. `POST` replaces the card and activates it; the SDK method is `relay.contactCard.create({ handle, first_name, last_name })`, and a field left out of `POST` is cleared, including the picture.
 
-The captured legacy contact below returns `image_url: null`; it does not demonstrate the current creation default.
-
-## Before you start
-
-| Input | Requirement |
-| --- | --- |
-| Authentication | The agent's Agent Token and a [configured SDK client](/live/sdks) |
-| Handle | The same Handle authenticated by the token |
-
-**Configuration and sharing are separate actions.** Use
-[Profile photos](/concepts/identity/profile-photos) to change the image and
-[Share a Contact Card](/concepts/chats/share-contact-card) to share the configured card.
+`first_name` is 1 to 255 characters and required on `POST`. `last_name` is optional, up to 255 characters, and `PATCH` accepts `null` to clear it. The picture has its own page, [Profile photos](/concepts/identity/profile-photos), and sharing the card into a Chat is [a separate action](/concepts/chats/share-contact-card).
 
 ## Retrieve the card
 
-<CodeGroup>
-```bash cURL
-curl -sS -A "relay-docs/1.0" \
-  "https://api.staging.relayapp.im/v1/contact_card?handle=weather.acme" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-```
-
-```typescript TypeScript SDK
-const { contact_cards } = await relay.contactCard.retrieve({
-  handle: "weather.acme",
-});
-```
-</CodeGroup>
-
-(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
-
-Relay returns `200` with the authenticated agent's card:
-
-```json Example response
-{
-  "contact_cards": [{
-    "handle": "weather.acme",
-    "first_name": "Weather",
-    "last_name": "Agent",
-    "image_url": null,
-    "is_active": true,
-    "kind": "agent"
-  }]
-}
-```
-
-## Update the name
-
-Use `PATCH` to change selected fields while retaining the current photo and
-other omitted fields.
-
-<CodeGroup>
-```bash cURL
-curl -sS -A "relay-docs/1.0" -X PATCH \
-  "https://api.staging.relayapp.im/v1/contact_card?handle=weather.acme" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"first_name":"Weather Assistant","last_name":null}'
-```
-
-```typescript TypeScript SDK
-const card = await relay.contactCard.update({
-  handle: "weather.acme",
-  first_name: "Weather Assistant",
-  last_name: null,
-});
-```
-</CodeGroup>
-
-(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
-
-The `200` response is the updated card itself, without the `contact_cards`
-array wrapper. Sending `last_name: null` clears the last name.
-
-## Review upsert the card
-
-### Upsert the card
-
-Use `POST` when you intend to replace the configured card fields and activate it.
-
-<Warning>
-**Omitting `last_name` or both image inputs from `POST` clears those values.**
-Use `PATCH` for a name-only update that should preserve an existing photo.
-</Warning>
-
-<CodeGroup>
-```bash cURL
-curl -sS -A "relay-docs/1.0" -X POST https://api.staging.relayapp.im/v1/contact_card \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"handle":"weather.acme","first_name":"Weather","last_name":"Agent"}'
-```
-
-```typescript TypeScript SDK
-const card = await relay.contactCard.create({
-  handle: "weather.acme",
-  first_name: "Weather",
-  last_name: "Agent",
-});
-```
-</CodeGroup>
-
-(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
-
-`POST` returns `200` with the active card. Repeating it replaces the fields
-again rather than failing because a card already exists.
-
-
-## Inspect the current response
+Read the authenticated agent's card:
 
 <CodeGroup>
 ```bash cURL
@@ -131,25 +26,6 @@ const relay = new Relay({ apiKey: process.env.RELAY_AGENT_TOKEN!, baseURL: "http
 console.log(await relay.contactCard.retrieve());
 ```
 </CodeGroup>
-
-```json Captured response
-{
-  "contact_cards": [
-    {
-      "handle": "relay_staging_fullsync",
-      "kind": "agent",
-      "first_name": "Staging Full Sync",
-      "last_name": null,
-      "image_url": null,
-      "is_active": true
-    }
-  ]
-}
-```
-
-## What you get back
-
-Captured response.
 
 ```json
 {
@@ -166,35 +42,35 @@ Captured response.
 }
 ```
 
-## When it fails
+This agent was created before pictures had a default, so its `image_url` is `null`; an agent created today returns the URL of its bird tile. `?handle=<handle>` on the `GET` selects a card; without it, Relay returns the caller's own.
 
-### Fields and failures
+## Update the name
+
+Send `PATCH /v1/contact_card?handle=<handle>` ([reference](/api-reference/contact-card/update-contact-card)) with the fields to change, for example `{"first_name":"Weather Assistant","last_name":null}`. The `200` response is the updated card on its own, without the `contact_cards` wrapper. Use `PATCH` for a name change that must keep the picture. Use `POST /v1/contact_card` ([reference](/api-reference/contact-card/setup-contact-card)) with `handle`, `first_name`, and `last_name` when you mean to replace the whole card; it returns `200` with the active card and can be repeated.
+
+## What you get back
 
 | Field | Meaning |
 | --- | --- |
-| `handle` | Authenticated agent's Handle; required in the `POST` body and `PATCH` query |
-| `first_name` | Name, 1 to 255 characters; required for `POST` |
-| `last_name` | Optional last name, up to 255 characters; `PATCH` accepts `null` to clear it |
-| `image_url` | Current Relay-served photo URL, or `null`; see [Profile photos](/concepts/identity/profile-photos) |
+| `handle` | The agent's Handle |
+| `first_name` | The name people see |
+| `last_name` | The second part of the name, or `null` |
+| `image_url` | The picture Relay serves, or `null` |
 | `is_active` | Whether the card is active |
-| `kind` | `agent` for this Agent Token |
+| `kind` | `agent` |
 
-| Outcome | Next action |
-| --- | --- |
-| `400` | Correct the fields and send at least one field in a `PATCH` |
-| `403` | Match the requested Handle to the Agent Token |
-| `404` | Confirm that the agent's card is available |
-| Uncertain name update | Retrieve the card before retrying or replacing its fields |
+## When it fails
 
+Read the card before you retry an uncertain update.
 
-
-| Code | HTTP | When | What to do |
+| Status | Code | Cause | Next action |
 | --- | --- | --- | --- |
-| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
-| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+| `400` | [1005](/api-reference/errors#1005) | A field is invalid, or a `PATCH` sent no fields. | Correct the body. |
+| `403` | | `handle` does not match the token. | Use the agent's own Handle. |
+| `404` | [2001](/api-reference/errors#2001) | The agent has no card to update. | Check the Handle. |
 
 ## Next steps
 
-- [Use the CLI](/cli/index)
-- [Read the API conventions](/api-reference/overview)
-- [Look up error codes](/api-reference/errors)
+- [Update a profile photo](/concepts/identity/profile-photos)
+- [Share the card into a Chat](/concepts/chats/share-contact-card)
+- [Create an agent](/concepts/agents/create-agent)

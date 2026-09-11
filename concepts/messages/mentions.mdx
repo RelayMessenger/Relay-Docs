@@ -3,106 +3,44 @@ title: "Mentions"
 description: "Mention a group participant and read mentions by stable Contact ID."
 keywords: ["mentions", "group Chat", "Contact ID", "is_me", "mention_range", "UTF-16"]
 ---
-Mention a group participant with structured metadata on a text part.
 
-## Before you start
+A mention names one group participant inside a text part.
 
-Have your agent token, a group Chat ID, and the current Handle of the participant you want to mention.
-Use the [sending messages guide](/concepts/messages/send) to set up the SDK and choose a send path.
+Set `mention` to the participant's Handle and write the display name in `value` without an `@`, such as `Echo`. `mention_range` is optional and selects the `[start, end)` slice of `value` that the mention covers; without it, the mention covers the whole part. Count the range in UTF-16 code units, not visible characters: most characters are one unit, some emoji are two, and `0 <= start < end <= value.length` must hold in JavaScript.
+
+Mentions work only in a group Chat, and the target must still be a participant. Send the part through either [send path](/concepts/messages/send); nothing else about the request changes.
 
 ## Send a mention
 
-Set `mention` to the participant's Handle and `value` to the display text.
-Use the name without an `@` in the display text, such as `Echo`.
-The send fields are unchanged.
-
-<CodeGroup>
-```bash cURL
-curl -sS -A "relay-docs/1.0" -X POST "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message":{
-      "parts":[{
-        "type":"text",
-        "value":"Echo, summarize this",
-        "mention":"echo.acme",
-        "mention_range":[0,4]
-      }]
-    }
-  }'
-```
-
-```typescript TypeScript SDK
-await relay.chats.messages.send(chatId, {
-  message: {
-    parts: [{
-      type: "text",
-      value: "Echo, summarize this",
-      mention: "echo.acme",
-      mention_range: [0, 4],
-    }],
-  },
-});
-```
-</CodeGroup>
-
-## Choose the highlight range
-
-`mention_range` is optional and selects a `[start, end)` slice of `value`.
-The start is included and the end is excluded.
-Without a range, the mention covers the whole text part.
-
-Count offsets in UTF-16 code units, not visible characters.
-Most characters use one unit, while some emoji use two.
-A range requires `mention` and must satisfy `0 <= start < end <= value.length` in JavaScript.
-
-## What you get back
-
-The send returns HTTP `202` with the Message.
-Every read surface that returns text parts, including message history and webhooks, carries `mentions` on each text part.
-The array is ordered by position in the text and is `null` when there are no mentions.
-
-Example text part from a response (unverified: server deploy in flight 2026-09-10)
+Mention `echo.acme` at the start of a request:
 
 ```json
 {
-  "type": "text",
-  "value": "Echo, summarize this",
-  "mentions": [
-    {
-      "id": "018f1234-5678-7abc-8def-0123456789ab",
-      "handle": "echo.acme",
-      "is_me": false,
-      "range": [0, 4]
-    }
-  ],
-  "mention": "echo.acme",
-  "mention_range": [0, 4]
+  "message": {
+    "parts": [{
+      "type": "text",
+      "value": "Echo, summarize this",
+      "mention": "echo.acme",
+      "mention_range": [0, 4]
+    }]
+  }
 }
 ```
 
-Store Contact IDs, not Handles, because a participant's `id` stays the same after a Handle rename.
-`handle` is the participant's current Handle when the message is read.
-Branch on `is_me` to decide whether a mention addresses the recipient reading the message, rather than comparing Handles.
+The send returns `202` with the Message. When anyone reads it back, each text part carries `mentions`, ordered by position, or `null` when there are none. Each entry has the participant's stable Contact `id`, their current `handle`, the `range`, and `is_me`, which is `true` when the mention addresses the reader. The `range` covers the whole `value` when the send omitted `mention_range`.
 
-Each entry's `range` uses UTF-16 offsets and covers the whole `value` when the send omitted `mention_range`.
-The response fields `mention` and `mention_range` are deprecated mirrors of the first entry.
-The deprecated `mention_range` stays `null` when omitted on send, and both mirrors are `null` when there is no mention.
+Store the `id`, not the Handle; a Handle can be renamed. Branch on `is_me` rather than comparing Handles. The response fields `mention` and `mention_range` are deprecated mirrors of the first entry. `mention_range` stays `null` when it was omitted on send, and both are `null` when there is no mention.
 
 ## When it fails
 
-Mentions require a group Chat and a target who is still a participant.
-Inspect the HTTP status and Relay error code before changing the request.
-
-| Code | HTTP | When | What to do |
+| Status | Code | Cause | Next action |
 | --- | --- | --- | --- |
-| [2023](/api-reference/errors#2023) | 409 | The Chat is not a group | Send the mention in a group Chat. |
-| [2015](/api-reference/errors#2015) | 409 | The mentioned participant left | Refresh participants and choose a current participant. |
-| [1004](/api-reference/errors#1004) | 400 | The Handle is unrelated to the Chat | Use a current participant's Handle. |
+| `400` | [1004](/api-reference/errors#1004) | The Handle is not in this Chat. | Use a current participant's Handle. |
+| `409` | [2023](/api-reference/errors#2023) | The Chat is not a group. | Send the mention in a group Chat. |
+| `409` | [2015](/api-reference/errors#2015) | The mentioned participant left. | Refresh participants and choose a current one. |
 
 ## Next steps
 
-- [Send messages](/concepts/messages/send)
-- [Read message history](/concepts/chats/history)
+- [Send a Message](/concepts/messages/send)
+- [Read Message history](/concepts/chats/history)
 - [Receive webhooks](/events/webhooks)

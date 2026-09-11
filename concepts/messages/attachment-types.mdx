@@ -4,64 +4,36 @@ description: "Look up Attachment MIME types, metadata, size limits, and download
 keywords: ["Attachment MIME type", "file types", "size_bytes", "100 MiB", "SVG"]
 ---
 
-Relay Message Attachments accept any valid MIME type and preserve the uploaded bytes.
+An Attachment can be any file type; Relay stores the bytes unchanged.
 
-```json Allocation metadata
-{
-  "filename": "report.pdf",
-  "content_type": "application/pdf",
-  "size_bytes": 48291
-}
-```
+A declared MIME type tells Relay how to serve the file, not whether its contents are safe. Relay serves every download with headers that stop a browser from guessing the type or running the content. The rest is yours: apply your own checks before you process a downloaded file. Profile and group photos are the exception; they accept images only, and their own pages list the types.
 
-## Review file types
-
-### File types
+## Choose a file type
 
 | Rule | Value |
 | --- | --- |
 | MIME shape | `type/subtype` using MIME token characters, without parameters |
 | Length | Up to 255 characters |
 | Case | Normalized to lowercase |
-| Invalid MIME value | `400`, code `1005` |
 | Public URL import | Keeps a valid declared type; otherwise uses `application/octet-stream` |
 
-**A declared MIME type describes how the file is served, not whether its contents are safe.**
-Apply your application's own validation before processing downloaded files.
+SVG can be allocated, uploaded, and downloaded like any other type. Unknown types remain downloadable files.
 
-## Download safety
+## Read the download headers
 
-| Response header | Value |
-| --- | --- |
-| `Content-Type` | The stored MIME type |
-| `X-Content-Type-Options` | `nosniff` |
-| `Content-Security-Policy` | `sandbox; default-src 'none'` |
-| `Referrer-Policy` | `no-referrer` |
-| `Cache-Control` | `private, no-store` |
+Every download carries `Content-Type` with the stored type, `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox; default-src 'none'`, `Referrer-Policy: no-referrer`, and `Cache-Control: private, no-store`. `Content-Disposition` is `inline` for `image/*`, `audio/*`, `video/*`, and `application/pdf`, and `attachment` for every other type.
 
-| Type | `Content-Disposition` |
-| --- | --- |
-| `image/*`, `audio/*`, `video/*`, `application/pdf` | `inline` |
-| Every other type | `attachment` |
-
-SVG can be allocated, uploaded, and downloaded under these same headers.
-Unknown file types remain downloadable files.
-
-## Review media metadata
-
-### Media metadata
+## Supply media metadata
 
 | Field | Requirement |
 | --- | --- |
 | `filename` | Required, 1 to 255 characters with no surrounding whitespace |
 | `content_type` | Required MIME type |
 | `size_bytes` | Required exact integer byte length |
-| `duration_ms` | Optional nonnegative integer for audio or video |
-| `width`, `height` | Optional positive integer pixel dimensions for images or video; supply both together |
+| `duration_ms` | Optional nonnegative integer, accepted for audio or video |
+| `width`, `height` | Optional positive integer pixels, supplied together, accepted for images or video |
 
-## Review limits
-
-### Limits
+## Keep within the limits
 
 | Boundary | Value |
 | --- | --- |
@@ -72,36 +44,18 @@ Unknown file types remain downloadable files.
 | Upload URL lifetime | 15 minutes |
 | Download URL lifetime | 60 minutes from issuance |
 
-## Review profile and group photos
-
-### Profile and group photos
-
-Photo inputs have their own image-only checks:
-
-| Use | Accepted input |
-| --- | --- |
-| [Profile photos](/concepts/identity/profile-photos) | A public image URL or completed owned Attachment with one of the profile-image MIME types |
-| [Group photo](/concepts/chats/group-photo) | A public image URL passing the image-ingestion checks, or a completed owned `image/*` Attachment |
-
-Follow the photo guides for the allowed image types, URL safety checks, and
-photo storage behavior.
-
-
-## What you get back
-
-(unverified: this operation was not captured; agent creation is prohibited and the allowed send returned HTTP 500, code 3006 2026-09-10)
+[Profile photos](/concepts/identity/profile-photos) accept a public image URL or a completed owned Attachment of a profile-image type. A [group photo](/concepts/chats/group-photo) accepts a public image URL that passes the image checks, or a completed owned `image/*` Attachment.
 
 ## When it fails
 
-Inspect the HTTP status, Relay code, and `trace_id` before retrying.
-
-| Code | HTTP | When | What to do |
-| --- | --- | --- | --- |
-| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
-| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+| Status | Code | Cause |
+| --- | --- | --- |
+| `400` | [1005](/api-reference/errors#1005) | The MIME type, filename, size, or media metadata is invalid. |
+| `413` | [2006](/api-reference/errors#2006) | `size_bytes` is over 100 MiB, or a URL import is over 10 MiB. |
+| `415` | [1005](/api-reference/errors#1005) | The allocation request is not `application/json`. |
 
 ## Next steps
 
-- [Use the CLI](/cli/index)
-- [Read the API conventions](/api-reference/overview)
-- [Look up error codes](/api-reference/errors)
+- [Upload attachments](/concepts/messages/attachments)
+- [Import media from a URL](/concepts/messages/import-media)
+- [Download attachments](/concepts/messages/receiving-media)
