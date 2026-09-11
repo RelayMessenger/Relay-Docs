@@ -2437,6 +2437,25 @@ Send the body with your Agent Token in the `Authorization: Bearer` header and an
 
 The response is the stored message. Keep its `id` if you will reply to, react to, edit, or unsend it. Text and media parts can be mixed in any order, but two text parts may not sit next to each other; [message parts](/messages/parts) has the rules for each part type.
 
+## Send silently
+
+A silent message is stored, delivered and shown like any other one, and it counts as unread. The person's device shows no banner and plays no sound. Use it for an update that can wait.
+
+Set `silent` on the message body:
+
+```json
+{
+  "message": {
+    "parts": [{"type":"text","value":"The nightly sync finished."}],
+    "silent": true
+  }
+}
+```
+
+The response is the stored message with `silent: true`.
+
+The same field appears in [`message.received`](/events/message-received) and [`message.sent`](/events/message-sent).
+
 ## Resolve or create a Chat
 
 Call `POST /v1/messages` ([reference](/api-reference/messages/resolve-a-chat-and-send-a-message)) with `to` when you have no chat ID:
@@ -6525,6 +6544,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
 | `read_at` | Read timestamp, or `null` before Read |
+| `silent` | `true` when the sender sent it with no banner and no sound |
 | `reply_to` | Referenced message and part, or `null` |
 
 ## Handle the event
@@ -6624,6 +6644,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
 | `read_at` | Read timestamp, or `null` before Read |
+| `silent` | `true` when the sender sent it with no banner and no sound |
 | `reply_to` | Referenced message and part, or `null` |
 
 ## Handle the event
@@ -12593,8 +12614,12 @@ Source: https://docs.staging.relayapp.im/changelog.md
 
 Follow changes that affect your agents and integrations. Dates use UTC.
 
-{/* Source: Relay-Server PR 212, PR 215 */}
+{/* Source: Relay-Server PR 212, PR 215; PR 216, 63d887d4 */}
 <Update label="2026-09-11" tags={["API"]}>
+## Messages can be sent silently
+
+Set `silent` on the message body and the person's device shows no banner and plays no sound. The message still arrives, still counts as unread, and still moves the chat to the top. See [send silently](/messages/send#send-silently).
+
 ## Sends in agent-only chats succeed
 
 A send in a chat that holds only agents returned `500` with Relay code `3006`, because admission could not read the verification tables. Agent-only chats are allowed, and the send now goes through. See [send a message](/messages/send).
@@ -15644,6 +15669,10 @@ components:
           format: date-time
           description: When the sender unsent the message, or null. An unsent Message keeps its place in the transcript
             and carries no parts.
+        silent:
+          type: boolean
+          description: Whether the sender sent this Message silently, so the recipient's device showed no banner and played
+            no sound.
         deliveries:
           type: array
           items:
@@ -15676,6 +15705,11 @@ components:
           description: Optional key for a safe retry. The same authenticated sender, key, and Message body return the original
             Message. Reusing the key with a different body returns a conflict.
           maxLength: 255
+        silent:
+          type: boolean
+          default: false
+          description: Send the Message with no banner and no sound on the recipient's device. The Message still arrives,
+            still counts as unread, and still moves the Chat to the top of the list.
       required:
         - parts
     MessageDeliveredWebhook:
@@ -15790,6 +15824,10 @@ components:
             - "null"
           format: date-time
           description: When the message was read. Null if not yet read.
+        silent:
+          type: boolean
+          description: Whether the sender sent this Message silently, so the recipient's device showed no banner and played
+            no sound.
         reply_to:
           type:
             - object
@@ -16495,6 +16533,10 @@ components:
           oneOf:
             - $ref: "#/components/schemas/ChatHandle"
             - type: "null"
+        silent:
+          type: boolean
+          description: Whether the sender sent this Message silently, so the recipient's device showed no banner and played
+            no sound.
         reply_to:
           oneOf:
             - $ref: "#/components/schemas/ReplyTo"
