@@ -4,39 +4,40 @@ description: "Connect OpenClaw to Relay and check its messaging setup."
 keywords: ["Relay", "OpenClaw", "connect"]
 ---
 
-Connect OpenClaw to Relay and talk to it from your phone.
-
 ## Before you start
 
-Install [OpenClaw](https://docs.openclaw.ai/start/getting-started) at a version in `>=2026.8.1 <2026.9.0` and sign in to it. Install Node.js 22.22.3 or newer; the Relay CLI and OpenClaw both run on it. Set `RELAY_API_URL` to `https://api.staging.relayapp.im` so Relay talks to the API your agent lives on. You do not need an agent yet: the command below creates one and saves its token on this computer. If you already have an Agent Token, pipe it in with `--with-token`; that agent must have zero saved webhook subscriptions, because the plugin receives over the WebSocket.
+- [OpenClaw](https://docs.openclaw.ai/start/getting-started) in `>=2026.8.1 <2026.9.0`, signed in.
+- Node.js 22.22.3 or newer.
+- `RELAY_API_URL` set to `https://api.staging.relayapp.im`.
+- An existing Agent Token needs zero saved webhook subscriptions.
 
 ## Connect
 
-Run this in a terminal. Relay finds OpenClaw and creates an agent with a `.dev` handle. Then it prints what it will change before it changes anything. It installs the `@relaymessenger/openclaw-plugin` package and writes the token alone into an owner-only file under `~/.openclaw/secrets/`. It adds `channels.relay` to `~/.openclaw/openclaw.json` with every other setting kept. It asks `Continue?` and does the work. It ends with `Relay is ready for OpenClaw.` and the handle to message from your phone:
+Run this in a terminal to create an agent and install the Relay plugin for OpenClaw:
 
 ```bash
 npx relaymessenger@staging connect openclaw
 ```
 
-Connect then offers to start the gateway with `openclaw gateway`. Say yes, or start it yourself later. The entry it writes sets `enabled`, `baseUrl`, `tokenFile`, and `allowFrom`.
+Approve the change, start the gateway with `openclaw gateway`, then message the new handle from your phone.
 
 ### Install the plugin yourself
 
-If you would rather not let the CLI touch OpenClaw, install the plugin with OpenClaw's own command and write the channel entry yourself. The source is [packages/openclaw](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/openclaw):
+To keep the CLI away from OpenClaw, install the plugin with OpenClaw's own command:
 
 ```bash
 openclaw plugins install @relaymessenger/openclaw-plugin@staging
 ```
 
-Then add `channels.relay` to `~/.openclaw/openclaw.json`. Set `enabled` to true and `baseUrl` to `https://api.staging.relayapp.im`. Point `tokenFile` at an owner-only file that holds the token alone, and list in `allowFrom` who may start a turn. Use contact UUIDs in `allowFrom`; a handle alone does not pass the stable-ID authorization gate, and user Contacts and agent Contacts pass the same sender checks. One gateway can back several Relay accounts. Give every named account its own `token` or `tokenFile`, keep each token paired with its API origin, and never reuse a token across accounts. Channel-level credentials belong to the default account only.
+Then write the channel entry into `~/.openclaw/openclaw.json` yourself: the API address, an owner-only token file, and the sender list. List contact UUIDs in `allowFrom`; a handle alone does not pass the stable-ID gate. One gateway can back several accounts, so keep each token paired with its own API origin.
 
 ## Send it a message
 
-Open Relay on your phone and send a message to the handle connect printed. OpenClaw wakes up on its own. The plugin holds one acknowledged WebSocket connection, commits each event to OpenClaw's ingress queue before it acknowledges it, and starts a turn. The reply appears in the same chat on your phone, and in the terminal while connect is waiting. Keep the gateway running; a stopped gateway receives nothing until it starts again, and then it catches up from the queue.
+Open Relay on your phone and message the handle. OpenClaw wakes up on its own and answers in the same chat. Keep the gateway running; a stopped one catches up from its queue.
 
 ## What it can do
 
-The table says what the Relay plugin gives OpenClaw. It comes from the connection code for `openclaw` and the plugin package; anything not listed is not there.
+These come from the connection code for `openclaw` and the plugin package.
 
 | Relay feature | OpenClaw |
 | --- | --- |
@@ -49,11 +50,16 @@ The table says what the Relay plugin gives OpenClaw. It comes from the connectio
 | Group chats | Yes, when the message mentions the agent or replies to one of its messages. |
 | Reactions, edits, unsend, typing | No. |
 
-Keep the gateway's own DM session scope under review separately from sender admission: an allowed sender is not evidence of isolated model memory. A replayed event reaches its existing row and never repeats model or tool work.
+User Contacts and agent Contacts pass the same sender checks, so an allowed sender is no evidence of an isolated DM session scope. A replayed event reaches its existing row and repeats no model or tool work.
 
 ## When it fails
 
-Every failure prints one line, and nothing else changes. `Relay cannot ask which agent to connect.` means you ran connect without a terminal and without a token; pipe one in with `--with-token`, or run it in a terminal. `Relay cannot ask you to confirm this plan.` means the same for the plan; add `--yes`. `Relay would not accept that token, so nothing was changed.` means the token and `RELAY_API_URL` come from different environments. `OpenClaw was not found on this computer; you named it, so Relay will try anyway` is a notice, not an error: install OpenClaw and run connect again. If a step stops with `did not finish`, your agent and its token are saved; fix what it said and run the same command again. If the gateway starts but the plugin refuses to connect, the agent has a saved webhook subscription. A Relay agent has one delivery path, and the plugin needs zero saved webhook subscriptions. `No reply yet. Run: relay watch @<handle>` means the gateway is not running, or the sender is not in `allowFrom`.
+- `Relay cannot ask which agent to connect.` Use a terminal, or pipe a token with `--with-token`.
+- `Relay cannot ask you to confirm this plan.` Add `--yes`.
+- `Relay would not accept that token, so nothing was changed.` The token and `RELAY_API_URL` come from different environments.
+- `did not finish` Fix what the step names and run the same command again; your agent is saved.
+- The plugin will not connect: the agent has a saved webhook subscription, and the plugin needs none.
+- `No reply yet. Run: relay watch @<handle>` The gateway is not running, or the sender is not in `allowFrom`.
 
 ## Next steps
 
@@ -61,3 +67,4 @@ Every failure prints one line, and nothing else changes. `Relay cannot ask which
 - [Read message history](/concepts/chats/history)
 - [Reconcile full sync](/events/websocket/full-sync)
 - [Connect Claude Code](/integrations/claude-code)
+- [Relay plugin source](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/openclaw)

@@ -4,11 +4,15 @@ description: "Connect Cloudflare Think to receive Relay messages and send replie
 keywords: ["Relay", "Cloudflare Think", "connect"]
 ---
 
-Connect Cloudflare Think to Relay and answer messages from a Worker.
-
 ## Before you start
 
-You need Node.js 22.22.3 or newer, a Cloudflare account with Workers AI, an Agent Token, and a public HTTPS route for the webhook. Set `RELAY_API_URL` to `https://api.staging.relayapp.im`, the API the token comes from. The starter is a folder in the SDK; clone it, install it, and copy the secrets template. `.dev.vars` stays out of source control:
+- Node.js 22.22.3 or newer, and a Cloudflare account with Workers AI.
+- An Agent Token from `https://api.staging.relayapp.im`, set as `RELAY_API_URL`.
+- A [webhook subscription](/events/webhooks/subscriptions) for your public `/webhooks/relay` route.
+
+## Connect
+
+Clone the starter, install it, and copy the secrets template, which stays out of source control:
 
 ```bash
 git clone --branch staging https://github.com/RelayMessenger/Relay-SDK.git
@@ -17,25 +21,23 @@ npm ci
 cp .dev.vars.example .dev.vars
 ```
 
-The source is [cookbook/cloudflare-think-agent](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook/cloudflare-think-agent); its README records the choices below.
+The source is [cookbook/cloudflare-think-agent](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook/cloudflare-think-agent), and its README records the choices below.
 
-## Connect
-
-[Create a webhook subscription](/events/webhooks/subscriptions) for your public `/webhooks/relay` route and keep its one-time signing secret. Put `RELAY_AGENT_TOKEN` and `RELAY_WEBHOOK_SECRET` in `.dev.vars`. In `wrangler.jsonc`, under `env.staging.vars`, set `RELAY_API_ORIGIN` to `https://api.staging.relayapp.im`, `RELAY_AGENT_HANDLE` to your agent's handle, and `MODEL_ID` to `@cf/openai/gpt-oss-120b`. Then start the Worker and route the registered HTTPS address to it:
+Put the Agent Token and the webhook signing secret in `.dev.vars`. In `wrangler.jsonc`, under the staging environment variables, set the API origin, your agent's handle, and the model `@cf/openai/gpt-oss-120b`. Then start the Worker and route the registered address to it:
 
 ```bash
 npm run dev
 ```
 
-The Worker verifies each webhook, commits the event, and runs one Think turn per message. Deploy it the way you deploy any Worker when local work is done; the same variables go into the deployed environment.
+The Worker verifies each webhook, commits the event, and runs one Think turn per message. Deploy it the way you deploy any Worker; the same variables go into the deployed environment.
 
 ## Send it a message
 
-Open Relay on your phone and send a message to your agent's handle. Relay posts the event to the Worker, Think runs the model, and the reply comes back in the same chat. To watch the exchange from a terminal, run `npx relaymessenger@staging watch @<handle>`.
+Open Relay on your phone and message your agent's handle. Relay posts the event to the Worker, Think runs the model, and the reply comes back in the same chat. To watch the exchange from a terminal, run `npx relaymessenger@staging watch @<handle>`.
 
 ## What it can do
 
-The starter builds the Chat SDK instance itself, so these are Think's rules, not settings you change in the starter.
+The starter builds the Chat SDK instance itself, so these are Think's rules, not settings.
 
 | Relay feature | Cloudflare Think starter |
 | --- | --- |
@@ -45,11 +47,13 @@ The starter builds the Chat SDK instance itself, so these are Think's rules, not
 | Read chat history | Yes, through the adapter's history walk. |
 | Marks the chat read | Yes, on receipt. |
 
-Think sets `concurrency` to `burst` with a 600 ms window and runs each reply with `waitForCompletion`. A second message inside that window replaces the first, and Think's handlers never read the earlier one. A second message during the turn waits and gets its own reply. A newer message never cancels a running turn: Think's handlers take only `(thread, message)` and never read `thread.signal`, so `abortActiveTurnOnReceipt` does nothing here and the starter leaves it off.
+Think sets `concurrency` to `burst` with a 600 ms window, and waits for each reply to finish. A second message inside that window replaces the first; a second message during the turn waits and gets its own reply. A newer message never cancels a running turn, because Think's handlers never read `thread.signal`.
 
 ## When it fails
 
-If signature verification fails, the secret is not the one from this subscription or the body was re-encoded before the Worker saw it. If no reply comes, read the Worker's logs; the turn either threw or the model call failed. If a send's result is uncertain, retry it with the same idempotency key and the same content.
+- Signature verification fails: the secret is not this subscription's, or the body was re-encoded.
+- No reply comes: read the Worker's logs, because the turn either threw or the model call failed.
+- A send's result is uncertain: retry it with the same idempotency key and the same content.
 
 ## Next steps
 
