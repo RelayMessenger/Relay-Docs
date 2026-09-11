@@ -295,14 +295,14 @@ async function main() {
   // The manifest is read from the Relay-SDK staging branch, so it carries the
   // version the `staging` dist-tag publishes, not `latest` (the two diverged
   // on 2026-09-07 when latest became the plain 0.3.0 release).
-  // connect/claude-code.mdx states that the staging catalog carries the
+  // integrations/claude-code.mdx states that the staging catalog carries the
   // staging train, so the refresh proves it instead of assuming it.
   const channelVersion = next.npm["relay-claude-channel"].staging;
   if (next.claudeCodePluginManifest !== channelVersion) {
     throw new Error(
       "the Relay-SDK Claude Code plugin manifest "
       + `(${next.claudeCodePluginManifest}) no longer matches the staging tag `
-      + `relay-claude-channel@${channelVersion}; connect/claude-code.mdx must `
+      + `relay-claude-channel@${channelVersion}; integrations/claude-code.mdx must `
       + "state what the staging catalog carries before this refresh can pass",
     );
   }

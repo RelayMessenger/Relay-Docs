@@ -19,7 +19,7 @@ class DocumentationStructureTests(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("---\ntitle: Test\n---\nOne task.\n\n## Next steps\n")
         (root / "index.mdx").write_text("\n".join("## " + heading for heading in LANDING_SECTIONS) + "\n")
-        config = {"navigation": {"tabs": [{"groups": [{"group": "Getting started", "pages": list(START_PAGES)}]}]}}
+        config = {"navigation": {"tabs": [{"groups": [{"group": "Get started", "pages": list(START_PAGES)}]}]}}
         return root, config
 
     def test_landing_order_mutation(self):
@@ -31,19 +31,19 @@ class DocumentationStructureTests(unittest.TestCase):
 
     def test_build_heading_mutation(self):
         with self.assertRaisesRegex(SystemExit, "imperative task"):
-            validate_build_headings("build/messages/send", "## Background\n## Next steps\n")
+            validate_build_headings("concepts/messages/send", "## Background\n## Next steps\n")
 
     def test_event_heading_mutation(self):
         with self.assertRaisesRegex(SystemExit, "imperative task"):
-            validate_build_headings("build/events/reference/message-sent", "## Fields\n## Next steps\n")
+            validate_build_headings("events/reference/message-sent", "## Fields\n## Next steps\n")
 
     def test_current_site(self):
         validate_structure(ROOT, json.loads((ROOT / "docs.json").read_text()))
 
     def test_onboarding_cannot_absorb_management(self):
         root, config = self.fixture()
-        config["navigation"]["tabs"][0]["groups"][0]["pages"].append("build/agents/lifecycle")
-        with self.assertRaisesRegex(SystemExit, "Getting started"):
+        config["navigation"]["tabs"][0]["groups"][0]["pages"].append("concepts/agents/lifecycle")
+        with self.assertRaisesRegex(SystemExit, "Get started"):
             validate_structure(root, config)
 
     def test_independent_sections_fail(self):

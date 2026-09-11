@@ -77,7 +77,7 @@ if config.get("navbar", {}).get("primary") != {
 if config.get("navbar", {}).get("links") != [
     {
         "label": "Copy agent prompt",
-        "href": "/connect/agent-prompt#relay-agent-prompt",
+        "href": "/integrations/agent-prompt#relay-agent-prompt",
         "icon": "copy",
     }
 ]:
@@ -95,20 +95,20 @@ redirects = {
     if isinstance(item, dict) and item.get("permanent") is True
 }
 for source, destination in {
-    "/ecosystem": "/connect/index",
-    "/ecosystem/agent-starter": "/connect/cloudflare-think",
-    "/ecosystem/chat-sdk": "/connect/chat-sdk",
-    "/ecosystem/claude-code": "/connect/claude-code",
+    "/ecosystem": "/integrations/claude-code",
+    "/ecosystem/agent-starter": "/integrations/cloudflare-think",
+    "/ecosystem/chat-sdk": "/integrations/chat-sdk",
+    "/ecosystem/claude-code": "/integrations/claude-code",
     "/ecosystem/cli": "/cli/index",
-    "/ecosystem/codex": "/connect/codex",
-    "/ecosystem/cursor": "/connect/cursor",
-    "/ecosystem/hermes": "/connect/hermes",
-    "/ecosystem/mcp": "/connect/mcp",
-    "/ecosystem/openclaw": "/connect/openclaw",
-    "/ecosystem/skills": "/connect/skills",
-    "/integrations/agent-starter": "/connect/cloudflare-think",
-    "/integrations/cloudflare": "/connect/cloudflare-think",
-    "/integrations/hermes-plugin": "/connect/hermes",
+    "/ecosystem/codex": "/integrations/codex",
+    "/ecosystem/cursor": "/integrations/cursor",
+    "/ecosystem/hermes": "/integrations/hermes",
+    "/ecosystem/mcp": "/integrations/mcp",
+    "/ecosystem/openclaw": "/integrations/openclaw",
+    "/ecosystem/skills": "/integrations/skills",
+    "/integrations/agent-starter": "/integrations/cloudflare-think",
+    "/integrations/cloudflare": "/integrations/cloudflare-think",
+    "/integrations/hermes-plugin": "/integrations/hermes",
 }.items():
     if redirects.get(source) != destination:
         raise SystemExit(
@@ -197,20 +197,22 @@ if navigated != files:
 
 tabs = config["navigation"]["tabs"]
 actual_tabs = [tab["tab"] for tab in tabs]
-expected_tabs = ["Start", "Connect", "Build", "CLI", "API", "Changelog"]
+# Owner ruling 2026-09-11: Docs with a real sidebar, Integrations, API
+# reference, CLI; the changelog is the last Docs group, not a tab.
+expected_tabs = ["Docs", "Integrations", "API reference", "CLI"]
 if actual_tabs != expected_tabs:
     raise SystemExit(f"top tab order changed: {actual_tabs}")
 
 # Page boundaries and navigation coverage are checked independently of a
 # frozen list of heading strings. Editorial changes must not require growing
 # an existing catch-all page to satisfy a historical outline.
-from docs_structure import validate_structure
+from docs_structure import is_task_guide, validate_structure
 validate_structure(root, config)
 expected_guide_groups = [group["group"] for group in tabs[0]["groups"]]
 
 
 
-api_tab = tabs[4]
+api_tab = next(tab for tab in tabs if tab["tab"] == "API reference")
 if api_tab.get("openapi") != "api-reference/openapi.mint.yaml":
     raise SystemExit("generated API groups must sit directly under API Reference")
 try:
@@ -234,32 +236,29 @@ if (root / "current-status.mdx").exists():
     raise SystemExit("Current status belongs in the evidence site, not public docs")
 
 required_paths = [
-    root / "build/identity/contact-card.mdx",
-    root / "build/chats/share-contact-card.mdx",
-    root / "build/chats/typing.mdx",
-    root / "build/messages/receipts.mdx",
-    root / "build/identity/message-requests.mdx",
-    root / "build/events/reference.mdx",
-    root / "build/events/websocket.mdx",
-    root / "build/events/websocket/protocol.mdx",
-    root / "build/events/websocket/full-sync.mdx",
+    root / "concepts/identity/contact-card.mdx",
+    root / "concepts/chats/share-contact-card.mdx",
+    root / "concepts/chats/typing.mdx",
+    root / "concepts/messages/receipts.mdx",
+    root / "concepts/requests/message-requests.mdx",
+    root / "events/reference/index.mdx",
+    root / "events/websocket/index.mdx",
+    root / "events/websocket/protocol.mdx",
+    root / "events/websocket/full-sync.mdx",
     root / "api-reference/errors.mdx",
 ]
 for path in required_paths:
     if not path.exists():
         raise SystemExit(f"required atomic guide missing: {path.relative_to(root)}")
 for path in [
-    root / "build/messages/index.mdx", root / "build/chats/index.mdx",
+    root / "concepts/messages/index.mdx", root / "concepts/chats/index.mdx",
     root / "api-reference/overview.mdx",
 ]:
     if 'sidebarTitle: "Overview"' not in path.read_text():
         raise SystemExit(f"overview sidebar label drifted: {path.relative_to(root)}")
 
-if 'title: "Pick your agent"' not in (root / "connect/index.mdx").read_text():
-    raise SystemExit("Connect chooser title drifted")
-
 for stale in [
-    root / "build/chats/install-agents.mdx",
+    root / "concepts/chats/install-agents.mdx",
     root / "guides/socket-mode.mdx",
     root / "guides/socket-mode-protocol.mdx",
     root / "build/events/choose-transport.mdx",
@@ -283,18 +282,17 @@ if "--topology-only" in sys.argv:
     raise SystemExit(0)
 
 ecosystem_paths = [
-    root / "connect/index.mdx",
-    root / "connect/chat-sdk.mdx",
+    root / "integrations/chat-sdk.mdx",
     root / "cli/index.mdx",
-    root / "connect/mcp.mdx",
-    root / "connect/openclaw.mdx",
-    root / "connect/claude-code.mdx",
-    root / "connect/hermes.mdx",
-    root / "connect/cloudflare-think.mdx",
-    root / "connect/skills.mdx",
-    root / "connect/codex.mdx",
-    root / "connect/cursor.mdx",
-    root / "build/examples.mdx",
+    root / "integrations/mcp.mdx",
+    root / "integrations/openclaw.mdx",
+    root / "integrations/claude-code.mdx",
+    root / "integrations/hermes.mdx",
+    root / "integrations/cloudflare-think.mdx",
+    root / "integrations/skills.mdx",
+    root / "integrations/codex.mdx",
+    root / "integrations/cursor.mdx",
+    root / "live/examples.mdx",
 ]
 ecosystem_text = "\n".join(path.read_text() for path in ecosystem_paths)
 # Integration installation and safety boundaries have dedicated regression
@@ -340,7 +338,9 @@ for path in mdx_paths:
         text,
     ):
         if "TypeScript SDK" in block and "cURL" in block:
-            if path.relative_to(root).parts[0] == "build" or path == root / "index.mdx":
+            # start/build-on-the-api is the main page's API walkthrough moved out
+            # verbatim (2026-09-11), so it keeps the main page's cURL-first order.
+            if is_task_guide(path.relative_to(root).with_suffix("").as_posix()) or path in {root / "index.mdx", root / "start/build-on-the-api.mdx"}:
                 if block.index("cURL") > block.index("TypeScript SDK"):
                     raise SystemExit(f"cURL must appear before TypeScript SDK: {path.relative_to(root)}")
             elif block.index("TypeScript SDK") > block.index("cURL"):
@@ -443,7 +443,7 @@ for path in [*mdx_paths, root / "skill.md"]:
 
 from docs_behavior import validate_behavior
 validate_behavior(root)
-webhook_events_text = (root / "build/events/reference.mdx").read_text()
+webhook_events_text = (root / "events/reference/index.mdx").read_text()
 
 # One code table replaces the former per-code page hierarchy.
 import runpy
@@ -806,7 +806,7 @@ if (root / "skill.md").read_bytes() != (
 ).read_bytes():
     raise SystemExit("published Relay skill drifted from skill.md")
 skill_text = (root / "skill.md").read_text()
-agent_prompt_page = (root / "connect/agent-prompt.mdx").read_text()
+agent_prompt_page = (root / "integrations/agent-prompt.mdx").read_text()
 prompt_match = re.search(
     r"^### Relay agent prompt\n.*?^````text Relay agent prompt\n"
     r"(.*?)\n````$",
@@ -827,7 +827,7 @@ if (
 ):
     raise SystemExit("agent-prompt.js payload drifted from skill.md")
 if (
-    'const FALLBACK_PATH = "/connect/agent-prompt#relay-agent-prompt";'
+    'const FALLBACK_PATH = "/integrations/agent-prompt#relay-agent-prompt";'
     not in agent_prompt_script
 ):
     raise SystemExit("agent-prompt.js lost its safe fallback destination")
@@ -872,7 +872,7 @@ for required in [
 ]:
     if required not in skill_text:
         raise SystemExit(f"setup prompt lost safety guidance: {required}")
-if "/connect/agent-prompt#relay-agent-prompt" not in (root / "start/quickstart.mdx").read_text():
+if "/integrations/agent-prompt#relay-agent-prompt" not in (root / "start/quickstart.mdx").read_text():
     raise SystemExit("Quickstart lost its link to the agent instructions")
 
 for name, pattern in {
@@ -914,7 +914,7 @@ for name, pattern in {
         raise SystemExit(f"stale {name}")
 
 print(
-    f"validated {len(files)} Relay public pages, three tabs, "
+    f"validated {len(files)} Relay public pages, four tabs, "
     "Console CTA, Copy agent prompt action, logo destination, Quickstart sidebar placement, "
     "atomic guide groups, "
     "focused page boundaries, "

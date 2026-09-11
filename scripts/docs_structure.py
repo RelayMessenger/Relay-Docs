@@ -5,9 +5,20 @@ from pathlib import Path
 
 # Frame catalogs and a complete copyable agent instruction are reference, not
 # onboarding. All ordinary task guides keep five sections before related links.
-REFERENCE_PAGES = {"build/events/websocket/protocol", "connect/agent-prompt"}
+REFERENCE_PAGES = {"events/websocket/protocol", "integrations/agent-prompt"}
 LANDING_SECTIONS = ["Start here", "What you need", "Connect your coding agent", "Message it from your phone", "Or build on the API", "Group chats and mentions", "Receive events", "Your agent’s identity", "Going live", "Next"]
-START_PAGES = ["index", "start/quickstart", "start/key-concepts", "start/authentication", "start/sdks"]
+# Owner ruling 2026-09-11: the Docs tab opens with the main page, the
+# quickstart and the API walkthrough split out of the main page.
+START_PAGES = ["index", "start/quickstart", "start/build-on-the-api"]
+GUIDE_PREFIXES = ("concepts/", "events/", "live/")
+# The key concepts overview and the SDK page moved out of start/ unchanged;
+# they are concept and reference pages, not task guides, so the
+# imperative-heading rule does not apply to them.
+CONCEPT_PAGES = {"concepts/index", "live/sdks"}
+
+
+def is_task_guide(page):
+    return page.startswith(GUIDE_PREFIXES) and page not in CONCEPT_PAGES
 INTERNAL_PROSE = re.compile(
     r"Prepare hosted proof|only after this docs candidate is pushed|"
     r"Local Docs validation prepares|Published artifact source commit|"
@@ -50,9 +61,9 @@ def authored_paths(value):
 
 def validate_structure(root: Path, config: dict):
     groups = config["navigation"]["tabs"][0]["groups"]
-    start = next((group for group in groups if group.get("group") == "Getting started"), None)
+    start = next((group for group in groups if group.get("group") == "Get started"), None)
     if start is None or start.get("pages") != START_PAGES:
-        raise SystemExit("Getting started must stay focused on quickstart, authentication, and SDK installation")
+        raise SystemExit("Get started must stay the main page, the quickstart, and the API walkthrough")
     pages = list(authored_paths(config["navigation"]))
     existing = {str(p.relative_to(root).with_suffix("")) for p in root.rglob("*.mdx") if "node_modules" not in p.parts}
     if len(pages) != len(set(pages)) or set(pages) != existing:
@@ -63,13 +74,13 @@ def validate_structure(root: Path, config: dict):
         sections = [h for h in re.findall(r"^## (.+)$", body, re.M) if h not in {"Next steps", "Related", "See also"}]
         if page == "index" and re.findall(r"^## (.+)$", body, re.M) != LANDING_SECTIONS:
             raise SystemExit("index: landing sections must match the approved order")
-        if page.startswith("build/"):
+        if is_task_guide(page):
             validate_build_headings(page, body)
-        if not page.startswith("build/") and page not in REFERENCE_PAGES and page not in {"changelog", "index"} and len(sections) > 8:
+        if not is_task_guide(page) and page not in REFERENCE_PAGES and page not in {"changelog", "index"} and len(sections) > 8:
             raise SystemExit(f"{page}: {len(sections)} top-level sections; split independent tasks rather than expanding this page")
-        if page != "connect/agent-prompt" and INTERNAL_PROSE.search(body):
+        if page != "integrations/agent-prompt" and INTERNAL_PROSE.search(body):
             raise SystemExit(f"{page}: internal publishing instructions do not belong in a reader task")
-        if page != "connect/agent-prompt" and "````text Relay agent prompt" in text:
+        if page != "integrations/agent-prompt" and "````text Relay agent prompt" in text:
             raise SystemExit(f"{page}: full machine instructions belong in the agent reference")
         if page == "start/quickstart":
             for detail in ("onFullSync", "through_sequence", "## Review with an agent", "## Delete", "image_recipe"):

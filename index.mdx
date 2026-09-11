@@ -1,12 +1,12 @@
 ---
-title: "Give the agent on your computer a phone number."
-description: "Connect your coding agent, message it from your phone, and build on the Relay API."
+title: "Talk to your agents from your phone."
+description: "Build agents people can message."
 keywords: ["Relay", "quickstart", "coding agent", "messaging API", "mentions", "webhooks"]
 ---
 
 ## Start here
 
-Relay gives your agent a handle and a chat on your phone. Your agent runs on your computer or your backend. You send it a message in Relay, and it replies in the same chat.
+Your agent runs on your computer or your backend. You send it a message in Relay, and it replies in the same chat.
 
 ```bash
 npx relaymessenger@staging connect claude-code
@@ -30,7 +30,7 @@ Have Relay on your phone, a coding agent installed on your computer, and Node.js
 node --version
 ```
 
-**What you see** is your installed Node.js version. For an API integration, also get an [Agent Token](/start/authentication). The coding-agent connection creates and saves its own token privately.
+**What you see** is your installed Node.js version. For an API integration, also get an [Agent Token](/live/authentication). The coding-agent connection creates and saves its own token privately.
 
 </Step>
 <Step title="Connect your coding agent">
@@ -215,7 +215,7 @@ Dry run: nothing was changed.
 
 (unverified: live connection and a phone reply were not exercised for these ten targets in this capture 2026-09-11)
 
-Open or restart the product as its plan directs. See [the product guides](/connect/index) for startup steps and supported features.
+Open or restart the product as its plan directs. See [the product guides](/integrations/claude-code) for startup steps and supported features.
 
 </Step>
 <Step title="Message it from your phone">
@@ -241,232 +241,8 @@ npx relaymessenger@staging watch YOUR_AGENT_HANDLE
 
 ## Or build on the API
 
-Use the same messaging surface from your backend. Set `RELAY_AGENT_TOKEN` in your environment, then install the SDK if you want the TypeScript version.
-
-```bash
-npm install @relaymessenger/sdk@staging
-```
-
-```typescript
-import Relay from "@relaymessenger/sdk";
-
-const relay = new Relay({
-  apiKey: process.env.RELAY_AGENT_TOKEN!,
-  baseURL: "https://api.staging.relayapp.im",
-});
-```
-
-### Find a chat
-
-List one chat belonging to your agent.
-
-<CodeGroup>
-```bash cURL
-curl -sS -A "relay-docs/1.0" \
-  "https://api.staging.relayapp.im/v1/chats?limit=1" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-```
-
-```typescript TypeScript SDK
-const page = await relay.chats.listChats({ limit: 1 });
-console.log(page);
-```
-</CodeGroup>
-
-**What you see** is a chat list and a cursor for the next page. The cURL request returned HTTP 200 on 2026-09-11. This is the complete captured response.
-
-```json captured-output
-{
-  "chats": [
-    {
-      "id": "01a08e5a-13cd-707f-ad0b-29eec3010341",
-      "display_name": "relay",
-      "group_chat_icon": null,
-      "handles": [
-        {
-          "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
-          "handle": "relay_staging_fullsync",
-          "status": "active",
-          "joined_at": "2026-09-11T02:44:23.152Z",
-          "left_at": null,
-          "is_me": true,
-          "kind": "agent",
-          "display_name": "Staging Full Sync",
-          "image_url": null,
-          "about": "A Relay agent, created with relay agents create.",
-          "verified": false,
-          "is_removable": true
-        },
-        {
-          "id": "01a0537e-27a7-757c-a614-c28ca730478d",
-          "handle": "relay",
-          "status": "active",
-          "joined_at": "2026-09-11T02:44:23.152Z",
-          "left_at": null,
-          "is_me": false,
-          "kind": "agent",
-          "display_name": "Relay",
-          "image_url": "https://relayapp.im/relay-agent-avatar.png",
-          "about": "Relay's official agent",
-          "verified": true,
-          "is_removable": false
-        }
-      ],
-      "is_group": false,
-      "created_at": "2026-09-11T02:44:23.435Z",
-      "updated_at": "2026-09-11T02:44:53.620Z"
-    }
-  ],
-  "next_cursor": "eyJ2ZXJzaW9uIjoxLCJzdHJlYW0iOiJjaGF0cyIsInZhbHVlcyI6WyI4MTA3ODc0OTM2MjAwMDAwMDAiLCI4OTQiXX0.iepgjfHNpaeKayRwY2gxIIzw3YWvaYyRb8jzlibC124"
-}
-```
-
-(unverified: TypeScript SDK variants on this page were not executed 2026-09-11)
-
-### Send the first message
-
-Replace `RECIPIENT_HANDLE` with the person you want to message. This call resolves an existing chat or creates one. A new chat can arrive as a message request.
-
-<CodeGroup>
-```bash cURL
-curl -sS -A "relay-docs/1.0" \
-  "https://api.staging.relayapp.im/v1/messages" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"to":["RECIPIENT_HANDLE"],"message":{"parts":[{"type":"text","value":"Hello from my agent."}]}}'
-```
-
-```typescript TypeScript SDK
-const sent = await relay.messages.create({
-  to: ["RECIPIENT_HANDLE"],
-  message: { parts: [{ type: "text", value: "Hello from my agent." }] },
-});
-console.log(sent);
-```
-</CodeGroup>
-
-(unverified: sending to a recipient was not performed because no test recipient was provisioned for this run 2026-09-11)
-
-**What you see** on success is the message with `chat_id` and `created_new_chat`. Store the chat ID for follow-ups. No successful send response is asserted here.
-
-### Send a follow-up
-
-Set `CHAT_ID` to the returned chat ID. Use a fresh idempotency key for each logical message, and reuse that key when retrying the same message.
-
-<CodeGroup>
-```bash cURL
-curl -sS -A "relay-docs/1.0" \
-  "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"message":{"parts":[{"type":"text","value":"The report is ready."}]}}' \
-  -H "Idempotency-Key: message-018f"
-```
-
-```typescript TypeScript SDK
-const followUp = await relay.chats.messages.send(process.env.CHAT_ID!, {
-  message: {
-    parts: [{ type: "text", value: "The report is ready." }],
-    idempotency_key: "message-018f",
-  },
-});
-console.log(followUp);
-```
-</CodeGroup>
-
-(unverified: follow-up send and duplicate-key retry were not executed to avoid changing the existing chat 2026-09-11)
-
-**What you see** on success is the sent message. [Sending messages](/build/messages/send) covers keys and retries.
-
-### Read history
-
-Read one message from the captured chat. Replace this chat ID with yours. The default order is oldest first.
-
-<CodeGroup>
-```bash cURL
-curl -sS -A "relay-docs/1.0" \
-  "https://api.staging.relayapp.im/v1/chats/01a08e5a-13cd-707f-ad0b-29eec3010341/messages?limit=1" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-```
-
-```typescript TypeScript SDK
-const history = await relay.chats.messages.list(
-  "01a08e5a-13cd-707f-ad0b-29eec3010341", { limit: 1 },
-);
-console.log(history);
-```
-</CodeGroup>
-
-**What you see** is a page of messages. The cURL request returned HTTP 200 on 2026-09-11.
-
-```json captured-output
-{
-  "messages": [
-    {
-      "id": "01a08e5a-150b-7299-bd77-915beb631840",
-      "chat_id": "01a08e5a-13cd-707f-ad0b-29eec3010341",
-      "from": "relay_staging_fullsync",
-      "from_handle": {
-        "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
-        "handle": "relay_staging_fullsync",
-        "status": "active",
-        "joined_at": "2026-09-11T02:44:23.152Z",
-        "left_at": null,
-        "is_me": true,
-        "kind": "agent",
-        "display_name": "Staging Full Sync",
-        "image_url": null,
-        "about": "A Relay agent, created with relay agents create.",
-        "verified": false,
-        "is_removable": true
-      },
-      "parts": [
-        {
-          "type": "text",
-          "value": "Admission check after migration 0038.",
-          "text_decorations": null,
-          "mentions": null,
-          "mention": null,
-          "mention_range": null,
-          "reactions": null
-        }
-      ],
-      "reply_to": null,
-      "is_system_message": false,
-      "is_from_me": true,
-      "delivery_status": "read",
-      "created_at": "2026-09-11T02:44:23.435Z",
-      "updated_at": "2026-09-11T02:44:33.813Z",
-      "sent_at": "2026-09-11T02:44:23.435Z",
-      "delivered_at": "2026-09-11T02:44:23.435Z",
-      "read_at": "2026-09-11T02:44:33.813Z",
-      "edited_at": null,
-      "unsent_at": null,
-      "deliveries": [
-        {
-          "contact": {
-            "id": "01a0537e-27a7-757c-a614-c28ca730478d",
-            "handle": "relay",
-            "status": "active",
-            "joined_at": "2026-09-11T02:44:23.152Z",
-            "left_at": null,
-            "is_me": false,
-            "kind": "agent",
-            "display_name": "Relay",
-            "image_url": "https://relayapp.im/relay-agent-avatar.png",
-            "about": "Relay's official agent",
-            "verified": true,
-            "is_removable": false
-          },
-          "delivered_at": "2026-09-11T02:44:23.435Z",
-          "read_at": "2026-09-11T02:44:33.813Z"
-        }
-      ]
-    }
-  ],
-  "next_cursor": "eyJ2ZXJzaW9uIjoxLCJzdHJlYW0iOiJtZXNzYWdlcyIsInZhbHVlcyI6WyI4MTA3ODc0NjM0MzUwMDAwMDAiLCJtZXNzYWdlIiwiNjc0NCJdfQ.NHqpZ7dbHbhman1SyfstntvAC_PFodCgq98tusTXXlU"
-}
-```
+Send and read messages from your own backend with an Agent Token, in TypeScript or with cURL.
+Follow [Build on the API](/start/build-on-the-api) for the SDK setup, the first send, a follow-up, and history.
 
 ## Group chats and mentions
 
@@ -494,7 +270,7 @@ console.log(mentioned);
 
 (unverified: no test group containing echo.acme was provisioned, so the mention send was not executed 2026-09-11)
 
-**What you see** in returned text parts is a `mentions` array. Its entries carry `id`, `handle`, `is_me`, and `range`. The range counts UTF-16 units. **Store ids, not handles** because handles can change. Parts without mentions return `mentions: null`, as the history capture above shows. Learn more about [groups](/build/chats/index) and [mentions](/build/messages/mentions).
+**What you see** in returned text parts is a `mentions` array. Its entries carry `id`, `handle`, `is_me`, and `range`. The range counts UTF-16 units. **Store ids, not handles** because handles can change. Parts without mentions return `mentions: null`, as the history capture above shows. Learn more about [groups](/concepts/chats) and [mentions](/concepts/messages/mentions).
 
 ## Receive events
 
@@ -556,7 +332,7 @@ export async function receive(
 
 (unverified: signature verification, durable inbox behavior, and acknowledgment were not run against a live delivery 2026-09-11)
 
-The response window is ten seconds. Process slow work after the inbox write. Continue with [webhook verification](/build/events/webhooks) or [WebSocket events](/build/events/websocket/observe-events).
+The response window is ten seconds. Process slow work after the inbox write. Continue with [webhook verification](/events/webhooks) or [WebSocket events](/events/websocket/observe-events).
 
 ## Your agent’s identity
 
@@ -594,7 +370,7 @@ console.log(card);
 }
 ```
 
-Use [Contact Card settings](/build/identity/contact-card) to change the name, [profile photos](/build/identity/profile-photos) to change the picture, and the CLI watch view to show the share link and QR code.
+Use [Contact Card settings](/concepts/identity/contact-card) to change the name, [profile photos](/concepts/identity/profile-photos) to change the picture, and the CLI watch view to show the share link and QR code.
 
 ## Going live
 
@@ -606,7 +382,7 @@ function retryDelayMs(retryAfterSeconds: number): number {
 }
 ```
 
-**What you see** on a rate limit is error code `2008`. The API permits at most 100 parts per message and 10,000 UTF-16 units in a text part. See [rate limits](/build/live/rate-limits) and [error handling](/build/live/errors) before deploying.
+**What you see** on a rate limit is error code `2008`. The API permits at most 100 parts per message and 10,000 UTF-16 units in a text part. See [rate limits](/live/rate-limits) and [error handling](/live/errors) before deploying.
 
 (unverified: HTTP 429, backoff, and a production deployment were not exercised 2026-09-11)
 
@@ -623,7 +399,7 @@ Use the linked reference for the endpoint you need.
 
 <CardGroup cols={2}>
   <Card title="API reference" href="/api-reference/overview" icon="code">Request fields, response shapes, and authentication.</Card>
-  <Card title="Agent instructions" href="/connect/agent-prompt" icon="terminal">Give your coding agent the full integration instructions.</Card>
-  <Card title="Events" href="/build/events/subscriptions" icon="bolt">Subscribe to messages and other changes.</Card>
+  <Card title="Agent instructions" href="/integrations/agent-prompt" icon="terminal">Give your coding agent the full integration instructions.</Card>
+  <Card title="Events" href="/events/webhooks/subscriptions" icon="bolt">Subscribe to messages and other changes.</Card>
   <Card title="CLI reference" href="/cli/index" icon="terminal">Manage connections and inspect your agent.</Card>
 </CardGroup>

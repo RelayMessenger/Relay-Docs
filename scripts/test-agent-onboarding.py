@@ -14,17 +14,17 @@ from urllib.parse import urlsplit
 from origins import origin, production_text, target
 
 ROOT = Path(__file__).resolve().parents[1]
-AGENT_PAGES = tuple(f"build/agents/{name}" for name in (
+AGENT_PAGES = tuple(f"concepts/agents/{name}" for name in (
     "lifecycle", "create-agent", "create-agent-api", "list-agents",
     "delete-agent", "console-agent",
 ))
 CLI_TASKS = tuple(f"cli/{name}" for name in (
     "auth", "watch",
 ))
-PHOTO_PAGE = "build/identity/profile-photos"
-RECIPE_PAGE = "build/identity/image-recipes"
-OBSERVER_PAGE = "build/events/websocket/observe-events"
-PROMPT_PAGE = "connect/agent-prompt"
+PHOTO_PAGE = "concepts/identity/profile-photos"
+RECIPE_PAGE = "concepts/identity/image-recipes"
+OBSERVER_PAGE = "events/websocket/observe-events"
+PROMPT_PAGE = "integrations/agent-prompt"
 
 
 def expected(value):
@@ -146,9 +146,9 @@ class AgentOnboardingTests(unittest.TestCase):
         cli = self.page("cli/index")
         self.assert_identifiers(cli, "npx relaymessenger@staging --help", "--json")
         self.assert_links_to_pages(
-            cli, *CLI_TASKS, "build/agents/create-agent",
-            "build/agents/list-agents", "build/agents/delete-agent",
-            "connect/native-setup", "connect/skills",
+            cli, *CLI_TASKS, "concepts/agents/create-agent",
+            "concepts/agents/list-agents", "concepts/agents/delete-agent",
+            "integrations/claude-code", "integrations/skills",
         )
         # Both released CLI channels have these operations. Do not require a
         # dated availability announcement or a particular tutorial order.
@@ -201,24 +201,24 @@ class AgentOnboardingTests(unittest.TestCase):
                 self.assertNotRegex(commands, r"(?m)^\s*relay (?:agents|auth|profiles|doctor|events|connect|watch)\b")
 
     def test_agent_management_router_is_short_and_links_to_tasks(self):
-        router = self.page("build/agents/lifecycle")
+        router = self.page("concepts/agents/lifecycle")
         self.assertLess(len(router.splitlines()), 50)
         self.assert_links_to_pages(router, *AGENT_PAGES[1:], PHOTO_PAGE,
-                                   "connect/native-setup")
+                                   "integrations/claude-code")
         self.assertFalse(code_blocks(router, "bash"))
         self.assertFalse(code_blocks(router, "typescript"))
 
     def test_cli_creation_and_api_storage_have_separate_owners(self):
-        create = self.page("build/agents/create-agent")
+        create = self.page("concepts/agents/create-agent")
         self.assert_identifiers(create, "npx relaymessenger@staging agents create",
                                 "https://api.staging.relayapp.im", "--profile", "--api-url")
-        self.assert_links_to_pages(create, "build/agents/create-agent-api", PHOTO_PAGE)
+        self.assert_links_to_pages(create, "concepts/agents/create-agent-api", PHOTO_PAGE)
         self.assert_operation_link(create, "createAgent")
         self.assert_concept(create, r"(?:no|without).{0,90}Console account")
         self.assert_concept(create, r"uncertain|unconfirmed")
         self.assert_concept(create, r"(?:no|never|not|without).{0,30}automatic\w* retr")
 
-        api = self.page("build/agents/create-agent-api")
+        api = self.page("concepts/agents/create-agent-api")
         self.assert_identifiers(api, "Relay.createAgent", "maxRetries: 0", "mode: 0o600",
                                 'flag: "wx"', "Retry-After", "8192", "Cache-Control: no-store")
         self.assert_operation_link(api, "createAgent")
@@ -233,7 +233,7 @@ class AgentOnboardingTests(unittest.TestCase):
         self.assert_links_to_pages(api, PHOTO_PAGE)
 
     def test_cli_agent_json_is_flat_safe_and_consistent(self):
-        created = [item for item in self.json_examples(self.page("build/agents/create-agent"))
+        created = [item for item in self.json_examples(self.page("concepts/agents/create-agent"))
                    if isinstance(item, dict) and "profile" in item]
         self.assertEqual(len(created), 1)
         record = created[0]
@@ -247,7 +247,7 @@ class AgentOnboardingTests(unittest.TestCase):
             origin("staging.relayapp.im"), origin("go.staging.relayapp.im"),
         })
 
-        listing = self.page("build/agents/list-agents")
+        listing = self.page("concepts/agents/list-agents")
         self.assert_identifiers(listing, "agents list --json")
         examples = self.json_examples(listing)
         inventories = [item for item in examples if isinstance(item, dict) and "agents" in item]
@@ -263,7 +263,7 @@ class AgentOnboardingTests(unittest.TestCase):
         self.assert_concept(listing, r"(?:each|own).{0,90}(?:saved token|saved credential)")
 
     def test_delete_keeps_identity_authorization_history_and_retry_safety(self):
-        delete = self.page("build/agents/delete-agent")
+        delete = self.page("concepts/agents/delete-agent")
         self.assert_identifiers(delete, "--profile", "agents delete", "relay.agents.delete",
                                 "Authorization: Bearer $RELAY_AGENT_TOKEN", "--json")
         self.assert_operation_link(delete, "deleteAgent")
@@ -274,7 +274,7 @@ class AgentOnboardingTests(unittest.TestCase):
         results = self.json_examples(delete)
         self.assertTrue(any(item.get("ok") is True and item.get("token") == "removed"
                             for item in results if isinstance(item, dict)))
-        self.assert_links_to_pages(delete, "build/agents/list-agents", "build/events/websocket")
+        self.assert_links_to_pages(delete, "concepts/agents/list-agents", "events/websocket")
 
     def test_authentication_keeps_private_input_and_profile_selection(self):
         auth = self.page("cli/auth")
@@ -285,37 +285,8 @@ class AgentOnboardingTests(unittest.TestCase):
         self.assert_concept(auth, r"(?:never|not).{0,35}command arguments")
         self.assert_identifiers(auth, "contact-card")
         self.assert_concept(auth, r"the name and picture people see for this agent")
-        self.assert_links_to_pages(auth, "build/agents/create-agent", "build/agents/delete-agent",
-                                   "connect/native-setup")
-
-    def test_native_consent_and_separate_connection_proof(self):
-        native = self.page("connect/native-setup")
-        self.assert_identifiers(native, "connect claude-code", "--token", "--allow", "--yes", "--dry-run",
-                                "--no-start", "RELAY_ALLOWED_SENDERS", "RELAY_CHANNEL_DIR")
-        self.assert_links_to_pages(native, "cli/auth", "build/agents/create-agent",
-                                   "connect/openclaw", "connect/hermes", "connect/claude-code")
-        results = [example for example in self.json_examples(native)
-                   if isinstance(example, dict) and example.get("dry_run") is True]
-        self.assertEqual(len(results), 1)
-        plan = results[0]
-        self.assertEqual(set(plan), {"ok", "dry_run", "agents", "steps"})
-        self.assertIs(plan["ok"], True)
-        self.assertEqual(len(plan["agents"]), 1)
-        agent = plan["agents"][0]
-        self.assertEqual(set(agent), {"agent", "files", "commands"})
-        self.assertEqual(agent["agent"], "claude-code")
-        self.assertEqual(agent["files"], ["/Users/you/.claude/channels/relay/.env"])
-        self.assertEqual(agent["commands"], [
-            "claude plugin marketplace add RelayMessenger/Relay-SDK@staging",
-            "claude plugin install relay@relay-messenger --yes",
-            "claude plugin enable relay@relay-messenger",
-        ])
-        self.assertEqual(len(plan["steps"]), 5)
-        self.assertNotIn("connected", plan, "a plan is not connection proof")
-        self.assert_concept(native, r"(?:asks|confirms).{0,60}before.{0,40}writ")
-        self.assert_concept(native, r"take the plan as it is")
-        self.assert_concept(native, r"(?:sender|senders).{0,25}(?:permissions|policy)")
-        self.assert_concept(native, r"(?:verify|confirm).{0,160}(?:reply|messaging)")
+        self.assert_links_to_pages(auth, "concepts/agents/create-agent", "concepts/agents/delete-agent",
+                                   "integrations/claude-code")
 
     def test_start_supports_anonymous_or_existing_token_without_console(self):
         skill = self.page("skill")
@@ -326,9 +297,9 @@ class AgentOnboardingTests(unittest.TestCase):
         self.assert_concept(start, r"existing.{0,25}Agent Token")
         self.assert_concept(start, r"(?:Neither|without|no|not requir).{0,80}Console account")
         self.assertNotRegex(start, r"created in that environment.s\s+Console")
-        self.assert_links_to_pages(skill, "build/agents/create-agent", "cli/auth",
-                                   "connect/native-setup", PHOTO_PAGE, "build/agents/delete-agent",
-                                   "connect/skills")
+        self.assert_links_to_pages(skill, "concepts/agents/create-agent", "cli/auth",
+                                   "integrations/claude-code", PHOTO_PAGE, "concepts/agents/delete-agent",
+                                   "integrations/skills")
 
     def test_full_prompt_has_one_generated_owner_and_no_greeting(self):
         skill = self.page("skill")
@@ -344,9 +315,9 @@ class AgentOnboardingTests(unittest.TestCase):
         visible = re.search(r"^````text Relay agent prompt\n(.*?)^````$", prompt, re.M | re.S)
         self.assertIsNotNone(visible)
         self.assertEqual(visible.group(1), skill.rstrip("\n") + "\n")
-        ai = self.page("connect/coding-agents")
-        self.assert_links_to_pages(ai, PROMPT_PAGE)
-        self.assertNotIn("````text Relay agent prompt", ai)
+        main = self.page("index")
+        self.assert_links_to_pages(main, PROMPT_PAGE)
+        self.assertNotIn("````text Relay agent prompt", main)
         config = json.loads((ROOT / "docs.json").read_text())
         self.assertTrue(any(link.get("href") == f"/{PROMPT_PAGE}#relay-agent-prompt"
                             for link in config["navbar"]["links"]))
@@ -354,12 +325,12 @@ class AgentOnboardingTests(unittest.TestCase):
     def test_native_guides_link_setup_without_dated_availability_claims(self):
         for name in ("openclaw", "hermes", "claude-code"):
             with self.subTest(integration=name):
-                text = self.page(f"connect/{name}")
-                self.assert_links_to_pages(text, "connect/native-setup")
-        self.assert_identifiers(self.page("connect/openclaw"),
+                text = self.page(f"integrations/{name}")
+                self.assert_links_to_pages(text, "integrations/claude-code")
+        self.assert_identifiers(self.page("integrations/openclaw"),
                                 "openclaw plugins install @relaymessenger/openclaw-plugin@staging")
-        self.assert_identifiers(self.page("connect/hermes"), "hermes plugins install")
-        self.assert_identifiers(self.page("connect/claude-code"),
+        self.assert_identifiers(self.page("integrations/hermes"), "hermes plugins install")
+        self.assert_identifiers(self.page("integrations/claude-code"),
                                 "/plugin marketplace add RelayMessenger/Relay-SDK@staging")
 
     def test_custom_profile_uses_existing_recipe_and_rendered_image_pair(self):
@@ -370,7 +341,7 @@ class AgentOnboardingTests(unittest.TestCase):
         self.assertIn("dependentRequired:", request)
         self.assertIn("image_recipe:\n          - image_url", request)
         # Field rules belong to the generated operation, rendering to recipes.
-        self.assert_operation_link(self.page("build/agents/create-agent"), "createAgent")
+        self.assert_operation_link(self.page("concepts/agents/create-agent"), "createAgent")
         recipes = self.page(RECIPE_PAGE)
         self.assert_links_to_pages(self.page(PHOTO_PAGE), RECIPE_PAGE)
         self.assert_links_to_pages(recipes, PHOTO_PAGE)
@@ -392,7 +363,7 @@ class AgentOnboardingTests(unittest.TestCase):
             self.assertRegex(example, r"(?:--request|-X)\s+PATCH\b")
         self.assert_concept(recipes, r"rendered|render\w* (?:image|PNG)")
         self.assert_concept(recipes, r"recipe.only.{0,70}(?:400|render)|(?:400|render).{0,70}recipe.only")
-        for slug in ("build/agents/lifecycle", "build/agents/create-agent", "build/agents/create-agent-api"):
+        for slug in ("concepts/agents/lifecycle", "concepts/agents/create-agent", "concepts/agents/create-agent-api"):
             self.assert_links_to_pages(self.page(slug), PHOTO_PAGE)
             self.assertNotRegex(self.page(slug), r'"recipe"\s*:\s*\{\s*"monogram"')
 
@@ -408,11 +379,11 @@ class AgentOnboardingTests(unittest.TestCase):
                     self.assertIn("relay.contactCard.update", example)
                 else:
                     self.assertRegex(example, r"(?:--request|-X)\s+PATCH\b")
-        self.assert_links_to_pages(photos, "build/messages/attachments", "build/identity/contact-card")
+        self.assert_links_to_pages(photos, "concepts/messages/attachments", "concepts/identity/contact-card")
         for concept in (r"complet", r"own\w*|same agent", r"public.{0,30}(?:image|storage)",
                         r"retry.{0,90}(?:same|existing|saved).{0,30}(?:agent|profile|identity)"):
             self.assert_concept(photos, concept)
-        self.assert_links_to_pages(self.page("build/identity/contact-card"), PHOTO_PAGE)
+        self.assert_links_to_pages(self.page("concepts/identity/contact-card"), PHOTO_PAGE)
         # The canonical shape, rather than an English sentence in a router,
         # proves completion, same-agent ownership, and mutually exclusive inputs.
         for schema in ("SetContactCardRequest", "UpdateContactCardRequest"):
@@ -435,10 +406,10 @@ class AgentOnboardingTests(unittest.TestCase):
         self.assert_concept(observer, r"runtime.{0,40}consumer|consumer.{0,40}runtime")
         self.assertTrue(any(re.match(r"\s*npx relaymessenger\S* watch\b", line)
                             for line in command_examples(observer).splitlines()))
-        self.assert_links_to_pages(observer, "connect/native-setup", OBSERVER_PAGE)
+        self.assert_links_to_pages(observer, "integrations/claude-code", OBSERVER_PAGE)
 
     def test_optional_skill_installation_preserves_consent_and_secret_isolation(self):
-        skills = self.page("connect/skills")
+        skills = self.page("integrations/skills")
         self.assert_identifiers(skills, "skills@1.5.24", "--skill relay")
         self.assert_concept(skills, r"opt.in|optional|consent")
         self.assert_concept(skills, r"declin|cancel")
@@ -466,10 +437,10 @@ class AgentOnboardingTests(unittest.TestCase):
                 r"|--(?:api-key|token|secret)\b|rly_live_",
             )
         skill = self.page("skill")
-        self.assert_links_to_pages(skill, "connect/skills")
+        self.assert_links_to_pages(skill, "integrations/skills")
         self.assert_concept(skill, r"separate.{0,40}consent")
         self.assert_concept(skill, r"credential consent.{0,60}(?:not|never).{0,40}install")
-        self.assert_links_to_pages(skills, "cli/index", "connect/mcp")
+        self.assert_links_to_pages(skills, "cli/index", "integrations/mcp")
 
     def test_observer_wire_is_canonical_and_distinct_from_ack_consumer(self):
         spec = (ROOT / "api-reference/openapi.yaml").read_text()
@@ -486,23 +457,22 @@ class AgentOnboardingTests(unittest.TestCase):
             self.assertIs(frame.get("observational"), True)
             self.assertIs(frame.get("full_sync_required"), False)
             self.assertIsNone(frame["full_sync_through"])
-        self.assert_links_to_pages(self.page("build/events/websocket"), OBSERVER_PAGE)
+        self.assert_links_to_pages(self.page("events/websocket"), OBSERVER_PAGE)
 
     def test_released_agent_admission_keeps_authorization_and_session_caveats(self):
-        openclaw = self.page("connect/openclaw")
-        claude = self.page("connect/claude-code")
+        openclaw = self.page("integrations/openclaw")
+        claude = self.page("integrations/claude-code")
         self.assert_identifiers(openclaw, ">=2026.8.1 <2026.9.0", "allowFrom")
         self.assert_concept(openclaw, r"Contact UUID")
         self.assert_concept(openclaw, r"stable.ID")
         self.assert_concept(openclaw, r"dmScope|DM session scope")
-        self.assert_links_to_pages(openclaw, "build/events/websocket/full-sync")
-        self.assert_concept(self.page("build/events/websocket/full-sync"), r"snapshot")
+        self.assert_links_to_pages(openclaw, "events/websocket/full-sync")
+        self.assert_concept(self.page("events/websocket/full-sync"), r"snapshot")
         for text in (openclaw, claude):
             self.assert_concept(text, r"agent Contacts?")
             self.assert_concept(text, r"allowlist|allowFrom")
             self.assert_concept(text, r"session")
             self.assert_concept(text, r"API origin")
-        self.assert_identifiers(self.page("connect/native-setup"), "RELAY_ALLOWED_SENDERS")
         self.assert_concept(claude, r"reply.origin")
         self.assert_concept(claude, r"contact\.is_me|agent.s own delivery row")
         self.assert_concept(claude, r"authenticat")
@@ -512,7 +482,7 @@ class AgentOnboardingTests(unittest.TestCase):
         config = json.loads((ROOT / "docs.json").read_text())
         navigation = navigation_pages(config["navigation"])
         for slug in (*AGENT_PAGES, *CLI_TASKS, PHOTO_PAGE, RECIPE_PAGE, OBSERVER_PAGE, PROMPT_PAGE,
-                     "connect/native-setup", "api-reference/resources/agents/overview"):
+                     "integrations/claude-code", "api-reference/resources/agents/overview"):
             with self.subTest(page=slug):
                 self.page(slug)
                 self.assertIn(slug, navigation)
@@ -522,10 +492,10 @@ class AgentOnboardingTests(unittest.TestCase):
     def test_getting_started_excludes_management_ai_and_checklist_pages(self):
         config = json.loads((ROOT / "docs.json").read_text())
         groups = [node for node in objects(config["navigation"])
-                  if node.get("group", "").casefold() == "getting started"]
-        self.assertTrue(groups, "Getting started navigation group is missing")
-        forbidden = {"build/agents/lifecycle", "connect/coding-agents",
-                     "build/live/best-practices", PROMPT_PAGE}
+                  if node.get("group", "").casefold() == "get started"]
+        self.assertTrue(groups, "Get started navigation group is missing")
+        forbidden = {"concepts/agents/lifecycle", "integrations/claude-code",
+                     "live/best-practices", PROMPT_PAGE}
         for group in groups:
             self.assertFalse(forbidden & navigation_pages(group),
                              "Management, AI instructions, and the checklist belong outside Getting started")
