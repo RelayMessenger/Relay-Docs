@@ -81,6 +81,14 @@ const expected = new Map();
 for (const [name, entry] of Object.entries(versions.npm)) {
   expected.set(name, new Set([entry.latest, entry.staging]));
 }
+// CLI examples are captured from the exact devDependency used by the help generator.
+// Permit that immutable capture version on staging; production still rejects prereleases.
+const packageConfig = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
+const lock = JSON.parse(await readFile(path.join(root, 'package-lock.json'), 'utf8'));
+const capturedCLI = packageConfig.devDependencies?.relaymessenger;
+if (capturedCLI && lock.packages?.['node_modules/relaymessenger']?.version === capturedCLI) {
+  expected.get('relaymessenger').add(capturedCLI);
+}
 for (const [name, version] of Object.entries(versions.pypi)) {
   expected.set(name, new Set([version]));
 }
