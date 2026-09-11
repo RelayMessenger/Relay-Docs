@@ -120,14 +120,32 @@ def check_06(root):
         assert len(h) == 5 and re.fullmatch(r'The .+ object', h[0]) and h[1:] == ['Example', 'Operations', 'Errors', 'Next steps'], f'{p.relative_to(root)}: reference skeleton out of order'
 
 
-def check_07(root):
+def missing_responses(root):
+    """Every request needs a real response fence after it. A prose marker such as
+    "(unverified: ...)" never counts: the relay-language skill bans provenance in
+    prose, and a request with no real response is deleted, not hedged."""
+    found = []
     for p in pages(root):
         text = p.read_text(); reqs = requests(text)
         for i, (_, end, _) in enumerate(reqs):
             tail = text[end:reqs[i + 1][0] if i + 1 < len(reqs) else len(text)]
-            # Unverified markers are explicit response placeholders, not captured output.
-            response = re.search(r'\(unverified\s*:', tail, re.I) or any(re.match(r'(?:json|http|text)\b', b[2]) for b in FENCES.finditer(tail))
-            assert response, f'{p.relative_to(root)}: request {i + 1} has no following response'
+            if not any(re.match(r'(?:json|http|text)\b', b[2]) for b in FENCES.finditer(tail)):
+                found.append(f'{p.relative_to(root)}: request {i + 1} has no following response')
+    return found
+
+
+def check_07(root):
+    import tempfile
+    # Mutation receipt: a page whose only "response" is an unverified marker must fail.
+    with tempfile.TemporaryDirectory() as scratch:
+        page = Path(scratch) / 'guide.mdx'
+        request = '<CodeGroup>\n```bash cURL\ncurl -sS "https://api.example/v1/chats"\n```\n```typescript TypeScript SDK\nconst page = await relay.chats.listChats({ limit: 1 });\n```\n</CodeGroup>\n'
+        page.write_text(request + '\n(unverified: response not captured)\n')
+        assert missing_responses(Path(scratch)), 'check_07 receipt: an unverified marker satisfied the response rule'
+        page.write_text(request + '\n```json\n{"chats": []}\n```\n')
+        assert not missing_responses(Path(scratch)), 'check_07 receipt: a real response fence was not accepted'
+    errors = missing_responses(root)
+    assert not errors, errors[0]
 
 
 def check_08(root):
