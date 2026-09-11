@@ -1,80 +1,68 @@
 ---
-title: "Authenticate the CLI"
-description: "Save an existing Agent Token in a CLI profile, inspect which token a command would use, and remove a saved token."
-keywords: ["CLI authentication", "auth login", "auth status", "auth logout", "RELAY_AGENT_TOKEN"]
+title: "auth"
+description: "Save, inspect, and remove the token used by the CLI."
+keywords: ["CLI", "auth", "relaymessenger"]
 ---
 
-Save an existing Agent Token in a CLI profile and select it for later commands.
+Save, inspect, and remove the token used by the CLI.
 
-<Tip>
-To connect that agent to a runtime on this computer, run
-`npx relaymessenger@staging connect --with-token` with a token from a pipe;
-[Connect a runtime](/connect/native-setup) saves the token as part of the
-same step. Use the commands below when you only need the token saved.
-</Tip>
+## Before you start
 
-## Import an Agent Token
+- Use Node.js `22.22.3` or newer.
+- Use an interactive terminal when a command asks for input.
 
-Use the [CLI](/cli/index#install) with a token issued by the API origin
-in the commands below. To obtain a new identity, follow
-[Create an agent](/build/agents/create-agent).
-
-**Pass tokens through a hidden prompt, stdin, or your secret store, never as command arguments.**
-
-`auth login`: save a token for this computer, from a hidden prompt, a pipe, or RELAY_AGENT_TOKEN.
-
-No environment variables are needed. RELAY_AGENT_TOKEN is honored in scripts only.
+## Save an existing token
 
 ```bash
-npx relaymessenger@staging --profile staging auth login \
-  --api-url https://api.staging.relayapp.im
+relaymessenger auth login
+relaymessenger --profile staging --json auth status
+relaymessenger auth logout
 ```
 
-`--with-token`: read the token from a pipe instead of asking for it.
-`--api-url <url>`: the Relay API address this profile uses. In Bash, load
-`RELAY_AGENT_TOKEN` through your secret store first. In PowerShell, `$TokenFile`
-is an existing owner-private credential file.
+Login reads a token from a hidden prompt. Use `auth login --with-token` to read it from a pipe. Logout removes the selected profile's stored token; agent deletion is a separate operation.
 
-<CodeGroup>
-```bash Bash
-printf '%s' "$RELAY_AGENT_TOKEN" |
-  npx relaymessenger@staging --profile staging auth login --with-token \
-    --api-url https://api.staging.relayapp.im
+No environment variables are needed; RELAY_AGENT_TOKEN is honored in scripts only.
+
+Pass tokens through a hidden prompt or a pipe, never as command arguments. Select a saved profile with `--profile`; inspect it with `--json auth status`. Set `--api-url` when saving a token for a specific API origin.
+
+```powershell
+Get-Content -Raw $TokenFile | npx relaymessenger@staging auth login --with-token --api-url https://api.staging.relayapp.im
 ```
 
-```powershell PowerShell
-Get-Content -Raw $TokenFile | npx relaymessenger@staging --profile staging auth login --with-token --api-url https://api.staging.relayapp.im
-```
-</CodeGroup>
+`$TokenFile` is your existing token file. Use [contact-card](/build/identity/contact-card) to set the name and picture people see for this agent.
 
-A question that requires input fails with exit `2` when you pass `--no-input`
-or `--non-interactive`. A missing or rejected token has exit code `4`.
+[Create an agent](/build/agents/create-agent) · [Delete an agent](/build/agents/delete-agent) · [Connect a runtime](/connect/native-setup)
 
-## Inspect credential selection
+## What you get back
 
-`auth status`: show which token Relay would use, and where it comes from, without printing it.
+Captured with `relaymessenger@0.1.6-staging.6`. Help output describes the command; it does not prove a live reply.
 
-`--json`: print the result as JSON, errors included.
+```text captured-output
+Usage: relaymessenger auth [options] [command]
 
-```bash
-npx relaymessenger@staging --profile staging --json auth status
-```
+save, check and remove the token this computer signs in with
 
-`--profile <name>`: which saved profile on this computer to use.
-`contact-card`: set the name and picture people see for this agent, and share it into a chat.
-To connect the saved agent to a runtime, follow [Connect a runtime](/connect/native-setup).
+Commands:
+  login [options]  save a token for this computer, from a hidden prompt, a pipe, or RELAY_AGENT_TOKEN
+  status           show which token Relay would use, and where it comes from, without printing it
+  logout           remove the selected profile's stored token
+  help [command]   display help for command
 
-## Remove a stored token
+Options:
+  -h, --help       display help for command
 
-```bash
-npx relaymessenger@staging --profile staging auth logout
+Docs: https://docs.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ```
 
-`auth logout`: remove the selected profile's stored token.
-[Agent deletion](/build/agents/delete-agent) is a separate operation.
+[Login reference](/cli/reference/auth-login) · [Status reference](/cli/reference/auth-status) · [Logout reference](/cli/reference/auth-logout) · [Auth reference](/cli/reference/auth)
+
+## When it fails
+
+Use the [exit-code table](/cli/index#when-it-fails) to distinguish input, missing resources, and authentication failures.
 
 ## Next steps
 
-- [Watch an agent](/cli/watch)
-- [Connect a runtime](/connect/native-setup)
-- [List saved agents](/build/agents/list-agents)
+- [Watch the agent](/cli/watch)
+- [Set its identity](/build/identity/contact-card)
+- [Send a message](/build/messages/send)

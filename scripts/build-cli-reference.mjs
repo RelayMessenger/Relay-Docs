@@ -60,7 +60,7 @@ let owner;
 function find(value) {
   if (Array.isArray(value)) value.forEach(find);
   else if (value && typeof value === 'object') {
-    if (value.group === 'CLI') owner = value;
+    if (value.group === 'CLI' || value.group === 'Overview') owner = value;
     Object.values(value).forEach(find);
   }
 }
@@ -76,7 +76,8 @@ for (const slug of slugs) {
   const command = commandRoots.find(command => slug === command || slug.startsWith(command + '-')) || 'help';
   grouped.get(command).push(`cli/reference/${slug}`);
 }
-tab.groups = [owner, ...[...grouped].filter(([, pages]) => pages.length).map(([group, pages]) => ({group, expanded: false, pages}))];
+owner = { group: 'Overview', pages: ['cli/index', 'cli/global-options', 'cli/reference/index', 'cli/reference/help'] };
+tab.groups = [owner, ...[...grouped].filter(([group, pages]) => group !== 'help' && pages.length).map(([group, pages]) => ({group, expanded: false, pages: ['connect', 'watch', 'doctor', 'agents', 'auth'].includes(group) ? [`cli/${group}`, ...pages] : pages}))];
 const outputs = new Map([...pages].map(([slug, content]) => [path.join(directory, `${slug}.mdx`), content]));
 outputs.set(path.join(root, 'docs.json'), JSON.stringify(navigation, null, 2) + '\n');
 const stale = existsSync(directory) ? readdirSync(directory).filter(name => name.endsWith('.mdx') && !pages.has(name.slice(0, -4))) : [];
