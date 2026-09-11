@@ -76,6 +76,17 @@ jobs:
           fi
           test "$(cat .docs-target)" = production
 
+      - name: No unverified sample may reach production
+        # A page marks a request whose real response was not captured with
+        # "(unverified: <why> <date>)" (docs rebuild, 2026-09-10). Staging may
+        # carry the marker; production never does.
+        run: |
+          set -euo pipefail
+          if grep -rIl '(unverified' --include='*.mdx' --exclude-dir=node_modules --exclude-dir=.git . ; then
+            echo "::error::An (unverified) sample survived; capture it before promoting."
+            exit 1
+          fi
+
       - name: Validate in production mode
         run: npm run validate
 

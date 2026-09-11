@@ -36,8 +36,13 @@ SWEEP_EXEMPT = {".github", "node_modules", "scripts", ".git", ".mint"}
 def example_errors(text: str, mode: str = "staging") -> list[str]:
     errors = []
     # Match Markdown fences including four-backtick LLM sections.
-    for match in re.finditer(r"^(`{3,})[^\n]*\n(.*?)^\1[ \t]*$", text, re.M | re.S):
-        block = ENVIRONMENT_FREE_DOC_URL.sub("", match[2])
+    for match in re.finditer(r"^(`{3,})([^\n]*)\n(.*?)^\1[ \t]*$", text, re.M | re.S):
+        # `text captured-output` marks verbatim program output, not a runnable
+        # example. CLI help prints environment-free docs links on both targets.
+        # The marker never exempts bash, curl, or TypeScript request blocks.
+        if match[2].strip() in {"text captured-output", "json captured-output"}:
+            continue
+        block = ENVIRONMENT_FREE_DOC_URL.sub("", match[3])
         if mode == "staging" and PRODUCTION.search(block):
             errors.append("production API, Console, docs, or share URL in a runnable example")
         for constructor in re.finditer(r"new Relay\(\{(.*?)\}\)", block, re.S):
@@ -49,6 +54,15 @@ def example_errors(text: str, mode: str = "staging") -> list[str]:
 
 
 class RegressionTests(unittest.TestCase):
+    def test_captured_program_output_is_not_a_request(self):
+        self.assertFalse(example_errors("```text captured-output\nDocs: https://docs.relayapp.im\n```\n"))
+
+    def test_captured_json_is_not_a_request(self):
+        self.assertFalse(example_errors('```json captured-output\n{"doc_url":"https://docs.relayapp.im/guides/webhooks/events"}\n```\n'))
+
+    def test_output_marker_does_not_exempt_runnable_blocks(self):
+        self.assertTrue(example_errors("```bash captured-output\ncurl https://api.relayapp.im/v1/chats\n```\n"))
+
     def test_production_curl_is_rejected(self):
         self.assertTrue(example_errors("```bash\ncurl https://api.relayapp.im/v1/chats\n```\n"))
 
@@ -140,7 +154,9 @@ def validate() -> None:
             relative = path.relative_to(ROOT)
             if not path.is_file() or path.suffix not in CONTENT_SUFFIXES:
                 continue
-            if relative.as_posix() in {"versions.json", "api-reference/openapi.yaml"}:
+            # Build dependencies pin the CLI used to reproduce captured help.
+            # They are maintainer inputs, not reader installation examples.
+            if relative.as_posix() in {"versions.json", "api-reference/openapi.yaml", "package.json", "package-lock.json"}:
                 continue
             if SWEEP_EXEMPT & set(relative.parts) or path.suffix == ".mdx":
                 continue

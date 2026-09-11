@@ -77,7 +77,7 @@ if config.get("navbar", {}).get("primary") != {
 if config.get("navbar", {}).get("links") != [
     {
         "label": "Copy agent prompt",
-        "href": "/agent-reference/prompt#relay-agent-prompt",
+        "href": "/connect/agent-prompt#relay-agent-prompt",
         "icon": "copy",
     }
 ]:
@@ -95,20 +95,20 @@ redirects = {
     if isinstance(item, dict) and item.get("permanent") is True
 }
 for source, destination in {
-    "/ecosystem": "/integrations",
-    "/ecosystem/agent-starter": "/integrations/cloudflare-think",
-    "/ecosystem/chat-sdk": "/integrations/chat-sdk",
-    "/ecosystem/claude-code": "/integrations/claude-code",
-    "/ecosystem/cli": "/integrations/cli",
-    "/ecosystem/codex": "/integrations/codex",
-    "/ecosystem/cursor": "/integrations/cursor",
-    "/ecosystem/hermes": "/integrations/hermes",
-    "/ecosystem/mcp": "/integrations/mcp",
-    "/ecosystem/openclaw": "/integrations/openclaw",
-    "/ecosystem/skills": "/integrations/skills",
-    "/integrations/agent-starter": "/integrations/cloudflare-think",
-    "/integrations/cloudflare": "/integrations/cloudflare-think",
-    "/integrations/hermes-plugin": "/integrations/hermes",
+    "/ecosystem": "/connect/index",
+    "/ecosystem/agent-starter": "/connect/cloudflare-think",
+    "/ecosystem/chat-sdk": "/connect/chat-sdk",
+    "/ecosystem/claude-code": "/connect/claude-code",
+    "/ecosystem/cli": "/cli/index",
+    "/ecosystem/codex": "/connect/codex",
+    "/ecosystem/cursor": "/connect/cursor",
+    "/ecosystem/hermes": "/connect/hermes",
+    "/ecosystem/mcp": "/connect/mcp",
+    "/ecosystem/openclaw": "/connect/openclaw",
+    "/ecosystem/skills": "/connect/skills",
+    "/integrations/agent-starter": "/connect/cloudflare-think",
+    "/integrations/cloudflare": "/connect/cloudflare-think",
+    "/integrations/hermes-plugin": "/connect/hermes",
 }.items():
     if redirects.get(source) != destination:
         raise SystemExit(
@@ -197,7 +197,7 @@ if navigated != files:
 
 tabs = config["navigation"]["tabs"]
 actual_tabs = [tab["tab"] for tab in tabs]
-expected_tabs = ["Guides", "Error Codes", "API Reference"]
+expected_tabs = ["Start", "Connect", "Build", "CLI", "API", "Changelog"]
 if actual_tabs != expected_tabs:
     raise SystemExit(f"top tab order changed: {actual_tabs}")
 
@@ -208,17 +208,9 @@ from docs_structure import validate_structure
 validate_structure(root, config)
 expected_guide_groups = [group["group"] for group in tabs[0]["groups"]]
 
-expected_error_groups = [
-    "Overview",
-    "1xxx request errors",
-    "2xxx errors",
-    "3xxx server errors",
-]
-actual_error_groups = [group["group"] for group in tabs[1]["groups"]]
-if actual_error_groups != expected_error_groups:
-    raise SystemExit(f"error group order changed: {actual_error_groups}")
 
-api_tab = tabs[2]
+
+api_tab = tabs[4]
 if api_tab.get("openapi") != "api-reference/openapi.mint.yaml":
     raise SystemExit("generated API groups must sit directly under API Reference")
 try:
@@ -236,42 +228,44 @@ if has_key(config.get("navigation", {}), "icon") or has_key(config.get("navigati
     raise SystemExit("decorative navigation icons returned")
 if config.get("contextual") != {"options": ["copy", "view"], "display": "header"}:
     raise SystemExit("header Copy page/Markdown actions changed")
-if "getting-started/quickstart" not in navigated:
+if "start/quickstart" not in navigated:
     raise SystemExit("Quickstart must remain a sidebar guide")
 if (root / "current-status.mdx").exists():
     raise SystemExit("Current status belongs in the evidence site, not public docs")
 
 required_paths = [
-    root / "guides/contact-cards.mdx",
-    root / "guides/chats/share-contact-card.mdx",
-    root / "guides/chats/typing-indicators.mdx",
-    root / "guides/messaging/delivery-receipts.mdx",
-    root / "guides/contacts/message-requests.mdx",
-    root / "guides/webhooks/events.mdx",
-    root / "guides/websocket/index.mdx",
-    root / "guides/websocket/protocol.mdx",
-    root / "guides/websocket/full-sync.mdx",
-    root / "error/index.mdx",
+    root / "build/identity/contact-card.mdx",
+    root / "build/chats/share-contact-card.mdx",
+    root / "build/chats/typing.mdx",
+    root / "build/messages/receipts.mdx",
+    root / "build/identity/message-requests.mdx",
+    root / "build/events/reference.mdx",
+    root / "build/events/websocket.mdx",
+    root / "build/events/websocket/protocol.mdx",
+    root / "build/events/websocket/full-sync.mdx",
+    root / "api-reference/errors.mdx",
 ]
 for path in required_paths:
     if not path.exists():
         raise SystemExit(f"required atomic guide missing: {path.relative_to(root)}")
 for path in [
-    root / "guides/messaging/index.mdx", root / "guides/chats/index.mdx",
-    root / "integrations/index.mdx", root / "api-reference/overview.mdx",
+    root / "build/messages/index.mdx", root / "build/chats/index.mdx",
+    root / "api-reference/overview.mdx",
 ]:
     if 'sidebarTitle: "Overview"' not in path.read_text():
         raise SystemExit(f"overview sidebar label drifted: {path.relative_to(root)}")
 
+if 'title: "Pick your agent"' not in (root / "connect/index.mdx").read_text():
+    raise SystemExit("Connect chooser title drifted")
+
 for stale in [
-    root / "guides/chats/install-agents.mdx",
+    root / "build/chats/install-agents.mdx",
     root / "guides/socket-mode.mdx",
     root / "guides/socket-mode-protocol.mdx",
-    root / "guides/webhooks/choose-transport.mdx",
-    root / "guides/platform/errors.mdx",
-    root / "guides/contacts/default-agents.mdx",
-    root / "guides/contacts/agent-greetings.mdx",
-    root / "guides/contacts/add-requests.mdx",
+    root / "build/events/choose-transport.mdx",
+    root / "build/identity/default-agents.mdx",
+    root / "build/identity/agent-greetings.mdx",
+    root / "build/identity/add-requests.mdx",
     root / "api-reference/resources/contacts/requests/overview.mdx",
     root / "error/codes/2xxx/2009.mdx",
     root / "error/codes/2xxx/2027.mdx",
@@ -289,18 +283,18 @@ if "--topology-only" in sys.argv:
     raise SystemExit(0)
 
 ecosystem_paths = [
-    root / "integrations/index.mdx",
-    root / "integrations/chat-sdk.mdx",
-    root / "integrations/cli.mdx",
-    root / "integrations/mcp.mdx",
-    root / "integrations/openclaw.mdx",
-    root / "integrations/claude-code.mdx",
-    root / "integrations/hermes.mdx",
-    root / "integrations/cloudflare-think.mdx",
-    root / "integrations/skills.mdx",
-    root / "integrations/codex.mdx",
-    root / "integrations/cursor.mdx",
-    root / "examples/index.mdx",
+    root / "connect/index.mdx",
+    root / "connect/chat-sdk.mdx",
+    root / "cli/index.mdx",
+    root / "connect/mcp.mdx",
+    root / "connect/openclaw.mdx",
+    root / "connect/claude-code.mdx",
+    root / "connect/hermes.mdx",
+    root / "connect/cloudflare-think.mdx",
+    root / "connect/skills.mdx",
+    root / "connect/codex.mdx",
+    root / "connect/cursor.mdx",
+    root / "build/examples.mdx",
 ]
 ecosystem_text = "\n".join(path.read_text() for path in ecosystem_paths)
 # Integration installation and safety boundaries have dedicated regression
@@ -322,6 +316,21 @@ for path in mdx_paths:
         raise SystemExit(f"missing {sorted(missing)} in {path}")
     if "—" in text:
         raise SystemExit(f"em dash in {path}")
+    if text[end + 5:].strip() == "This page is being written.":
+        continue
+    if path.name == "changelog.mdx":
+        updates = re.findall(r'<Update label="(\d{4}-\d{2}-\d{2})" tags=\{(\[[^\n]+\])\}>([\s\S]*?)</Update>', text)
+        if not updates or len(updates) != text.count("<Update "):
+            raise SystemExit("Changelog entries need dated labels and tags")
+        dates = [date for date, tags, body in updates]
+        if dates != sorted(dates, reverse=True):
+            raise SystemExit("Changelog entries must be newest first")
+        for date, tags, body in updates:
+            if not re.search(r'\]\(/[^)]+\)', body):
+                raise SystemExit("Every changelog entry must link an affected page")
+            if re.search(r"removed|replace|moved|instead of", body, re.I) and "Breaking change" not in tags:
+                raise SystemExit("Removed paths or flags need a Breaking change tag")
+        continue
     headings = h2_headings(text)
     if not headings or headings[-1] not in {"Next steps", "Related", "See also"}:
         raise SystemExit(f"page must end with Next steps, Related, or See also: {path}")
@@ -331,10 +340,11 @@ for path in mdx_paths:
         text,
     ):
         if "TypeScript SDK" in block and "cURL" in block:
-            if block.index("TypeScript SDK") > block.index("cURL"):
-                raise SystemExit(
-                    f"TypeScript SDK must appear before cURL: {path.relative_to(root)}"
-                )
+            if path.relative_to(root).parts[0] == "build":
+                if block.index("cURL") > block.index("TypeScript SDK"):
+                    raise SystemExit(f"cURL must appear before TypeScript SDK: {path.relative_to(root)}")
+            elif block.index("TypeScript SDK") > block.index("cURL"):
+                raise SystemExit(f"TypeScript SDK must appear before cURL: {path.relative_to(root)}")
 
 private_contact_field = "is_" + "default"
 private_contact_phrase = "default " + "agent"
@@ -433,73 +443,11 @@ for path in [*mdx_paths, root / "skill.md"]:
 
 from docs_behavior import validate_behavior
 validate_behavior(root)
-webhook_events_text = (root / "guides/webhooks/events.mdx").read_text()
+webhook_events_text = (root / "build/events/reference.mdx").read_text()
 
-expected_error_codes = {
-    1004, 1005, 2001, 2003, 2004, 2005, 2006,
-    2007, 2008, 2015, 2023, 2025, 2026,
-    2028, 2029, 2030, 3006,
-}
-error_paths = sorted((root / "error/codes").rglob("*.mdx"))
-actual_error_codes = {int(path.stem) for path in error_paths}
-if actual_error_codes != expected_error_codes:
-    raise SystemExit(
-        f"error code pages drifted: {sorted(actual_error_codes ^ expected_error_codes)}"
-    )
-expected_error_statuses = {
-    1004: ("`400`",),
-    # errors.ts:12-17 makes 1005 the default for every status that is not
-    # 401, 402, 404, 429 or 5xx, so it ships as 400 and as 409.
-    1005: ("`400`", "`409`"),
-    2001: ("`404`",),
-    2003: ("`403`",),
-    2004: ("`401`",),
-    2005: ("`500`",),
-    2006: ("`413`, `415`, or `422`",),
-    2007: ("`404`",),
-    2008: ("`429`",),
-    2015: ("`409`",),
-    2023: ("`409`",),
-    2025: ("`404`",),
-    # relationships.ts admissionError: 2026 for a block, 2030 for a setting
-    # that screens the sender out; both 403, both at Chat creation.
-    2026: ("`403`",),
-    2028: ("`403`",),
-    2029: ("`403`",),
-    2030: ("`403`",),
-    # app.ts:225 is the 500 catch-all; images.ts:466 and :507,
-    # attachments.ts:153 and developer-agents.ts:140 are 503.
-    3006: ("`500`", "`503`"),
-}
-error_overview_text = (root / "error/index.mdx").read_text()
-for path in error_paths:
-    error_text = path.read_text()
-    code = int(path.stem)
-    sidebar_match = re.search(r'^sidebarTitle: "([^"]+)"$', error_text, re.M)
-    if (
-        not sidebar_match
-        or not sidebar_match.group(1).startswith(path.stem)
-        or sidebar_match.group(1).startswith(f"Error {path.stem}")
-        or len(sidebar_match.group(1)) > 28
-    ):
-        raise SystemExit(
-            f"error sidebar title is not concise: {path.relative_to(root)}"
-        )
-    for status in expected_error_statuses[code]:
-        if f'| {status} | `{code}` |' not in error_text:
-            raise SystemExit(
-                f"error status/code row drifted in {path.relative_to(root)}: "
-                f"no row for {status}"
-            )
-    if "## Troubleshooting" not in error_text or "**Retry:**" not in error_text:
-        raise SystemExit(f"error recovery guidance missing in {path.relative_to(root)}")
-    if "```json" in error_text:
-        raise SystemExit(f"shared error envelope duplicated in {path.relative_to(root)}")
-    if f'description: "Resolve Relay error {code}."' in error_text:
-        raise SystemExit(f"generic error description returned in {path.relative_to(root)}")
-    expected_link = f"/error/codes/{code // 1000}xxx/{code}"
-    if expected_link not in error_overview_text:
-        raise SystemExit(f"error overview link missing: {expected_link}")
+# One code table replaces the former per-code page hierarchy.
+import runpy
+runpy.run_path(str(root / "scripts/check-error-anchors.py"))["check"](root)
 
 openapi_text = (root / "api-reference/openapi.yaml").read_text()
 mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
@@ -514,10 +462,10 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # error 2030, contact_requests removed, Relay-Server PR 205, September 9, 2026.
 # A person's reply accepts a message request; the request route takes deleted
 # only, Relay-Server PR 207, September 9, 2026.
-# Source authority: Relay-Server staging commit 4a3cbbed313d9011298ae5c305bd4b3f247c2dda; CLI publication is gated separately.
+# Source authority: Relay-Server staging commit c5f3046368049e7d85c9d20f4bf9bfa4c742c5d6; CLI publication is gated separately.
 # The digest pins source bytes independently of the Server release commit.
 expected_openapi_sha256 = (
-    "29ab747f1069a73fa09285400df2c6e0ce4bc3a143d94ed88fb0b5e5ecd842b4"
+    "ccc6eed43086ffdd9912a9d021469948128f8dee080f00f15ad2c0c269196cdc"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
@@ -791,7 +739,8 @@ if disconnect_reasons != [
     raise SystemExit(f"WebSocket disconnect reasons drifted: {disconnect_reasons}")
 
 handwritten_paths = [*mdx_paths, root / "skill.md", root / "README.md"]
-handwritten_text = "\n".join(path.read_text() for path in handwritten_paths)
+# Verbatim payload text is user content, not product vocabulary.
+handwritten_text = "\n".join(re.sub(r"^```json captured-output\n.*?^```\s*$", "", path.read_text(), flags=re.M | re.S) for path in handwritten_paths)
 all_contract_text = handwritten_text + "\n" + openapi_text
 if target() == "production" and STAGING_INSTRUCTION_REFERENCE.search(handwritten_text):
     raise SystemExit("staging installation or credential guidance returned to production")
@@ -837,9 +786,9 @@ if (root / "skill.md").read_bytes() != (
 ).read_bytes():
     raise SystemExit("published Relay skill drifted from skill.md")
 skill_text = (root / "skill.md").read_text()
-agent_prompt_page = (root / "agent-reference/prompt.mdx").read_text()
+agent_prompt_page = (root / "connect/agent-prompt.mdx").read_text()
 prompt_match = re.search(
-    r"^## Relay agent prompt\n.*?^````text Relay agent prompt\n"
+    r"^### Relay agent prompt\n.*?^````text Relay agent prompt\n"
     r"(.*?)\n````$",
     agent_prompt_page,
     re.M | re.S,
@@ -858,7 +807,7 @@ if (
 ):
     raise SystemExit("agent-prompt.js payload drifted from skill.md")
 if (
-    'const FALLBACK_PATH = "/agent-reference/prompt#relay-agent-prompt";'
+    'const FALLBACK_PATH = "/connect/agent-prompt#relay-agent-prompt";'
     not in agent_prompt_script
 ):
     raise SystemExit("agent-prompt.js lost its safe fallback destination")
@@ -903,7 +852,7 @@ for required in [
 ]:
     if required not in skill_text:
         raise SystemExit(f"setup prompt lost safety guidance: {required}")
-if "/agent-reference/prompt#relay-agent-prompt" not in (root / "getting-started/quickstart.mdx").read_text():
+if "/connect/agent-prompt#relay-agent-prompt" not in (root / "start/quickstart.mdx").read_text():
     raise SystemExit("Quickstart lost its link to the agent instructions")
 
 for name, pattern in {
@@ -934,7 +883,7 @@ for name, pattern in {
     "uuidv4 example": r"\b[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b",
     "human identity kind": r"\bkind\b.{0,30}\bhumans?\b|\bhumans?\b.{0,30}\bkind\b",
     "message parts table": r"\bmessage_parts?\b",
-    "unsupported payments": r"\bpayments?\b",
+    "unsupported payment endpoint": r"/v1/payments?\b",
     "long polling": r"long[ -]poll",
     "noncanonical error URL": r"docs\.relayapp\.im/error/codes/\dxxx/\d{4}/",
     "carrier API residue": r"from-number|sending line|line flagging|S3 will|sandbox and production",

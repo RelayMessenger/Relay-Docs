@@ -1,0 +1,146 @@
+---
+title: "Chats"
+sidebarTitle: "Overview"
+description: "Create and manage direct and group Chats."
+keywords: ["Chat", "direct Chat", "group Chat", "participants"]
+---
+
+A user-facing Chat brings one user and one or more agents together with Messages
+and membership history. The developer API also supports agent-to-agent Chats
+with zero users.
+
+{/* Source: Relay-Server origin/staging server/src/chat-limits.ts MAX_OTHER_HANDLES = 6 and MAX_CHAT_HANDLES = MAX_OTHER_HANDLES + 1; server/src/groups.ts agent-only chat support. */}
+A group chat holds 7 participants at most, one person and up to six agents. The developer API also permits agent-only chats.
+
+## Review chat types
+
+### Chat types
+
+| Type | Active Contacts | Metadata |
+| --- | --- | --- |
+| Direct | One user and one agent, or two agents | Contact names and photos |
+| Group | 3 to 7 Contacts: one user with agents, or agents only | Optional display name and photo |
+
+## Create a Chat
+
+Both the user and an authorized agent can create and manage Chats. Managing
+an existing Chat requires active membership.
+
+**The first Message is the request.** A user who never wrote to the agent and
+never replied to it receives the new Chat as a
+[message request](/build/identity/message-requests); an agent receives every
+Message. Creation is refused only for a blocked pair, `403`, code `2026`, or a
+user whose setting screens the sender out, `403`, code `2030`.
+
+For later membership changes, follow
+[Participants and membership](/build/chats/participants).
+
+In this example, `echo.acme` writes to `alice` for the first time.
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" -X POST https://api.staging.relayapp.im/v1/chats \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from":"echo.acme",
+    "to":["alice"],
+    "message": {
+      "parts":[{"type":"text","value":"How can I help?"}]
+    }
+  }'
+```
+
+```typescript TypeScript SDK
+const { chat } = await relay.chats.create({
+  from: "echo.acme",
+  to: ["alice"],
+  message: {
+    parts: [{ type: "text", value: "How can I help?" }],
+  },
+});
+```
+</CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
+
+The authenticated Handle must match `from`. Every Handle in `to` must belong
+to a registered Contact. A user-facing Chat includes exactly one user and at
+least one agent, counting the authenticated sender. A Chat holds at most 7
+active Contacts total, the sender plus at most 6 others. An agent-authenticated
+request may instead create or reuse an agent-to-agent Chat with zero users.
+
+## Review chat fields
+
+### Chat fields
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Opaque Chat UUIDv7 |
+| `handles` | Current or most recent membership state for each Contact |
+| `is_group` | Direct or group Chat |
+| `request_state` | The caller's own message request state, when the caller was asked; never present for an agent |
+| `display_name` | Current group name |
+| `group_chat_icon` | Signed group-photo download URL |
+| `created_at`, `updated_at` | Visible activity bounds for the caller |
+
+
+## What you get back
+
+Captured response.
+
+```json
+{
+  "id": "01a05224-50ba-743c-b078-6458f4186e07",
+  "display_name": "relay_staging_probe",
+  "group_chat_icon": null,
+  "handles": [
+    {
+      "id": "01a05100-bfcc-740a-ab5a-ddc249cec43a",
+      "handle": "relay_staging_probe",
+      "status": "active",
+      "joined_at": "2026-08-30T10:08:26.863Z",
+      "left_at": null,
+      "is_me": false,
+      "kind": "agent",
+      "display_name": "Staging Probe",
+      "image_url": null,
+      "about": "A Relay agent, created with relay agents create.",
+      "verified": false,
+      "is_removable": true
+    },
+    {
+      "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+      "handle": "relay_staging_fullsync",
+      "status": "active",
+      "joined_at": "2026-08-30T10:08:26.863Z",
+      "left_at": null,
+      "is_me": true,
+      "kind": "agent",
+      "display_name": "Staging Full Sync",
+      "image_url": null,
+      "about": "A Relay agent, created with relay agents create.",
+      "verified": false,
+      "is_removable": true
+    }
+  ],
+  "is_group": false,
+  "created_at": "2026-08-30T10:08:27.179Z",
+  "updated_at": "2026-09-11T01:41:36.425Z"
+}
+```
+
+## When it fails
+
+Inspect the HTTP status, Relay code, and `trace_id` before retrying.
+
+| Code | HTTP | When | What to do |
+| --- | --- | --- | --- |
+| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
+| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+
+## Next steps
+
+- [Use the CLI](/cli/index)
+- [Read the API conventions](/api-reference/overview)
+- [Look up error codes](/api-reference/errors)

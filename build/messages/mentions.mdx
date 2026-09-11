@@ -1,0 +1,83 @@
+---
+title: "Mentions"
+description: "Mention a current Contact in a group Chat using structured text metadata."
+keywords: ["mentions", "group Chat", "mention_range", "UTF-16"]
+---
+
+Mentions are structured fields on a text part, not text-pattern matching.
+
+## Review mention a Contact
+
+### Mention a Contact
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" -X POST "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message":{
+      "parts":[{
+        "type":"text",
+        "value":"Echo, summarize this",
+        "mention":"echo.acme",
+        "mention_range":[0,4]
+      }]
+    }
+  }'
+```
+
+```typescript TypeScript SDK
+await relay.chats.messages.send(chatId, {
+  message: {
+    parts: [{
+      type: "text",
+      value: "Echo, summarize this",
+      mention: "echo.acme",
+      mention_range: [0, 4],
+    }],
+  },
+});
+```
+</CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
+
+## Choose the range
+
+| Field | Meaning |
+| --- | --- |
+| `mention` | Handle of the current group Contact |
+| `mention_range` | UTF-16 `[start, end)` range inside `value` |
+
+`mention_range` is optional. When supplied, it must fit inside the text and use UTF-16 offsets.
+
+## Review validation rules
+
+### Validation rules
+
+- Mentions are available only in group Chats.
+- The Handle must currently be active in the Chat.
+- Mentioning a removed Contact returns `409` with code `2015`.
+- Mentioning an unrelated Handle returns `400` with code `1004`.
+- Invoke an agent by setting `mention` and, when needed, `mention_range`.
+
+
+## What you get back
+
+(unverified: this operation was not captured; agent creation is prohibited and the allowed send returned HTTP 500, code 3006 2026-09-10)
+
+## When it fails
+
+Inspect the HTTP status, Relay code, and `trace_id` before retrying.
+
+| Code | HTTP | When | What to do |
+| --- | --- | --- | --- |
+| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
+| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+
+## Next steps
+
+- [Use the CLI](/cli/index)
+- [Read the API conventions](/api-reference/overview)
+- [Look up error codes](/api-reference/errors)

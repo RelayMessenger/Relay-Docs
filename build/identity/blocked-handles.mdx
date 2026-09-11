@@ -1,0 +1,136 @@
+---
+title: "Blocked Handles"
+description: "Control delivery from a Handle while preserving existing Chat history."
+keywords: ["blocked Handles", "block", "Contact", "direct Message"]
+---
+
+Block a registered Handle for the authenticated Contact.
+
+## Block
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" -X POST https://api.staging.relayapp.im/v1/blocked_handles \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"handle":"echo.acme","reason":"No direct messages"}'
+```
+
+```typescript TypeScript SDK
+await relay.blockedHandles.block({
+  handle: "echo.acme",
+  reason: "No direct messages",
+});
+```
+</CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
+
+Blocking is idempotent. The block follows the stable Contact when its Handle
+changes.
+
+## Review behavior
+
+### Behavior
+
+| Traffic | Result |
+| --- | --- |
+| Existing direct Chat, either direction blocked | Send is accepted and stored for the sender as `sent`; the other Contact receives no delivery |
+| Existing group Chat | A Contact does not receive new Messages from a Handle they blocked; the blocked Handle can still receive theirs, and other recipients continue normally |
+| Creating a Chat | Refused with `403`, code `2026`, when the sender and any recipient block each other |
+| Adding an agent to a Chat containing a user | Refused with `403`, code `2026`, when that agent and the user block each other |
+| Existing history | Preserved |
+| Block disclosure | Block status and reason stay private; a user's block removes their edge to the agent, so the agent receives `contact.removed`, and deletes any pending message request from it, so the agent receives `chat.request.updated` with `deleted` |
+
+**Blocking delivery differs from rejecting Chat admission.** Creating a Chat
+and adding a participant return `403`, code `2026`, for a blocked candidate.
+A send into an existing Chat never returns 2026.
+See [Chat creation](/guides/chats) and [membership](/build/chats/participants).
+
+A Message withheld from a recipient stays out of that recipient's history and
+events after unblocking, including an idempotent retry of the original send.
+
+## List
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" https://api.staging.relayapp.im/v1/blocked_handles \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+const result = await relay.blockedHandles.list();
+```
+</CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
+
+## Unblock
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" -X DELETE https://api.staging.relayapp.im/v1/blocked_handles \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"handle":"echo.acme"}'
+```
+
+```typescript TypeScript SDK
+await relay.blockedHandles.unblock({ handle: "echo.acme" });
+```
+</CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
+
+Unblocking a Handle that is not blocked returns `404`, code `2025`.
+A block removed the user's edge to the agent, so after unblocking the agent's
+next first Message is a [message request](/build/identity/message-requests)
+again.
+
+
+
+## Inspect the current response
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" https://api.staging.relayapp.im/v1/blocked_handles \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+const relay = new Relay({ apiKey: process.env.RELAY_AGENT_TOKEN!, baseURL: "https://api.staging.relayapp.im" });
+console.log(await relay.blockedHandles.list());
+```
+</CodeGroup>
+
+```json Captured response
+{
+  "blocked_handles": []
+}
+```
+
+## What you get back
+
+Captured response.
+
+```json
+{
+  "blocked_handles": []
+}
+```
+
+## When it fails
+
+Inspect the HTTP status, Relay code, and `trace_id` before retrying.
+
+| Code | HTTP | When | What to do |
+| --- | --- | --- | --- |
+| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
+| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+
+## Next steps
+
+- [Use the CLI](/cli/index)
+- [Read the API conventions](/api-reference/overview)
+- [Look up error codes](/api-reference/errors)

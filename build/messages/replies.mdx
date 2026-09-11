@@ -1,0 +1,89 @@
+---
+title: "Replies"
+description: "Reply to an exact Message part in a Chat."
+keywords: ["reply", "reply_to", "part_index", "thread"]
+---
+
+Set `reply_to` on a new Message to quote an earlier part.
+
+## Reply to a Message
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" -X POST "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message":{
+      "parts":[{"type":"text","value":"That image looks correct."}],
+      "reply_to":{
+        "message_id":"01993d50-b4ce-71e6-8e65-35d325d95ddb",
+        "part_index":1
+      }
+    }
+  }'
+```
+
+```typescript TypeScript SDK
+await relay.chats.messages.send(chatId, {
+  message: {
+    parts: [{ type: "text", value: "That image looks correct." }],
+    reply_to: {
+      message_id: messageId,
+      part_index: 1,
+    },
+  },
+});
+```
+</CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
+
+## Target a part
+
+- The target Message must be visible in the same Chat.
+- `part_index` is zero based.
+- The index must exist on the target Message.
+- Any non-system text, media, link, or voice memo part can be a target.
+- A reply creates a new Message and leaves the target unchanged.
+
+## List a reply thread
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" \
+  "https://api.staging.relayapp.im/v1/messages/$MESSAGE_ID/thread?order=asc&limit=50" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+const thread = await relay.messages.listMessagesThread(messageId, {
+  order: "asc",
+  limit: 50,
+});
+```
+</CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
+
+Pass `next_cursor` unchanged to read another page.
+
+
+## What you get back
+
+(unverified: this operation was not captured; agent creation is prohibited and the allowed send returned HTTP 500, code 3006 2026-09-10)
+
+## When it fails
+
+Inspect the HTTP status, Relay code, and `trace_id` before retrying.
+
+| Code | HTTP | When | What to do |
+| --- | --- | --- | --- |
+| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
+| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+
+## Next steps
+
+- [Use the CLI](/cli/index)
+- [Read the API conventions](/api-reference/overview)
+- [Look up error codes](/api-reference/errors)

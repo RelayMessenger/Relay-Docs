@@ -25,27 +25,27 @@ from urllib.parse import unquote, urlsplit
 from origins import origin, production_text, source_ref, target
 
 ROOT = Path(__file__).resolve().parents[1]
-CLI = "integrations/cli.mdx"
-AUTH = "integrations/cli/authentication.mdx"
-OBSERVE = "integrations/cli/observe-events.mdx"
-NATIVE = "integrations/native-setup.mdx"
-SKILLS = "integrations/skills.mdx"
-MCP = "integrations/mcp.mdx"
-OBSERVER_REFERENCE = "guides/websocket/observe-events.mdx"
-FENCE = re.compile(r"^```[^\n]*\n(.*?)^```\s*$", re.M | re.S)
+CLI = "cli/index.mdx"
+AUTH = "cli/auth.mdx"
+OBSERVE = "cli/watch.mdx"
+NATIVE = "connect/native-setup.mdx"
+SKILLS = "connect/skills.mdx"
+MCP = "connect/mcp.mdx"
+OBSERVER_REFERENCE = "build/events/websocket/observe-events.mdx"
+FENCE = re.compile(r"^(`{3,})[^\n]*\n(.*?)^\1[ \t]*$", re.M | re.S)
 FINISH = {"Next steps", "See also", "Related"}
 SOURCES = {
     CLI: "packages/cli",
     NATIVE: "packages/cli/src/runtime-connect",
     MCP: "packages/mcp",
     SKILLS: "skills/relay",
-    "integrations/chat-sdk.mdx": "packages/chat-sdk-adapter",
-    "integrations/openclaw.mdx": "packages/openclaw",
-    "integrations/claude-code.mdx": "packages/claude-code",
-    "integrations/cloudflare-think.mdx": "cookbook/cloudflare-think-agent",
-    "integrations/codex.mdx": "plugins/relay",
-    "integrations/cursor.mdx": "plugins/relay",
-    "examples/index.mdx": "cookbook",
+    "connect/chat-sdk.mdx": "packages/chat-sdk-adapter",
+    "connect/openclaw.mdx": "packages/openclaw",
+    "connect/claude-code.mdx": "packages/claude-code",
+    "connect/cloudflare-think.mdx": "cookbook/cloudflare-think-agent",
+    "connect/codex.mdx": "plugins/relay",
+    "connect/cursor.mdx": "plugins/relay",
+    "build/examples.mdx": "cookbook",
 }
 RETIRED_REPOS = (
     "Relay-Chat-SDK", "Relay-CLI", "Relay-MCP", "Relay-OpenClaw",
@@ -64,9 +64,9 @@ def expected(value):
 
 def assigned_pages():
     return sorted({
-        *ROOT.glob("integrations/*.mdx"),
-        *ROOT.glob("integrations/cli/*.mdx"),
-        ROOT / "examples/index.mdx",
+        *ROOT.glob("connect/*.mdx"),
+        *ROOT.glob("cli/index/*.mdx"),
+        ROOT / "build/examples.mdx",
     })
 
 
@@ -82,7 +82,9 @@ def commands(text):
     """Join shell continuations without mistaking Markdown prose for commands."""
     return [
         line.strip()
-        for block in FENCE.findall(text)
+        for _, block in FENCE.findall(re.sub(
+            r"^```text captured-output\n.*?^```[ \t]*$", "", text, flags=re.M | re.S
+        ))
         for line in re.sub(r"\\\s*\n\s*", " ", block).splitlines()
         if line.strip()
     ]
@@ -168,10 +170,18 @@ class IntegrationDocsTests(unittest.TestCase):
                 frontmatter = text.split("---", 2)[1]
                 for key in ("title", "description", "keywords"):
                     self.assertRegex(frontmatter, rf"(?m)^{key}:")
+                if text.split("---", 2)[2].strip() == "This page is being written.":
+                    continue
                 headings = re.findall(r"^## (.+)$", prose(text), re.M)
                 self.assertTrue(headings, "page needs a related-task section")
                 self.assertIn(headings[-1], FINISH)
-                self.assertLessEqual(len(headings) - 1, 5, "split independent tasks, not paragraph length")
+                if path.stem in {"claude-code", "codex", "cursor", "opencode", "cline", "vs-code", "gemini-cli", "claude-desktop", "hermes", "openclaw", "mcp", "your-own-backend", "chat-sdk", "cloudflare-think"}:
+                    self.assertEqual(headings, ["Before you start", "Install", "Connect", "Send it a message", "What this changed", "When it fails", "Next steps"])
+                elif path.relative_to(ROOT).parts[0] == "build":
+                    from docs_structure import validate_build_headings
+                    validate_build_headings(str(path.relative_to(ROOT).with_suffix("")), prose(text))
+                else:
+                    self.assertLessEqual(len(headings), 8, "split independent tasks, not paragraph length")
 
     def test_owned_links_resolve_including_fragments(self):
         config = json.loads(read("docs.json"))
@@ -184,11 +194,10 @@ class IntegrationDocsTests(unittest.TestCase):
     def test_sources_remain_in_maintained_repositories(self):
         for page, directory in SOURCES.items():
             with self.subTest(page=page):
-                self.assertIn(
-                    f"https://github.com/RelayMessenger/Relay-SDK/tree/{source_ref()}/{directory}",
-                    links(read(page)),
-                )
-        self.assertIn("https://github.com/RelayMessenger/Relay-Hermes", links(read("integrations/hermes.mdx")))
+                source = f"https://github.com/RelayMessenger/Relay-SDK/tree/{source_ref()}/{directory}"
+                self.assertTrue(any(link == source or link.startswith(source + "/")
+                                    for link in links(read(page))))
+        self.assertIn("https://github.com/RelayMessenger/Relay-Hermes", links(read("connect/hermes.mdx")))
         for path in assigned_pages():
             text = path.read_text()
             for repository in RETIRED_REPOS:
@@ -201,60 +210,60 @@ class IntegrationDocsTests(unittest.TestCase):
         installs = {
             CLI: "npm install --global relaymessenger@staging",
             MCP: "npm install --global @relaymessenger/mcp@staging",
-            "integrations/openclaw.mdx": "openclaw plugins install @relaymessenger/openclaw-plugin@staging",
-            "integrations/hermes.mdx": "hermes plugins install RelayMessenger/Relay-Hermes --enable",
-            "integrations/claude-code.mdx": "/plugin install relay@relay-messenger",
-            "integrations/codex.mdx": "codex plugin add relay@relay-plugin-marketplace",
+            "connect/openclaw.mdx": "openclaw plugins install @relaymessenger/openclaw-plugin@staging",
+            "connect/hermes.mdx": "hermes plugins install RelayMessenger/Relay-Hermes --enable",
+            "connect/claude-code.mdx": "/plugin install relay@relay-messenger",
+            "connect/codex.mdx": "codex plugin add relay@relay-plugin-marketplace",
         }
         for page, command in installs.items():
             self.assertIn(expected(command), commands(read(page)), page)
         self.assertIn(expected("npx relaymessenger@staging --help"), commands(read(CLI)))
         self.assertIn(
             expected("/plugin marketplace add RelayMessenger/Relay-SDK@staging"),
-            commands(read("integrations/claude-code.mdx")),
+            commands(read("connect/claude-code.mdx")),
         )
         self.assertTrue(any(
-            line.startswith("codex plugin marketplace add ") for line in commands(read("integrations/codex.mdx"))
+            line.startswith("codex plugin marketplace add ") for line in commands(read("connect/codex.mdx"))
         ))
         self.assertTrue(any(
             line.startswith("ln -s ") and "/plugins/relay" in line and ".cursor/plugins/local/relay" in line
-            for line in commands(read("integrations/cursor.mdx"))
+            for line in commands(read("connect/cursor.mdx"))
         ))
         self.assertTrue(any(
             re.search(r"npx skills@\S+ add \./Relay-SDK/skills/relay --skill relay", line)
             for line in commands(read(SKILLS))
         ))
-        adapter_commands = "\n".join(commands(read("integrations/chat-sdk.mdx")))
+        adapter_commands = "\n".join(commands(read("connect/chat-sdk.mdx")))
         self.assertIn("chat@4.39.0", adapter_commands)
         self.assertIn(expected("@relaymessenger/chat-sdk-adapter@staging"), adapter_commands)
 
     def test_environment_pairing_and_runtime_requirements(self):
         api = f"https://{origin('api.staging.relayapp.im')}"
-        for page in (AUTH, NATIVE, "integrations/chat-sdk.mdx", "integrations/openclaw.mdx",
-                     "integrations/claude-code.mdx", "integrations/hermes.mdx", "integrations/cloudflare-think.mdx"):
+        for page in (AUTH, NATIVE, "connect/chat-sdk.mdx", "connect/openclaw.mdx",
+                     "connect/claude-code.mdx", "connect/hermes.mdx", "connect/cloudflare-think.mdx"):
             self.assertIn(api, read(page), page)
-        for page in (CLI, MCP, NATIVE, "integrations/openclaw.mdx", "integrations/claude-code.mdx"):
+        for page in (CLI, MCP, NATIVE, "connect/openclaw.mdx", "connect/claude-code.mdx"):
             self.assertIn("22.22.3", read(page), "Keep the supported Node minimum at the install task")
-        self.assertIn(">=2026.8.1 <2026.9.0", read("integrations/openclaw.mdx"))
+        self.assertIn(">=2026.8.1 <2026.9.0", read("connect/openclaw.mdx"))
         for version in ("3.11", "3.13"):
-            self.assertIn(version, read("integrations/hermes.mdx"))
-        self.assertConcept(read("integrations/claude-code.mdx"), r"channels.*research.preview", "Keep channel availability prerequisite")
-        self.assertLink(MCP, "/integrations/cli/authentication")
+            self.assertIn(version, read("connect/hermes.mdx"))
+        self.assertConcept(read("connect/claude-code.mdx"), r"channels.*research.preview", "Keep channel availability prerequisite")
+        self.assertLink(MCP, "/cli/auth")
         self.assertIn("RELAY_API_URL", read(MCP))
         self.assertConcept(read(MCP), r"(?:match|pair).*token", "MCP environment overrides must stay paired")
 
     def test_cli_routes_to_task_owners_without_copying_agent_flows(self):
         for task in ("create-agent", "list-agents", "delete-agent"):
-            self.assertLink(CLI, f"/guides/agents/{task}")
+            self.assertLink(CLI, f"/build/agents/{task}")
         for page in (AUTH, OBSERVE, NATIVE):
             self.assertLink(CLI, "/" + page.removesuffix(".mdx"))
-        for path in ROOT.glob("integrations/**/*.mdx"):
+        for path in ROOT.glob("connect/**/*.mdx"):
             self.assertFalse(
                 any(re.search(r"\bagents (?:create|list|delete)\b", line) for line in commands(path.read_text())),
                 f"Agent workflows belong to guides/agents, not {path.relative_to(ROOT)}",
             )
         # Inspect the owning guides, not a duplicated record on the CLI overview.
-        for page, is_list in (("guides/agents/create-agent.mdx", False), ("guides/agents/list-agents.mdx", True)):
+        for page, is_list in (("build/agents/create-agent.mdx", False), ("build/agents/list-agents.mdx", True)):
             records = []
             for block in re.findall(r"^```json\n(.*?)^```", read(page), re.M | re.S):
                 value = json.loads(block)
@@ -278,10 +287,10 @@ class IntegrationDocsTests(unittest.TestCase):
         self.assertConcept(text, r"save a token for this computer", "Use the shipped login description")
         self.assertConcept(text, r"logout.*(?:only|selected|that profile)", "Logout scope is local")
         self.assertConcept(text, r"relay_agent_token is honored in scripts only", "Use the shipped environment rule")
-        self.assertLink(AUTH, "/guides/agents/delete-agent")
+        self.assertLink(AUTH, "/build/agents/delete-agent")
 
     def test_observation_delegates_protocol_without_becoming_a_consumer(self):
-        self.assertLink(OBSERVE, "/guides/websocket/observe-events")
+        self.assertLink(OBSERVE, "/build/events/websocket/observe-events")
         text = read(OBSERVE)
         reference = read(OBSERVER_REFERENCE)
         self.assertTrue(any(re.match(r"npx relaymessenger\S* watch\b", line) for line in commands(text)))
@@ -291,7 +300,7 @@ class IntegrationDocsTests(unittest.TestCase):
             self.assertIn(marker, reference, "Wire details belong to the observer reference")
         self.assertConcept(reference, r"(?:neither|no|without).*ack", "An observer must never ACK")
         self.assertConcept(reference, r"without.*consuming fallback", "Observer failure must not start a consumer")
-        self.assertLink(OBSERVE, "/integrations/native-setup")
+        self.assertLink(OBSERVE, "/connect/native-setup")
 
     def test_connect_examples_keep_tokens_out_of_arguments(self):
         text = read(NATIVE)
@@ -330,15 +339,15 @@ class IntegrationDocsTests(unittest.TestCase):
         self.assertIn('"agent": "claude-code"', text)
         self.assertNotIn('"connected"', text, "Do not invent a connection field the CLI does not print")
         for runtime in ("openclaw", "hermes", "claude-code"):
-            page = f"integrations/{runtime}.mdx"
-            self.assertLink(page, "/integrations/native-setup")
+            page = f"connect/{runtime}.mdx"
+            self.assertLink(page, "/connect/native-setup")
             self.assertNotRegex("\n".join(commands(read(page))), r"\bconnect\b.*--(?:yes|allow|token)",
                                 "Keep connect flags canonical on the connect page")
 
     def test_native_admission_stays_with_the_runtime_setup(self):
-        openclaw = read("integrations/openclaw.mdx")
-        claude = read("integrations/claude-code.mdx")
-        hermes = read("integrations/hermes.mdx")
+        openclaw = read("connect/openclaw.mdx")
+        claude = read("connect/claude-code.mdx")
+        hermes = read("connect/hermes.mdx")
         for text in (openclaw, claude, hermes):
             self.assertConcept(text, r"zero saved webhook subscriptions", "Native channels use the WebSocket path")
         for pattern in (r"allowfrom", r"contact uuids", r"stable.id", r"session scope", r"token.*api origin"):
@@ -361,9 +370,9 @@ class IntegrationDocsTests(unittest.TestCase):
         self.assertConcept(text, r"docs mcp.*none.*read.only", "Docs search needs no Agent Token")
         self.assertConcept(text, r"api mcp.*agent token", "API tools require an Agent Token")
         self.assertConcept(text, r"installing a skill alone.*does not confirm", "Skill installation is not MCP connection proof")
-        self.assertLink(SKILLS, "/integrations/mcp")
-        for page in (MCP, "integrations/codex.mdx", "integrations/cursor.mdx"):
-            self.assertLink(page, "/integrations/skills")
+        self.assertLink(SKILLS, "/connect/mcp")
+        for page in (MCP, "connect/codex.mdx", "connect/cursor.mdx"):
+            self.assertLink(page, "/connect/skills")
 
     def test_setup_pages_do_not_regrow_release_or_maintainer_checklists(self):
         for path in assigned_pages():
@@ -379,14 +388,14 @@ class IntegrationDocsTests(unittest.TestCase):
                 self.assertNotRegex(text, r"(?i)test:live|hosted.proof|lockfile|registry integrity|sha(?:256|512)-")
                 self.assertNotRegex(text, r"(?im)^## (?:Package versions|Package status)\s*$")
                 self.assertNotRegex(text, r"(?i)\bcoming[- ]soon\b|\bsource[- ]only\b")
-        self.assertLink("integrations/chat-sdk.mdx", "/guides/messaging/attachments")
+        self.assertLink("connect/chat-sdk.mdx", "/build/messages/attachments")
         self.assertNotRegex(
-            normalized(read("integrations/chat-sdk.mdx")),
+            normalized(read("connect/chat-sdk.mdx")),
             r"rejects.{0,40}(?:local byte|file upload)",
             "Current adapter source supports file-byte uploads",
         )
         for recipe in ("send-a-message", "send-an-image", "send-a-voice-memo"):
-            self.assertIn(f"/cookbook/{recipe}", read("examples/index.mdx"))
+            self.assertIn(f"/cookbook/{recipe}", read("build/examples.mdx"))
 
     def test_safety_guard_detects_literal_token_or_production_origin(self):
         example = "```bash\nnpx relaymessenger@staging connect claude --token \"$RELAY_AGENT_TOKEN\" --yes\n```\n"

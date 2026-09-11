@@ -11,8 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 class NavigationTests(unittest.TestCase):
     def setUp(self):
         self.config = json.loads((ROOT / "docs.json").read_text())
-        self.api = next(tab for tab in self.config["navigation"]["tabs"] if tab["tab"] == "API Reference")
-        self.chats = self.api["groups"][0]["pages"][1]
+        self.api = next(tab for tab in self.config["navigation"]["tabs"] if tab["tab"] == "API")
+        self.chats = next(g for g in self.api["groups"] if g["group"] == "Chats")
 
     def test_every_existing_endpoint_is_nested_once(self):
         self.assertEqual(len(validate_api_navigation(self.config)), 38)
@@ -22,10 +22,9 @@ class NavigationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "exactly once"):
             validate_api_navigation(self.config)
 
-    def test_flattening_chat_messages_rejected(self):
-        messages = next(item for item in self.chats["pages"] if isinstance(item, dict) and item["group"] == "Messages")
-        self.chats["pages"].extend(messages["pages"])
-        self.chats["pages"].remove(messages)
+    def test_wrong_resource_rejected(self):
+        self.chats["pages"].remove("GET /v1/chats/{chatId}/messages")
+        self.api["groups"][2]["pages"].append("GET /v1/chats/{chatId}/messages")
         with self.assertRaisesRegex(ValueError, "Incorrect resource nesting"):
             validate_api_navigation(self.config)
 
@@ -36,7 +35,17 @@ class NavigationTests(unittest.TestCase):
 
     def test_root_flattening_rejected(self):
         self.api["groups"] = [copy.deepcopy(self.chats)]
-        with self.assertRaisesRegex(ValueError, "nested under HTTP"):
+        with self.assertRaisesRegex(ValueError, "their own groups"):
+            validate_api_navigation(self.config)
+
+    def test_extra_authored_endpoint_rejected(self):
+        self.chats["pages"].append("api-reference/chats/custom")
+        with self.assertRaisesRegex(ValueError, "Only generated"):
+            validate_api_navigation(self.config)
+
+    def test_error_reference_required(self):
+        self.api["groups"][0]["pages"].pop()
+        with self.assertRaisesRegex(ValueError, "Error codes"):
             validate_api_navigation(self.config)
 
     def test_recursive_walk_preserves_order_and_parentage(self):

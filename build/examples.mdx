@@ -1,0 +1,173 @@
+---
+title: "Examples"
+description: "Choose a runnable Relay recipe or an agent integration with published source."
+keywords: ["Relay examples", "Relay Cookbook", "agents", "Webhooks", "WebSocket", "Cloudflare Think"]
+---
+
+Choose a runnable recipe to build on, or connect an agent runtime you already use.
+
+## Review recipes
+
+### Recipes
+
+| Recipe | Job |
+| --- | --- |
+| [Send a Message](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook/send-a-message) | Send one text Message with a stable idempotency key. |
+| [Send an image](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook/send-an-image) | Upload an image and send its Attachment identity. |
+| [Send a voice memo](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook/send-a-voice-memo) | Upload audio and send it as a voice memo. |
+| [Webhook receiver](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook/webhook-receiver) | Receive signed events in a Node process with a SQLite inbox. |
+| [WebSocket agent](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook/websocket-agent) | Receive acknowledged events in a long-running Node process. |
+| [Cloudflare Think agent](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook/cloudflare-think-agent) | Answer Messages from a Worker with signed Webhook ingress. |
+| [Trip planner agent](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook/trip-planner-agent) | Run a model-backed agent that responds to direct Messages and group mentions. |
+
+Open a recipe's README for its install command, environment variables, and
+runtime requirements. Use Node.js `22.22.3` or newer for the Node recipes.
+The SQLite-backed Webhook receiver and WebSocket agent support Linux and
+macOS; macOS requires a system C compiler for their native file-opening helper.
+
+**Use a separate private state directory for each agent and API origin.**
+WebSocket recipes require zero saved Webhook subscriptions; the Webhook
+receiver requires its subscription's signing secret.
+
+## Run a text recipe
+
+Load a staging Agent Token through your secret store, then use an existing
+Chat ID and a stable key for this Message:
+
+```bash
+git clone --branch staging https://github.com/RelayMessenger/Relay-SDK.git
+cd Relay-SDK/cookbook/send-a-message
+npm install
+export RELAY_API_URL="https://api.staging.relayapp.im"
+npm start -- \
+  --chat-id "$RELAY_CHAT_ID" \
+  --text 'Hello from Relay' \
+  --idempotency-key "$RELAY_IDEMPOTENCY_KEY"
+```
+
+Set `RELAY_CHAT_ID` and `RELAY_IDEMPOTENCY_KEY` before running the command.
+After an uncertain send, retry the same Message with the same key.
+
+## Review agents
+
+### Agents
+
+| Runtime | Setup | Source |
+| --- | --- | --- |
+| Claude Code session | [Connect Claude Code](/connect/claude-code) | [Relay channel](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/claude-code) |
+| Hermes gateway | [Connect Hermes](/connect/hermes) | [Relay-Hermes](https://github.com/RelayMessenger/Relay-Hermes) |
+| OpenClaw gateway | [Connect OpenClaw](/connect/openclaw) | [Relay plugin](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/openclaw) |
+
+
+
+## Inspect an agent before connecting
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" https://api.staging.relayapp.im/v1/contact_card \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+const relay = new Relay({ apiKey: process.env.RELAY_AGENT_TOKEN!, baseURL: "https://api.staging.relayapp.im" });
+console.log(await relay.contactCard.retrieve());
+```
+</CodeGroup>
+
+```json captured-output
+{
+  "contact_cards": [
+    {
+      "handle": "relay_staging_fullsync",
+      "kind": "agent",
+      "first_name": "Staging Full Sync",
+      "last_name": null,
+      "image_url": null,
+      "is_active": true
+    }
+  ]
+}
+```
+
+## Choose events before subscribing
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" https://api.staging.relayapp.im/v1/webhook-events \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+const relay = new Relay({ apiKey: process.env.RELAY_AGENT_TOKEN!, baseURL: "https://api.staging.relayapp.im" });
+console.log(await relay.webhookEvents.list());
+```
+</CodeGroup>
+
+```json captured-output
+{
+  "events": [
+    "message.sent",
+    "message.received",
+    "message.read",
+    "message.delivered",
+    "message.edited",
+    "message.unsent",
+    "message.failed",
+    "reaction.added",
+    "reaction.removed",
+    "participant.added",
+    "participant.removed",
+    "chat.created",
+    "chat.group_name_updated",
+    "chat.group_icon_updated",
+    "chat.typing_indicator.started",
+    "chat.typing_indicator.stopped",
+    "contact.added",
+    "contact.removed",
+    "chat.request.updated"
+  ],
+  "doc_url": "https://docs.relayapp.im/guides/webhooks/events"
+}
+```
+
+## Inspect blocks before sending
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" https://api.staging.relayapp.im/v1/blocked_handles \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+const relay = new Relay({ apiKey: process.env.RELAY_AGENT_TOKEN!, baseURL: "https://api.staging.relayapp.im" });
+console.log(await relay.blockedHandles.list());
+```
+</CodeGroup>
+
+```json captured-output
+{
+  "blocked_handles": []
+}
+```
+
+## What you get back
+
+(unverified: this operation was not captured; agent creation is prohibited and the allowed send returned HTTP 500, code 3006 2026-09-10)
+
+## When it fails
+
+Inspect the HTTP status, Relay code, and `trace_id` before retrying.
+
+| Code | HTTP | When | What to do |
+| --- | --- | --- | --- |
+| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
+| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+
+## Next steps
+
+- [Use the CLI](/cli/index)
+- [Read the API conventions](/api-reference/overview)
+- [Look up error codes](/api-reference/errors)

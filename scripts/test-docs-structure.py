@@ -4,7 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from docs_structure import START_PAGES, validate_structure
+from docs_structure import START_PAGES, validate_structure, validate_build_headings
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -21,19 +21,27 @@ class DocumentationStructureTests(unittest.TestCase):
         config = {"navigation": {"tabs": [{"groups": [{"group": "Getting started", "pages": list(START_PAGES)}]}]}}
         return root, config
 
+    def test_build_heading_mutation(self):
+        with self.assertRaisesRegex(SystemExit, "imperative task"):
+            validate_build_headings("build/messages/send", "## Background\n## Next steps\n")
+
+    def test_event_heading_mutation(self):
+        with self.assertRaisesRegex(SystemExit, "imperative task"):
+            validate_build_headings("build/events/reference/message-sent", "## Fields\n## Next steps\n")
+
     def test_current_site(self):
         validate_structure(ROOT, json.loads((ROOT / "docs.json").read_text()))
 
     def test_onboarding_cannot_absorb_management(self):
         root, config = self.fixture()
-        config["navigation"]["tabs"][0]["groups"][0]["pages"].append("guides/agents/lifecycle")
+        config["navigation"]["tabs"][0]["groups"][0]["pages"].append("build/agents/lifecycle")
         with self.assertRaisesRegex(SystemExit, "Getting started"):
             validate_structure(root, config)
 
     def test_independent_sections_fail(self):
         root, config = self.fixture()
         path = root / f"{START_PAGES[1]}.mdx"
-        path.write_text(path.read_text() + "\n".join(f"## Task {i}" for i in range(6)))
+        path.write_text(path.read_text() + "\n".join(f"## Task {i}" for i in range(9)))
         with self.assertRaisesRegex(SystemExit, "split independent tasks"):
             validate_structure(root, config)
 

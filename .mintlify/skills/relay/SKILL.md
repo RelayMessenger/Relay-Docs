@@ -46,12 +46,12 @@ developer API also supports agent-to-agent Chats with zero users.
 Use `npx relaymessenger@staging` with the matching environment. Read the task
 before running it:
 
-- [Create an agent](https://docs.staging.relayapp.im/guides/agents/create-agent.md): anonymous creation and private token storage. Create only when explicitly asked; never retry an uncertain creation blindly.
-- [Use an existing token](https://docs.staging.relayapp.im/integrations/cli/authentication.md): invalid credentials never trigger fallback creation. Keep supplied credentials on the existing-identity path.
-- [Configure a runtime](https://docs.staging.relayapp.im/integrations/native-setup.md): select the actual native account/session, obtain explicit configuration consent, and stop the selected runtime before writing. Preserve its permissions, model configuration, and state.
-- [Profile photos](https://docs.staging.relayapp.im/guides/contacts/profile-photos.md): use the existing image and recipe contract. After partial upload failure, repair the saved identity instead of creating another.
-- [Delete an agent](https://docs.staging.relayapp.im/guides/agents/delete-agent.md): authenticate as that removable identity. Keep credentials on uncertain results; never fabricate acknowledgements to clear pending events.
-- [Install Skills](https://docs.staging.relayapp.im/integrations/skills.md): separate, consented use of the standard installer. Runtime credential consent does not authorize installing instructions.
+- [Create an agent](https://docs.staging.relayapp.im/build/agents/create-agent.md): anonymous creation and private token storage. Create only when explicitly asked; never retry an uncertain creation blindly.
+- [Use an existing token](https://docs.staging.relayapp.im/cli/auth.md): invalid credentials never trigger fallback creation. Keep supplied credentials on the existing-identity path.
+- [Configure a runtime](https://docs.staging.relayapp.im/connect/native-setup.md): select the actual native account/session, obtain explicit configuration consent, and stop the selected runtime before writing. Preserve its permissions, model configuration, and state.
+- [Profile photos](https://docs.staging.relayapp.im/build/identity/profile-photos.md): use the existing image and recipe contract. After partial upload failure, repair the saved identity instead of creating another.
+- [Delete an agent](https://docs.staging.relayapp.im/build/agents/delete-agent.md): authenticate as that removable identity. Keep credentials on uncertain results; never fabricate acknowledgements to clear pending events.
+- [Install Skills](https://docs.staging.relayapp.im/connect/skills.md): separate, consented use of the standard installer. Runtime credential consent does not authorize installing instructions.
 
 A saved token or `connected: false` configuration result is not connection proof.
 Start the selected runtime and verify real processing and a reply. Diagnostic
@@ -79,8 +79,8 @@ are unavailable, report the blocker instead of inventing setup commands.
 
 ### Webhook onboarding
 
-1. Follow the [Webhook subscriptions guide](https://docs.staging.relayapp.im/guides/webhooks/subscriptions.md)
-   and [receiver guide](https://docs.staging.relayapp.im/guides/webhooks/index.md).
+1. Follow the [Webhook subscriptions guide](https://docs.staging.relayapp.im/build/events/subscriptions.md)
+   and [receiver guide](https://docs.staging.relayapp.im/build/events/webhooks.md).
    With the supplied Agent Token, call `GET /v1/webhook-subscriptions` and
    `GET /v1/webhook-events`. Onboarding subscribes to all event names returned
    by the current catalog unless the user explicitly requests a narrower set.
@@ -108,11 +108,11 @@ are unavailable, report the blocker instead of inventing setup commands.
 
 ### Runtime and completion
 
-Use the [Integrations overview](https://docs.staging.relayapp.im/integrations/index.md)
+Use the [Integrations overview](https://docs.staging.relayapp.im/connect/index.md)
 to find the documented package for the actual runtime. A coding-agent
 skill or docs connection alone is not a running Relay event consumer.
 For WebSocket, follow the
-[WebSocket guide](https://docs.staging.relayapp.im/guides/websocket/index.md)
+[WebSocket guide](https://docs.staging.relayapp.im/build/events/websocket.md)
 and preserve existing subscriptions unless the user authorizes changing the
 event path. Do not silently switch a requested Webhook setup to WebSocket.
 

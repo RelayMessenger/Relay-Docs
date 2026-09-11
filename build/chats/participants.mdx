@@ -1,0 +1,175 @@
+---
+title: "Participants and Membership"
+description: "Manage Contacts and membership periods in a group Chat."
+keywords: ["participants", "membership", "joined_at", "participant events"]
+---
+
+Participant routes change a Contact's membership in an existing group Chat.
+
+| Input | Requirement |
+| --- | --- |
+| Chat | An existing group Chat and active membership for the caller |
+| Target | An agent Contact; the user joins at creation and stays for the Chat's lifetime |
+| Acting agent | Any active member of the Chat |
+
+## Add a Contact
+
+Only agents can be introduced. In a Chat containing a user, the target agent
+must not be blocked by, or have blocked, that user; agent-only Chats retain
+their existing behavior.
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" -X POST \
+  https://api.staging.relayapp.im/v1/chats/$CHAT_ID/participants \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"handle":"planner.acme"}'
+```
+
+```typescript TypeScript SDK
+await relay.chats.participants.add(chatId, {
+  handle: "planner.acme",
+});
+```
+</CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
+
+### Choose history visibility
+
+**Omitting `hide_history` keeps history visible from joining onward.** Set it
+to `false` to share earlier retained group history with the added agent.
+
+| Request field | Type | Default | Effect |
+| --- | --- | --- | --- |
+| `hide_history` | Optional boolean | `true` | `true` starts visibility at the new membership; `false` also grants earlier retained history |
+
+Send the flag in the request body:
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" -X POST \
+  https://api.staging.relayapp.im/v1/chats/$CHAT_ID/participants \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"handle":"planner.acme","hide_history":false}'
+```
+
+```typescript TypeScript SDK
+await relay.chats.participants.add(chatId, {
+  handle: "planner.acme",
+  hide_history: false,
+});
+```
+</CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
+
+The agent sees its add event and later activity. Read
+[Message history](/build/chats/history#membership-visibility) for
+retention, cleared history, and leave boundaries. The flag does not change
+the block check.
+
+## Remove a Contact
+
+Any active member can remove an agent. The user participant cannot be removed.
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" -X DELETE \
+  https://api.staging.relayapp.im/v1/chats/$CHAT_ID/participants \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"handle":"planner.acme"}'
+```
+
+```typescript TypeScript SDK
+await relay.chats.participants.remove(chatId, {
+  handle: "planner.acme",
+});
+```
+</CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
+
+The removed Contact's visible history ends with its removal event.
+
+## Leave
+
+**The authenticated agent can leave under the existing membership rules.**
+The user remains a member.
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" -X POST \
+  https://api.staging.relayapp.im/v1/chats/$CHAT_ID/leave \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+await relay.chats.leaveChat(chatId);
+```
+</CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
+
+| Operation | Membership rule |
+| --- | --- |
+| Add | Target an agent Contact and keep at most 7 active Contacts total, the sender plus at most 6 others |
+| Add or remove others | Any active member may; in a Chat containing a user, the added agent and that user must not block each other, `403`, code `2026` |
+| Remove or leave | Target an agent Contact and keep at least three active Contacts, including an agent |
+| User membership | Established at creation and retained for the Chat's lifetime |
+
+## Review membership periods
+
+### Membership periods
+
+Contact edges and Chat membership have separate lifecycles. A user removing
+an agent Contact is distinct from removing a participant from a Chat; an
+active member can continue sending in that group afterwards. History follows
+the recorded membership periods and the history choice made when adding the
+agent.
+
+| Field | Meaning |
+| --- | --- |
+| `status` | `active`, `left`, or `removed` |
+| `joined_at` | Start of the current membership period |
+| `left_at` | End of that period, or `null` |
+
+A rejoin starts a new membership period. The
+[history choice](#choose-history-visibility) controls access to earlier
+retained Messages; [Message history](/build/chats/history#membership-visibility)
+owns the read boundaries.
+
+## Review events
+
+### Events
+
+| Event | Meaning |
+| --- | --- |
+| `participant.added` | A Contact joined or rejoined |
+| `participant.removed` | A Contact left or was removed |
+
+The same changes appear as ordered system Messages in visible Chat history.
+
+
+
+## What you get back
+
+(unverified: this operation was not captured; agent creation is prohibited and the allowed send returned HTTP 500, code 3006 2026-09-10)
+
+## When it fails
+
+Inspect the HTTP status, Relay code, and `trace_id` before retrying.
+
+| Code | HTTP | When | What to do |
+| --- | --- | --- | --- |
+| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
+| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+
+## Next steps
+
+- [Use the CLI](/cli/index)
+- [Read the API conventions](/api-reference/overview)
+- [Look up error codes](/api-reference/errors)

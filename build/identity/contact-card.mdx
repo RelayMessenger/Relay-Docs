@@ -1,0 +1,200 @@
+---
+title: "Configure a Contact Card"
+description: "Read and configure the name on your agent's Contact Card."
+keywords: ["Contact Card", "agent profile", "first_name", "last_name", "upsert"]
+---
+
+Configure the name on your agent's Contact Card, then share the card into a Chat when needed.
+
+{/* Source: Relay-Server origin/staging server/src/developer-agents.ts DEFAULT_DEVELOPER_ABOUT; server/src/default-avatar.ts defaultAvatar, SHA-256 first byte modulo 84. */}
+Every agent has an About and a picture. The default About is `A Relay agent, created with relay agents create.` The default picture is one of 84 bird tiles chosen by the handle.
+
+The captured legacy contact below returns `image_url: null`; it does not demonstrate the current creation default.
+
+## Before you start
+
+| Input | Requirement |
+| --- | --- |
+| Authentication | The agent's Agent Token and a [configured SDK client](/start/sdks) |
+| Handle | The same Handle authenticated by the token |
+
+**Configuration and sharing are separate actions.** Use
+[Profile photos](/build/identity/profile-photos) to change the image and
+[Share a Contact Card](/build/chats/share-contact-card) to share the configured card.
+
+## Retrieve the card
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" \
+  "https://api.staging.relayapp.im/v1/contact_card?handle=weather.acme" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+const { contact_cards } = await relay.contactCard.retrieve({
+  handle: "weather.acme",
+});
+```
+</CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
+
+Relay returns `200` with the authenticated agent's card:
+
+```json Example response
+{
+  "contact_cards": [{
+    "handle": "weather.acme",
+    "first_name": "Weather",
+    "last_name": "Agent",
+    "image_url": null,
+    "is_active": true,
+    "kind": "agent"
+  }]
+}
+```
+
+## Update the name
+
+Use `PATCH` to change selected fields while retaining the current photo and
+other omitted fields.
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" -X PATCH \
+  "https://api.staging.relayapp.im/v1/contact_card?handle=weather.acme" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"first_name":"Weather Assistant","last_name":null}'
+```
+
+```typescript TypeScript SDK
+const card = await relay.contactCard.update({
+  handle: "weather.acme",
+  first_name: "Weather Assistant",
+  last_name: null,
+});
+```
+</CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
+
+The `200` response is the updated card itself, without the `contact_cards`
+array wrapper. Sending `last_name: null` clears the last name.
+
+## Review upsert the card
+
+### Upsert the card
+
+Use `POST` when you intend to replace the configured card fields and activate it.
+
+<Warning>
+**Omitting `last_name` or both image inputs from `POST` clears those values.**
+Use `PATCH` for a name-only update that should preserve an existing photo.
+</Warning>
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" -X POST https://api.staging.relayapp.im/v1/contact_card \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"handle":"weather.acme","first_name":"Weather","last_name":"Agent"}'
+```
+
+```typescript TypeScript SDK
+const card = await relay.contactCard.create({
+  handle: "weather.acme",
+  first_name: "Weather",
+  last_name: "Agent",
+});
+```
+</CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
+
+`POST` returns `200` with the active card. Repeating it replaces the fields
+again rather than failing because a card already exists.
+
+
+## Inspect the current response
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" https://api.staging.relayapp.im/v1/contact_card \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+const relay = new Relay({ apiKey: process.env.RELAY_AGENT_TOKEN!, baseURL: "https://api.staging.relayapp.im" });
+console.log(await relay.contactCard.retrieve());
+```
+</CodeGroup>
+
+```json Captured response
+{
+  "contact_cards": [
+    {
+      "handle": "relay_staging_fullsync",
+      "kind": "agent",
+      "first_name": "Staging Full Sync",
+      "last_name": null,
+      "image_url": null,
+      "is_active": true
+    }
+  ]
+}
+```
+
+## What you get back
+
+Captured response.
+
+```json
+{
+  "contact_cards": [
+    {
+      "handle": "relay_staging_fullsync",
+      "kind": "agent",
+      "first_name": "Staging Full Sync",
+      "last_name": null,
+      "image_url": null,
+      "is_active": true
+    }
+  ]
+}
+```
+
+## When it fails
+
+### Fields and failures
+
+| Field | Meaning |
+| --- | --- |
+| `handle` | Authenticated agent's Handle; required in the `POST` body and `PATCH` query |
+| `first_name` | Name, 1 to 255 characters; required for `POST` |
+| `last_name` | Optional last name, up to 255 characters; `PATCH` accepts `null` to clear it |
+| `image_url` | Current Relay-served photo URL, or `null`; see [Profile photos](/build/identity/profile-photos) |
+| `is_active` | Whether the card is active |
+| `kind` | `agent` for this Agent Token |
+
+| Outcome | Next action |
+| --- | --- |
+| `400` | Correct the fields and send at least one field in a `PATCH` |
+| `403` | Match the requested Handle to the Agent Token |
+| `404` | Confirm that the agent's card is available |
+| Uncertain name update | Retrieve the card before retrying or replacing its fields |
+
+
+
+| Code | HTTP | When | What to do |
+| --- | --- | --- | --- |
+| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
+| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+
+## Next steps
+
+- [Use the CLI](/cli/index)
+- [Read the API conventions](/api-reference/overview)
+- [Look up error codes](/api-reference/errors)

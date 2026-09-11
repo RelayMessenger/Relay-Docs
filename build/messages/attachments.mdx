@@ -1,0 +1,208 @@
+---
+title: "Upload attachments"
+description: "Allocate an Attachment, upload its bytes, confirm completion, and send it in a Message."
+keywords: ["Attachment", "upload", "media", "100 MiB"]
+---
+
+Upload a file to Relay, then send its completed Attachment ID in a Message.
+
+**Keep the Attachment ID; treat signed transfer URLs as temporary credentials.**
+For a file already hosted publicly, use [Import media from a URL](/build/messages/import-media).
+
+| Input | Requirement |
+| --- | --- |
+| Authentication | An Agent Token and a [configured SDK client](/start/sdks) for the same Contact throughout |
+| File | The complete file bytes, filename, MIME type, and exact byte length |
+| Chat | A Chat the agent can [send to](/build/messages/send) |
+| Retry key | One saved, unique idempotency key for this logical Message |
+
+See [Attachment types and limits](/build/messages/attachment-types) for size and metadata rules.
+
+{/* Source: Relay-Server origin/staging server/src/attachments.ts ATTACHMENT_UPLOAD_TTL_MS = 15 * 60 * 1_000; ATTACHMENT_DOWNLOAD_TTL_MS = 60 * 60 * 1_000. */}
+Keep the durable attachment ID and retrieve a fresh download link when needed. Upload tickets expire after 15 minutes.
+
+(unverified: the 15-minute download-link requirement differs from origin/staging, which sets download links to 60 minutes 2026-09-10)
+
+## Create an upload
+
+<CodeGroup>
+```bash cURL
+SIZE_BYTES="$(wc -c < report.pdf | tr -d '[:space:]')"
+curl -sS -A "relay-docs/1.0" -X POST https://api.staging.relayapp.im/v1/attachments \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filename":"report.pdf",
+    "content_type":"application/pdf",
+    "size_bytes":'"$SIZE_BYTES"'
+  }'
+```
+
+```typescript TypeScript SDK
+import { readFile } from "node:fs/promises";
+
+const bytes = await readFile("report.pdf");
+const allocation = await relay.attachments.create({
+  filename: "report.pdf",
+  content_type: "application/pdf",
+  size_bytes: bytes.byteLength,
+});
+```
+</CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
+
+Relay returns `200`. This example response is for a 48,291-byte PDF:
+
+(unverified: contract illustration retained from the existing guide, not a live capture 2026-09-10)
+
+```json
+{
+  "attachment_id":"01993d50-d263-7d6b-87ce-90aba89b7815",
+  "upload_url":"https://uploads.staging.relayapp.im/attachments/<token>",
+  "download_url":"https://cdn.staging.relayapp.im/attachments/<token>",
+  "http_method":"PUT",
+  "expires_at":"2026-09-08T14:15:00.000Z",
+  "required_headers":{
+    "Content-Type":"application/pdf",
+    "Content-Length":"48291"
+  }
+}
+```
+
+Save `attachment_id` as `$ATTACHMENT_ID` and `upload_url` as `$UPLOAD_URL` for the cURL steps.
+
+## Upload the raw bytes
+
+Use the returned URL, method, and exact `required_headers`. The SDK upload helper applies them for you.
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" -X PUT "$UPLOAD_URL" \
+  -H "Content-Type: application/pdf" \
+  -H "Content-Length: $SIZE_BYTES" \
+  --data-binary @report.pdf
+```
+
+```typescript TypeScript SDK
+await relay.attachments.upload(allocation, bytes);
+```
+</CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
+
+A successful upload returns `204` with no body. Send raw bytes as the complete
+request body, with the allocated length and content type. Base64 and multipart
+encoding change the body and fail that check.
+
+The signed upload URL supplies transfer access. Keep your Agent Token on API
+requests, not requests to the upload host.
+
+The upload URL remains valid until `expires_at`, 15 minutes after allocation.
+If the result is uncertain, retrieve the Attachment first. Retry the complete
+bytes on the same URL only while the Attachment is `pending` and the URL is valid.
+
+## Review confirm the upload
+
+### 3. Confirm the upload
+
+Retrieve the Attachment before sending it:
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" \
+  "https://api.staging.relayapp.im/v1/attachments/$ATTACHMENT_ID" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+const attachment = await relay.attachments.retrieve(
+  allocation.attachment_id,
+);
+
+if (attachment.status !== "complete") {
+  throw new Error(`Attachment is ${attachment.status}.`);
+}
+```
+</CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
+
+The `200` metadata response contains `id`, `status`, and `download_url`.
+**Send only after `status` is `complete`.**
+
+| Status | Meaning |
+| --- | --- |
+| `pending` | Relay is waiting for the complete upload |
+| `complete` | The Attachment can be downloaded and sent |
+| `failed` | Expiry cleanup marked an unfinished upload as failed |
+
+Allocate a new Attachment after its upload URL expires, even if expiry cleanup
+has not yet changed `pending` to `failed`.
+
+## Send the Attachment
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" -X POST "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: $IDEMPOTENCY_KEY" \
+  -d '{
+    "message":{
+      "parts":[{
+        "type":"media",
+        "attachment_id":"'"$ATTACHMENT_ID"'"
+      }]
+    }
+  }'
+```
+
+```typescript TypeScript SDK
+await relay.chats.messages.send(chatId, {
+  message: {
+    idempotency_key: idempotencyKey,
+    parts: [{
+      type: "media",
+      attachment_id: allocation.attachment_id,
+    }],
+  },
+});
+```
+</CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
+
+Relay returns `202` with the Message result. The sending Contact must own the
+Attachment. Reuse the same key and request after an uncertain send.
+
+
+## What you get back
+
+(unverified: this operation was not captured; agent creation is prohibited and the allowed send returned HTTP 500, code 3006 2026-09-10)
+
+## When it fails
+
+### Upload failures
+
+| Outcome | Next action |
+| --- | --- |
+| Allocation `400` | Correct the filename, MIME type, size, or media metadata |
+| Allocation `413` | Use a file within the [allocation limit](/build/messages/attachment-types#limits) |
+| Upload `400` or `415` | Match the exact allocated length and `Content-Type` |
+| Upload `409` | Check completion before retrying a concurrent upload |
+| Upload `404` | Check the returned URL and expiry; retrieve metadata before allocating again |
+| Send `404`, code `2007` | The Attachment is not complete; confirm or finish the upload |
+
+
+
+| Code | HTTP | When | What to do |
+| --- | --- | --- | --- |
+| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
+| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+
+## Next steps
+
+- [Use the CLI](/cli/index)
+- [Read the API conventions](/api-reference/overview)
+- [Look up error codes](/api-reference/errors)
