@@ -526,9 +526,9 @@ def run(args, root=ROOT, fetch=None, get_json=github_json):
         pages["/" + path] = response_pair(canonical, busted)
         bodies[path] = busted["body"]
     versions = [pages[path]["canonical"]["headers"].get("x-served-version")
-                or pages[path]["canonical"]["headers"].get("x-version") for path in ("/", "/guides")]
+                or pages[path]["canonical"]["headers"].get("x-version") for path in ("/", "/start/quickstart")]
     if not versions[0] or versions[0] != versions[1]:
-        raise SystemExit("root and /guides are not served by the same Mintlify deployment")
+        raise SystemExit("root and /start/quickstart are not served by the same Mintlify deployment")
     authored, contract_ids = check_discovery(root, config, bodies["llms.txt"].decode(), bodies["llms-full.txt"].decode())
     install_count = check_sdk_installs(bodies["llms-full.txt"].decode(), settings["environment"])
     brand = check_brand(fetch, bodies[""], root, settings)

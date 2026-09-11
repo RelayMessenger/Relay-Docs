@@ -19,7 +19,7 @@ class HostedCacheTests(unittest.TestCase):
 
     def test_all_canonical_surfaces_are_checked_twice(self):
         self.assertEqual(
-            CANONICAL_PATHS, ("", "guides", "llms.txt", "llms-full.txt", "skill.md")
+            CANONICAL_PATHS, ("", "start/quickstart", "llms.txt", "llms-full.txt", "skill.md")
         )
         fetch, calls = self.responses()
         self.assertEqual(len(list(canonical_cache_pairs(fetch))), 5)
