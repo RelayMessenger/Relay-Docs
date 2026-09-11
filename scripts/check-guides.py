@@ -181,7 +181,11 @@ def check_13(root):
 
 
 def baseline(root):
-    return subprocess.check_output(['git', '-C', str(root), 'ls-tree', '-r', '--name-only', 'origin/staging'], text=True).splitlines()
+    # The page set before the 2026-09-10 rebuild, committed so the check needs
+    # no git ref: CI checks out shallow and has no origin/staging, and after
+    # the merge origin/staging is the rebuilt tree itself. Every path ever
+    # removed must keep its redirect; append to the file, never prune it.
+    return (root / 'scripts' / 'page-set-baseline.txt').read_text().splitlines()
 
 
 def check_14(root):
