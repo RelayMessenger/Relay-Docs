@@ -332,7 +332,7 @@ for path in mdx_paths:
                 raise SystemExit("Removed paths or flags need a Breaking change tag")
         continue
     headings = h2_headings(text)
-    if not headings or headings[-1] not in {"Next steps", "Related", "See also"}:
+    if not headings or headings[-1] not in ({"Next"} if path == root / "index.mdx" else {"Next steps", "Related", "See also"}):
         raise SystemExit(f"page must end with Next steps, Related, or See also: {path}")
 
     for block in re.findall(
@@ -340,7 +340,7 @@ for path in mdx_paths:
         text,
     ):
         if "TypeScript SDK" in block and "cURL" in block:
-            if path.relative_to(root).parts[0] == "build":
+            if path.relative_to(root).parts[0] == "build" or path == root / "index.mdx":
                 if block.index("cURL") > block.index("TypeScript SDK"):
                     raise SystemExit(f"cURL must appear before TypeScript SDK: {path.relative_to(root)}")
             elif block.index("TypeScript SDK") > block.index("cURL"):
