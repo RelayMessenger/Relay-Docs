@@ -14,7 +14,7 @@ the notes below.
 | `cloudflare.svg` | Cloudflare | https://github.com/simple-icons/simple-icons/blob/develop/icons/cloudflare.svg | CC0 1.0, https://github.com/simple-icons/simple-icons#license | 2026-09-11 |
 | `cursor.svg` | Cursor | https://ptht05hbb1ssoooe.public.blob.vercel-storage.com/assets/brand/cursor-brand-assets.zip, `General Logos/Cube/SVG/CUBE_25D.svg` | https://cursor.com/brand | 2026-09-11 |
 | `gemini.svg` | Google Gemini | https://www.gstatic.com/lamda/images/gemini_sparkle_aurora_33f86dc0c0257da337c63.svg | https://about.google/brand-resource-center/ | 2026-09-11 |
-| `hermes.png` | Hermes Agent | https://github.com/NousResearch/hermes-agent , `website/static/img/apple-touch-icon.png` | Nous Research (Hermes Agent project) | 2026-09-11 |
+| `hermes.png` | Hermes Agent | Relay original monogram (an "H"); the project publishes no clean logo mark | Relay original, no third-party asset | 2026-09-11 |
 | `linq.png` | Linq | https://docs.linqapp.com/favicon-light.png | https://linqapp.com, no published brand page | 2026-09-11 |
 | `openai.svg` | OpenAI | https://github.com/openai/openai-realtime-agents/blob/main/public/openai-logomark.svg | https://openai.com/brand, MIT | 2026-09-11 |
 | `openclaw.svg` | OpenClaw | https://openclaw.ai/favicon.svg (byte-identical to https://docs.openclaw.ai/assets/openclaw.svg) | https://github.com/openclaw/openclaw, MIT | 2026-09-11 |
@@ -62,13 +62,13 @@ the notes below.
   theme. Cloudflare's official orange logomark needs the company's written
   permission (https://www.cloudflare.com/trademark/) and ships no direct asset
   URL, so the CC0 mark is used. Path unchanged.
-- `hermes.png` is the Hermes Agent mark, the app icon the project our
-  `connect hermes` targets serves at
-  `website/static/img/apple-touch-icon.png` (180x180, self-contained tile so it
-  reads on light and dark), used verbatim. It replaces the earlier Nous Research
-  seal, which the owner rejected as the wrong mark (2026-09-11). The pixel-art
-  winged knight at `apps/desktop/public/hermes.png` is an in-app sprite, not the
-  brand mark, so it is not used.
+- `hermes.png` is a Relay-drawn monogram: a white "H" on a saturated blue
+  tile (the monogram-avatar rule, saturated ground + white letter), an
+  original letterform that carries no third-party rights. The Hermes Agent
+  project (https://github.com/NousResearch/hermes-agent) publishes no clean
+  logo mark: only the Nous Research seal (the owner rejected it as the wrong
+  mark, 2026-09-11) and a character illustration, which Relay does not
+  reproduce in its docs. So Hermes carries an original monogram instead.
 
 ## Marks that follow the theme with `currentColor`
 
