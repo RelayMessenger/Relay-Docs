@@ -1,151 +1,52 @@
 ---
-title: "Talk to your agents from your phone."
-description: "Build agents people can message."
-keywords: ["Relay", "quickstart", "coding agent", "messaging API", "mentions", "webhooks"]
+title: "Build agents people can message."
+sidebarTitle: "Introduction"
+description: "Connect the agent you build with the people who use it."
+keywords: ["Relay", "agents", "messaging API", "coding agent", "webhooks"]
 ---
 
 ## Start here
 
-Connect your coding agent in three steps: install Relay, connect it, send it a message from your phone. Your agent runs on your computer or your backend. You message it in Relay, and it replies in the same chat.
+Relay is a messaging app. People message agents in it the way they message friends. You give an agent a handle, and it answers in the chat.
 
 <CardGroup cols={2}>
-  <Card title="Connect your coding agent" href="#connect-your-coding-agent" icon="terminal">Give the coding agent you already use a place to receive messages.</Card>
-  <Card title="Build on the API" href="#or-build-on-the-api" icon="code">Send messages from your own backend with an Agent Token.</Card>
+  <Card title="Connect a coding agent" href="/start/quickstart" icon="terminal">Claude Code, Codex, Cursor and seven more. One command.</Card>
+  <Card title="Build on the API" href="/start/build-on-the-api" icon="code">Your own backend, an Agent Token, the REST API.</Card>
 </CardGroup>
 
+## Connect a coding agent
 
-## What you need
-
-Install Relay on your phone from [relayapp.im](https://relayapp.im). Have a coding agent installed on your computer, and Node.js 22.22.3 or newer. Keep your computer and the agent running while you message it. Check your Node.js version with this command:
-
-```bash
-node --version
-```
-
-The coding-agent path creates an agent and saves its token privately on your computer. If you build on the API instead, get an [Agent Token](/live/authentication) first.
-
-
-## Connect your coding agent
-
-Run the connect command for the product you use. Replace `claude-code` with `codex`, `cursor`, `opencode`, `cline`, `vscode`, `gemini-cli`, `claude-desktop`, `hermes`, or `openclaw`. Relay creates a new agent, saves its token privately on this computer, and adds itself to the product's configuration. It prints the plan and asks before it changes anything.
+Run this for the coding agent you use:
 
 ```bash
-npx relaymessenger@staging connect claude-code
+npx relaymessenger connect claude-code
 ```
 
-Add `--dry-run` to read the plan without applying it. When connect finishes, open or restart the product as the plan directs. Each product's page under [Integrations](/integrations/claude-code) lists its startup steps and what it supports.
+Relay creates an agent, writes the connection into your coding agent, and prints the handle. Open Relay on your phone and message the handle. The agent answers in the chat. Every coding agent has its own page under [Integrations](/integrations/claude-code).
 
+## Build on the API
 
-## Message it from your phone
-
-Watch the agent's chat from your terminal while you send the first message. Replace `YOUR_AGENT_HANDLE` with the handle connect printed. The view prints a QR code and a share link; open the link on your phone, or scan the code, and send `hello` in Relay.
+Create an agent in the [Console](https://console.staging.relayapp.im) and copy its Agent Token. Then send a message:
 
 ```bash
-npx relaymessenger@staging watch YOUR_AGENT_HANDLE
+curl -X POST https://api.staging.relayapp.im/v1/messages \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"to":["alice"],"message":{"parts":[{"type":"text","value":"Hello from my agent."}]}}'
 ```
 
-The watch view only observes. Your coding agent must stay running to receive the message and reply. Press `q` or `Ctrl-C` to stop watching; the agent keeps running.
-
-## Or build on the API
-
-Send and read messages from your own backend with an Agent Token, in TypeScript or with cURL. [Build on the API](/start/build-on-the-api) walks through the SDK setup, the first send, a follow-up, and reading history.
-
-## Group chats and mentions
-
-A group chat holds one person and up to six agents. Mention an agent by handle when you address it: send the text with `POST /v1/chats/{chatId}/messages`, set `mention` to the agent's handle, and set `mention_range` to the position of its name in the text. The range counts UTF-16 units, so most characters count as 1 and some emoji count as 2. Text parts in returned messages carry a `mentions` array with `id`, `handle`, `is_me`, and `range`, or `mentions: null` when nothing is mentioned. Store ids, not handles, because a handle can change. Branch on `is_me` to learn whether the mention addresses your agent. [Mentions](/concepts/messages/mentions) shows a full request and its response, and [Group chats](/concepts/chats/group-chats) covers the recipient rules.
+The response is the message Relay stored. Read the chat, reply, react and send attachments with the same token. The [API quickstart](/start/build-on-the-api) walks through each call.
 
 ## Receive events
 
-Give Relay an HTTPS endpoint for `message.received` events: create a subscription with `POST /v1/webhook-subscriptions`, passing your `target_url` and the `subscribed_events` you want. Relay sends every event to that address as an HTTP POST with a signed body. The response carries the subscription and its `signing_secret`. Relay returns the secret only in this response, so save it as `RELAY_WEBHOOK_SECRET` now; every later request for the subscription omits it. [Create a subscription](/events/webhooks/subscriptions) walks through the request, and [the reference](/api-reference/webhooks/create-a-new-webhook-subscription) lists every field.
+Subscribe a webhook, verify the signature, handle the event. Or hold a WebSocket open and get every event as it happens.
 
-Verify the raw body before you parse it. Write each verified event to your own store once, then acknowledge it. Relay waits ten seconds for your response and retries when it gets none, so do slow work after the write, not before. In this receiver `acceptOnce` is your durable inbox operation, not an SDK method:
-
-```typescript
-import Relay, { type RelayWebhookEvent } from "@relaymessenger/sdk";
-
-const receiver = new Relay({
-  apiKey: process.env.RELAY_AGENT_TOKEN!,
-  baseURL: "https://api.staging.relayapp.im",
-  webhookSecret: process.env.RELAY_WEBHOOK_SECRET!,
-});
-
-export async function receive(
-  request: Request,
-  acceptOnce: (event: RelayWebhookEvent) => Promise<void>,
-): Promise<Response> {
-  let event: RelayWebhookEvent;
-  try {
-    event = receiver.webhooks.unwrap(await request.text(), {
-      headers: request.headers,
-    });
-  } catch {
-    return new Response("Webhook rejected", { status: 401 });
-  }
-  try {
-    await acceptOnce(event);
-  } catch {
-    return new Response("Inbox unavailable", { status: 503 });
-  }
-  return new Response(null, { status: 204 });
-}
-```
-
-Continue with [webhook verification](/events/webhooks) for the signature rules, or [WebSocket events](/events/websocket/observe-events) if your agent cannot expose an HTTPS endpoint.
-
-## Your agent’s identity
-
-Every agent has a name, an About line, a picture, a handle, a share link, and a QR code. The default About is `A Relay agent, created with relay agents create.` The default picture is a bird tile chosen by the handle. Read your agent's own card with this request:
-
-<CodeGroup>
-```bash cURL
-curl -sS -A "relay-docs/1.0" \
-  "https://api.staging.relayapp.im/v1/contact_card?handle=relay_staging_fullsync" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-```
-
-```typescript TypeScript SDK
-const card = await relay.contactCard.retrieve({
-  handle: "relay_staging_fullsync",
-});
-console.log(card);
-```
-</CodeGroup>
-
-The response lists the matching cards. This agent was created before the bird default, so its `image_url` is `null`; a new agent gets a picture address here.
-
-```json captured-output
-{
-  "contact_cards": [
-    {
-      "handle": "relay_staging_fullsync",
-      "kind": "agent",
-      "first_name": "Staging Full Sync",
-      "last_name": null,
-      "image_url": null,
-      "is_active": true
-    }
-  ]
-}
-```
-
-Change the name in [Contact Card settings](/concepts/identity/contact-card), the picture in [profile photos](/concepts/identity/profile-photos), and read the share link and QR code from the CLI watch view.
-
-## Going live
-
-Handle errors by code, keep the trace ID for support, and reuse the message's idempotency key on every retry of the same message. A rate limit returns HTTP 429 with error code `2008` and a `retry_after` value in seconds; wait that long, then retry. A message holds at most 100 parts, and a text part at most 10,000 UTF-16 units. Read [rate limits](/live/rate-limits) and [error handling](/live/errors) before you deploy.
+- [Webhooks](/webhooks/index)
+- [Events](/events/index)
+- [WebSocket](/websocket/observe-events)
 
 ## Next
 
-Keep these two lines with your project so your coding agent reads the same documentation you do. The index links every task and every API reference page.
-
-```text
-Read https://docs.staging.relayapp.im/llms.txt before changing this Relay integration.
-Use the linked reference for the endpoint you need.
-```
-
-<CardGroup cols={2}>
-  <Card title="API reference" href="/api-reference/overview" icon="code">Request fields, response shapes, and authentication.</Card>
-  <Card title="Agent instructions" href="/integrations/agent-prompt" icon="terminal">Give your coding agent the full setup instructions.</Card>
-  <Card title="Events" href="/events/webhooks/subscriptions" icon="bolt">Subscribe to messages and other changes.</Card>
-  <Card title="CLI reference" href="/cli/index" icon="terminal">Manage connections and inspect your agent.</Card>
-</CardGroup>
+- [API reference](/api-reference/overview)
+- [CLI](/cli/index)
+- [Changelog](/changelog)

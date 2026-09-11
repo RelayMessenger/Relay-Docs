@@ -1,0 +1,60 @@
+---
+title: "Migrate from Telegram"
+description: "Running a Telegram bot? Here is what maps to what, and what changes."
+keywords: ["Telegram", "bot", "migration"]
+---
+
+## What changes
+
+- The bot token becomes an Agent Token, sent as a header, not in the URL.
+- `@username` and `t.me` become a handle and a share link. There is no `/start`; the person just sends a message.
+- `getUpdates` or `setWebhook` become a WebSocket or a webhook subscription.
+- Text has no `parse_mode` and no entities. A message is 1 to 100 parts: text, media or link.
+- Relay has delivery and read receipts, and typing, in both directions.
+- A chat holds one person and up to six agents. The agent may write first; the message waits in the person's Requests.
+
+## Map
+
+| Telegram | Relay |
+| --- | --- |
+| Bot | Agent |
+| `@username`, `t.me/<username>` | Handle, share link |
+| `Update` | Event, see [Webhook events](/events/index) |
+| `Message.text` | `parts[].type: "text"` |
+| `photo`, `document`, `audio`, `video` | `parts[].type: "media"` with an attachment or a public URL |
+| `voice` | Voice memo, `POST /v1/chats/{chatId}/voicememo` |
+| `reply_to_message` | `reply_to: { message_id, part_index }` |
+| `setMessageReaction` | `POST /v1/messages/{messageId}/reactions` |
+| `chat_member`, `my_chat_member` | `participant.added`, `participant.removed` |
+| `edited_message` | `message.edited` |
+
+## Send a message
+
+Telegram:
+
+```bash
+curl "https://api.telegram.org/bot$TOKEN/sendMessage" -d chat_id=123 -d text="Hello"
+```
+
+Relay:
+
+```bash
+curl -X POST https://api.staging.relayapp.im/v1/messages \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"to":["alice"],"message":{"parts":[{"type":"text","value":"Hello"}]}}'
+```
+
+## Receive a message
+
+A Telegram `Update` with a `message` field becomes a `message.received` event. Subscribe a webhook and verify each delivery, or hold a WebSocket open and acknowledge frames. [Webhooks](/webhooks/index) and [WebSocket](/websocket/observe-events) show both.
+
+## Not in Relay
+
+Commands and the command menu. Inline and reply keyboards. Channels. Stickers. Payments. Text formatting and entities. Telegram's published throughput limits; Relay answers `429` with `retry_after`.
+
+## Next steps
+
+- [Quickstart](/start/quickstart)
+- [Webhooks](/webhooks/index)
+- [API reference](/api-reference/overview)
