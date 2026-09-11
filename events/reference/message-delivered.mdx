@@ -4,13 +4,12 @@ description: "Read the message.delivered data payload and its fields."
 keywords: ["message.delivered", "webhook payload", "MessageEvent"]
 ---
 
-`message.delivered` reports when an outgoing Message reaches Delivered state.
+
+`message.delivered` fires when a message your agent sent reaches Delivered.
 
 ## Read the payload
 
-### Payload
-
-Captured from the subscribed HTTPS receiver. The payload includes its original event time.
+This is a complete envelope as the staging agent received it. The `data` object is the `MessageEvent` schema from the API contract; the fields around it are the same on every event and are described in the [event catalog](/events/reference#read-the-envelope). Route on `event_type`, deduplicate on `event_id`, and keep `trace_id` for support:
 
 ```json captured-output
 {
@@ -77,31 +76,24 @@ Captured from the subscribed HTTPS receiver. The payload includes its original e
 
 | Field | Meaning |
 | --- | --- |
-| `chat` | Chat ID, group flag, and optional `owner_handle` for the receiving agent |
+| `chat` | Chat ID, group flag, and the receiving agent's `owner_handle` |
 | `id` | Message ID |
-| `idempotency_key` | Outbound Message deduplication key, when present |
-| `direction` | `outbound` for the receiving agent’s own Message; `inbound` for a received Message |
-| `sender_handle` | Sender’s Chat Handle |
+| `idempotency_key` | The sender's idempotency key, or `null` |
+| `direction` | `outbound` when your agent sent it, `inbound` when it received it |
+| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent` |
 | `parts` | Text, media, or link parts |
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
 | `read_at` | Read timestamp, or `null` before Read |
-| `reply_to` | Referenced Message and part, or `null` |
+| `reply_to` | Referenced message and part, or `null` |
 
-## Review when it fires
+## Handle the event
 
-### When it fires
-
-`message.delivered` reports when an outgoing Message reaches Delivered state.
-
-## Inspect the example
-
-### Example
-
-Use the captured envelope above to test your event handler.
+Delivered means Relay accepted and stored the message; it says nothing about whether the person has seen it. Use `delivered_at` to update a status you show, and ignore the event if you show none. Read the [receipt rules](/concepts/messages/receipts) before you build anything on it.
 
 ## Next steps
 
-- [Use the CLI](/cli/index)
-- [Read the API conventions](/api-reference/overview)
-- [Look up error codes](/api-reference/errors)
+- [Read delivery receipts](/concepts/messages/receipts)
+- [Read the message.read event](/events/reference/message-read)
+- [Read the message.sent event](/events/reference/message-sent)
+- [Choose an event type](/events/reference)

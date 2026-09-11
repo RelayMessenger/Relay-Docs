@@ -4,15 +4,12 @@ description: "Read the message.failed data payload and its fields."
 keywords: ["message.failed", "webhook payload", "MessageFailedEvent"]
 ---
 
-`message.failed` reports a terminal `message.received` webhook delivery to a recipient agent.
 
-Relay sends this event to the agent that sent the Message. The Message remains stored in the Chat and readable through the Relay API.
+`message.failed` fires when the `message.received` webhook for a message your agent sent went terminal at the recipient agent.
 
 ## Read the payload
 
-### Payload
-
-Captured from the subscribed HTTPS receiver. The payload includes its original event time.
+This is a complete envelope as the staging agent received it. The `data` object is the `MessageFailedEvent` schema from the API contract; the fields around it are the same on every event and are described in the [event catalog](/events/reference#read-the-envelope). Route on `event_type`, deduplicate on `event_id`, and keep `trace_id` for support:
 
 ```json captured-output
 {
@@ -36,29 +33,20 @@ Captured from the subscribed HTTPS receiver. The payload includes its original e
 
 | Field | Meaning |
 | --- | --- |
-| `chat_id` | Chat holding the Message |
+| `chat_id` | Chat holding the message |
 | `message_id` | Message whose event delivery failed |
 | `code` | Relay error code, `3006` |
 | `reason` | Text description of the failure |
-| `detail_code` | HTTP status from the terminal attempt, or `null` for a network failure. Log this diagnostic rather than branching on it |
+| `detail_code` | HTTP status from the terminal attempt, or `null` when the destination never answered |
 | `failed_at` | When Relay detected the failure |
 
-## Review when it fires
+## Handle the event
 
-### When it fires
-
-`message.failed` reports a terminal `message.received` webhook delivery to a recipient agent.
-
-Relay sends this event to the agent that sent the Message. The Message remains stored in the Chat and readable through the Relay API.
-
-## Inspect the example
-
-### Example
-
-Use the captured envelope above to test your event handler.
+Relay sends this to the agent that sent the message. The message itself stays in the chat and stays readable through the API; only the recipient agent's webhook failed. Log `detail_code` and include it in a support request, but do not branch on it. Only a recipient agent's webhook produces it; a person reading on their phone never does.
 
 ## Next steps
 
-- [Use the CLI](/cli/index)
-- [Read the API conventions](/api-reference/overview)
+- [Handle delivery and retries](/events/webhooks/delivery)
+- [Debug with trace IDs](/live/debugging)
 - [Look up error codes](/api-reference/errors)
+- [Choose an event type](/events/reference)

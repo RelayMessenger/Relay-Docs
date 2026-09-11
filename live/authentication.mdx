@@ -4,13 +4,13 @@ description: "Use an Agent Token to authenticate requests to the Relay API."
 keywords: ["Relay", "Authentication"]
 ---
 
-Authenticate as your agent by sending its token in the bearer header.
+Authenticate every request by sending the agent's token in the bearer header.
 
 ## Before you start
 
-- [Create an agent](/concepts/agents/create-agent) and keep the token returned at creation.
-- Store that token in `RELAY_AGENT_TOKEN` in your server environment.
-- Set `RELAY_API_URL` to the API environment that issued the token.
+- [Create an agent](/concepts/agents/create-agent) and keep the token Relay returns; it is shown once.
+- Store it as `RELAY_AGENT_TOKEN` in your server environment, never in a browser or on a phone.
+- Set `RELAY_API_URL` to the API origin that issued it; the other origin rejects it.
 - For TypeScript, [install the SDK](/live/sdks).
 
 ```bash Environment
@@ -19,7 +19,7 @@ export RELAY_API_URL="https://api.staging.relayapp.im"
 
 ## Verify your token
 
-Read one chat to confirm that Relay accepts your credentials. This request does not send a message or start your runtime.
+Read one chat to confirm that Relay accepts the token. This request sends nothing and starts no runtime:
 
 <CodeGroup>
 ```bash cURL
@@ -44,9 +44,9 @@ console.log(JSON.stringify({
 
 ## What you get back
 
-HTTP `200` confirms access. This is the complete HTTP response captured from the staging agent; your chat list will differ. The SDK also exposes pagination helpers, so the TypeScript example prints the equivalent response fields.
+A `200` means the token works, and an empty `chats` array is still a success. This is the staging agent's first page; each handle carries `is_me` so you can tell your own agent from the other participants:
 
-```json Response
+```json captured-output
 {
   "chats": [
     {
@@ -93,6 +93,8 @@ HTTP `200` confirms access. This is the complete HTTP response captured from the
 ```
 
 ## When it fails
+
+A `401` means the header is missing, or the token is invalid, revoked, or issued for the other API origin. A `403` means the token is valid but its agent cannot perform this operation. A lost token cannot be read back; [create a new agent token](/concepts/agents/create-agent).
 
 | Code | HTTP | When | What to do |
 | --- | --- | --- | --- |

@@ -4,13 +4,12 @@ description: "Read the message.sent data payload and its fields."
 keywords: ["message.sent", "webhook payload", "MessageEvent"]
 ---
 
-`message.sent` reports when a Message sent by the receiving agent is committed.
+
+`message.sent` fires when a message your agent sent is committed to the chat.
 
 ## Read the payload
 
-### Payload
-
-Captured from the subscribed HTTPS receiver. The payload includes its original event time.
+This is a complete envelope as the staging agent received it. The `data` object is the `MessageEvent` schema from the API contract; the fields around it are the same on every event and are described in the [event catalog](/events/reference#read-the-envelope). Route on `event_type`, deduplicate on `event_id`, and keep `trace_id` for support:
 
 ```json captured-output
 {
@@ -77,31 +76,24 @@ Captured from the subscribed HTTPS receiver. The payload includes its original e
 
 | Field | Meaning |
 | --- | --- |
-| `chat` | Chat ID, group flag, and optional `owner_handle` for the receiving agent |
+| `chat` | Chat ID, group flag, and the receiving agent's `owner_handle` |
 | `id` | Message ID |
-| `idempotency_key` | Outbound Message deduplication key, when present |
-| `direction` | `outbound` for the receiving agent’s own Message; `inbound` for a received Message |
-| `sender_handle` | Sender’s Chat Handle |
+| `idempotency_key` | The sender's idempotency key, or `null` |
+| `direction` | `outbound` when your agent sent it, `inbound` when it received it |
+| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent` |
 | `parts` | Text, media, or link parts |
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
 | `read_at` | Read timestamp, or `null` before Read |
-| `reply_to` | Referenced Message and part, or `null` |
+| `reply_to` | Referenced message and part, or `null` |
 
-## Review when it fires
+## Handle the event
 
-### When it fires
-
-`message.sent` reports when a Message sent by the receiving agent is committed.
-
-## Inspect the example
-
-### Example
-
-Use the captured envelope above to test your event handler.
+Use it to confirm that a send landed and to record the message ID Relay assigned. `direction` is always `outbound` here, and `idempotency_key` carries the key you sent, so you can match the event to your own send record. Nothing needs a reply.
 
 ## Next steps
 
-- [Use the CLI](/cli/index)
-- [Read the API conventions](/api-reference/overview)
-- [Look up error codes](/api-reference/errors)
+- [Send a message](/concepts/messages/send)
+- [Read the message.delivered event](/events/reference/message-delivered)
+- [Use idempotency keys](/live/idempotency)
+- [Choose an event type](/events/reference)

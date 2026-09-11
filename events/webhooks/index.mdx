@@ -5,17 +5,17 @@ description: "Accept a signed webhook into your durable inbox and return a succe
 keywords: ["webhook receiver", "durable inbox", "event_id", "receive events"]
 ---
 
-Receive Relay events at your HTTPS endpoint, commit them durably, and acknowledge before running your agent’s work.
+Receive Relay events at your HTTPS endpoint in three steps: verify the signature, commit the event, and answer `2xx`.
 
 ## Before you start
 
 - [Create a subscription](/events/webhooks/subscriptions) for the events you need.
 - Load its signing secret as `RELAY_WEBHOOK_SECRET` in your backend.
-- Provide a durable inbox with a unique `event_id` and a worker that processes accepted events.
+- Give your inbox a unique constraint on `event_id`, and a worker that reads from it.
 
 ## Receive and acknowledge
 
-**Commit the event before returning `2xx`.** Mount this handler on your subscription’s POST route; `acceptOnce` is your database operation, which resolves after inserting the event or confirming an already-committed duplicate.
+Commit the event before you return `2xx`. Mount this handler on the POST route your subscription targets. `acceptOnce` is your own database write; it resolves after inserting the event, or after finding the same ID already committed:
 
 ```typescript TypeScript SDK
 import Relay, { type RelayWebhookEvent } from "@relaymessenger/sdk";
@@ -46,33 +46,21 @@ export async function receive(
 }
 ```
 
-The SDK [verifies the raw body before parsing](/events/webhooks/verify-signatures). After acceptance, your worker handles the event and any replies without scheduling a duplicate twice.
+The SDK [verifies the raw body](/events/webhooks/verify-signatures) before it parses anything. Your worker then reads the inbox, runs the model or tools, and sends any reply. A duplicate returns the existing row, so the same work never runs twice.
 
 | Handler result | Response |
 | --- | --- |
-| New event committed or duplicate already committed | `204`, within the 10-second response window |
-| Verification or parsing rejected | `401` |
-| Durable acceptance failed | `503`, allowing Relay to retry |
-
-See [delivery and retries](/events/webhooks/delivery) for transport outcomes and recovery.
-
-
-
-## What you get back
-
-(unverified: this operation was not captured; agent creation is prohibited and the allowed send returned HTTP 500, code 3006 2026-09-10)
+| New event committed, or duplicate already committed | `204` within the 10-second window |
+| Signature or JSON rejected | `401` |
+| Inbox write failed | `503`, so Relay retries |
 
 ## When it fails
 
-Inspect the HTTP status, Relay code, and `trace_id` before retrying.
-
-| Code | HTTP | When | What to do |
-| --- | --- | --- | --- |
-| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
-| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+Answer `401` when verification fails and store nothing; Relay treats it as terminal and stops retrying. Answer `503` when your inbox is down, and Relay retries with backoff for up to 10 attempts. If your success response never reached Relay, the same event arrives again and your unique constraint absorbs it; read [delivery and retries](/events/webhooks/delivery) for the full policy.
 
 ## Next steps
 
-- [Use the CLI](/cli/index)
-- [Read the API conventions](/api-reference/overview)
-- [Look up error codes](/api-reference/errors)
+- [Manage subscriptions](/events/webhooks/subscriptions)
+- [Verify signatures](/events/webhooks/verify-signatures)
+- [Handle delivery and retries](/events/webhooks/delivery)
+- [Choose an event type](/events/reference)

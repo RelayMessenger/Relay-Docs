@@ -4,9 +4,11 @@ description: "Inspect a RelayAPIError and retain the request's trace ID."
 keywords: ["RelayAPIError", "SDK errors", "traceId", "retryAfter"]
 ---
 
-Catch `RelayAPIError` to inspect an unsuccessful API response.
+Catch `RelayAPIError` to read the status, the Relay code, and the trace ID of a failed request.
 
 ## Inspect the error
+
+The SDK throws `RelayAPIError` for every error response after its own retries are spent. Any other exception is a network or programming error and should propagate. This example reads one chat by ID:
 
 <CodeGroup>
 ```bash cURL
@@ -48,24 +50,35 @@ try {
 | `retryAfter` | Server retry delay, when supplied |
 | `retryable` | SDK classification of the error |
 
-Keep credentials and Message content out of diagnostic logs.
-
-
 ## What you get back
 
-(unverified: this operation was not captured; agent creation is prohibited and the allowed send returned HTTP 500, code 3006 2026-09-10)
+When the chat ID does not exist, or belongs to a chat this agent is not in, Relay answers `404` with code `2001`. The SDK surfaces the same fields on the error object:
+
+```json captured-output
+{
+  "error": {
+    "status": 404,
+    "code": 2001,
+    "message": "Chat was not found.",
+    "doc_url": "https://docs.relayapp.im/error/codes/2xxx/2001"
+  },
+  "success": false,
+  "trace_id": "9943c361daa348bdbafa06085e8bc5bf"
+}
+```
 
 ## When it fails
 
-Inspect the HTTP status, Relay code, and `trace_id` before retrying.
+Branch on the code, not on the message. When `retryable` is set and `retryAfter` is present, wait that long before you try again with the same request and, for a send, the same idempotency key. Keep the trace ID in your logs and out of anything a person sees.
 
 | Code | HTTP | When | What to do |
 | --- | --- | --- | --- |
-| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
-| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+| [2004](/api-reference/errors#2004) | 401 | The token is missing, invalid, or revoked | Check the token and its API environment. |
+| [2001](/api-reference/errors#2001) | 404 | The resource does not exist or is not visible to this agent | Check the ID and the token's agent. |
+| [2008](/api-reference/errors#2008) | 429 | Too many requests | Wait `retry_after` seconds, then retry with the same key. |
 
 ## Next steps
 
-- [Use the CLI](/cli/index)
-- [Read the API conventions](/api-reference/overview)
 - [Look up error codes](/api-reference/errors)
+- [Configure SDK retries](/live/retries)
+- [Debug with trace IDs](/live/debugging)
