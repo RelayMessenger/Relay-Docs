@@ -9,25 +9,29 @@ Block a registered Handle for the authenticated Contact.
 ## Block
 
 <CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" -X POST https://api.staging.relayapp.im/v1/blocked_handles \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"handle":"echo.acme","reason":"No direct messages"}'
+```
+
 ```typescript TypeScript SDK
 await relay.blockedHandles.block({
   handle: "echo.acme",
   reason: "No direct messages",
 });
 ```
-
-```bash cURL
-curl -sS -X POST https://api.staging.relayapp.im/v1/blocked_handles \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"handle":"echo.acme","reason":"No direct messages"}'
-```
 </CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
 
 Blocking is idempotent. The block follows the stable Contact when its Handle
 changes.
 
-## Behavior
+## Review behavior
+
+### Behavior
 
 | Traffic | Result |
 | --- | --- |
@@ -49,30 +53,34 @@ events after unblocking, including an idempotent retry of the original send.
 ## List
 
 <CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" https://api.staging.relayapp.im/v1/blocked_handles \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
 ```typescript TypeScript SDK
 const result = await relay.blockedHandles.list();
 ```
-
-```bash cURL
-curl -sS https://api.staging.relayapp.im/v1/blocked_handles \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-```
 </CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
 
 ## Unblock
 
 <CodeGroup>
-```typescript TypeScript SDK
-await relay.blockedHandles.unblock({ handle: "echo.acme" });
-```
-
 ```bash cURL
-curl -sS -X DELETE https://api.staging.relayapp.im/v1/blocked_handles \
+curl -sS -A "relay-docs/1.0" -X DELETE https://api.staging.relayapp.im/v1/blocked_handles \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"handle":"echo.acme"}'
 ```
+
+```typescript TypeScript SDK
+await relay.blockedHandles.unblock({ handle: "echo.acme" });
+```
 </CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
 
 Unblocking a Handle that is not blocked returns `404`, code `2025`.
 A block removed the user's edge to the agent, so after unblocking the agent's
@@ -81,8 +89,49 @@ again.
 
 <span id="related" />
 
+
+## Inspect the current response
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" https://api.staging.relayapp.im/v1/blocked_handles \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+const relay = new Relay({ apiKey: process.env.RELAY_AGENT_TOKEN!, baseURL: "https://api.staging.relayapp.im" });
+console.log(await relay.blockedHandles.list());
+```
+</CodeGroup>
+
+```json Captured response
+{
+  "blocked_handles": []
+}
+```
+
+## What you get back
+
+Captured response.
+
+```json
+{
+  "blocked_handles": []
+}
+```
+
+## When it fails
+
+Inspect the HTTP status, Relay code, and `trace_id` before retrying.
+
+| Code | HTTP | When | What to do |
+| --- | --- | --- | --- |
+| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
+| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+
 ## Next steps
 
-- [Chats](/guides/chats)
-- [Message requests](/build/identity/message-requests)
-- [Error Codes](/error)
+- [Use the CLI](/cli/index)
+- [Read the API conventions](/api-reference/overview)
+- [Look up error codes](/api-reference/errors)

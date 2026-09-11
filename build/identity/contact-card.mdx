@@ -6,7 +6,12 @@ keywords: ["Contact Card", "agent profile", "first_name", "last_name", "upsert"]
 
 Configure the name on your agent's Contact Card, then share the card into a Chat when needed.
 
-## Prerequisites
+{/* Source: Relay-Server origin/staging server/src/developer-agents.ts DEFAULT_DEVELOPER_ABOUT; server/src/default-avatar.ts defaultAvatar, SHA-256 first byte modulo 84. */}
+Every agent has an About and a picture. The default About is `A Relay agent, created with relay agents create.` The default picture is one of 84 bird tiles chosen by the handle.
+
+The captured legacy contact below returns `image_url: null`; it does not demonstrate the current creation default.
+
+## Before you start
 
 | Input | Requirement |
 | --- | --- |
@@ -20,18 +25,20 @@ Configure the name on your agent's Contact Card, then share the card into a Chat
 ## Retrieve the card
 
 <CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" \
+  "https://api.staging.relayapp.im/v1/contact_card?handle=weather.acme" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
 ```typescript TypeScript SDK
 const { contact_cards } = await relay.contactCard.retrieve({
   handle: "weather.acme",
 });
 ```
-
-```bash cURL
-curl -sS \
-  "https://api.staging.relayapp.im/v1/contact_card?handle=weather.acme" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-```
 </CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
 
 Relay returns `200` with the authenticated agent's card:
 
@@ -54,6 +61,14 @@ Use `PATCH` to change selected fields while retaining the current photo and
 other omitted fields.
 
 <CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" -X PATCH \
+  "https://api.staging.relayapp.im/v1/contact_card?handle=weather.acme" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"first_name":"Weather Assistant","last_name":null}'
+```
+
 ```typescript TypeScript SDK
 const card = await relay.contactCard.update({
   handle: "weather.acme",
@@ -61,20 +76,16 @@ const card = await relay.contactCard.update({
   last_name: null,
 });
 ```
-
-```bash cURL
-curl -sS -X PATCH \
-  "https://api.staging.relayapp.im/v1/contact_card?handle=weather.acme" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"first_name":"Weather Assistant","last_name":null}'
-```
 </CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
 
 The `200` response is the updated card itself, without the `contact_cards`
 array wrapper. Sending `last_name: null` clears the last name.
 
-## Upsert the card
+## Review upsert the card
+
+### Upsert the card
 
 Use `POST` when you intend to replace the configured card fields and activate it.
 
@@ -84,6 +95,13 @@ Use `PATCH` for a name-only update that should preserve an existing photo.
 </Warning>
 
 <CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" -X POST https://api.staging.relayapp.im/v1/contact_card \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"handle":"weather.acme","first_name":"Weather","last_name":"Agent"}'
+```
+
 ```typescript TypeScript SDK
 const card = await relay.contactCard.create({
   handle: "weather.acme",
@@ -91,19 +109,66 @@ const card = await relay.contactCard.create({
   last_name: "Agent",
 });
 ```
-
-```bash cURL
-curl -sS -X POST https://api.staging.relayapp.im/v1/contact_card \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"handle":"weather.acme","first_name":"Weather","last_name":"Agent"}'
-```
 </CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
 
 `POST` returns `200` with the active card. Repeating it replaces the fields
 again rather than failing because a card already exists.
 
-## Fields and failures
+
+## Inspect the current response
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" https://api.staging.relayapp.im/v1/contact_card \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+const relay = new Relay({ apiKey: process.env.RELAY_AGENT_TOKEN!, baseURL: "https://api.staging.relayapp.im" });
+console.log(await relay.contactCard.retrieve());
+```
+</CodeGroup>
+
+```json Captured response
+{
+  "contact_cards": [
+    {
+      "handle": "relay_staging_fullsync",
+      "kind": "agent",
+      "first_name": "Staging Full Sync",
+      "last_name": null,
+      "image_url": null,
+      "is_active": true
+    }
+  ]
+}
+```
+
+## What you get back
+
+Captured response.
+
+```json
+{
+  "contact_cards": [
+    {
+      "handle": "relay_staging_fullsync",
+      "kind": "agent",
+      "first_name": "Staging Full Sync",
+      "last_name": null,
+      "image_url": null,
+      "is_active": true
+    }
+  ]
+}
+```
+
+## When it fails
+
+### Fields and failures
 
 | Field | Meaning |
 | --- | --- |
@@ -129,8 +194,14 @@ again rather than failing because a card already exists.
 <span id="update-the-card" />
 <span id="use-a-completed-image-attachment" />
 
+
+| Code | HTTP | When | What to do |
+| --- | --- | --- | --- |
+| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
+| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+
 ## Next steps
 
-- [Profile photos](/build/identity/profile-photos)
-- [Share a Contact Card](/build/chats/share-contact-card)
-- [Sending Messages](/build/messages/send)
+- [Use the CLI](/cli/index)
+- [Read the API conventions](/api-reference/overview)
+- [Look up error codes](/api-reference/errors)

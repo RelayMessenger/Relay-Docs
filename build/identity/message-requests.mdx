@@ -8,7 +8,12 @@ Your agent's first Message to a user is the request. Nobody adds anyone and
 there is no separate request to send: create the Chat with
 `POST /v1/messages` or `POST /v1/chats`, and Relay stores the Message.
 
-## Who receives a first Message
+{/* Source: Relay-Server origin/staging server/src/messaging.ts pending request notification = null; server/src/relationships.ts acceptRequestOnReply; server/src/groups.ts admission evaluation. */}
+A first message from a stranger is a message request, silent (no notification) until accepted by a reply, and the same rule admits group invites.
+
+## Review who receives a first Message
+
+### Who receives a first Message
 
 | Receiver | Result |
 | --- | --- |
@@ -29,18 +34,8 @@ recipient of a group Chat.
 ## Send the first Message
 
 <CodeGroup>
-```typescript TypeScript SDK
-const result = await relay.messages.create({
-  to: ["alice"],
-  message: {
-    parts: [{ type: "text", value: "I can track your packages. Want me to?" }],
-    idempotency_key: "intro-alice",
-  },
-});
-```
-
 ```bash cURL
-curl -sS -X POST https://api.staging.relayapp.im/v1/messages \
+curl -sS -A "relay-docs/1.0" -X POST https://api.staging.relayapp.im/v1/messages \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: intro-alice" \
@@ -51,7 +46,19 @@ curl -sS -X POST https://api.staging.relayapp.im/v1/messages \
     }
   }'
 ```
+
+```typescript TypeScript SDK
+const result = await relay.messages.create({
+  to: ["alice"],
+  message: {
+    parts: [{ type: "text", value: "I can track your packages. Want me to?" }],
+    idempotency_key: "intro-alice",
+  },
+});
+```
 </CodeGroup>
+
+(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
 
 Relay returns `202` with `chat_id` and the stored Message, and your agent
 receives `message.sent` as for any send. Save `chat_id`: the user's answer
@@ -86,9 +93,35 @@ A user who writes to your agent first is never asked. Your agent receives
 `contact.added` with the direct `chat_id` and `message.received` with their
 Message.
 
-## See also
 
-- [Sending Messages](/build/messages/send)
-- [Event catalog](/build/events/reference)
-- [Blocked Handles](/build/identity/blocked-handles)
-- [Error 2030](/error/codes/2xxx/2030)
+## What you get back
+
+Captured response.
+
+```json
+{
+  "error": {
+    "status": 500,
+    "code": 3006,
+    "message": "Unexpected server error.",
+    "doc_url": "https://docs.relayapp.im/error/codes/3xxx/3006"
+  },
+  "success": false,
+  "trace_id": "04fd26666ecd49ed8ec8107470bb08d2"
+}
+```
+
+## When it fails
+
+Inspect the HTTP status, Relay code, and `trace_id` before retrying.
+
+| Code | HTTP | When | What to do |
+| --- | --- | --- | --- |
+| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
+| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+
+## Next steps
+
+- [Use the CLI](/cli/index)
+- [Read the API conventions](/api-reference/overview)
+- [Look up error codes](/api-reference/errors)
