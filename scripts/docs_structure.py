@@ -66,7 +66,7 @@ def validate_structure(root: Path, config: dict):
         sections = [h for h in re.findall(r"^## (.+)$", body, re.M) if h not in {"Next steps", "Related", "See also"}]
         if page.startswith("build/"):
             validate_build_headings(page, body)
-        if not page.startswith("build/") and page not in REFERENCE_PAGES and len(sections) > 8:
+        if not page.startswith("build/") and page not in REFERENCE_PAGES and page != "changelog" and len(sections) > 8:
             raise SystemExit(f"{page}: {len(sections)} top-level sections; split independent tasks rather than expanding this page")
         if page != "connect/agent-prompt" and INTERNAL_PROSE.search(body):
             raise SystemExit(f"{page}: internal publishing instructions do not belong in a reader task")

@@ -318,6 +318,19 @@ for path in mdx_paths:
         raise SystemExit(f"em dash in {path}")
     if text[end + 5:].strip() == "This page is being written.":
         continue
+    if path.name == "changelog.mdx":
+        updates = re.findall(r'<Update label="(\d{4}-\d{2}-\d{2})" tags=\{(\[[^\n]+\])\}>([\s\S]*?)</Update>', text)
+        if not updates or len(updates) != text.count("<Update "):
+            raise SystemExit("Changelog entries need dated labels and tags")
+        dates = [date for date, tags, body in updates]
+        if dates != sorted(dates, reverse=True):
+            raise SystemExit("Changelog entries must be newest first")
+        for date, tags, body in updates:
+            if not re.search(r'\]\(/[^)]+\)', body):
+                raise SystemExit("Every changelog entry must link an affected page")
+            if re.search(r"removed|replace|moved|instead of", body, re.I) and "Breaking change" not in tags:
+                raise SystemExit("Removed paths or flags need a Breaking change tag")
+        continue
     headings = h2_headings(text)
     if not headings or headings[-1] not in {"Next steps", "Related", "See also"}:
         raise SystemExit(f"page must end with Next steps, Related, or See also: {path}")
