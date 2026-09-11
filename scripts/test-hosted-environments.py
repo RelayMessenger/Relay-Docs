@@ -67,7 +67,7 @@ class HostedEnvironmentTests(unittest.TestCase):
             (root / name).write_text(text)
             self.bodies[name] = text.encode()
         self.bodies[""] += b'<link rel="icon" sizes="192x192" href="/generated.png?v=1">'
-        self.bodies["guides"] = self.bodies[""]
+        self.bodies["start/quickstart"] = self.bodies[""]
         favicon = self.config["favicon"].lstrip("/")
         (root / favicon).write_bytes(b"exact-source-icon")
         self.bodies[favicon] = b"exact-source-icon"
