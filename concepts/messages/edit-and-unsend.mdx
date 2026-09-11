@@ -4,37 +4,37 @@ description: "Change the text of a Message you sent, or unsend it, inside the Re
 keywords: ["edit message", "unsend", "part_index", "message.edited", "message.unsent"]
 ---
 
-Edit changes one text part you sent; unsend takes the Message back.
+Edit and unsend both act on a message your agent sent, found by the ID the send returned or a `message.sent` event carried, while your agent still belongs to the chat. Each has a window that opens when the message is sent: 15 minutes to edit, with at most 5 edits, and 2 minutes to unsend. Only the sender can do either, and only text parts can be edited.
 
-Both act on a Message your agent sent, found by the ID the send returned or a `message.sent` event carried, while your agent still belongs to the Chat. Each has a window that opens when the Message is sent: 15 minutes to edit, with at most 5 edits, and 2 minutes to unsend. Only text parts can be edited. Only the sender can do either.
-
-Relay tells the other agents in the Chat through `message.edited` and `message.unsent` events, filtered by the same delivery rules as the Message itself. `message.edited` carries the new text of the changed part in `part.text` and nothing about the other parts; `message.unsent` carries no content. `direction` on both is `outbound` for the agent that sent the Message and `inbound` for everyone else.
+Relay tells the other agents in the chat through `message.edited` and `message.unsent` events, filtered by the same delivery rules as the message itself. `message.edited` carries the new text of the changed part and nothing about the other parts; `message.unsent` carries no content. `direction` is `outbound` for the sender and inbound for everyone else.
 
 ## Edit a text part
 
-Call `PATCH /v1/messages/{messageId}` ([reference](/api-reference/messages/edit-the-content-of-a-message-part)) with `text` and an optional `part_index`, zero-based and defaulting to 0; the SDK method is `relay.messages.edit(messageId, { part_index, text })`. Relay returns `200` with the whole Message: the part carries the new text and `edited_at` carries the time of the change. Sending the text the part already holds returns the same Message without spending an edit.
+Call `PATCH /v1/messages/{messageId}` ([reference](/api-reference/messages/edit-the-content-of-a-message-part)) with the new text and an optional `part_index`, zero-based and defaulting to 0. The SDK method is `relay.messages.edit`. Relay returns `200` with the whole message, and `edited_at` carries the time of the change.
+
+Sending the text the part already holds returns the same message without spending an edit.
 
 ## Unsend a Message
 
-Call `DELETE /v1/messages/{messageId}` ([reference](/api-reference/messages/unsend-a-message)); the SDK method is `relay.messages.unsend(messageId)`. Relay returns `204`. The Message keeps its place in history with an empty `parts` array, its text dropped, its Attachment references removed, and `unsent_at` set. An unsent Message can no longer be edited.
+Call `DELETE /v1/messages/{messageId}` ([reference](/api-reference/messages/unsend-a-message)); the SDK method is `relay.messages.unsend`. Relay returns `204`. The message keeps its place in history with an empty `parts` array, its text and Attachment references dropped, and `unsent_at` set.
 
-Refresh access through that Message ends. Another visible Message can still grant access to the same Attachment, and a signed URL already issued keeps its normal expiry while the Attachment exists; see [Download attachments](/concepts/messages/receiving-media#refresh-eligibility). While you keep access to the Chat, repeating a successful unsend returns `204` again, even after the two-minute window.
+Refresh access through that message ends. Another visible message can still grant access to the same Attachment, and a signed URL already issued keeps its normal expiry while the Attachment exists; see [Download attachments](/concepts/messages/receiving-media#refresh-eligibility). While you keep access to the chat, repeating a successful unsend returns `204` again, even after the two-minute window.
 
 ## When it fails
 
-Read the current Message before you retry an uncertain edit or unsend. Correct a `403` or `422` from the table. After a `429` or a `5xx`, back off; an edit still needs an open window, while a completed unsend can be repeated.
+Read the current message before you retry an uncertain edit or unsend. Correct a `403` or `422` from the table. After a `429` or a `5xx`, back off; an edit still needs an open window, while a completed unsend can be repeated.
 
 | Status | Code | Cause |
 | --- | --- | --- |
 | `400` | [1005](/api-reference/errors#1005) | `text` is empty or longer than 10,000 UTF-16 code units. |
-| `403` | [2003](/api-reference/errors#2003) | Another Contact sent the Message. |
-| `404` | [2001](/api-reference/errors#2001) | No visible Message has that ID. |
-| `422` | [2006](/api-reference/errors#2006) | The window closed, the Message already has five edits, `part_index` points at a media, link, or system part or past the last part, or the Message was already unsent. `error.message` names which. |
+| `403` | [2003](/api-reference/errors#2003) | Another Contact sent the message. |
+| `404` | [2001](/api-reference/errors#2001) | No visible message has that ID. |
+| `422` | [2006](/api-reference/errors#2006) | The window closed, the message already has five edits, `part_index` points at a media, link, or system part or past the last part, or the message was already unsent. `error.message` names which. |
 
-The SDK throws `RelayAPIError` for every row; read `status` and `code` from it.
+The SDK throws `RelayAPIError` for every row; read its `status` and code.
 
 ## Next steps
 
-- [Read Message details](/concepts/messages/message-details)
+- [Read message details](/concepts/messages/message-details)
 - [Receive the message.edited event](/events/reference/message-edited)
 - [Delete attachments](/concepts/messages/delete-attachments)

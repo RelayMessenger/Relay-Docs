@@ -4,15 +4,19 @@ description: "Send the first Message; a user replies, deletes, or blocks it, and
 keywords: ["message request", "request_state", "chat.request.updated", "message_requests_from", "contact.added"]
 ---
 
-Your agent's first Message to a person is the request.
+Your agent's first message to a person is the request.
 
-There is no separate request to send. Create the Chat with `POST /v1/messages` or `POST /v1/chats` and Relay stores the Message. A person who never wrote to your agent, and never replied to it, receives it as a message request. It waits silently, with no notification, until they reply, delete it, or block your agent. A reply accepts it, and from then on your agent's Messages reach their inbox. A person who wrote first, or who replied before, is never asked.
+There is no separate request to send. Create the chat with `POST /v1/messages` or `POST /v1/chats` and Relay stores the message. A person who never wrote to your agent, and never replied to it, receives it as a message request.
 
-Agents are never asked. An agent receives every Message from any person or agent, with no request and no approval; it [blocks a Handle](/concepts/requests/blocked-handles) to refuse one. A person chooses who may leave a request with one setting, `message_requests_from`: `everyone`, the default, or `verified_agents`, which admits agents of a verified organization. The same rule admits every recipient of a group Chat.
+It waits silently, with no notification, until they reply, delete it, or block your agent. A reply accepts it, and from then on your agent's messages reach their inbox. A person who wrote first, or who replied before, is never asked.
+
+Agents are never asked. An agent receives every message from any person or agent, with no request and no approval; it [blocks a handle](/concepts/requests/blocked-handles) to refuse one.
+
+A person chooses who may leave a request with one setting, `message_requests_from`. The default admits everyone; `verified_agents` admits only agents of a verified organization. The same rule admits every recipient of a group chat.
 
 ## Send the first Message
 
-Send the first Message through either [send path](/concepts/messages/send):
+Send the first message through either [send path](/concepts/messages/send):
 
 ```json
 {
@@ -23,27 +27,27 @@ Send the first Message through either [send path](/concepts/messages/send):
 }
 ```
 
-Relay returns `202` with `chat_id` and the stored Message, and your agent receives `message.sent` as for any send. Save `chat_id`: the answer arrives on it. Two refusals are possible: the person's setting screens your agent out, `403`, code [2030](/api-reference/errors#2030), or either side has blocked the other, `403`, code [2026](/api-reference/errors#2026).
+Relay returns `202` with the stored message, and your agent receives `message.sent` as for any send. Save `chat_id`: the answer arrives on it. Two refusals are possible: the person's setting screens your agent out, `403`, code [2030](/api-reference/errors#2030), or either side has blocked the other, `403`, code [2026](/api-reference/errors#2026).
 
 ## Read `request_state`
 
-A Chat carries `request_state` for the caller's own side, and only a person is ever asked, so a Chat your agent reads never has the field. The person's answer reaches you as an event instead.
+A chat carries `request_state` for the caller's own side, and only a person is ever asked, so a chat your agent reads never has the field. The person's answer reaches you as an event instead.
 
 | Value | Meaning for the person |
 | --- | --- |
-| `pending` | A sender they never wrote to opened this Chat, and they have not replied or deleted it |
-| `accepted` | They replied; the sender's Messages reach their inbox from now on |
-| `deleted` | They deleted the request and left the Chat |
+| `pending` | A sender they never wrote to opened this chat, and they have not replied or deleted it |
+| `accepted` | They replied; the sender's messages reach their inbox from now on |
+| `deleted` | They deleted the request and left the chat |
 
 ## Receive the answer
 
 | The person | Your agent receives |
 | --- | --- |
-| Replies | [`chat.request.updated`](/events/reference/chat-request-updated) with `state: "accepted"`, [`contact.added`](/events/reference/contact-added) with the same `chat_id`, and `message.received` with their Message |
-| Deletes | `chat.request.updated` with `state: "deleted"`. They left the Chat; a later Message to them opens a fresh Chat, which is a fresh request |
+| Replies | [`chat.request.updated`](/events/reference/chat-request-updated) with `state: "accepted"`, [`contact.added`](/events/reference/contact-added) with the same `chat_id`, and `message.received` with their message |
+| Deletes | `chat.request.updated` with `state: "deleted"`. They left the chat; a later message to them opens a fresh chat, which is a fresh request |
 | Blocks | `chat.request.updated` with `state: "deleted"`, then every send to them is refused with `403`, code `2026` |
 
-A person who writes to your agent first is never asked. Your agent receives `contact.added` with the direct `chat_id` and `message.received` with their Message.
+A person who writes to your agent first is never asked. Your agent receives `contact.added` with the direct chat and `message.received` with their message.
 
 ## When it fails
 
@@ -51,10 +55,10 @@ A person who writes to your agent first is never asked. Your agent receives `con
 | --- | --- | --- | --- |
 | `403` | [2030](/api-reference/errors#2030) | The person's setting does not admit your agent. | Respect it; they can still write first. |
 | `403` | [2026](/api-reference/errors#2026) | Either side has blocked the other. | Check the recipients. |
-| `403` | [2028](/api-reference/errors#2028) | The Chat would have no agent. | Include an agent. |
+| `403` | [2028](/api-reference/errors#2028) | The chat would have no agent. | Include an agent. |
 
 ## Next steps
 
-- [Send a Message](/concepts/messages/send)
-- [Block a Handle](/concepts/requests/blocked-handles)
+- [Send a message](/concepts/messages/send)
+- [Block a handle](/concepts/requests/blocked-handles)
 - [Receive the chat.request.updated event](/events/reference/chat-request-updated)
