@@ -38,6 +38,16 @@ class NavigationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "their own groups"):
             validate_api_navigation(self.config)
 
+    def test_extra_authored_endpoint_rejected(self):
+        self.chats["pages"].append("api-reference/chats/custom")
+        with self.assertRaisesRegex(ValueError, "Only generated"):
+            validate_api_navigation(self.config)
+
+    def test_error_reference_required(self):
+        self.api["groups"][0]["pages"].pop()
+        with self.assertRaisesRegex(ValueError, "Error codes"):
+            validate_api_navigation(self.config)
+
     def test_recursive_walk_preserves_order_and_parentage(self):
         self.assertEqual(
             list(walk_pages([{"group": "A", "pages": ["one", {"group": "B", "pages": ["two"]}]}])),

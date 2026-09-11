@@ -24,6 +24,13 @@ def validate_api_navigation(config):
     groups = api["groups"]
     if not {"Chats", "Messages", "Attachments", "Contacts", "Webhooks", "WebSocket", "Agents"}.issubset({g["group"] for g in groups}):
         raise ValueError("API resources must have their own groups")
+    expected_groups = ["Overview", "Chats", "Messages", "Attachments", "Contacts", "Webhooks", "WebSocket", "Agents"]
+    if [g["group"] for g in groups] != expected_groups:
+        raise ValueError("API group order must match the resource tree")
+    if groups[0]["pages"] != ["api-reference/overview", "api-reference/errors"]:
+        raise ValueError("API must start with Overview and Error codes")
+    if api.get("openapi") != "api-reference/openapi.mint.yaml":
+        raise ValueError("API must use the generated OpenAPI bundle")
     entries = list(walk_pages(groups))
     methods = ("GET ", "POST ", "PUT ", "PATCH ", "DELETE ")
     endpoints = [(parents, page) for parents, page in entries if page.startswith(methods)]
@@ -51,4 +58,14 @@ def validate_api_navigation(config):
             check_overviews(pages)
 
     check_overviews(groups)
+    for group in groups[1:]:
+        if any(not page.startswith(methods) for page in group["pages"][1:]):
+            raise ValueError("Only generated endpoints may follow a resource overview")
+    import re
+    for group in groups[1:]:
+        path = ROOT / (group["pages"][0] + ".mdx")
+        headings = re.findall(r"^## (.+)$", path.read_text(), re.M)
+        resource = {"Chats": "Chat", "Messages": "Message", "Attachments": "Attachment", "Contacts": "Contact", "Webhooks": "Webhook", "WebSocket": "WebSocket", "Agents": "Agent"}[group["group"]]
+        if headings != [f"The {resource} object", "Example", "Operations", "Errors", "Next steps"]:
+            raise ValueError(f"Resource overview skeleton drifted: {path}")
     return found

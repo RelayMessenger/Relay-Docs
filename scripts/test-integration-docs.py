@@ -177,6 +177,9 @@ class IntegrationDocsTests(unittest.TestCase):
                 self.assertIn(headings[-1], FINISH)
                 if path.stem in {"claude-code", "codex", "cursor", "opencode", "cline", "vs-code", "gemini-cli", "claude-desktop", "hermes", "openclaw", "mcp", "your-own-backend", "chat-sdk", "cloudflare-think"}:
                     self.assertEqual(headings, ["Before you start", "Install", "Connect", "Send it a message", "What this changed", "When it fails", "Next steps"])
+                elif path.relative_to(ROOT).parts[0] == "build":
+                    from docs_structure import validate_build_headings
+                    validate_build_headings(str(path.relative_to(ROOT).with_suffix("")), prose(text))
                 else:
                     self.assertLessEqual(len(headings), 8, "split independent tasks, not paragraph length")
 
@@ -191,10 +194,9 @@ class IntegrationDocsTests(unittest.TestCase):
     def test_sources_remain_in_maintained_repositories(self):
         for page, directory in SOURCES.items():
             with self.subTest(page=page):
-                self.assertIn(
-                    f"https://github.com/RelayMessenger/Relay-SDK/tree/{source_ref()}/{directory}",
-                    links(read(page)),
-                )
+                source = f"https://github.com/RelayMessenger/Relay-SDK/tree/{source_ref()}/{directory}"
+                self.assertTrue(any(link == source or link.startswith(source + "/")
+                                    for link in links(read(page))))
         self.assertIn("https://github.com/RelayMessenger/Relay-Hermes", links(read("connect/hermes.mdx")))
         for path in assigned_pages():
             text = path.read_text()

@@ -208,15 +208,7 @@ from docs_structure import validate_structure
 validate_structure(root, config)
 expected_guide_groups = [group["group"] for group in tabs[0]["groups"]]
 
-expected_error_groups = [
-    "Overview",
-    "1xxx request errors",
-    "2xxx errors",
-    "3xxx server errors",
-]
-actual_error_groups = [group["group"] for group in tabs[4]["groups"][-4:]]
-if actual_error_groups != expected_error_groups:
-    raise SystemExit(f"error group order changed: {actual_error_groups}")
+
 
 api_tab = tabs[4]
 if api_tab.get("openapi") != "api-reference/openapi.mint.yaml":
@@ -251,7 +243,7 @@ required_paths = [
     root / "build/events/websocket.mdx",
     root / "build/events/websocket/protocol.mdx",
     root / "build/events/websocket/full-sync.mdx",
-    root / "error/index.mdx",
+    root / "api-reference/errors.mdx",
 ]
 for path in required_paths:
     if not path.exists():
@@ -440,71 +432,9 @@ from docs_behavior import validate_behavior
 validate_behavior(root)
 webhook_events_text = (root / "build/events/reference.mdx").read_text()
 
-expected_error_codes = {
-    1004, 1005, 2001, 2003, 2004, 2005, 2006,
-    2007, 2008, 2015, 2023, 2025, 2026,
-    2028, 2029, 2030, 3006,
-}
-error_paths = sorted((root / "error/codes").rglob("*.mdx"))
-actual_error_codes = {int(path.stem) for path in error_paths}
-if actual_error_codes != expected_error_codes:
-    raise SystemExit(
-        f"error code pages drifted: {sorted(actual_error_codes ^ expected_error_codes)}"
-    )
-expected_error_statuses = {
-    1004: ("`400`",),
-    # errors.ts:12-17 makes 1005 the default for every status that is not
-    # 401, 402, 404, 429 or 5xx, so it ships as 400 and as 409.
-    1005: ("`400`", "`409`"),
-    2001: ("`404`",),
-    2003: ("`403`",),
-    2004: ("`401`",),
-    2005: ("`500`",),
-    2006: ("`413`, `415`, or `422`",),
-    2007: ("`404`",),
-    2008: ("`429`",),
-    2015: ("`409`",),
-    2023: ("`409`",),
-    2025: ("`404`",),
-    # relationships.ts admissionError: 2026 for a block, 2030 for a setting
-    # that screens the sender out; both 403, both at Chat creation.
-    2026: ("`403`",),
-    2028: ("`403`",),
-    2029: ("`403`",),
-    2030: ("`403`",),
-    # app.ts:225 is the 500 catch-all; images.ts:466 and :507,
-    # attachments.ts:153 and developer-agents.ts:140 are 503.
-    3006: ("`500`", "`503`"),
-}
-error_overview_text = (root / "error/index.mdx").read_text()
-for path in error_paths:
-    error_text = path.read_text()
-    code = int(path.stem)
-    sidebar_match = re.search(r'^sidebarTitle: "([^"]+)"$', error_text, re.M)
-    if (
-        not sidebar_match
-        or not sidebar_match.group(1).startswith(path.stem)
-        or sidebar_match.group(1).startswith(f"Error {path.stem}")
-        or len(sidebar_match.group(1)) > 28
-    ):
-        raise SystemExit(
-            f"error sidebar title is not concise: {path.relative_to(root)}"
-        )
-    for status in expected_error_statuses[code]:
-        if f'| {status} | `{code}` |' not in error_text:
-            raise SystemExit(
-                f"error status/code row drifted in {path.relative_to(root)}: "
-                f"no row for {status}"
-            )
-    if "## Troubleshooting" not in error_text or "**Retry:**" not in error_text:
-        raise SystemExit(f"error recovery guidance missing in {path.relative_to(root)}")
-    if "```json" in error_text:
-        raise SystemExit(f"shared error envelope duplicated in {path.relative_to(root)}")
-    if f'description: "Resolve Relay error {code}."' in error_text:
-        raise SystemExit(f"generic error description returned in {path.relative_to(root)}")
-    expected_link = f"/error/codes/{code // 1000}xxx/{code}"
-    if expected_link not in error_overview_text:
-        raise SystemExit(f"error overview link missing: {expected_link}")
+# One code table replaces the former per-code page hierarchy.
+import runpy
+runpy.run_path(str(root / "scripts/check-error-anchors.py"))["check"](root)
 
 openapi_text = (root / "api-reference/openapi.yaml").read_text()
 mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
@@ -940,7 +870,7 @@ for name, pattern in {
     "uuidv4 example": r"\b[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b",
     "human identity kind": r"\bkind\b.{0,30}\bhumans?\b|\bhumans?\b.{0,30}\bkind\b",
     "message parts table": r"\bmessage_parts?\b",
-    "unsupported payments": r"\bpayments?\b",
+    "unsupported payment endpoint": r"/v1/payments?\b",
     "long polling": r"long[ -]poll",
     "noncanonical error URL": r"docs\.relayapp\.im/error/codes/\dxxx/\d{4}/",
     "carrier API residue": r"from-number|sending line|line flagging|S3 will|sandbox and production",

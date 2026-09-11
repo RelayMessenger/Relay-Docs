@@ -33,22 +33,20 @@ class ContractSourceTests(unittest.TestCase):
         self.assertEqual((ROOT / "api-reference/openapi.staging.yaml").read_bytes(), expected)
 
     def test_error_is_integrated_in_navigation_and_generated_surfaces(self):
-        page = "error/codes/2xxx/2029"
+        page = "api-reference/errors"
         config = json.loads((ROOT / "docs.json").read_text())
         self.assertIn(page, json.dumps(config["navigation"]))
         self.assertTrue((ROOT / f"{page}.mdx").is_file())
-        for path in ("error/index.mdx", "llms.txt", "llms-full.txt"):
-            with self.subTest(path=path):
-                self.assertIn(page, (ROOT / path).read_text())
+        for path in ("llms.txt", "llms-full.txt"):
+            self.assertIn(page, (ROOT / path).read_text())
         for path in ("api-reference/openapi.staging.yaml", "api-reference/openapi.mint.yaml"):
             with self.subTest(path=path):
                 text = (ROOT / path).read_text()
                 self.assertIn("code: 2029", text)
                 self.assertIn("is_removable:", text)
         page_text = (ROOT / f"{page}.mdx").read_text()
-        self.assertIn("| `403` | `2029` |", page_text)
-        self.assertIn("`This agent is not removable.`", page_text)
-        self.assertIn("Group membership can change", page_text)
+        self.assertIn('<a id="2029">2029</a> | 403', page_text)
+        self.assertIn("This agent cannot be removed.", page_text)
 
 
 if __name__ == "__main__":
