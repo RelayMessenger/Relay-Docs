@@ -5114,40 +5114,41 @@ The contact description field is `about` instead of `tagline`. Public profile im
 
 Source: https://docs.staging.relayapp.im/integrations/claude-code.md
 
-Connect Claude Code to Relay and talk to it from your phone.
-
 ## Before you start
 
-Install [Claude Code](https://github.com/anthropics/claude-code#installation) and sign in to it. Relay is a channel, so your Claude Code needs the Channels research preview. Install Node.js 22.22.3 or newer; the Relay CLI runs with `npx`. Set `RELAY_API_URL` to `https://api.staging.relayapp.im` so Relay talks to the API your agent lives on. You do not need an agent yet: the command below creates one and saves its token on this computer. If you already have an Agent Token, pipe it in with `--with-token`; that agent must have zero saved webhook subscriptions, because a channel receives over the WebSocket.
+- [Claude Code](https://github.com/anthropics/claude-code#installation) with the Channels research preview, signed in.
+- Node.js 22.22.3 or newer.
+- `RELAY_API_URL` set to `https://api.staging.relayapp.im`.
+- An existing Agent Token needs zero saved webhook subscriptions.
 
 ## Connect
 
-Run this in a terminal. Relay finds Claude Code and creates an agent with a `.dev` handle. Then it prints what it will change before it changes anything. It adds the Relay marketplace and installs and enables the `relay@relay-messenger` plugin. It writes the channel file at `~/.claude/channels/relay/.env`: the token, the API address, and the allowed senders. It asks `Continue?` and does the work. It ends with `Relay is ready for Claude Code.` and the handle to message from your phone:
+Run this to create an agent and install the Relay channel:
 
 ```bash
 npx relaymessenger@staging connect claude-code
 ```
 
-Connect then offers to start Claude Code with the channel loaded. Say yes, or start it yourself later with `claude --dangerously-load-development-channels plugin:relay@relay-messenger`. Relay is not on Anthropic's default channel allowlist yet, so that flag is how a custom channel loads during the research preview. An organization administrator can instead add `relay@relay-messenger` to `allowedChannelPlugins`, after which `--channels` is enough.
+Approve the change, start Claude Code with the channel loaded, then message the new handle.
 
-### Install the plugin yourself
+### Install the channel yourself
 
-If you would rather not let the CLI touch Claude Code, do the two plugin steps inside a Claude Code session. Add the marketplace from the SDK's `staging` branch, then install the plugin. The plugin starts disabled because it talks to a messaging service. Enable it in `/plugin` for the one session that should receive messages, and run `/reload-plugins` if Claude Code asks:
+To keep the CLI away, run these two steps in a Claude Code session:
 
 ```text
 /plugin marketplace add RelayMessenger/Relay-SDK@staging
 /plugin install relay@relay-messenger
 ```
 
-Claude Code then asks for three settings. The Relay Agent Token goes into its secure credential store, never into `settings.json`. The allowed Relay senders are exact contact UUIDs or handles, separated by commas, and only those senders can start a turn. The Relay API origin is `https://api.staging.relayapp.im` for a staging token. The source is [packages/claude-code](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/claude-code) and the [marketplace file](https://github.com/RelayMessenger/Relay-SDK/blob/staging/.claude-plugin/marketplace.json).
+Enable it in `/plugin`, then give it the Agent Token, the allowed senders, and the API origin `https://api.staging.relayapp.im`.
 
 ## Send it a message
 
-Open Relay on your phone and send a message to the handle connect printed. Claude Code wakes up on its own: the channel holds one acknowledged WebSocket connection, saves each event before it acknowledges it, and hands the message to the running session. Claude reads it, replies, and the reply appears in the same chat on your phone, and in the terminal while connect is waiting. Keep the session open; a closed session receives nothing until it starts again, and then it catches up.
+Open Relay on your phone and message the handle. Claude Code wakes up on its own and answers in the same chat.
 
 ## What it can do
 
-The table says what the Relay channel gives Claude Code. It comes from the connection code for `claude-code` and the channel's three tools: `begin_processing`, `reply`, and `complete_processing`; anything not listed is not there.
+From the connection code for `claude-code` and the channel's three tools.
 
 | Relay feature | Claude Code |
 | --- | --- |
@@ -5159,17 +5160,22 @@ The table says what the Relay channel gives Claude Code. It comes from the conne
 | Read chat history | No. It gets each message as it arrives; a full sync rebuilds only what was unread. |
 | Group chats | Yes, when the message mentions the agent or replies to one of its messages. |
 
-Sender permission is an allowlist and nothing more. Agent Contacts use the same allowlist as user Contacts. An allowed sender does not get separate model contexts per chat: sender permissions and reply-origin checks are admission rules, not memory isolation. A reply goes only to the chat that authenticated the active turn. A FULL sync after a gap reconciles the unread, allowlisted messages using the agent's own delivery row for Read state. Claude Code's permission prompts remain local to Claude Code; Relay cannot answer them. Delivery is at least once, and a message is never answered twice. A turn closes when Claude calls `reply` or `complete_processing`. A second message that arrives during a turn waits or supersedes it, and a turn older than ten minutes goes back to pending.
+Sender permission is an allowlist: agent Contacts pass the same check as user Contacts, and no chat gets separate model contexts. A reply goes only to the chat that authenticated the turn, checked by reply origin. A FULL sync reconciles unread messages from the agent's own delivery row, and Claude Code's permission prompts remain local.
 
 ## When it fails
 
-Every failure prints one line, and nothing else changes. `Relay cannot ask which agent to connect.` means you ran connect without a terminal and without a token; pipe one in with `--with-token`, or run it in a terminal. `Relay cannot ask you to confirm this plan.` means the same for the plan; add `--yes`. `Relay would not accept that token, so nothing was changed.` means the token and `RELAY_API_URL` come from different environments. `Claude Code was not found on this computer; you named it, so Relay will try anyway` is a notice, not an error: install Claude Code and run connect again. If a step stops with `did not finish`, your agent and its token are saved; fix what it said and run the same command again. If Claude Code starts but the channel refuses to connect, the agent has a saved webhook subscription. A Relay agent has one delivery path, and the channel needs zero saved webhook subscriptions. `No reply yet. Run: relay watch @<handle>` means the session is not running with the channel loaded, or the sender is not on the allowlist; start it as shown under [Connect](/integrations/claude-code#connect).
+- `Relay cannot ask which agent to connect.` Use a terminal, or pipe a token with `--with-token`.
+- `Relay cannot ask you to confirm this plan.` Add `--yes`.
+- `Relay would not accept that token, so nothing was changed.` Token and `RELAY_API_URL` are from different environments.
+- `did not finish` Fix what it names and run the command again.
+- `No reply yet. Run: relay watch @<handle>` The channel is not loaded, or the sender is not allowed; [start it](/integrations/claude-code#connect).
 
 ## Next steps
 
 - [Send messages](/concepts/messages/send)
 - [Read message history](/concepts/chats/history)
 - [Handle retries](/live/retries)
+- [Relay channel source](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/claude-code)
 
 # Codex
 
@@ -5177,24 +5183,25 @@ Every failure prints one line, and nothing else changes. `Relay cannot ask which
 
 Source: https://docs.staging.relayapp.im/integrations/codex.md
 
-Connect Codex to Relay and talk to it from your phone.
-
 ## Before you start
 
-Install Codex from [openai/codex](https://github.com/openai/codex#quickstart) and sign in to it. Install Node.js 22.22.3 or newer; the Relay CLI runs with `npx`. Set `RELAY_API_URL` to `https://api.staging.relayapp.im` so Relay talks to the API your agent lives on. You do not need an agent yet: the command below creates one and saves its token on this computer. If you already have an Agent Token, pipe it in with `--with-token`.
+- [Codex](https://github.com/openai/codex#quickstart), installed and signed in.
+- Node.js 22.22.3 or newer.
+- `RELAY_API_URL` set to `https://api.staging.relayapp.im`.
 
 ## Connect
 
-Run this in a terminal. Relay finds Codex and creates an agent with a `.dev` handle. Then it prints what it will change before it changes anything: Codex's own `codex mcp add` writes the Relay MCP server into `~/.codex/config.toml`. It asks `Continue?` and does the work. It ends with `Relay is ready for Codex.` and the handle to message from your phone:
+Run this in a terminal to create an agent and add the Relay MCP server to Codex:
 
 ```bash
 npx relaymessenger@staging connect codex
 ```
 
-The last lines tell you what to do next. `Say anything to @<handle> from your phone.` is the invitation. `Later: relay watch <handle> · relay doctor` names the two commands that show the chat in the terminal and check the setup. Connect then waits for the agent's first reply and prints it as `Answered from your phone: …`.
+Approve the change, then message the new handle from your phone.
+
 ### Install the Relay plugin for Codex
 
-The Relay plugin for Codex is a different thing from the connection above. It gives Codex the Relay skill and a documentation search server named `relayDocs`, so Codex can look up how Relay works while it writes code for you. It does not create an agent and it cannot read your chats. Install it from a clone of the SDK:
+The Relay plugin is a different thing: it gives Codex the Relay skill and a documentation search server, not an agent:
 
 ```bash
 git clone --branch staging https://github.com/RelayMessenger/Relay-SDK.git
@@ -5203,15 +5210,15 @@ codex plugin marketplace add "$PWD"
 codex plugin add relay@relay-plugin-marketplace
 ```
 
-Start a new Codex session after the install. The marketplace is named `relay-plugin-marketplace` and its Relay entry points at [plugins/relay](https://github.com/RelayMessenger/Relay-SDK/tree/staging/plugins/relay). For the difference between documentation search and the messaging tools, read [documentation search](/integrations/skills#connect-documentation-search).
+Start a new Codex session, then read [documentation search](/integrations/skills#connect-documentation-search) for the difference between searching the docs and the messaging tools.
 
 ## Send it a message
 
-Open Relay on your phone and send a message to the handle connect printed. Codex does not wake up on its own: the Relay MCP server gives it tools, and it uses them when you ask. In Codex, say `Read my Relay messages and answer them.` It lists the chat, reads your message, and sends its answer. The answer appears in the same chat on your phone, and in the terminal while connect is waiting. Start it: `codex`; connect offers to start it for you.
+Open Relay on your phone and message the handle. Codex does not wake up on its own, so tell it: `Read my Relay messages and answer them.` It reads the chat and sends its answer there.
 
 ## What it can do
 
-The table says what the Relay CLI and the Relay MCP server give Codex. It comes from the connection code for `codex` and the tool list of `@relaymessenger/mcp`; anything not listed is not there.
+These come from the connection code for `codex` and the Relay MCP tool list.
 
 | Relay feature | Codex |
 | --- | --- |
@@ -5226,13 +5233,18 @@ The table says what the Relay CLI and the Relay MCP server give Codex. It comes 
 
 ## When it fails
 
-Every failure prints one line, and nothing else changes. `Relay cannot ask which agent to connect.` means you ran connect without a terminal and without a token; pipe one in with `--with-token`, or run it in a terminal. `Relay cannot ask you to confirm this plan.` means the same for the plan; add `--yes`. `Relay would not accept that token, so nothing was changed.` means the token and `RELAY_API_URL` come from different environments. `Codex was not found on this computer; you named it, so Relay will try anyway` is a notice, not an error: install Codex and run connect again. If a step stops with `did not finish`, your agent and its token are saved; fix what it said and run the same command again. `No reply yet. Run: relay watch @<handle>` means Codex has not read the chat: `Read my Relay messages and answer them.`
+- `Relay cannot ask which agent to connect.` Run connect in a terminal, or pipe a token with `--with-token`.
+- `Relay cannot ask you to confirm this plan.` Add `--yes`.
+- `Relay would not accept that token, so nothing was changed.` The token and `RELAY_API_URL` come from different environments.
+- `did not finish` Fix what the step names, then run the same command again; your agent and its token are saved.
+- `No reply yet. Run: relay watch @<handle>` Codex has not read the chat yet; ask it again.
 
 ## Next steps
 
 - [Send messages](/concepts/messages/send)
 - [Read message history](/concepts/chats/history)
 - [Add Relay guidance](/integrations/skills)
+- [Relay plugin source](https://github.com/RelayMessenger/Relay-SDK/tree/staging/plugins/relay)
 
 # Cursor
 
@@ -5240,24 +5252,25 @@ Every failure prints one line, and nothing else changes. `Relay cannot ask which
 
 Source: https://docs.staging.relayapp.im/integrations/cursor.md
 
-Connect Cursor to Relay and talk to it from your phone.
-
 ## Before you start
 
-[Install Cursor](https://cursor.com/downloads) and sign in to it. Install Node.js 22.22.3 or newer; the Relay CLI runs with `npx`. Set `RELAY_API_URL` to `https://api.staging.relayapp.im` so Relay talks to the API your agent lives on. You do not need an agent yet: the command below creates one and saves its token on this computer. If you already have an Agent Token, pipe it in with `--with-token`.
+- [Cursor](https://cursor.com/downloads), installed and signed in.
+- Node.js 22.22.3 or newer.
+- `RELAY_API_URL` set to `https://api.staging.relayapp.im`.
 
 ## Connect
 
-Run this in a terminal. Relay finds Cursor and creates an agent with a `.dev` handle. Then it prints what it will change before it changes anything: Relay adds one `mcpServers.relay` entry to `~/.cursor/mcp.json` and keeps every other entry. It asks `Continue?` and does the work. It ends with `Relay is ready for Cursor.` and the handle to message from your phone:
+Run this in a terminal to create an agent and add the Relay MCP server to Cursor:
 
 ```bash
 npx relaymessenger@staging connect cursor
 ```
 
-The last lines tell you what to do next. `Say anything to @<handle> from your phone.` is the invitation. `Later: relay watch <handle> · relay doctor` names the two commands that show the chat in the terminal and check the setup. Connect then waits for the agent's first reply and prints it as `Answered from your phone: …`.
+Approve the change, then message the new handle from your phone.
+
 ### Install the Relay plugin for Cursor
 
-The Relay plugin for Cursor is a different thing from the connection above. It gives Cursor the Relay skill and a documentation search server named `relayDocs`, so Cursor can look up how Relay works while it writes code for you. It does not create an agent and it cannot read your chats. Link it from a clone of the SDK:
+The Relay plugin is a different thing: it gives Cursor the Relay skill and a documentation search server, not an agent:
 
 ```bash
 git clone --branch staging https://github.com/RelayMessenger/Relay-SDK.git
@@ -5266,15 +5279,15 @@ mkdir -p "$HOME/.cursor/plugins/local"
 ln -s "$PWD/plugins/relay" "$HOME/.cursor/plugins/local/relay"
 ```
 
-Reload Cursor, open **Customize**, and check that the Relay skill and the `relayDocs` server are listed. Keep the clone; the link points into it. If `relay` already exists at that path, look at what is there before you replace it. The source is [plugins/relay](https://github.com/RelayMessenger/Relay-SDK/tree/staging/plugins/relay). For the difference between documentation search and the messaging tools, read [documentation search](/integrations/skills#connect-documentation-search).
+Reload Cursor, keep the clone the link points into, and read [documentation search](/integrations/skills#connect-documentation-search) for the difference between searching the docs and the messaging tools.
 
 ## Send it a message
 
-Open Relay on your phone and send a message to the handle connect printed. Cursor does not wake up on its own: the Relay MCP server gives it tools, and it uses them when you ask. In Cursor, say `Read my Relay messages and answer them.` It lists the chat, reads your message, and sends its answer. The answer appears in the same chat on your phone, and in the terminal while connect is waiting. Start it: restart Cursor; connect tells you when.
+Open Relay on your phone and message the handle. Cursor does not wake up on its own, so tell it: `Read my Relay messages and answer them.` It reads the chat and sends its answer there.
 
 ## What it can do
 
-The table says what the Relay CLI and the Relay MCP server give Cursor. It comes from the connection code for `cursor` and the tool list of `@relaymessenger/mcp`; anything not listed is not there.
+These come from the connection code for `cursor` and the Relay MCP tool list.
 
 | Relay feature | Cursor |
 | --- | --- |
@@ -5289,13 +5302,18 @@ The table says what the Relay CLI and the Relay MCP server give Cursor. It comes
 
 ## When it fails
 
-Every failure prints one line, and nothing else changes. `Relay cannot ask which agent to connect.` means you ran connect without a terminal and without a token; pipe one in with `--with-token`, or run it in a terminal. `Relay cannot ask you to confirm this plan.` means the same for the plan; add `--yes`. `Relay would not accept that token, so nothing was changed.` means the token and `RELAY_API_URL` come from different environments. `Cursor was not found on this computer; you named it, so Relay will try anyway` is a notice, not an error: install Cursor and run connect again. If a step stops with `did not finish`, your agent and its token are saved; fix what it said and run the same command again. `No reply yet. Run: relay watch @<handle>` means Cursor has not read the chat: `Read my Relay messages and answer them.`
+- `Relay cannot ask which agent to connect.` Run connect in a terminal, or pipe a token with `--with-token`.
+- `Relay cannot ask you to confirm this plan.` Add `--yes`.
+- `Relay would not accept that token, so nothing was changed.` The token and `RELAY_API_URL` come from different environments.
+- `did not finish` Fix what the step names, then run the same command again; your agent and its token are saved.
+- `No reply yet. Run: relay watch @<handle>` Cursor has not read the chat yet; ask it again.
 
 ## Next steps
 
 - [Send messages](/concepts/messages/send)
 - [Read message history](/concepts/chats/history)
 - [Add Relay guidance](/integrations/skills)
+- [Relay plugin source](https://github.com/RelayMessenger/Relay-SDK/tree/staging/plugins/relay)
 
 # OpenCode
 
@@ -5303,29 +5321,29 @@ Every failure prints one line, and nothing else changes. `Relay cannot ask which
 
 Source: https://docs.staging.relayapp.im/integrations/opencode.md
 
-Connect OpenCode to Relay and talk to it from your phone.
-
 ## Before you start
 
-[Install OpenCode](https://opencode.ai/docs/) and sign in to it. Install Node.js 22.22.3 or newer; the Relay CLI runs with `npx`. Set `RELAY_API_URL` to `https://api.staging.relayapp.im` so Relay talks to the API your agent lives on. You do not need an agent yet: the command below creates one and saves its token on this computer. If you already have an Agent Token, pipe it in with `--with-token`.
+- [OpenCode](https://opencode.ai/docs/), installed and signed in.
+- Node.js 22.22.3 or newer.
+- `RELAY_API_URL` set to `https://api.staging.relayapp.im`.
 
 ## Connect
 
-Run this in a terminal. Relay finds OpenCode and creates an agent with a `.dev` handle. Then it prints what it will change before it changes anything: Relay adds one `mcp.relay` entry to `~/.config/opencode/opencode.json` and keeps every other entry. It asks `Continue?` and does the work. It ends with `Relay is ready for OpenCode.` and the handle to message from your phone:
+Run this in a terminal to create an agent and add the Relay MCP server to OpenCode:
 
 ```bash
 npx relaymessenger@staging connect opencode
 ```
 
-The last lines tell you what to do next. `Say anything to @<handle> from your phone.` is the invitation. `Later: relay watch <handle> · relay doctor` names the two commands that show the chat in the terminal and check the setup. Connect then waits for the agent's first reply and prints it as `Answered from your phone: …`.
+Approve the change, then message the new handle from your phone.
 
 ## Send it a message
 
-Open Relay on your phone and send a message to the handle connect printed. OpenCode does not wake up on its own: the Relay MCP server gives it tools, and it uses them when you ask. In OpenCode, say `Read my Relay messages and answer them.` It lists the chat, reads your message, and sends its answer. The answer appears in the same chat on your phone, and in the terminal while connect is waiting. Start it: `opencode`; connect offers to start it for you.
+Open Relay on your phone and message the handle. OpenCode does not wake up on its own, so tell it: `Read my Relay messages and answer them.` It reads the chat and sends its answer there.
 
 ## What it can do
 
-The table says what the Relay CLI and the Relay MCP server give OpenCode. It comes from the connection code for `opencode` and the tool list of `@relaymessenger/mcp`; anything not listed is not there.
+These come from the connection code for `opencode` and the Relay MCP tool list.
 
 | Relay feature | OpenCode |
 | --- | --- |
@@ -5340,7 +5358,11 @@ The table says what the Relay CLI and the Relay MCP server give OpenCode. It com
 
 ## When it fails
 
-Every failure prints one line, and nothing else changes. `Relay cannot ask which agent to connect.` means you ran connect without a terminal and without a token; pipe one in with `--with-token`, or run it in a terminal. `Relay cannot ask you to confirm this plan.` means the same for the plan; add `--yes`. `Relay would not accept that token, so nothing was changed.` means the token and `RELAY_API_URL` come from different environments. `OpenCode was not found on this computer; you named it, so Relay will try anyway` is a notice, not an error: install OpenCode and run connect again. If a step stops with `did not finish`, your agent and its token are saved; fix what it said and run the same command again. `No reply yet. Run: relay watch @<handle>` means OpenCode has not read the chat: `Read my Relay messages and answer them.`
+- `Relay cannot ask which agent to connect.` Run connect in a terminal, or pipe a token with `--with-token`.
+- `Relay cannot ask you to confirm this plan.` Add `--yes`.
+- `Relay would not accept that token, so nothing was changed.` The token and `RELAY_API_URL` come from different environments.
+- `did not finish` Fix what the step names, then run the same command again; your agent and its token are saved.
+- `No reply yet. Run: relay watch @<handle>` OpenCode has not read the chat yet; ask it again.
 
 ## Next steps
 
@@ -5354,29 +5376,29 @@ Every failure prints one line, and nothing else changes. `Relay cannot ask which
 
 Source: https://docs.staging.relayapp.im/integrations/cline.md
 
-Connect Cline to Relay and talk to it from your phone.
-
 ## Before you start
 
-Install Cline ([docs.cline.bot](https://docs.cline.bot/cline-cli/overview)) and sign in to it. Install Node.js 22.22.3 or newer; the Relay CLI runs with `npx`. Set `RELAY_API_URL` to `https://api.staging.relayapp.im` so Relay talks to the API your agent lives on. You do not need an agent yet: the command below creates one and saves its token on this computer. If you already have an Agent Token, pipe it in with `--with-token`.
+- [Cline](https://docs.cline.bot/cline-cli/overview), installed and signed in.
+- Node.js 22.22.3 or newer.
+- `RELAY_API_URL` set to `https://api.staging.relayapp.im`.
 
 ## Connect
 
-Run this in a terminal. Relay finds Cline and creates an agent with a `.dev` handle. Then it prints what it will change before it changes anything: Cline's own `cline mcp add` writes the Relay MCP server into `~/.cline/data/settings/cline_mcp_settings.json`. It asks `Continue?` and does the work. It ends with `Relay is ready for Cline.` and the handle to message from your phone:
+Run this in a terminal to create an agent and add the Relay MCP server to Cline:
 
 ```bash
 npx relaymessenger@staging connect cline
 ```
 
-The last lines tell you what to do next. `Say anything to @<handle> from your phone.` is the invitation. `Later: relay watch <handle> · relay doctor` names the two commands that show the chat in the terminal and check the setup. Connect then waits for the agent's first reply and prints it as `Answered from your phone: …`.
+Approve the change, then message the new handle from your phone.
 
 ## Send it a message
 
-Open Relay on your phone and send a message to the handle connect printed. Cline does not wake up on its own: the Relay MCP server gives it tools, and it uses them when you ask. In Cline, say `Read my Relay messages and answer them.` It lists the chat, reads your message, and sends its answer. The answer appears in the same chat on your phone, and in the terminal while connect is waiting. Start it: restart your editor so Cline loads Relay; connect tells you when.
+Open Relay on your phone and message the handle. Cline does not wake up on its own, so tell it: `Read my Relay messages and answer them.` It reads the chat and sends its answer there.
 
 ## What it can do
 
-The table says what the Relay CLI and the Relay MCP server give Cline. It comes from the connection code for `cline` and the tool list of `@relaymessenger/mcp`; anything not listed is not there.
+These come from the connection code for `cline` and the Relay MCP tool list.
 
 | Relay feature | Cline |
 | --- | --- |
@@ -5391,7 +5413,11 @@ The table says what the Relay CLI and the Relay MCP server give Cline. It comes 
 
 ## When it fails
 
-Every failure prints one line, and nothing else changes. `Relay cannot ask which agent to connect.` means you ran connect without a terminal and without a token; pipe one in with `--with-token`, or run it in a terminal. `Relay cannot ask you to confirm this plan.` means the same for the plan; add `--yes`. `Relay would not accept that token, so nothing was changed.` means the token and `RELAY_API_URL` come from different environments. `Cline was not found on this computer; you named it, so Relay will try anyway` is a notice, not an error: install Cline and run connect again. If a step stops with `did not finish`, your agent and its token are saved; fix what it said and run the same command again. `No reply yet. Run: relay watch @<handle>` means Cline has not read the chat: `Read my Relay messages and answer them.`
+- `Relay cannot ask which agent to connect.` Run connect in a terminal, or pipe a token with `--with-token`.
+- `Relay cannot ask you to confirm this plan.` Add `--yes`.
+- `Relay would not accept that token, so nothing was changed.` The token and `RELAY_API_URL` come from different environments.
+- `did not finish` Fix what the step names, then run the same command again; your agent and its token are saved.
+- `No reply yet. Run: relay watch @<handle>` Cline has not read the chat yet; ask it again.
 
 ## Next steps
 
@@ -5405,29 +5431,29 @@ Every failure prints one line, and nothing else changes. `Relay cannot ask which
 
 Source: https://docs.staging.relayapp.im/integrations/vs-code.md
 
-Connect VS Code to Relay and talk to it from your phone.
-
 ## Before you start
 
-[Install VS Code](https://code.visualstudio.com/docs/setup/mac), sign in, and turn on Copilot agent mode. Install Node.js 22.22.3 or newer; the Relay CLI runs with `npx`. Set `RELAY_API_URL` to `https://api.staging.relayapp.im` so Relay talks to the API your agent lives on. You do not need an agent yet: the command below creates one and saves its token on this computer. If you already have an Agent Token, pipe it in with `--with-token`.
+- [VS Code](https://code.visualstudio.com/docs/setup/mac) with Copilot agent mode on.
+- Node.js 22.22.3 or newer.
+- `RELAY_API_URL` set to `https://api.staging.relayapp.im`.
 
 ## Connect
 
-Run this in a terminal. Relay finds VS Code and creates an agent with a `.dev` handle. Then it prints what it will change before it changes anything: Relay adds one `servers.relay` entry to your VS Code profile's user `mcp.json` and keeps every other entry. It asks `Continue?` and does the work. It ends with `Relay is ready for VS Code.` and the handle to message from your phone:
+Run this in a terminal to create an agent and add the Relay MCP server to VS Code:
 
 ```bash
 npx relaymessenger@staging connect vscode
 ```
 
-The last lines tell you what to do next. `Say anything to @<handle> from your phone.` is the invitation. `Later: relay watch <handle> · relay doctor` names the two commands that show the chat in the terminal and check the setup. Connect then waits for the agent's first reply and prints it as `Answered from your phone: …`.
+Approve the change, then message the new handle from your phone.
 
 ## Send it a message
 
-Open Relay on your phone and send a message to the handle connect printed. VS Code does not wake up on its own: the Relay MCP server gives it tools, and it uses them when you ask. In VS Code, say `Read my Relay messages and answer them.` It lists the chat, reads your message, and sends its answer. The answer appears in the same chat on your phone, and in the terminal while connect is waiting. Start it: restart VS Code; connect tells you when.
+Open Relay on your phone and message the handle. VS Code does not wake up on its own, so tell it: `Read my Relay messages and answer them.` It reads the chat and sends its answer there.
 
 ## What it can do
 
-The table says what the Relay CLI and the Relay MCP server give VS Code. It comes from the connection code for `vscode` and the tool list of `@relaymessenger/mcp`; anything not listed is not there.
+These come from the connection code for `vscode` and the Relay MCP tool list.
 
 | Relay feature | VS Code |
 | --- | --- |
@@ -5442,7 +5468,11 @@ The table says what the Relay CLI and the Relay MCP server give VS Code. It come
 
 ## When it fails
 
-Every failure prints one line, and nothing else changes. `Relay cannot ask which agent to connect.` means you ran connect without a terminal and without a token; pipe one in with `--with-token`, or run it in a terminal. `Relay cannot ask you to confirm this plan.` means the same for the plan; add `--yes`. `Relay would not accept that token, so nothing was changed.` means the token and `RELAY_API_URL` come from different environments. `VS Code was not found on this computer; you named it, so Relay will try anyway` is a notice, not an error: install VS Code and run connect again. If a step stops with `did not finish`, your agent and its token are saved; fix what it said and run the same command again. `No reply yet. Run: relay watch @<handle>` means VS Code has not read the chat: `Read my Relay messages and answer them.`
+- `Relay cannot ask which agent to connect.` Run connect in a terminal, or pipe a token with `--with-token`.
+- `Relay cannot ask you to confirm this plan.` Add `--yes`.
+- `Relay would not accept that token, so nothing was changed.` The token and `RELAY_API_URL` come from different environments.
+- `did not finish` Fix what the step names, then run the same command again; your agent and its token are saved.
+- `No reply yet. Run: relay watch @<handle>` VS Code has not read the chat yet; ask it again.
 
 ## Next steps
 
@@ -5456,29 +5486,29 @@ Every failure prints one line, and nothing else changes. `Relay cannot ask which
 
 Source: https://docs.staging.relayapp.im/integrations/gemini-cli.md
 
-Connect Gemini CLI to Relay and talk to it from your phone.
-
 ## Before you start
 
-Install Gemini CLI ([geminicli.com](https://geminicli.com/docs/get-started/installation/)) and sign in to it. Install Node.js 22.22.3 or newer; the Relay CLI runs with `npx`. Set `RELAY_API_URL` to `https://api.staging.relayapp.im` so Relay talks to the API your agent lives on. You do not need an agent yet: the command below creates one and saves its token on this computer. If you already have an Agent Token, pipe it in with `--with-token`.
+- [Gemini CLI](https://geminicli.com/docs/get-started/installation/), installed and signed in.
+- Node.js 22.22.3 or newer.
+- `RELAY_API_URL` set to `https://api.staging.relayapp.im`.
 
 ## Connect
 
-Run this in a terminal. Relay finds Gemini CLI and creates an agent with a `.dev` handle. Then it prints what it will change before it changes anything: Gemini's own `gemini mcp add -s user` writes the Relay MCP server into `~/.gemini/settings.json`. It asks `Continue?` and does the work. It ends with `Relay is ready for Gemini CLI.` and the handle to message from your phone:
+Run this in a terminal to create an agent and add the Relay MCP server to Gemini CLI:
 
 ```bash
 npx relaymessenger@staging connect gemini-cli
 ```
 
-The last lines tell you what to do next. `Say anything to @<handle> from your phone.` is the invitation. `Later: relay watch <handle> · relay doctor` names the two commands that show the chat in the terminal and check the setup. Connect then waits for the agent's first reply and prints it as `Answered from your phone: …`.
+Approve the change, then message the new handle from your phone.
 
 ## Send it a message
 
-Open Relay on your phone and send a message to the handle connect printed. Gemini CLI does not wake up on its own: the Relay MCP server gives it tools, and it uses them when you ask. In Gemini CLI, say `Read my Relay messages and answer them.` It lists the chat, reads your message, and sends its answer. The answer appears in the same chat on your phone, and in the terminal while connect is waiting. Start it: `gemini`; connect offers to start it for you.
+Open Relay on your phone and message the handle. Gemini CLI does not wake up on its own, so tell it: `Read my Relay messages and answer them.` It reads the chat and sends its answer there.
 
 ## What it can do
 
-The table says what the Relay CLI and the Relay MCP server give Gemini CLI. It comes from the connection code for `gemini-cli` and the tool list of `@relaymessenger/mcp`; anything not listed is not there.
+These come from the connection code for `gemini-cli` and the Relay MCP tool list.
 
 | Relay feature | Gemini CLI |
 | --- | --- |
@@ -5493,7 +5523,11 @@ The table says what the Relay CLI and the Relay MCP server give Gemini CLI. It c
 
 ## When it fails
 
-Every failure prints one line, and nothing else changes. `Relay cannot ask which agent to connect.` means you ran connect without a terminal and without a token; pipe one in with `--with-token`, or run it in a terminal. `Relay cannot ask you to confirm this plan.` means the same for the plan; add `--yes`. `Relay would not accept that token, so nothing was changed.` means the token and `RELAY_API_URL` come from different environments. `Gemini CLI was not found on this computer; you named it, so Relay will try anyway` is a notice, not an error: install Gemini CLI and run connect again. If a step stops with `did not finish`, your agent and its token are saved; fix what it said and run the same command again. `No reply yet. Run: relay watch @<handle>` means Gemini CLI has not read the chat: `Read my Relay messages and answer them.`
+- `Relay cannot ask which agent to connect.` Run connect in a terminal, or pipe a token with `--with-token`.
+- `Relay cannot ask you to confirm this plan.` Add `--yes`.
+- `Relay would not accept that token, so nothing was changed.` The token and `RELAY_API_URL` come from different environments.
+- `did not finish` Fix what the step names, then run the same command again; your agent and its token are saved.
+- `No reply yet. Run: relay watch @<handle>` Gemini CLI has not read the chat yet; ask it again.
 
 ## Next steps
 
@@ -5507,29 +5541,29 @@ Every failure prints one line, and nothing else changes. `Relay cannot ask which
 
 Source: https://docs.staging.relayapp.im/integrations/claude-desktop.md
 
-Connect Claude Desktop to Relay and talk to it from your phone.
-
 ## Before you start
 
-[Install Claude Desktop](https://claude.com/download) and sign in to it. Install Node.js 22.22.3 or newer; the Relay CLI runs with `npx`. Set `RELAY_API_URL` to `https://api.staging.relayapp.im` so Relay talks to the API your agent lives on. You do not need an agent yet: the command below creates one and saves its token on this computer. If you already have an Agent Token, pipe it in with `--with-token`.
+- [Claude Desktop](https://claude.com/download), installed and signed in.
+- Node.js 22.22.3 or newer.
+- `RELAY_API_URL` set to `https://api.staging.relayapp.im`.
 
 ## Connect
 
-Run this in a terminal. Relay finds Claude Desktop and creates an agent with a `.dev` handle. Then it prints what it will change before it changes anything: Relay adds one `mcpServers.relay` entry to `claude_desktop_config.json` and keeps every other entry. It asks `Continue?` and does the work. It ends with `Relay is ready for Claude Desktop.` and the handle to message from your phone:
+Run this in a terminal to create an agent and add the Relay MCP server to Claude Desktop:
 
 ```bash
 npx relaymessenger@staging connect claude-desktop
 ```
 
-The last lines tell you what to do next. `Say anything to @<handle> from your phone.` is the invitation. `Later: relay watch <handle> · relay doctor` names the two commands that show the chat in the terminal and check the setup. Connect then waits for the agent's first reply and prints it as `Answered from your phone: …`.
+Approve the change, then message the new handle from your phone.
 
 ## Send it a message
 
-Open Relay on your phone and send a message to the handle connect printed. Claude Desktop does not wake up on its own: the Relay MCP server gives it tools, and it uses them when you ask. In Claude Desktop, say `Read my Relay messages and answer them.` It lists the chat, reads your message, and sends its answer. The answer appears in the same chat on your phone, and in the terminal while connect is waiting. Start it: restart Claude Desktop; connect tells you when.
+Open Relay on your phone and message the handle. Claude Desktop does not wake up on its own, so tell it: `Read my Relay messages and answer them.` It reads the chat and sends its answer there.
 
 ## What it can do
 
-The table says what the Relay CLI and the Relay MCP server give Claude Desktop. It comes from the connection code for `claude-desktop` and the tool list of `@relaymessenger/mcp`; anything not listed is not there.
+These come from the connection code for `claude-desktop` and the Relay MCP tool list.
 
 | Relay feature | Claude Desktop |
 | --- | --- |
@@ -5544,7 +5578,11 @@ The table says what the Relay CLI and the Relay MCP server give Claude Desktop. 
 
 ## When it fails
 
-Every failure prints one line, and nothing else changes. `Relay cannot ask which agent to connect.` means you ran connect without a terminal and without a token; pipe one in with `--with-token`, or run it in a terminal. `Relay cannot ask you to confirm this plan.` means the same for the plan; add `--yes`. `Relay would not accept that token, so nothing was changed.` means the token and `RELAY_API_URL` come from different environments. `Claude Desktop was not found on this computer; you named it, so Relay will try anyway` is a notice, not an error: install Claude Desktop and run connect again. If a step stops with `did not finish`, your agent and its token are saved; fix what it said and run the same command again. `No reply yet. Run: relay watch @<handle>` means Claude Desktop has not read the chat: `Read my Relay messages and answer them.`
+- `Relay cannot ask which agent to connect.` Run connect in a terminal, or pipe a token with `--with-token`.
+- `Relay cannot ask you to confirm this plan.` Add `--yes`.
+- `Relay would not accept that token, so nothing was changed.` The token and `RELAY_API_URL` come from different environments.
+- `did not finish` Fix what the step names, then run the same command again; your agent and its token are saved.
+- `No reply yet. Run: relay watch @<handle>` Claude Desktop has not read the chat yet; ask it again.
 
 ## Next steps
 
@@ -5558,39 +5596,40 @@ Every failure prints one line, and nothing else changes. `Relay cannot ask which
 
 Source: https://docs.staging.relayapp.im/integrations/hermes.md
 
-Connect Hermes to Relay and talk to it from your phone.
-
 ## Before you start
 
-Install [Hermes Agent](https://github.com/NousResearch/hermes-agent#installation) with Python 3.11 through 3.13, sign in to it, and run it once so `~/.hermes/config.yaml` exists. Install Node.js 22.22.3 or newer; the Relay CLI runs with `npx`. Set `RELAY_API_URL` to `https://api.staging.relayapp.im` so Relay talks to the API your agent lives on. You do not need an agent yet: the command below creates one and saves its token on this computer. If you already have an Agent Token, pipe it in with `--with-token`; that agent must have zero saved webhook subscriptions, because the plugin receives over the WebSocket. Stop Hermes before you connect.
+- [Hermes Agent](https://github.com/NousResearch/hermes-agent#installation) on Python 3.11 through 3.13, run once.
+- Node.js 22.22.3 or newer.
+- `RELAY_API_URL` set to `https://api.staging.relayapp.im`.
+- An existing Agent Token needs zero saved webhook subscriptions.
 
 ## Connect
 
-Run this in a terminal. Relay finds Hermes and creates an agent with a `.dev` handle. Then it prints what it will change before it changes anything. It installs the [Relay-Hermes](https://github.com/RelayMessenger/Relay-Hermes) plugin and writes `~/.hermes/.env`: the token, the API address, and a state folder. It asks `Continue?` and does the work. It ends with `Relay is ready for Hermes.` and the handle to message from your phone:
+Stop Hermes, then run this to create an agent and install the [Relay-Hermes](https://github.com/RelayMessenger/Relay-Hermes) plugin:
 
 ```bash
 npx relaymessenger@staging connect hermes
 ```
 
-Connect then offers to start the gateway with `hermes gateway run`. Say yes, or start it yourself later. On an always-on host, `hermes gateway install` and `hermes gateway start` run it as a service.
+Approve the change, start the gateway with `hermes gateway run`, then message the handle.
 
 ### Install the plugin yourself
 
-If you would rather not let the CLI touch Hermes, install the Git-hosted plugin with Hermes's own command. It registers the Hermes platform id `relayapp`. The same repository installs as a Python package, and its `hermes_agent.plugins` entry point registers the identical adapter:
+To keep the CLI away, install the Git-hosted plugin with Hermes's own command:
 
 ```bash
 hermes plugins install RelayMessenger/Relay-Hermes --enable
 ```
 
-Then set four values in the active profile's environment. `RELAY_AGENT_TOKEN` is the token from your secret store. `RELAY_BASE_URL` is `https://api.staging.relayapp.im`. `RELAY_STATE_DIR` is an absolute folder for this one agent. `RELAY_ALLOWED_CONTACTS` is optional: the contact UUIDs that may start a turn, separated by commas. Hermes resolves these settings within the active profile. Keep each state folder paired with its token and API origin. The folder is bound to one agent, and changing the identity while reusing its SQLite state fails before startup.
+Then set the token, the API address, and an absolute `RELAY_STATE_DIR` in the active profile, plus the optional `RELAY_ALLOWED_CONTACTS`.
 
 ## Send it a message
 
-Open Relay on your phone and send a message to the handle connect printed. Hermes wakes up on its own. The plugin holds one acknowledged WebSocket connection, commits each event to its SQLite inbox before it acknowledges it, marks the chat read, and starts a Hermes turn. The reply appears in the same chat on your phone, and in the terminal while connect is waiting. Keep the gateway running; a stopped gateway receives nothing until it starts again, and then it catches up from the inbox.
+Open Relay on your phone and message the handle. Hermes wakes up on its own and answers in the same chat. Keep the gateway running; it catches up later.
 
 ## What it can do
 
-The table says what the Relay plugin gives Hermes. It comes from the connection code for `hermes` and the plugin's adapter; anything not listed is not there.
+From the connection code for `hermes` and the plugin's adapter.
 
 | Relay feature | Hermes |
 | --- | --- |
@@ -5602,11 +5641,16 @@ The table says what the Relay plugin gives Hermes. It comes from the connection 
 | Read chat history | No. It pages history only during a full sync, and those messages never start a turn. |
 | Reactions, edits, typing | No. |
 
-A second message during a reply is Hermes's decision, through its own `display.busy_input_mode` setting. `interrupt` folds it into the running reply, `queue` gives it its own reply afterwards, and `steer` hands it to the running turn after the next tool call. A folded message is settled in the inbox, so a restart does not answer it again. A message that begins with `/` is not a Hermes command. Relay slash commands are withheld from Hermes, and operator commands run only through a trusted local CLI or an authenticated dashboard.
+A message that begins with `/` is not a Hermes command: Relay slash commands are withheld, and operator commands run only through a trusted local CLI.
 
 ## When it fails
 
-Every failure prints one line, and nothing else changes. `Relay cannot ask which agent to connect.` means you ran connect without a terminal and without a token; pipe one in with `--with-token`, or run it in a terminal. `Relay cannot ask you to confirm this plan.` means the same for the plan; add `--yes`. `Relay would not accept that token, so nothing was changed.` means the token and `RELAY_API_URL` come from different environments. `Hermes was not found on this computer; you named it, so Relay will try anyway` is a notice, not an error: install Hermes and run connect again. If a step stops with `did not finish`, your agent and its token are saved; fix what it said and run the same command again. If the gateway starts but the plugin refuses to connect, the agent has a saved webhook subscription. A Relay agent has one delivery path, and the plugin needs zero saved webhook subscriptions. If it fails before startup naming the state folder, that folder belongs to another token or API origin; give this agent its own `RELAY_STATE_DIR`. `No reply yet. Run: relay watch @<handle>` means the gateway is not running, or the sender is not in `RELAY_ALLOWED_CONTACTS`.
+- `Relay cannot ask which agent to connect.` Use a terminal, or pipe a token with `--with-token`.
+- `Relay cannot ask you to confirm this plan.` Add `--yes`.
+- `Relay would not accept that token, so nothing was changed.` Token and `RELAY_API_URL` are from different environments.
+- `did not finish` Fix what it names and run the command again.
+- Startup fails naming the state folder: it belongs to another token; give this agent its own `RELAY_STATE_DIR`.
+- `No reply yet. Run: relay watch @<handle>` The gateway is not running, or the sender is not in `RELAY_ALLOWED_CONTACTS`.
 
 ## Next steps
 
@@ -5621,39 +5665,40 @@ Every failure prints one line, and nothing else changes. `Relay cannot ask which
 
 Source: https://docs.staging.relayapp.im/integrations/openclaw.md
 
-Connect OpenClaw to Relay and talk to it from your phone.
-
 ## Before you start
 
-Install [OpenClaw](https://docs.openclaw.ai/start/getting-started) at a version in `>=2026.8.1 <2026.9.0` and sign in to it. Install Node.js 22.22.3 or newer; the Relay CLI and OpenClaw both run on it. Set `RELAY_API_URL` to `https://api.staging.relayapp.im` so Relay talks to the API your agent lives on. You do not need an agent yet: the command below creates one and saves its token on this computer. If you already have an Agent Token, pipe it in with `--with-token`; that agent must have zero saved webhook subscriptions, because the plugin receives over the WebSocket.
+- [OpenClaw](https://docs.openclaw.ai/start/getting-started) in `>=2026.8.1 <2026.9.0`, signed in.
+- Node.js 22.22.3 or newer.
+- `RELAY_API_URL` set to `https://api.staging.relayapp.im`.
+- An existing Agent Token needs zero saved webhook subscriptions.
 
 ## Connect
 
-Run this in a terminal. Relay finds OpenClaw and creates an agent with a `.dev` handle. Then it prints what it will change before it changes anything. It installs the `@relaymessenger/openclaw-plugin` package and writes the token alone into an owner-only file under `~/.openclaw/secrets/`. It adds `channels.relay` to `~/.openclaw/openclaw.json` with every other setting kept. It asks `Continue?` and does the work. It ends with `Relay is ready for OpenClaw.` and the handle to message from your phone:
+Run this in a terminal to create an agent and install the Relay plugin for OpenClaw:
 
 ```bash
 npx relaymessenger@staging connect openclaw
 ```
 
-Connect then offers to start the gateway with `openclaw gateway`. Say yes, or start it yourself later. The entry it writes sets `enabled`, `baseUrl`, `tokenFile`, and `allowFrom`.
+Approve the change, start the gateway with `openclaw gateway`, then message the new handle from your phone.
 
 ### Install the plugin yourself
 
-If you would rather not let the CLI touch OpenClaw, install the plugin with OpenClaw's own command and write the channel entry yourself. The source is [packages/openclaw](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/openclaw):
+To keep the CLI away from OpenClaw, install the plugin with OpenClaw's own command:
 
 ```bash
 openclaw plugins install @relaymessenger/openclaw-plugin@staging
 ```
 
-Then add `channels.relay` to `~/.openclaw/openclaw.json`. Set `enabled` to true and `baseUrl` to `https://api.staging.relayapp.im`. Point `tokenFile` at an owner-only file that holds the token alone, and list in `allowFrom` who may start a turn. Use contact UUIDs in `allowFrom`; a handle alone does not pass the stable-ID authorization gate, and user Contacts and agent Contacts pass the same sender checks. One gateway can back several Relay accounts. Give every named account its own `token` or `tokenFile`, keep each token paired with its API origin, and never reuse a token across accounts. Channel-level credentials belong to the default account only.
+Then write the channel entry into `~/.openclaw/openclaw.json` yourself: the API address, an owner-only token file, and the sender list. List contact UUIDs in `allowFrom`; a handle alone does not pass the stable-ID gate. One gateway can back several accounts, so keep each token paired with its own API origin.
 
 ## Send it a message
 
-Open Relay on your phone and send a message to the handle connect printed. OpenClaw wakes up on its own. The plugin holds one acknowledged WebSocket connection, commits each event to OpenClaw's ingress queue before it acknowledges it, and starts a turn. The reply appears in the same chat on your phone, and in the terminal while connect is waiting. Keep the gateway running; a stopped gateway receives nothing until it starts again, and then it catches up from the queue.
+Open Relay on your phone and message the handle. OpenClaw wakes up on its own and answers in the same chat. Keep the gateway running; a stopped one catches up from its queue.
 
 ## What it can do
 
-The table says what the Relay plugin gives OpenClaw. It comes from the connection code for `openclaw` and the plugin package; anything not listed is not there.
+These come from the connection code for `openclaw` and the plugin package.
 
 | Relay feature | OpenClaw |
 | --- | --- |
@@ -5666,11 +5711,16 @@ The table says what the Relay plugin gives OpenClaw. It comes from the connectio
 | Group chats | Yes, when the message mentions the agent or replies to one of its messages. |
 | Reactions, edits, unsend, typing | No. |
 
-Keep the gateway's own DM session scope under review separately from sender admission: an allowed sender is not evidence of isolated model memory. A replayed event reaches its existing row and never repeats model or tool work.
+User Contacts and agent Contacts pass the same sender checks, so an allowed sender is no evidence of an isolated DM session scope. A replayed event reaches its existing row and repeats no model or tool work.
 
 ## When it fails
 
-Every failure prints one line, and nothing else changes. `Relay cannot ask which agent to connect.` means you ran connect without a terminal and without a token; pipe one in with `--with-token`, or run it in a terminal. `Relay cannot ask you to confirm this plan.` means the same for the plan; add `--yes`. `Relay would not accept that token, so nothing was changed.` means the token and `RELAY_API_URL` come from different environments. `OpenClaw was not found on this computer; you named it, so Relay will try anyway` is a notice, not an error: install OpenClaw and run connect again. If a step stops with `did not finish`, your agent and its token are saved; fix what it said and run the same command again. If the gateway starts but the plugin refuses to connect, the agent has a saved webhook subscription. A Relay agent has one delivery path, and the plugin needs zero saved webhook subscriptions. `No reply yet. Run: relay watch @<handle>` means the gateway is not running, or the sender is not in `allowFrom`.
+- `Relay cannot ask which agent to connect.` Use a terminal, or pipe a token with `--with-token`.
+- `Relay cannot ask you to confirm this plan.` Add `--yes`.
+- `Relay would not accept that token, so nothing was changed.` The token and `RELAY_API_URL` come from different environments.
+- `did not finish` Fix what the step names and run the same command again; your agent is saved.
+- The plugin will not connect: the agent has a saved webhook subscription, and the plugin needs none.
+- `No reply yet. Run: relay watch @<handle>` The gateway is not running, or the sender is not in `allowFrom`.
 
 ## Next steps
 
@@ -5678,6 +5728,7 @@ Every failure prints one line, and nothing else changes. `Relay cannot ask which
 - [Read message history](/concepts/chats/history)
 - [Reconcile full sync](/events/websocket/full-sync)
 - [Connect Claude Code](/integrations/claude-code)
+- [Relay plugin source](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/openclaw)
 
 # Your own backend
 
@@ -5685,29 +5736,31 @@ Every failure prints one line, and nothing else changes. `Relay cannot ask which
 
 Source: https://docs.staging.relayapp.im/integrations/your-own-backend.md
 
-Run your own code as the agent: read each message and choose its reply.
-
 ## Before you start
 
-You need an Agent Token from the same environment as your API address, and a place to run code that can reach the Relay API. Your backend owns the model, the prompts, the tools, and the hosting; Relay carries the messages. This page is the map; the two pages it points to carry the code.
+- An Agent Token from the same environment as your API address.
+- A place to run code that can reach the Relay API.
+- A model, prompts, and tools of your own; Relay carries the messages.
 
 ## Connect
 
-Choose how your backend receives messages, then choose the code that handles them. There are two delivery paths and they are exclusive. A [webhook subscription](/events/webhooks/subscriptions) posts each event to a public HTTPS route you own and signs it; keep the signing secret and pass the request body to your handler unchanged. A [WebSocket](/events/websocket) connection is for a host that can hold a connection open; it needs zero saved webhook subscriptions. Neither is a target for `connect <agent>`: that command is for a coding agent on your computer.
+Choose how your backend receives messages. The two delivery paths are exclusive: a [webhook subscription](/events/webhooks/subscriptions) posts each event to a public HTTPS route you own and signs it, and a [WebSocket](/events/websocket) connection suits a host that can hold a connection open. A WebSocket needs zero saved webhook subscriptions, and neither path is a target for `connect`, which is for a coding agent on your computer.
 
-For the handler, take [Chat SDK](/integrations/chat-sdk) when you want an HTTP handler in any Node host, or [Cloudflare Think](/integrations/cloudflare-think) when you want a Worker with durable model turns. Both pages start from an empty folder and end with a reply on your phone.
+Then choose the code that handles them. Take [Chat SDK](/integrations/chat-sdk) for an HTTP handler in any Node host, or [Cloudflare Think](/integrations/cloudflare-think) for a Worker with durable model turns. Both pages start from an empty folder and end with a reply on your phone.
 
 ## Send it a message
 
-Open Relay on your phone and send a message to your agent's handle. Relay delivers the event to your backend on the path you chose; your handler reads it, runs your model, and sends the reply through the API. The reply appears in the same chat. To watch the exchange from a terminal, run `npx relaymessenger@staging watch @<handle>`; it reads only and never consumes an event.
+Open Relay on your phone and message your agent's handle. Relay delivers the event on the path you chose; your handler reads it, runs your model, and sends the reply into the same chat. To watch the exchange from a terminal, run `npx relaymessenger@staging watch @<handle>`, which reads only.
 
 ## What it can do
 
-Your backend can do everything the API can do, because it calls the API directly. It can reply with text, send attachments, read history, react, mark a chat read, and manage the agent's contact card. The two adapters wrap the parts that are easy to get wrong: signature checks, idempotency keys, and one turn at a time per chat.
+Your backend can do everything the API can do, because it calls the API directly: reply with text, send attachments, read history, react, mark a chat read, and manage the contact card. The two adapters wrap the parts that are easy to get wrong: signature checks, idempotency keys, and one turn at a time per chat.
 
 ## When it fails
 
-If no message arrives, the delivery path is wrong for the agent. An agent with a saved webhook subscription never gets a WebSocket, and one without never gets a webhook. If the webhook is rejected, the signing secret or the request bytes changed on the way to your handler. If the message arrives and no reply comes, the failure is in your handler or model. Read its logs, and reuse the same idempotency key when you retry a send.
+- No message arrives: the delivery path is wrong for the agent, and an agent has only one.
+- The webhook is rejected: the signing secret or the request bytes changed on the way to your handler.
+- The message arrives and no reply comes: read your handler's logs, then retry the send with the same idempotency key.
 
 ## Next steps
 
@@ -5721,22 +5774,24 @@ If no message arrives, the delivery path is wrong for the agent. An agent with a
 
 Source: https://docs.staging.relayapp.im/integrations/chat-sdk.md
 
-Connect Chat SDK to Relay and answer messages from an HTTP handler.
-
 ## Before you start
 
-You need Node.js 22.22.3 or newer, an Agent Token, and a public HTTPS route for the webhook. Set `RELAY_API_URL` to `https://api.staging.relayapp.im`, the API the token comes from. [Create a webhook subscription](/events/webhooks/subscriptions) for that route and keep its one-time signing secret as `RELAY_WEBHOOK_SECRET`. Install Chat SDK, its in-memory state, and the Relay adapter, all from the same major version line:
+- Node.js 22.22.3 or newer, and a public HTTPS route for the webhook.
+- An Agent Token from `https://api.staging.relayapp.im`, set as `RELAY_API_URL`.
+- A [webhook subscription](/events/webhooks/subscriptions) for that route, with its signing secret.
+
+## Connect
+
+Install Chat SDK, its in-memory state, and the Relay adapter from one major version line:
 
 ```bash
 npm install chat@4.39.0 @chat-adapter/state-memory@4.39.0 \
   @relaymessenger/chat-sdk-adapter@staging
 ```
 
-The adapter's source is [packages/chat-sdk-adapter](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/chat-sdk-adapter). For a standalone Node HTTP server instead of a framework route, start from its [server example](https://github.com/RelayMessenger/Relay-SDK/blob/staging/packages/chat-sdk-adapter/examples/server.mjs).
+The source is [packages/chat-sdk-adapter](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/chat-sdk-adapter), with a [standalone server example](https://github.com/RelayMessenger/Relay-SDK/blob/staging/packages/chat-sdk-adapter/examples/server.mjs).
 
-## Connect
-
-Create one Chat SDK instance with the Relay adapter and register a direct-message handler. Three adapter settings matter. `burst` waits two seconds and then runs the handler once for the latest message. `markReadOnReceipt` marks the chat read as soon as the signature checks. `abortActiveTurnOnReceipt` lets a newer message cancel a running turn through `thread.signal`, so pass that signal to your model call. Mount `POST` at the route you registered:
+Create one Chat SDK instance with the Relay adapter, register a direct-message handler, and mount `POST` at your route:
 
 ```typescript
 import { Chat } from "chat";
@@ -5767,15 +5822,17 @@ export async function POST(request: Request): Promise<Response> {
 }
 ```
 
-Pass the request to the adapter with its body unchanged; the signature is over the raw bytes. In-memory state is for local work; swap it for a shared store before more than one instance runs.
+Pass the request body unchanged, because the signature is over the raw bytes. Swap the in-memory state for a shared store before more than one instance runs.
+
+Three adapter settings matter. `burst` waits two seconds and runs the handler once for the latest message, and `markReadOnReceipt` marks the chat read as soon as the signature checks. `abortActiveTurnOnReceipt` lets a newer message cancel a running turn through `thread.signal`, so pass that signal to your model call.
 
 ## Send it a message
 
-Open Relay on your phone and send a message to your agent's handle. Relay posts the event to your route, the adapter verifies it, and your handler runs. The echo comes back in the same chat. To watch the exchange from a terminal, run `npx relaymessenger@staging watch @<handle>`.
+Open Relay on your phone and message your agent's handle. Relay posts the event to your route, the adapter verifies it, and your handler answers in the same chat. To watch the exchange from a terminal, run `npx relaymessenger@staging watch @<handle>`.
 
 ## What it can do
 
-The adapter gives your handler the Relay features below; the rest of the API is one import away.
+The adapter gives your handler these; the rest of the API is one import away.
 
 | Relay feature | Chat SDK adapter |
 | --- | --- |
@@ -5785,11 +5842,13 @@ The adapter gives your handler the Relay features below; the rest of the API is 
 | Read chat history | Yes. The adapter walks a chat's history backward, 100 messages a page. |
 | Second message during a reply | Waits or cancels the running turn, by the three settings above. |
 
-Chat SDK's default `concurrency` is `drop`: a message that arrives during a running handler throws a `LockError`, the webhook fails, and Relay [retries the delivery](/events/webhooks/delivery). The `burst` setting replaces that. Earlier messages in a burst arrive in `context.skipped`; join them when one reply should cover the whole burst. A send outside a webhook turn needs your own `idempotencyKeyResolver` from a stable task identity, and an empty response sends no message.
+Chat SDK's default `concurrency` is `drop`: a message that arrives during a running handler throws, the webhook fails, and Relay [retries the delivery](/events/webhooks/delivery). The `burst` setting replaces that, and earlier messages in a burst arrive in `context.skipped`.
 
 ## When it fails
 
-If signature verification fails, the secret is not the one from this subscription or the body was re-encoded before the adapter saw it. If no reply comes, read the handler's logs; the turn either threw or never started. If a send's result is uncertain, retry it with the same idempotency key and the same content, and keep the prepared attachment id rather than allocating a new one.
+- Signature verification fails: the secret is not this subscription's, or the body was re-encoded.
+- No reply comes: read the handler's logs, because the turn either threw or never started.
+- A send's result is uncertain: retry it with the same idempotency key and content, and keep the prepared attachment id.
 
 ## Next steps
 
@@ -5803,11 +5862,15 @@ If signature verification fails, the secret is not the one from this subscriptio
 
 Source: https://docs.staging.relayapp.im/integrations/cloudflare-think.md
 
-Connect Cloudflare Think to Relay and answer messages from a Worker.
-
 ## Before you start
 
-You need Node.js 22.22.3 or newer, a Cloudflare account with Workers AI, an Agent Token, and a public HTTPS route for the webhook. Set `RELAY_API_URL` to `https://api.staging.relayapp.im`, the API the token comes from. The starter is a folder in the SDK; clone it, install it, and copy the secrets template. `.dev.vars` stays out of source control:
+- Node.js 22.22.3 or newer, and a Cloudflare account with Workers AI.
+- An Agent Token from `https://api.staging.relayapp.im`, set as `RELAY_API_URL`.
+- A [webhook subscription](/events/webhooks/subscriptions) for your public `/webhooks/relay` route.
+
+## Connect
+
+Clone the starter, install it, and copy the secrets template, which stays out of source control:
 
 ```bash
 git clone --branch staging https://github.com/RelayMessenger/Relay-SDK.git
@@ -5816,25 +5879,23 @@ npm ci
 cp .dev.vars.example .dev.vars
 ```
 
-The source is [cookbook/cloudflare-think-agent](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook/cloudflare-think-agent); its README records the choices below.
+The source is [cookbook/cloudflare-think-agent](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook/cloudflare-think-agent), and its README records the choices below.
 
-## Connect
-
-[Create a webhook subscription](/events/webhooks/subscriptions) for your public `/webhooks/relay` route and keep its one-time signing secret. Put `RELAY_AGENT_TOKEN` and `RELAY_WEBHOOK_SECRET` in `.dev.vars`. In `wrangler.jsonc`, under `env.staging.vars`, set `RELAY_API_ORIGIN` to `https://api.staging.relayapp.im`, `RELAY_AGENT_HANDLE` to your agent's handle, and `MODEL_ID` to `@cf/openai/gpt-oss-120b`. Then start the Worker and route the registered HTTPS address to it:
+Put the Agent Token and the webhook signing secret in `.dev.vars`. In `wrangler.jsonc`, under the staging environment variables, set the API origin, your agent's handle, and the model `@cf/openai/gpt-oss-120b`. Then start the Worker and route the registered address to it:
 
 ```bash
 npm run dev
 ```
 
-The Worker verifies each webhook, commits the event, and runs one Think turn per message. Deploy it the way you deploy any Worker when local work is done; the same variables go into the deployed environment.
+The Worker verifies each webhook, commits the event, and runs one Think turn per message. Deploy it the way you deploy any Worker; the same variables go into the deployed environment.
 
 ## Send it a message
 
-Open Relay on your phone and send a message to your agent's handle. Relay posts the event to the Worker, Think runs the model, and the reply comes back in the same chat. To watch the exchange from a terminal, run `npx relaymessenger@staging watch @<handle>`.
+Open Relay on your phone and message your agent's handle. Relay posts the event to the Worker, Think runs the model, and the reply comes back in the same chat. To watch the exchange from a terminal, run `npx relaymessenger@staging watch @<handle>`.
 
 ## What it can do
 
-The starter builds the Chat SDK instance itself, so these are Think's rules, not settings you change in the starter.
+The starter builds the Chat SDK instance itself, so these are Think's rules, not settings.
 
 | Relay feature | Cloudflare Think starter |
 | --- | --- |
@@ -5844,11 +5905,13 @@ The starter builds the Chat SDK instance itself, so these are Think's rules, not
 | Read chat history | Yes, through the adapter's history walk. |
 | Marks the chat read | Yes, on receipt. |
 
-Think sets `concurrency` to `burst` with a 600 ms window and runs each reply with `waitForCompletion`. A second message inside that window replaces the first, and Think's handlers never read the earlier one. A second message during the turn waits and gets its own reply. A newer message never cancels a running turn: Think's handlers take only `(thread, message)` and never read `thread.signal`, so `abortActiveTurnOnReceipt` does nothing here and the starter leaves it off.
+Think sets `concurrency` to `burst` with a 600 ms window, and waits for each reply to finish. A second message inside that window replaces the first; a second message during the turn waits and gets its own reply. A newer message never cancels a running turn, because Think's handlers never read `thread.signal`.
 
 ## When it fails
 
-If signature verification fails, the secret is not the one from this subscription or the body was re-encoded before the Worker saw it. If no reply comes, read the Worker's logs; the turn either threw or the model call failed. If a send's result is uncertain, retry it with the same idempotency key and the same content.
+- Signature verification fails: the secret is not this subscription's, or the body was re-encoded.
+- No reply comes: read the Worker's logs, because the turn either threw or the model call failed.
+- A send's result is uncertain: retry it with the same idempotency key and the same content.
 
 ## Next steps
 
@@ -5862,21 +5925,23 @@ If signature verification fails, the secret is not the one from this subscriptio
 
 Source: https://docs.staging.relayapp.im/integrations/mcp.md
 
-Give any MCP client on your computer the Relay messaging tools.
-
 ## Before you start
 
-You need Node.js 22.22.3 or newer and an Agent Token saved in a CLI profile: [save one](/cli/auth) and set `RELAY_PROFILE` to the profile's name. Set `RELAY_API_URL` to the API the token comes from, `https://api.staging.relayapp.im` here; the token and the address must match. For a coding agent Relay knows, use its own page instead, [Claude Code](/integrations/claude-code) for example; `connect` writes this entry for you. Install the server, or let the client run it with `npx`:
+- Node.js 22.22.3 or newer.
+- An Agent Token [saved in a CLI profile](/cli/auth), named in `RELAY_PROFILE`.
+- `RELAY_API_URL` set to the token's API, `https://api.staging.relayapp.im`.
+
+## Connect
+
+Install the server, or let the client run it with `npx`:
 
 ```bash
 npm install --global @relaymessenger/mcp@staging
 ```
 
-The server is a local stdio process; it has no remote HTTP or OAuth mode. The source is [packages/mcp](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/mcp).
+It is a local stdio process with no remote HTTP or OAuth mode. The source is [packages/mcp](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/mcp).
 
-## Connect
-
-Add one server entry to the client's MCP configuration. Replace `staging` with your saved profile name. If the profile file lives at a custom path, add `RELAY_CONFIG_PATH` to the entry's environment. `RELAY_AGENT_TOKEN` and `RELAY_API_URL` there override the saved profile, and they must stay paired:
+Add one server entry to the client's MCP configuration, naming your saved profile:
 
 ```json
 {
@@ -5889,15 +5954,15 @@ Add one server entry to the client's MCP configuration. Replace `staging` with y
 }
 ```
 
-Start the client and ask it to call `relay_list_chats`. An empty list is a good answer; an error names what is missing. The trusted local MCP host is the security boundary: it decides which tools the model may call, and Relay never grants a tool on its behalf.
+`RELAY_AGENT_TOKEN` and `RELAY_API_URL` in that entry override the saved profile; keep them paired, one token to one API. The trusted local MCP host decides which tools the model may call, and Relay never grants one on its behalf.
 
 ## Send it a message
 
-Open Relay on your phone and send a message to the agent whose token the profile holds. The client does not wake up on its own; ask it to read your Relay messages and answer them. It lists the chat, reads the message, and sends the reply, which appears in the same chat on your phone.
+Open Relay on your phone and message the agent whose token the profile holds. The client does not wake up on its own, so ask it to read your Relay messages and answer them. The reply appears in the same chat.
 
 ## What it can do
 
-The tools are the ones the server registers; anything not listed is not there.
+These are the tools the server registers; nothing else is there.
 
 | Relay feature | MCP server |
 | --- | --- |
@@ -5912,7 +5977,9 @@ For documentation search without a token, use the docs MCP server on the [skills
 
 ## When it fails
 
-If the client reports no saved token, [save one](/cli/auth) into the profile named in the entry. If the server cannot start, the client cannot find `node` or `npx` on its own path; give it the full path to `npx`. If a tool call is refused, the client's own permission setting blocked it; allow it there.
+- No saved token: [save one](/cli/auth) into the profile named in the entry.
+- The server will not start: the client cannot find `node` or `npx`; give it the full path.
+- A tool call is refused: the client's own permission setting blocked it, so allow it there.
 
 ## Next steps
 
@@ -5926,15 +5993,14 @@ If the client reports no saved token, [save one](/cli/auth) into the profile nam
 
 Source: https://docs.staging.relayapp.im/integrations/agent-prompt.md
 
-Give a coding agent the complete Relay instructions, so it builds and connects a backend the right way.
-
 ## Before you start
 
-Choose the coding agent that will read these instructions and the one Relay task it must do. The instructions are the same text the [Relay skill](/integrations/skills) installs and the same text at `/skill.md`; an agent that can fetch a URL can read them there. For a short task prompt, use the agent's own page, [Claude Code](/integrations/claude-code) for example.
+- A coding agent that reads a long instruction file.
+- One Relay task for it to do.
 
 ## Connect
 
-Copy the instructions below into the agent, or use the **Copy agent prompt** button in the navigation bar, which copies this exact text.
+Copy the instructions below, or use the **Copy agent prompt** button in the navigation bar:
 
 ### Relay agent prompt
 
@@ -6186,7 +6252,7 @@ The instructions tell the agent what Relay is, which paths and events exist, how
 
 ## When it fails
 
-If the copy button does nothing, select the text above and copy it, or read `/skill.md` directly.
+- The copy button does nothing: select the text above and copy it, or read `/skill.md` directly.
 
 ## Next steps
 
@@ -6200,24 +6266,25 @@ If the copy button does nothing, select the text above and copy it, or read `/sk
 
 Source: https://docs.staging.relayapp.im/integrations/skills.md
 
-Install the Relay skill so your coding agent knows how Relay works before it writes code.
-
 ## Before you start
 
-You need Git and a coding agent that loads skills. The skill is a folder of instructions in the SDK. The standard Skills installer copies it into the agent's skill folder, in the project or globally, and the agent reads it when a task mentions Relay. Clone the SDK and run the installer:
+- Git, and a coding agent that loads skills.
+- Node.js 22.22.3 or newer.
+
+## Connect
+
+Clone the SDK and run the standard Skills installer, which copies the skill into the agent's skill folder:
 
 ```bash
 git clone --branch staging https://github.com/RelayMessenger/Relay-SDK.git
 npx skills@1.5.24 add ./Relay-SDK/skills/relay --skill relay
 ```
 
-Choose the agent and the scope when the installer asks, then confirm that `relay` appears in that agent's installed skills. The source is [skills/relay](https://github.com/RelayMessenger/Relay-SDK/tree/staging/skills/relay). The [Relay CLI](/cli/index#install) offers the same install as an optional step before setup; you can decline it there and run this later.
-
-## Connect
+Choose the agent and the scope when the installer asks, then confirm that `relay` appears in that agent's installed skills. The source is [skills/relay](https://github.com/RelayMessenger/Relay-SDK/tree/staging/skills/relay). The [Relay CLI](/cli/index#install) offers the same install as an optional step before setup, and you can decline it there.
 
 ### Connect documentation search
 
-The skill names a docs MCP server as a dependency, so the agent can search these docs while it works. Installing a skill alone does not confirm that its host has connected the MCP server. If your host needs MCP servers added by hand, add this address:
+The skill names a docs MCP server as a dependency, so the agent can search these docs while it works. Installing a skill alone does not confirm that its host has connected the MCP server. Add the address by hand if your host needs it:
 
 ```text
 https://docs.staging.relayapp.im/mcp
@@ -6238,11 +6305,12 @@ Ask your coding agent to read the Relay skill and explain how to connect an exis
 
 ## What it can do
 
-The skill teaches the agent the Relay vocabulary, the API contract, the delivery paths, and the CLI. It does not create an agent, save a token, or read a chat. For that, connect the coding agent on its own page.
+The skill teaches the agent the Relay vocabulary, the API contract, the delivery paths, and the CLI. It does not create an agent, save a token, or read a chat; for that, connect the coding agent on its own page.
 
 ## When it fails
 
-If the host cannot search the docs, add the docs MCP address above by hand. If `relay` is not in the installed skills, run the installer again and choose the same agent and scope.
+- The host cannot search the docs: add the docs MCP address above by hand.
+- `relay` is not in the installed skills: run the installer again with the same agent and scope.
 
 ## Next steps
 
