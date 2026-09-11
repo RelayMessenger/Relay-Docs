@@ -1391,6 +1391,263 @@ User Contacts and agent Contacts pass the same sender checks, so an allowed send
 - [Connect Claude Code](/integrations/claude-code)
 - [Relay plugin source](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/openclaw)
 
+# Your own backend
+
+> Run the code that reads a Relay message and chooses its reply.
+
+Source: https://docs.staging.relayapp.im/integrations/your-own-backend.md
+
+## Before you start
+
+- An Agent Token from the same environment as your API address.
+- A place to run code that can reach the Relay API.
+- A model, prompts, and tools of your own; Relay carries the messages.
+
+## Connect
+
+Choose how your backend receives messages. The two delivery paths are exclusive: a [webhook subscription](/webhooks/subscriptions) posts each event to a public HTTPS route you own and signs it, and a [WebSocket](/websocket) connection suits a host that can hold a connection open. A WebSocket needs zero saved webhook subscriptions, and neither path is a target for `connect`, which is for a coding agent on your computer.
+
+Then choose the code that handles them. Take [Chat SDK](/integrations/chat-sdk) for an HTTP handler in any Node host, or [Cloudflare Think](/integrations/cloudflare-think) for a Worker with durable model turns. Both pages start from an empty folder and end with a reply on your phone.
+
+## Send it a message
+
+Open Relay on your phone and message your agent's handle. Relay delivers the event on the path you chose; your handler reads it, runs your model, and sends the reply into the same chat. To watch the exchange from a terminal, run `npx relaymessenger@staging watch @<handle>`, which reads only.
+
+## What it can do
+
+Your backend can do everything the API can do, because it calls the API directly: reply with text, send attachments, read history, react, mark a chat read, and manage the contact card. The two adapters wrap the parts that are easy to get wrong: signature checks, idempotency keys, and one turn at a time per chat.
+
+## When it fails
+
+- No message arrives: the delivery path is wrong for the agent, and an agent has only one.
+- The webhook is rejected: the signing secret or the request bytes changed on the way to your handler.
+- The message arrives and no reply comes: read your handler's logs, then retry the send with the same idempotency key.
+
+## Next steps
+
+- [Verify signatures](/webhooks/verify-signatures)
+- [Send a reply](/messages/replies)
+- [Debug requests](/live/debugging)
+
+# Vercel Chat SDK
+
+> Connect Chat SDK to receive Relay messages and send replies.
+
+Source: https://docs.staging.relayapp.im/integrations/chat-sdk.md
+
+## Before you start
+
+- Node.js 22.22.3 or newer, and a public HTTPS route for the webhook.
+- An Agent Token from `https://api.staging.relayapp.im`, set as `RELAY_API_URL`.
+- A [webhook subscription](/webhooks/subscriptions) for that route, with its signing secret.
+
+## Connect
+
+Install Chat SDK, its in-memory state, and the Relay adapter from one major version line:
+
+```bash
+npm install chat@4.39.0 @chat-adapter/state-memory@4.39.0 \
+  @relaymessenger/chat-sdk-adapter@staging
+```
+
+The source is [packages/chat-sdk-adapter](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/chat-sdk-adapter), with a [standalone server example](https://github.com/RelayMessenger/Relay-SDK/blob/staging/packages/chat-sdk-adapter/examples/server.mjs).
+
+Create one Chat SDK instance with the Relay adapter, register a direct-message handler, and mount `POST` at your route:
+
+```typescript
+import { Chat } from "chat";
+import { createMemoryState } from "@chat-adapter/state-memory";
+import { createRelayAdapter } from "@relaymessenger/chat-sdk-adapter";
+
+const chat = new Chat({
+  userName: "Relay example",
+  concurrency: { strategy: "burst", debounceMs: 2000 },
+  adapters: {
+    relay: createRelayAdapter({
+      baseUrl: process.env.RELAY_API_URL!,
+      token: process.env.RELAY_AGENT_TOKEN,
+      webhookSecret: process.env.RELAY_WEBHOOK_SECRET,
+      markReadOnReceipt: true,
+      abortActiveTurnOnReceipt: true,
+    }),
+  },
+  state: createMemoryState(),
+});
+
+chat.onDirectMessage(async (thread, message) => {
+  await thread.post(`Echo: ${message.text}`);
+});
+
+export async function POST(request: Request): Promise<Response> {
+  return chat.webhooks.relay(request);
+}
+```
+
+Pass the request body unchanged, because the signature is over the raw bytes. Swap the in-memory state for a shared store before more than one instance runs.
+
+Three adapter settings matter. `burst` waits two seconds and runs the handler once for the latest message, and `markReadOnReceipt` marks the chat read as soon as the signature checks. `abortActiveTurnOnReceipt` lets a newer message cancel a running turn through `thread.signal`, so pass that signal to your model call.
+
+## Send it a message
+
+Open Relay on your phone and message your agent's handle. Relay posts the event to your route, the adapter verifies it, and your handler answers in the same chat. To watch the exchange from a terminal, run `npx relaymessenger@staging watch @<handle>`.
+
+## What it can do
+
+The adapter gives your handler these; the rest of the API is one import away.
+
+| Relay feature | Chat SDK adapter |
+| --- | --- |
+| Wakes when a message arrives | Yes, by webhook. |
+| Reply in the chat | Yes, with a send key derived from the event id and the send ordinal, so a retry never sends twice. |
+| Send attachments | Yes, from a public HTTPS URL or from file bytes; see [attachments](/messages/attachments). |
+| Read chat history | Yes. The adapter walks a chat's history backward, 100 messages a page. |
+| Second message during a reply | Waits or cancels the running turn, by the three settings above. |
+
+Chat SDK's default `concurrency` is `drop`: a message that arrives during a running handler throws, the webhook fails, and Relay [retries the delivery](/webhooks/delivery). The `burst` setting replaces that, and earlier messages in a burst arrive in `context.skipped`.
+
+## When it fails
+
+- Signature verification fails: the secret is not this subscription's, or the body was re-encoded.
+- No reply comes: read the handler's logs, because the turn either threw or never started.
+- A send's result is uncertain: retry it with the same idempotency key and content, and keep the prepared attachment id.
+
+## Next steps
+
+- [Verify webhook signatures](/webhooks/verify-signatures)
+- [Handle delivery retries](/webhooks/delivery)
+- [Send attachments](/messages/attachments)
+
+# Cloudflare Think
+
+> Connect Cloudflare Think to receive Relay messages and send replies.
+
+Source: https://docs.staging.relayapp.im/integrations/cloudflare-think.md
+
+## Before you start
+
+- Node.js 22.22.3 or newer, and a Cloudflare account with Workers AI.
+- An Agent Token from `https://api.staging.relayapp.im`, set as `RELAY_API_URL`.
+- A [webhook subscription](/webhooks/subscriptions) for your public `/webhooks/relay` route.
+
+## Connect
+
+Clone the starter, install it, and copy the secrets template, which stays out of source control:
+
+```bash
+git clone --branch staging https://github.com/RelayMessenger/Relay-SDK.git
+cd Relay-SDK/cookbook/cloudflare-think-agent
+npm ci
+cp .dev.vars.example .dev.vars
+```
+
+The source is [cookbook/cloudflare-think-agent](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook/cloudflare-think-agent), and its README records the choices below.
+
+Put the Agent Token and the webhook signing secret in `.dev.vars`. In `wrangler.jsonc`, under the staging environment variables, set the API origin, your agent's handle, and the model `@cf/openai/gpt-oss-120b`. Then start the Worker and route the registered address to it:
+
+```bash
+npm run dev
+```
+
+The Worker verifies each webhook, commits the event, and runs one Think turn per message. Deploy it the way you deploy any Worker; the same variables go into the deployed environment.
+
+## Send it a message
+
+Open Relay on your phone and message your agent's handle. Relay posts the event to the Worker, Think runs the model, and the reply comes back in the same chat. To watch the exchange from a terminal, run `npx relaymessenger@staging watch @<handle>`.
+
+## What it can do
+
+The starter builds the Chat SDK instance itself, so these are Think's rules, not settings.
+
+| Relay feature | Cloudflare Think starter |
+| --- | --- |
+| Wakes when a message arrives | Yes, by webhook. |
+| Reply in the chat | Yes, one turn per message, with the chat locked for the whole turn. |
+| Send attachments | Yes, through the Chat SDK adapter it wraps. |
+| Read chat history | Yes, through the adapter's history walk. |
+| Marks the chat read | Yes, on receipt. |
+
+Think sets `concurrency` to `burst` with a 600 ms window, and waits for each reply to finish. A second message inside that window replaces the first; a second message during the turn waits and gets its own reply. A newer message never cancels a running turn, because Think's handlers never read `thread.signal`.
+
+## When it fails
+
+- Signature verification fails: the secret is not this subscription's, or the body was re-encoded.
+- No reply comes: read the Worker's logs, because the turn either threw or the model call failed.
+- A send's result is uncertain: retry it with the same idempotency key and the same content.
+
+## Next steps
+
+- [Verify webhook signatures](/webhooks/verify-signatures)
+- [Handle delivery retries](/webhooks/delivery)
+- [Send attachments](/messages/attachments)
+
+# MCP server
+
+> Give a trusted local MCP client authenticated Relay messaging tools.
+
+Source: https://docs.staging.relayapp.im/integrations/mcp.md
+
+## Before you start
+
+- Node.js 22.22.3 or newer.
+- An Agent Token [saved in a CLI profile](/cli/auth), named in `RELAY_PROFILE`.
+- `RELAY_API_URL` set to the token's API, `https://api.staging.relayapp.im`.
+
+## Connect
+
+Install the server, or let the client run it with `npx`:
+
+```bash
+npm install --global @relaymessenger/mcp@staging
+```
+
+It is a local stdio process with no remote HTTP or OAuth mode. The source is [packages/mcp](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/mcp).
+
+Add one server entry to the client's MCP configuration, naming your saved profile:
+
+```json
+{
+  "mcpServers": {
+    "relay": {
+      "command": "npx",
+      "args": ["-y", "@relaymessenger/mcp@staging", "--profile", "staging"]
+    }
+  }
+}
+```
+
+`RELAY_AGENT_TOKEN` and `RELAY_API_URL` in that entry override the saved profile; keep them paired, one token to one API. The trusted local MCP host decides which tools the model may call, and Relay never grants one on its behalf.
+
+## Send it a message
+
+Open Relay on your phone and message the agent whose token the profile holds. The client does not wake up on its own, so ask it to read your Relay messages and answer them. The reply appears in the same chat.
+
+## What it can do
+
+These are the tools the server registers; nothing else is there.
+
+| Relay feature | MCP server |
+| --- | --- |
+| Wakes when a message arrives | No. The client reads when asked. |
+| Reply in the chat | Yes, text up to 10,000 characters, to a chat or to handles, with an idempotency key. |
+| Send attachments | No. Sends are text only. |
+| Read chat history | Yes, chats, messages, and threads, one page at a time. |
+| React, type, mark read | Yes. |
+| Contact card | Yes, read and set. |
+
+For documentation search without a token, use the docs MCP server on the [skills page](/integrations/skills).
+
+## When it fails
+
+- No saved token: [save one](/cli/auth) into the profile named in the entry.
+- The server will not start: the client cannot find `node` or `npx`; give it the full path.
+- A tool call is refused: the client's own permission setting blocked it, so allow it there.
+
+## Next steps
+
+- [Send messages](/messages/send)
+- [Use idempotency keys](/live/idempotency)
+- [Add documentation search](/integrations/skills)
+
 # Agent prompt
 
 > Copy the complete instructions for a coding agent that connects a Relay backend.
@@ -4499,263 +4756,6 @@ A `full_sync_mismatch` error means the boundary you sent differs from the frame'
 - [Acknowledge events](/websocket/acknowledgements)
 - [Read the frames](/websocket/protocol)
 - [Page through history](/chats/history)
-
-# Your own backend
-
-> Run the code that reads a Relay message and chooses its reply.
-
-Source: https://docs.staging.relayapp.im/integrations/your-own-backend.md
-
-## Before you start
-
-- An Agent Token from the same environment as your API address.
-- A place to run code that can reach the Relay API.
-- A model, prompts, and tools of your own; Relay carries the messages.
-
-## Connect
-
-Choose how your backend receives messages. The two delivery paths are exclusive: a [webhook subscription](/webhooks/subscriptions) posts each event to a public HTTPS route you own and signs it, and a [WebSocket](/websocket) connection suits a host that can hold a connection open. A WebSocket needs zero saved webhook subscriptions, and neither path is a target for `connect`, which is for a coding agent on your computer.
-
-Then choose the code that handles them. Take [Chat SDK](/integrations/chat-sdk) for an HTTP handler in any Node host, or [Cloudflare Think](/integrations/cloudflare-think) for a Worker with durable model turns. Both pages start from an empty folder and end with a reply on your phone.
-
-## Send it a message
-
-Open Relay on your phone and message your agent's handle. Relay delivers the event on the path you chose; your handler reads it, runs your model, and sends the reply into the same chat. To watch the exchange from a terminal, run `npx relaymessenger@staging watch @<handle>`, which reads only.
-
-## What it can do
-
-Your backend can do everything the API can do, because it calls the API directly: reply with text, send attachments, read history, react, mark a chat read, and manage the contact card. The two adapters wrap the parts that are easy to get wrong: signature checks, idempotency keys, and one turn at a time per chat.
-
-## When it fails
-
-- No message arrives: the delivery path is wrong for the agent, and an agent has only one.
-- The webhook is rejected: the signing secret or the request bytes changed on the way to your handler.
-- The message arrives and no reply comes: read your handler's logs, then retry the send with the same idempotency key.
-
-## Next steps
-
-- [Verify signatures](/webhooks/verify-signatures)
-- [Send a reply](/messages/replies)
-- [Debug requests](/live/debugging)
-
-# Vercel Chat SDK
-
-> Connect Chat SDK to receive Relay messages and send replies.
-
-Source: https://docs.staging.relayapp.im/integrations/chat-sdk.md
-
-## Before you start
-
-- Node.js 22.22.3 or newer, and a public HTTPS route for the webhook.
-- An Agent Token from `https://api.staging.relayapp.im`, set as `RELAY_API_URL`.
-- A [webhook subscription](/webhooks/subscriptions) for that route, with its signing secret.
-
-## Connect
-
-Install Chat SDK, its in-memory state, and the Relay adapter from one major version line:
-
-```bash
-npm install chat@4.39.0 @chat-adapter/state-memory@4.39.0 \
-  @relaymessenger/chat-sdk-adapter@staging
-```
-
-The source is [packages/chat-sdk-adapter](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/chat-sdk-adapter), with a [standalone server example](https://github.com/RelayMessenger/Relay-SDK/blob/staging/packages/chat-sdk-adapter/examples/server.mjs).
-
-Create one Chat SDK instance with the Relay adapter, register a direct-message handler, and mount `POST` at your route:
-
-```typescript
-import { Chat } from "chat";
-import { createMemoryState } from "@chat-adapter/state-memory";
-import { createRelayAdapter } from "@relaymessenger/chat-sdk-adapter";
-
-const chat = new Chat({
-  userName: "Relay example",
-  concurrency: { strategy: "burst", debounceMs: 2000 },
-  adapters: {
-    relay: createRelayAdapter({
-      baseUrl: process.env.RELAY_API_URL!,
-      token: process.env.RELAY_AGENT_TOKEN,
-      webhookSecret: process.env.RELAY_WEBHOOK_SECRET,
-      markReadOnReceipt: true,
-      abortActiveTurnOnReceipt: true,
-    }),
-  },
-  state: createMemoryState(),
-});
-
-chat.onDirectMessage(async (thread, message) => {
-  await thread.post(`Echo: ${message.text}`);
-});
-
-export async function POST(request: Request): Promise<Response> {
-  return chat.webhooks.relay(request);
-}
-```
-
-Pass the request body unchanged, because the signature is over the raw bytes. Swap the in-memory state for a shared store before more than one instance runs.
-
-Three adapter settings matter. `burst` waits two seconds and runs the handler once for the latest message, and `markReadOnReceipt` marks the chat read as soon as the signature checks. `abortActiveTurnOnReceipt` lets a newer message cancel a running turn through `thread.signal`, so pass that signal to your model call.
-
-## Send it a message
-
-Open Relay on your phone and message your agent's handle. Relay posts the event to your route, the adapter verifies it, and your handler answers in the same chat. To watch the exchange from a terminal, run `npx relaymessenger@staging watch @<handle>`.
-
-## What it can do
-
-The adapter gives your handler these; the rest of the API is one import away.
-
-| Relay feature | Chat SDK adapter |
-| --- | --- |
-| Wakes when a message arrives | Yes, by webhook. |
-| Reply in the chat | Yes, with a send key derived from the event id and the send ordinal, so a retry never sends twice. |
-| Send attachments | Yes, from a public HTTPS URL or from file bytes; see [attachments](/messages/attachments). |
-| Read chat history | Yes. The adapter walks a chat's history backward, 100 messages a page. |
-| Second message during a reply | Waits or cancels the running turn, by the three settings above. |
-
-Chat SDK's default `concurrency` is `drop`: a message that arrives during a running handler throws, the webhook fails, and Relay [retries the delivery](/webhooks/delivery). The `burst` setting replaces that, and earlier messages in a burst arrive in `context.skipped`.
-
-## When it fails
-
-- Signature verification fails: the secret is not this subscription's, or the body was re-encoded.
-- No reply comes: read the handler's logs, because the turn either threw or never started.
-- A send's result is uncertain: retry it with the same idempotency key and content, and keep the prepared attachment id.
-
-## Next steps
-
-- [Verify webhook signatures](/webhooks/verify-signatures)
-- [Handle delivery retries](/webhooks/delivery)
-- [Send attachments](/messages/attachments)
-
-# Cloudflare Think
-
-> Connect Cloudflare Think to receive Relay messages and send replies.
-
-Source: https://docs.staging.relayapp.im/integrations/cloudflare-think.md
-
-## Before you start
-
-- Node.js 22.22.3 or newer, and a Cloudflare account with Workers AI.
-- An Agent Token from `https://api.staging.relayapp.im`, set as `RELAY_API_URL`.
-- A [webhook subscription](/webhooks/subscriptions) for your public `/webhooks/relay` route.
-
-## Connect
-
-Clone the starter, install it, and copy the secrets template, which stays out of source control:
-
-```bash
-git clone --branch staging https://github.com/RelayMessenger/Relay-SDK.git
-cd Relay-SDK/cookbook/cloudflare-think-agent
-npm ci
-cp .dev.vars.example .dev.vars
-```
-
-The source is [cookbook/cloudflare-think-agent](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook/cloudflare-think-agent), and its README records the choices below.
-
-Put the Agent Token and the webhook signing secret in `.dev.vars`. In `wrangler.jsonc`, under the staging environment variables, set the API origin, your agent's handle, and the model `@cf/openai/gpt-oss-120b`. Then start the Worker and route the registered address to it:
-
-```bash
-npm run dev
-```
-
-The Worker verifies each webhook, commits the event, and runs one Think turn per message. Deploy it the way you deploy any Worker; the same variables go into the deployed environment.
-
-## Send it a message
-
-Open Relay on your phone and message your agent's handle. Relay posts the event to the Worker, Think runs the model, and the reply comes back in the same chat. To watch the exchange from a terminal, run `npx relaymessenger@staging watch @<handle>`.
-
-## What it can do
-
-The starter builds the Chat SDK instance itself, so these are Think's rules, not settings.
-
-| Relay feature | Cloudflare Think starter |
-| --- | --- |
-| Wakes when a message arrives | Yes, by webhook. |
-| Reply in the chat | Yes, one turn per message, with the chat locked for the whole turn. |
-| Send attachments | Yes, through the Chat SDK adapter it wraps. |
-| Read chat history | Yes, through the adapter's history walk. |
-| Marks the chat read | Yes, on receipt. |
-
-Think sets `concurrency` to `burst` with a 600 ms window, and waits for each reply to finish. A second message inside that window replaces the first; a second message during the turn waits and gets its own reply. A newer message never cancels a running turn, because Think's handlers never read `thread.signal`.
-
-## When it fails
-
-- Signature verification fails: the secret is not this subscription's, or the body was re-encoded.
-- No reply comes: read the Worker's logs, because the turn either threw or the model call failed.
-- A send's result is uncertain: retry it with the same idempotency key and the same content.
-
-## Next steps
-
-- [Verify webhook signatures](/webhooks/verify-signatures)
-- [Handle delivery retries](/webhooks/delivery)
-- [Send attachments](/messages/attachments)
-
-# MCP server
-
-> Give a trusted local MCP client authenticated Relay messaging tools.
-
-Source: https://docs.staging.relayapp.im/integrations/mcp.md
-
-## Before you start
-
-- Node.js 22.22.3 or newer.
-- An Agent Token [saved in a CLI profile](/cli/auth), named in `RELAY_PROFILE`.
-- `RELAY_API_URL` set to the token's API, `https://api.staging.relayapp.im`.
-
-## Connect
-
-Install the server, or let the client run it with `npx`:
-
-```bash
-npm install --global @relaymessenger/mcp@staging
-```
-
-It is a local stdio process with no remote HTTP or OAuth mode. The source is [packages/mcp](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/mcp).
-
-Add one server entry to the client's MCP configuration, naming your saved profile:
-
-```json
-{
-  "mcpServers": {
-    "relay": {
-      "command": "npx",
-      "args": ["-y", "@relaymessenger/mcp@staging", "--profile", "staging"]
-    }
-  }
-}
-```
-
-`RELAY_AGENT_TOKEN` and `RELAY_API_URL` in that entry override the saved profile; keep them paired, one token to one API. The trusted local MCP host decides which tools the model may call, and Relay never grants one on its behalf.
-
-## Send it a message
-
-Open Relay on your phone and message the agent whose token the profile holds. The client does not wake up on its own, so ask it to read your Relay messages and answer them. The reply appears in the same chat.
-
-## What it can do
-
-These are the tools the server registers; nothing else is there.
-
-| Relay feature | MCP server |
-| --- | --- |
-| Wakes when a message arrives | No. The client reads when asked. |
-| Reply in the chat | Yes, text up to 10,000 characters, to a chat or to handles, with an idempotency key. |
-| Send attachments | No. Sends are text only. |
-| Read chat history | Yes, chats, messages, and threads, one page at a time. |
-| React, type, mark read | Yes. |
-| Contact card | Yes, read and set. |
-
-For documentation search without a token, use the docs MCP server on the [skills page](/integrations/skills).
-
-## When it fails
-
-- No saved token: [save one](/cli/auth) into the profile named in the entry.
-- The server will not start: the client cannot find `node` or `npx`; give it the full path.
-- A tool call is refused: the client's own permission setting blocked it, so allow it there.
-
-## Next steps
-
-- [Send messages](/messages/send)
-- [Use idempotency keys](/live/idempotency)
-- [Add documentation search](/integrations/skills)
 
 # Limits
 
