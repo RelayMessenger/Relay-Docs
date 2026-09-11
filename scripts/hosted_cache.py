@@ -1,6 +1,6 @@
 """Canonical surfaces must match their cache-busted responses byte for byte."""
 
-CANONICAL_PATHS = ("", "guides", "llms.txt", "llms-full.txt", "skill.md")
+CANONICAL_PATHS = ("", "start/quickstart", "llms.txt", "llms-full.txt", "skill.md")
 
 
 def canonical_cache_pairs(fetch, expected_bodies=None, *, paths=None):
