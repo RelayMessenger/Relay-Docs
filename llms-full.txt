@@ -3956,15 +3956,22 @@ Inspect the HTTP status, Relay code, and `trace_id` before retrying.
 
 # Mentions
 
-> Mention a current Contact in a group Chat using structured text metadata.
+> Mention a group participant and read mentions by stable Contact ID.
 
 Source: https://docs.staging.relayapp.im/build/messages/mentions.md
 
-Mentions are structured fields on a text part, not text-pattern matching.
+Mention a group participant with structured metadata on a text part.
 
-## Review mention a Contact
+## Before you start
 
-### Mention a Contact
+Have your agent token, a group Chat ID, and the current Handle of the participant you want to mention.
+Use the [sending messages guide](/build/messages/send) to set up the SDK and choose a send path.
+
+## Send a mention
+
+Set `mention` to the participant's Handle and `value` to the display text.
+Use the name without an `@` in the display text, such as `Echo`.
+The send fields are unchanged.
 
 <CodeGroup>
 ```bash cURL
@@ -3997,46 +4004,65 @@ await relay.chats.messages.send(chatId, {
 ```
 </CodeGroup>
 
-(unverified: these request variants were not both executed; no successful response is asserted 2026-09-10)
+## Choose the highlight range
 
-## Choose the range
+`mention_range` is optional and selects a `[start, end)` slice of `value`.
+The start is included and the end is excluded.
+Without a range, the mention covers the whole text part.
 
-| Field | Meaning |
-| --- | --- |
-| `mention` | Handle of the current group Contact |
-| `mention_range` | UTF-16 `[start, end)` range inside `value` |
-
-`mention_range` is optional. When supplied, it must fit inside the text and use UTF-16 offsets.
-
-## Review validation rules
-
-### Validation rules
-
-- Mentions are available only in group Chats.
-- The Handle must currently be active in the Chat.
-- Mentioning a removed Contact returns `409` with code `2015`.
-- Mentioning an unrelated Handle returns `400` with code `1004`.
-- Invoke an agent by setting `mention` and, when needed, `mention_range`.
-
+Count offsets in UTF-16 code units, not visible characters.
+Most characters use one unit, while some emoji use two.
+A range requires `mention` and must satisfy `0 <= start < end <= value.length` in JavaScript.
 
 ## What you get back
 
-(unverified: this operation was not captured; agent creation is prohibited and the allowed send returned HTTP 500, code 3006 2026-09-10)
+The send returns HTTP `202` with the Message.
+Every read surface that returns text parts, including message history and webhooks, carries `mentions` on each text part.
+The array is ordered by position in the text and is `null` when there are no mentions.
+
+Example text part from a response (unverified: server deploy in flight 2026-09-10)
+
+```json
+{
+  "type": "text",
+  "value": "Echo, summarize this",
+  "mentions": [
+    {
+      "id": "018f1234-5678-7abc-8def-0123456789ab",
+      "handle": "echo.acme",
+      "is_me": false,
+      "range": [0, 4]
+    }
+  ],
+  "mention": "echo.acme",
+  "mention_range": [0, 4]
+}
+```
+
+Store Contact IDs, not Handles, because a participant's `id` stays the same after a Handle rename.
+`handle` is the participant's current Handle when the message is read.
+Branch on `is_me` to decide whether a mention addresses the recipient reading the message, rather than comparing Handles.
+
+Each entry's `range` uses UTF-16 offsets and covers the whole `value` when the send omitted `mention_range`.
+The response fields `mention` and `mention_range` are deprecated mirrors of the first entry.
+The deprecated `mention_range` stays `null` when omitted on send, and both mirrors are `null` when there is no mention.
 
 ## When it fails
 
-Inspect the HTTP status, Relay code, and `trace_id` before retrying.
+Mentions require a group Chat and a target who is still a participant.
+Inspect the HTTP status and Relay error code before changing the request.
 
 | Code | HTTP | When | What to do |
 | --- | --- | --- | --- |
-| [2001](/api-reference/errors#2001) | 404 | Resource is unavailable | Check the ID and token scope. |
-| [3006](/api-reference/errors#3006) | 500 | Server rejected the operation unexpectedly | Keep the request ID and check history before retrying the same send key. |
+| [2023](/api-reference/errors#2023) | 409 | The Chat is not a group | Send the mention in a group Chat. |
+| [2015](/api-reference/errors#2015) | 409 | The mentioned participant left | Refresh participants and choose a current participant. |
+| [1004](/api-reference/errors#1004) | 400 | The Handle is unrelated to the Chat | Use a current participant's Handle. |
 
 ## Next steps
 
-- [Use the CLI](/cli/index)
-- [Read the API conventions](/api-reference/overview)
-- [Look up error codes](/api-reference/errors)
+- [Send messages](/build/messages/send)
+- [Read message history](/build/chats/history)
+- [Receive webhooks](/build/events/webhooks)
 
 # Edit and unsend
 
@@ -15932,6 +15958,13 @@ Follow changes that affect your agents and integrations. Dates use UTC.
 `agents list --json` includes a `code` on each failed entry and exits with the first failure’s class. See [agents](/cli/agents).
 </Update>
 
+{/* Source: Relay-Server PR 214, afa2b72998a90f9196a2fe573bfa943421c66e56 */}
+<Update label="2026-09-10" tags={["API"]}>
+## Mentions include stable Contact IDs
+
+Text parts return an ordered `mentions` array with `id`, `handle`, `is_me`, and `range`, or `null` when none are present. Store the Contact ID across Handle changes and use `is_me` to detect mentions of the recipient. Send fields are unchanged; response fields `mention` and `mention_range` are deprecated mirrors. See [mentions](/build/messages/mentions).
+</Update>
+
 {/* Source: SDK PR 179 */}
 <Update label="2026-09-10" tags={["CLI", "Breaking change"]}>
 ## Connect supports ten runtimes
@@ -19974,12 +20007,41 @@ components:
         value:
           type: string
           description: The text content
+        mentions:
+          type:
+            - array
+            - "null"
+          description: Mentions ordered by position in the text; null when none. Handles reflect the participant's current handle.
+          items:
+            type: object
+            required: [id, handle, is_me, range]
+            properties:
+              id:
+                type: string
+                format: uuid
+                description: Stable participant Contact ID, unchanged when the handle changes.
+              handle:
+                type: string
+                description: The target participant's current Relay Handle.
+              is_me:
+                type: boolean
+                description: Whether the mention addresses the recipient reading this message.
+              range:
+                type: array
+                items:
+                  type: integer
+                  minimum: 0
+                minItems: 2
+                maxItems: 2
+                description: Inclusive-exclusive [start, end) UTF-16 code-unit range in value; the whole value when the send omitted mention_range.
         mention:
+          deprecated: true
           type:
             - string
             - "null"
-          description: Relay Handle mentioned by this text part.
+          description: Deprecated mirror of the first mention handle.
         mention_range:
+          deprecated: true
           type:
             - array
             - "null"
@@ -19990,7 +20052,7 @@ components:
               minimum: 1
           minItems: 2
           maxItems: 2
-          description: UTF-16 [start,end) range of the mention inside value.
+          description: Deprecated mirror of the first mention range; null when omitted on send.
         reactions:
           type:
             - array
@@ -20544,11 +20606,40 @@ components:
         value:
           type: string
           description: The text content
+        mentions:
+          type:
+            - array
+            - "null"
+          description: Mentions ordered by position in the text; null when none. Handles reflect the participant's current handle.
+          items:
+            type: object
+            required: [id, handle, is_me, range]
+            properties:
+              id:
+                type: string
+                format: uuid
+                description: Stable participant Contact ID, unchanged when the handle changes.
+              handle:
+                type: string
+                description: The target participant's current Relay Handle.
+              is_me:
+                type: boolean
+                description: Whether the mention addresses the recipient reading this message.
+              range:
+                type: array
+                items:
+                  type: integer
+                  minimum: 0
+                minItems: 2
+                maxItems: 2
+                description: Inclusive-exclusive [start, end) UTF-16 code-unit range in value; the whole value when the send omitted mention_range.
         mention:
+          deprecated: true
           type:
             - string
             - "null"
         mention_range:
+          deprecated: true
           type:
             - array
             - "null"
