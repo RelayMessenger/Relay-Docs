@@ -13,8 +13,8 @@ cropped, or otherwise edited, except where the "differs" note says so.
 | `gemini.svg` | Google Gemini | https://www.gstatic.com/lamda/images/gemini_sparkle_aurora_33f86dc0c0257da337c63.svg | https://about.google/brand-resource-center/ | 2026-09-11 |
 | `hermes.png` | Hermes (Nous Research) | already in the repo, source not recorded | Nous Research | before 2026-09-11 |
 | `linq.png` | Linq | https://docs.linqapp.com/favicon-light.png | https://linqapp.com, no published brand page | 2026-09-11 |
-| `openai.png` | OpenAI | already in the repo, source not recorded | https://openai.com/brand | before 2026-09-11 |
-| `openclaw.png` | OpenClaw | already in the repo, source not recorded | OpenClaw | before 2026-09-11 |
+| `openai.svg` | OpenAI | https://github.com/openai/openai-realtime-agents/blob/main/public/openai-logomark.svg | https://openai.com/brand, MIT | 2026-09-11 |
+| `openclaw.svg` | OpenClaw | https://openclaw.ai/favicon.svg (byte-identical to https://docs.openclaw.ai/assets/openclaw.svg) | https://github.com/openclaw/openclaw, MIT | 2026-09-11 |
 | `opencode.svg` | opencode | https://opencode.ai/favicon.svg | https://github.com/anomalyco/opencode, MIT | 2026-09-11 |
 | `photon.svg` | Photon | https://mintcdn.com/photon-6d78d87b/-Sx6UdxO4BG0ZSxk/logo/light.svg (the nav logo on https://docs.photon.codes) | https://photon.codes, no published brand page | 2026-09-11 |
 | `telegram.svg` | Telegram | https://telegram.org/img/t_logo.svg | https://telegram.org/press | 2026-09-11 |
@@ -25,19 +25,26 @@ cropped, or otherwise edited, except where the "differs" note says so.
 
 | Product | Mark to use | Why |
 | --- | --- | --- |
-| OpenAI Codex | `openai.png` | Codex ships no mark of its own. Its VS Code extension icon and its CLI splash both carry the OpenAI mark. |
+| OpenAI Codex | `openai.svg` | Codex ships no mark of its own. Its VS Code extension icon and its CLI splash both carry the OpenAI mark. |
 | Claude Desktop | `claude.svg` | Claude Desktop ships the Claude mark. |
 
 ## Notes on the files that were already here
 
 - `anthropic.svg` carries `fill="#D97757"`. That is Claude's brand colour.
-  Anthropic's own hex for this mark is `#191919`. The path is correct.
+  Simple Icons records `#191919` for this mark. The path is correct.
 - `claude.svg` carries `fill="#D97757"`, which is correct for Claude.
 - `vercel.svg` carries `fill="#737373"`. Vercel's mark is `#000000`
   (https://vercel.com/geist/brands). The path is correct.
-- `openai.png` is the current OpenAI mark at 128 px with no transparency, so it
-  shows a white box on a dark background.
-- `openclaw.png` is JPEG data under a `.png` name, 128 px.
+- `openai.png` was the OpenAI mark at 128 px with no transparency, a white box
+  on dark. Replaced 2026-09-11 by `openai.svg`. OpenAI's brand page publishes
+  only construction diagrams, misuse examples and a Photoshop template zip, and
+  it refuses requests outside a browser, so the mark comes from an OpenAI
+  repository instead.
+- `openclaw.png` was JPEG data under a `.png` name, 128 px. Replaced 2026-09-11
+  by `openclaw.svg`, the transparent mark both OpenClaw sites serve.
+- `anthropic.svg` keeps its `#D97757` fill. Anthropic publishes no brand page:
+  `/brand`, `/brand-kit`, `/press` and `/company/brand` all return 404, and the
+  site links no brand asset. There is no official file to replace it with.
 - `hermes.png` is the Nous Research seal, 128 px, not a Hermes-specific mark.
 
 ## Marks that need a second file for dark backgrounds
@@ -48,6 +55,7 @@ light-background one, so it disappears on dark.
 | File | Dark-background twin |
 | --- | --- |
 | `cline.svg` | `General Logos/Bot/SVG/BOT_DARK.svg` in the Cline brand kit |
+| `openai.svg` | OpenAI publishes no white twin. https://openai.com/favicon.svg is a rounded tile that inverts with the colour scheme. |
 | `photon.svg` | https://mintcdn.com/photon-6d78d87b/-Sx6UdxO4BG0ZSxk/logo/dark.svg |
 | `linq.png` | https://docs.linqapp.com/favicon-dark.png |
 
