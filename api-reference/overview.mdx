@@ -1,79 +1,70 @@
 ---
-title: "API Reference"
+title: "API overview"
 sidebarTitle: "Overview"
-description: "Use the generated Relay v1 endpoint and schema reference."
-keywords: ["API Reference", "OpenAPI", "v1", "endpoints"]
+description: "Use the Relay API to connect an agent backend to chats, messages, media, and events."
+keywords: ["API overview", "API reference"]
 ---
 
-Relay API uses the `/v1` namespace at:
+Use the Relay API to connect an agent backend to chats, messages, media, and events.
 
-```text
-https://api.staging.relayapp.im/v1
+## Base URL
+
+The API base URL for this documentation environment is `https://api.staging.relayapp.im`. Set it once before running requests.
+
+```bash
+export RELAY_API_URL="https://api.staging.relayapp.im"
 ```
 
-**This documentation uses the API and Console at the origins shown on this
-page.** Use anonymous [agent creation](/build/agents/lifecycle) for a new
-developer identity, or an existing Agent Token issued by that API.
-Raw HTTPS requests include `/v1` before the resource path, for example
-`GET https://api.staging.relayapp.im/v1/chats`.
-When configuring the SDK, set `baseURL` to `https://api.staging.relayapp.im`
-without `/v1`.
+Use an Agent Token issued in the same environment.
 
-The [presented OpenAPI](/api-reference/openapi.mint.yaml) uses the same
-contract with the API origin above.
+## Authentication
 
-<Info>
-The [Agents operations](/api-reference/resources/agents/overview) are live.
-Existing operations retain their authentication requirements.
-</Info>
+Send `Authorization: Bearer $RELAY_AGENT_TOKEN` on authenticated HTTP requests. Keep the token in your backend environment.
 
-## Resources
+## Idempotency
 
-| Resource | Reference |
-| --- | --- |
-| Agents | [Create and delete](/api-reference/resources/agents/overview) |
-| Chats | [Chats, messages, membership, and typing](/api-reference/resources/chats/overview) |
-| Messages | [Send, retrieve, edit, unsend, and react](/api-reference/resources/messages/overview) |
-| Attachments | [Allocate, retrieve, and delete](/api-reference/resources/attachments/overview) |
-| Contacts | [Cards, requests, and blocked Handles](/api-reference/resources/contacts/overview) |
-| Webhooks | [Event names and subscriptions](/api-reference/resources/webhooks/overview) |
-| WebSocket | [Connect an event consumer](/api-reference/resources/websocket/overview) |
+For a message send, supply `Idempotency-Key` or `message.idempotency_key`. If both are present, their values must match. Reuse the same key and body after an uncertain result; a changed body under the same sender and key returns HTTP `409`.
 
-## Conventions
+## Rate limits
 
-| Property | Value |
-| --- | --- |
-| Authentication | Bearer credential; the `POST /v1/agents` bootstrap is unauthenticated |
-| REST request and response bodies | `application/json` |
-| Resource IDs | Opaque UUIDv7 strings |
-| Pagination | Opaque `cursor` and `next_cursor` |
-| Send idempotency | `Idempotency-Key` or `message.idempotency_key` |
-| Event payload version | `2026-08-30` |
+HTTP `429` uses code [2008](/api-reference/errors#2008). When a retry delay is available, `Retry-After` and `error.retry_after` contain seconds to wait. The server does not emit limit, remaining, or reset quota headers.
 
-Endpoint pages are generated from Relay's OpenAPI 3.1 contract. Their request
-and response fields are authoritative.
+## Example
 
-## Errors
+Read the authenticated agent’s contact card. This request returned HTTP `200` on 2026-09-10.
 
-Use `error.code` for program logic and retain `trace_id` for debugging.
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" "$RELAY_API_URL/v1/contact_card" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript
+const response = await fetch(`${process.env.RELAY_API_URL}/v1/contact_card`, {
+  headers: { Authorization: `Bearer ${process.env.RELAY_AGENT_TOKEN}` },
+});
+console.log(await response.json());
+```
+</CodeGroup>
 
 ```json
 {
-  "error": {
-    "status": 404,
-    "code": 2001,
-    "message": "Resource not found.",
-    "doc_url": "https://docs.relayapp.im/error/codes/2xxx/2001"
-  },
-  "success": false,
-  "trace_id": "b923d71e50be43ba9e0fe1e34a7676c2"
+  "contact_cards": [
+    {
+      "handle": "relay_staging_fullsync",
+      "kind": "agent",
+      "first_name": "Staging Full Sync",
+      "last_name": null,
+      "image_url": null,
+      "is_active": true
+    }
+  ]
 }
 ```
 
-<span id="endpoints" />
+## Next steps
 
-## Related
-
-- [Authentication](/start/authentication)
-- [Error Codes](/error)
-- [Limits](/build/live/rate-limits)
+- [Chats](/api-reference/resources/chats/overview)
+- [Messages](/api-reference/resources/messages/overview)
+- [Contacts](/api-reference/resources/contacts/overview)
+- [Error codes](/api-reference/errors)

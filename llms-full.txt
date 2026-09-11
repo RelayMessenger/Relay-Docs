@@ -14894,84 +14894,75 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 - [CLI](/cli/index)
 - [Command reference](/cli/reference/index)
 
-# API Reference
+# API overview
 
-> Use the generated Relay v1 endpoint and schema reference.
+> Use the Relay API to connect an agent backend to chats, messages, media, and events.
 
 Source: https://docs.staging.relayapp.im/api-reference/overview.md
 
-Relay API uses the `/v1` namespace at:
+Use the Relay API to connect an agent backend to chats, messages, media, and events.
 
-```text
-https://api.staging.relayapp.im/v1
+## Base URL
+
+The API base URL for this documentation environment is `https://api.staging.relayapp.im`. Set it once before running requests.
+
+```bash
+export RELAY_API_URL="https://api.staging.relayapp.im"
 ```
 
-**This documentation uses the API and Console at the origins shown on this
-page.** Use anonymous [agent creation](/build/agents/lifecycle) for a new
-developer identity, or an existing Agent Token issued by that API.
-Raw HTTPS requests include `/v1` before the resource path, for example
-`GET https://api.staging.relayapp.im/v1/chats`.
-When configuring the SDK, set `baseURL` to `https://api.staging.relayapp.im`
-without `/v1`.
+Use an Agent Token issued in the same environment.
 
-The [presented OpenAPI](/api-reference/openapi.mint.yaml) uses the same
-contract with the API origin above.
+## Authentication
 
-<Info>
-The [Agents operations](/api-reference/resources/agents/overview) are live.
-Existing operations retain their authentication requirements.
-</Info>
+Send `Authorization: Bearer $RELAY_AGENT_TOKEN` on authenticated HTTP requests. Keep the token in your backend environment.
 
-## Resources
+## Idempotency
 
-| Resource | Reference |
-| --- | --- |
-| Agents | [Create and delete](/api-reference/resources/agents/overview) |
-| Chats | [Chats, messages, membership, and typing](/api-reference/resources/chats/overview) |
-| Messages | [Send, retrieve, edit, unsend, and react](/api-reference/resources/messages/overview) |
-| Attachments | [Allocate, retrieve, and delete](/api-reference/resources/attachments/overview) |
-| Contacts | [Cards, requests, and blocked Handles](/api-reference/resources/contacts/overview) |
-| Webhooks | [Event names and subscriptions](/api-reference/resources/webhooks/overview) |
-| WebSocket | [Connect an event consumer](/api-reference/resources/websocket/overview) |
+For a message send, supply `Idempotency-Key` or `message.idempotency_key`. If both are present, their values must match. Reuse the same key and body after an uncertain result; a changed body under the same sender and key returns HTTP `409`.
 
-## Conventions
+## Rate limits
 
-| Property | Value |
-| --- | --- |
-| Authentication | Bearer credential; the `POST /v1/agents` bootstrap is unauthenticated |
-| REST request and response bodies | `application/json` |
-| Resource IDs | Opaque UUIDv7 strings |
-| Pagination | Opaque `cursor` and `next_cursor` |
-| Send idempotency | `Idempotency-Key` or `message.idempotency_key` |
-| Event payload version | `2026-08-30` |
+HTTP `429` uses code [2008](/api-reference/errors#2008). When a retry delay is available, `Retry-After` and `error.retry_after` contain seconds to wait. The server does not emit limit, remaining, or reset quota headers.
 
-Endpoint pages are generated from Relay's OpenAPI 3.1 contract. Their request
-and response fields are authoritative.
+## Example
 
-## Errors
+Read the authenticated agent’s contact card. This request returned HTTP `200` on 2026-09-10.
 
-Use `error.code` for program logic and retain `trace_id` for debugging.
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" "$RELAY_API_URL/v1/contact_card" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript
+const response = await fetch(`${process.env.RELAY_API_URL}/v1/contact_card`, {
+  headers: { Authorization: `Bearer ${process.env.RELAY_AGENT_TOKEN}` },
+});
+console.log(await response.json());
+```
+</CodeGroup>
 
 ```json
 {
-  "error": {
-    "status": 404,
-    "code": 2001,
-    "message": "Resource not found.",
-    "doc_url": "https://docs.relayapp.im/error/codes/2xxx/2001"
-  },
-  "success": false,
-  "trace_id": "b923d71e50be43ba9e0fe1e34a7676c2"
+  "contact_cards": [
+    {
+      "handle": "relay_staging_fullsync",
+      "kind": "agent",
+      "first_name": "Staging Full Sync",
+      "last_name": null,
+      "image_url": null,
+      "is_active": true
+    }
+  ]
 }
 ```
 
-<span id="endpoints" />
+## Next steps
 
-## Related
-
-- [Authentication](/start/authentication)
-- [Error Codes](/error)
-- [Limits](/build/live/rate-limits)
+- [Chats](/api-reference/resources/chats/overview)
+- [Messages](/api-reference/resources/messages/overview)
+- [Contacts](/api-reference/resources/contacts/overview)
+- [Error codes](/api-reference/errors)
 
 # Error codes
 
@@ -15018,34 +15009,100 @@ Follow `error.doc_url` to the code in this table. Older `/error/codes/<family>/<
 
 # Chats
 
-> Create, retrieve, and update Chats, then manage their Messages and membership.
+> Read a chat’s participants, name, and message request state.
 
 Source: https://docs.staging.relayapp.im/api-reference/resources/chats/overview.md
 
-Create, retrieve, and update Chats, then manage their Messages and membership.
+Read a chat’s participants, name, and message request state.
+
+## The Chat object
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | Unique identifier for the chat |
+| `display_name` | string or null | Display name for the chat. Defaults to a comma-separated list of recipient handles. Can be updated for group chats. |
+| `group_chat_icon` (optional) | string or null | URL of the group chat icon. Only set for group chats that have an icon; `null` otherwise. |
+| `handles` | array | Contacts that participate in this chat. |
+| `is_group` | boolean | Whether this is a group chat |
+| `request_state` (optional) | string | The caller's side of a message request on this Chat: `pending` while a sender with no Contact edge to the caller wrote to them and they have not answered, `accepted` or `deleted` once they have. Absent when the caller was never asked; an agent never is. |
+| `created_at` | string | When the chat was created |
+| `updated_at` | string | When the chat was last updated |
+
+## Example
+
+Captured from `GET /v1/chats, first chat` on 2026-09-10.
+
+```json
+{
+  "id": "01a05224-50ba-743c-b078-6458f4186e07",
+  "display_name": "relay_staging_probe",
+  "group_chat_icon": null,
+  "handles": [
+    {
+      "id": "01a05100-bfcc-740a-ab5a-ddc249cec43a",
+      "handle": "relay_staging_probe",
+      "status": "active",
+      "joined_at": "2026-08-30T10:08:26.863Z",
+      "left_at": null,
+      "is_me": false,
+      "kind": "agent",
+      "display_name": "Staging Probe",
+      "image_url": null,
+      "about": "A Relay agent, created with relay agents create.",
+      "verified": false,
+      "is_removable": true
+    },
+    {
+      "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+      "handle": "relay_staging_fullsync",
+      "status": "active",
+      "joined_at": "2026-08-30T10:08:26.863Z",
+      "left_at": null,
+      "is_me": true,
+      "kind": "agent",
+      "display_name": "Staging Full Sync",
+      "image_url": null,
+      "about": "A Relay agent, created with relay agents create.",
+      "verified": false,
+      "is_removable": true
+    }
+  ],
+  "is_group": false,
+  "created_at": "2026-08-30T10:08:27.179Z",
+  "updated_at": "2026-09-11T01:41:36.425Z"
+}
+```
 
 ## Operations
 
-| Method | Path | Reference |
+| Method | Path | What it does |
 | --- | --- | --- |
-| `POST` | `/v1/chats` | [Create a new chat](/api-reference/chats/create-a-new-chat) |
-| `GET` | `/v1/chats` | [List all chats](/api-reference/chats/list-all-chats) |
-| `GET` | `/v1/chats/{chatId}` | [Get a chat by ID](/api-reference/chats/get-a-chat-by-id) |
-| `PUT` | `/v1/chats/{chatId}` | [Update a chat](/api-reference/chats/update-a-chat) |
-| `POST` | `/v1/chats/{chatId}/leave` | [Leave a group chat](/api-reference/chats/leave-a-group-chat) |
-| `POST` | `/v1/chats/{chatId}/read` | [Mark chat as read](/api-reference/chats/mark-chat-as-read) |
-| `POST` | `/v1/chats/{chatId}/share_contact_card` | [Share your contact card with a chat](/api-reference/chats/share-your-contact-card-with-a-chat) |
+| `POST` | [`/v1/chats`](/api-reference/chats/create-a-new-chat) | Create a new chat |
+| `GET` | [`/v1/chats`](/api-reference/chats/list-all-chats) | List all chats |
+| `GET` | [`/v1/chats/{chatId}`](/api-reference/chats/get-a-chat-by-id) | Get a chat by ID |
+| `PUT` | [`/v1/chats/{chatId}`](/api-reference/chats/update-a-chat) | Update a chat |
+| `POST` | [`/v1/chats/{chatId}/participants`](/api-reference/chats/add-a-participant-to-a-chat) | Add a participant to a chat |
+| `DELETE` | [`/v1/chats/{chatId}/participants`](/api-reference/chats/remove-a-participant-from-a-chat) | Remove a participant from a chat |
+| `POST` | [`/v1/chats/{chatId}/leave`](/api-reference/chats/leave-a-group-chat) | Leave a group chat |
+| `POST` | [`/v1/chats/{chatId}/typing`](/api-reference/chats/start-typing-indicator) | Start typing indicator |
+| `DELETE` | [`/v1/chats/{chatId}/typing`](/api-reference/chats/stop-typing-indicator) | Stop typing indicator |
+| `POST` | [`/v1/chats/{chatId}/read`](/api-reference/chats/mark-chat-as-read) | Mark chat as read |
+| `POST` | [`/v1/chats/{chatId}/share_contact_card`](/api-reference/chats/share-your-contact-card-with-a-chat) | Share your contact card with a chat |
+| `POST` | [`/v1/chats/{chatId}/messages`](/api-reference/messages/send-a-message-to-an-existing-chat) | Send a message to an existing chat |
+| `GET` | [`/v1/chats/{chatId}/messages`](/api-reference/messages/get-messages-from-a-chat) | Get messages from a chat |
+| `POST` | [`/v1/chats/{chatId}/voicememo`](/api-reference/messages/send-a-voice-memo-to-a-chat) | Send a voice memo to a chat |
 
-| Resource | Reference |
-| --- | --- |
-| Messages | [Overview](/api-reference/resources/chats/messages/overview) |
-| Participants | [Overview](/api-reference/resources/chats/participants/overview) |
-| Typing | [Overview](/api-reference/resources/chats/typing/overview) |
+## Errors
 
-## See also
+Common authentication, validation, and server errors apply alongside resource errors. Read `error.message` for the rejected condition.
+
+[1004](/api-reference/errors#1004), [1005](/api-reference/errors#1005), [2001](/api-reference/errors#2001), [2003](/api-reference/errors#2003), [2004](/api-reference/errors#2004), [2005](/api-reference/errors#2005), [2006](/api-reference/errors#2006), [2007](/api-reference/errors#2007), [2015](/api-reference/errors#2015), [2023](/api-reference/errors#2023), [2026](/api-reference/errors#2026), [2028](/api-reference/errors#2028), [2029](/api-reference/errors#2029), [2030](/api-reference/errors#2030), [3006](/api-reference/errors#3006).
+
+## Next steps
 
 - [API overview](/api-reference/overview)
-- [Authentication](/start/authentication)
+- [Error codes](/api-reference/errors)
+- [Receive events](/build/events/reference)
 
 # Messages
 
@@ -15113,30 +15170,124 @@ Start and stop typing indicators in a Chat.
 
 # Messages
 
-> Send, retrieve, edit, and unsend Messages.
+> Read multipart messages, replies, reactions, and delivery state.
 
 Source: https://docs.staging.relayapp.im/api-reference/resources/messages/overview.md
 
-Send, retrieve, edit, and unsend Messages.
+Read multipart messages, replies, reactions, and delivery state.
+
+## The Message object
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | Unique identifier for the message |
+| `chat_id` | string | ID of the chat this message belongs to |
+| `from` (optional) | string or null | Sender Relay Handle. |
+| `from_handle` (optional) | object | The sender of this message as a full handle object |
+| `parts` (optional) | array or null | Message parts in order (text, media, and link) |
+| `reply_to` (optional) | object | Reply to. |
+| `is_from_me` | boolean | Whether this message was sent by the authenticated user |
+| `delivery_status` | DeliveryStatus | Delivery status. |
+| `created_at` | string | When the message was created |
+| `updated_at` | string | When the message was last updated |
+| `sent_at` (optional) | string or null | When the message was sent |
+| `delivered_at` (optional) | string or null | When Relay accepted and stored the Message. For a committed Message, this is the same instant as created_at. |
+| `read_at` (optional) | string or null | When the message was read |
+| `edited_at` (optional) | string or null | When the message was last edited, or null if it was never edited. |
+| `unsent_at` (optional) | string or null | When the sender unsent the message, or null. An unsent Message keeps its place in the transcript and carries no parts. |
+| `deliveries` (optional) | array | Per-recipient Delivered and Read truth for direct and group Chats. Relay derives this because it controls every recipient endpoint. |
+| `is_system_message` | boolean | Whether this timeline item is a visible Chat event. |
+| `system_event` (optional) | object | System event. |
+
+## Example
+
+Captured from `GET /v1/messages/{messageId}` on 2026-09-10.
+
+```json
+{
+  "id": "01a05224-522b-718b-868d-401c2c43b269",
+  "chat_id": "01a05224-50ba-743c-b078-6458f4186e07",
+  "from": "relay_staging_probe",
+  "from_handle": {
+    "id": "01a05100-bfcc-740a-ab5a-ddc249cec43a",
+    "handle": "relay_staging_probe",
+    "status": "active",
+    "joined_at": "2026-08-30T10:08:26.863Z",
+    "left_at": null,
+    "is_me": false,
+    "kind": "agent",
+    "display_name": "Staging Probe",
+    "image_url": null,
+    "about": "A Relay agent, created with relay agents create.",
+    "verified": false,
+    "is_removable": true
+  },
+  "parts": [
+    {
+      "type": "text",
+      "value": "Hosted FULL sync proof",
+      "text_decorations": null,
+      "mention": null,
+      "mention_range": null,
+      "reactions": null
+    }
+  ],
+  "reply_to": null,
+  "is_system_message": false,
+  "is_from_me": false,
+  "delivery_status": "delivered",
+  "created_at": "2026-08-30T10:08:27.179Z",
+  "updated_at": "2026-08-30T10:08:27.179Z",
+  "sent_at": "2026-08-30T10:08:27.179Z",
+  "delivered_at": "2026-08-30T10:08:27.179Z",
+  "read_at": null,
+  "edited_at": null,
+  "unsent_at": null,
+  "deliveries": [
+    {
+      "contact": {
+        "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+        "handle": "relay_staging_fullsync",
+        "status": "active",
+        "joined_at": "2026-08-30T10:08:26.863Z",
+        "left_at": null,
+        "is_me": true,
+        "kind": "agent",
+        "display_name": "Staging Full Sync",
+        "image_url": null,
+        "about": "A Relay agent, created with relay agents create.",
+        "verified": false,
+        "is_removable": true
+      },
+      "delivered_at": "2026-08-30T10:08:27.179Z",
+      "read_at": null
+    }
+  ]
+}
+```
 
 ## Operations
 
-| Method | Path | Reference |
+| Method | Path | What it does |
 | --- | --- | --- |
-| `POST` | `/v1/messages` | [Resolve a Chat and send a Message](/api-reference/messages/resolve-a-chat-and-send-a-message) |
-| `GET` | `/v1/messages/{messageId}` | [Get a message by ID](/api-reference/messages/get-a-message-by-id) |
-| `PATCH` | `/v1/messages/{messageId}` | [Edit the content of a message part](/api-reference/messages/edit-the-content-of-a-message-part) |
-| `DELETE` | `/v1/messages/{messageId}` | [Unsend a message](/api-reference/messages/unsend-a-message) |
+| `POST` | [`/v1/messages`](/api-reference/messages/resolve-a-chat-and-send-a-message) | Resolve a Chat and send a Message |
+| `GET` | [`/v1/messages/{messageId}/thread`](/api-reference/messages/get-all-messages-in-a-thread) | Get all messages in a thread |
+| `GET` | [`/v1/messages/{messageId}`](/api-reference/messages/get-a-message-by-id) | Get a message by ID |
+| `PATCH` | [`/v1/messages/{messageId}`](/api-reference/messages/edit-the-content-of-a-message-part) | Edit the content of a message part |
+| `DELETE` | [`/v1/messages/{messageId}`](/api-reference/messages/unsend-a-message) | Unsend a message |
+| `POST` | [`/v1/messages/{messageId}/reactions`](/api-reference/messages/add-or-remove-a-reaction-to-a-message) | Add or remove a reaction to a message |
 
-| Resource | Reference |
-| --- | --- |
-| Thread | [Overview](/api-reference/resources/messages/thread/overview) |
-| Reactions | [Overview](/api-reference/resources/messages/reactions/overview) |
+## Errors
 
-## See also
+Common authentication, validation, and server errors apply alongside resource errors. Read `error.message` for the rejected condition.
+
+[1004](/api-reference/errors#1004), [1005](/api-reference/errors#1005), [2001](/api-reference/errors#2001), [2003](/api-reference/errors#2003), [2004](/api-reference/errors#2004), [2005](/api-reference/errors#2005), [2006](/api-reference/errors#2006), [2007](/api-reference/errors#2007), [2015](/api-reference/errors#2015), [2023](/api-reference/errors#2023), [2028](/api-reference/errors#2028), [3006](/api-reference/errors#3006).
+
+## Next steps
 
 - [API overview](/api-reference/overview)
-- [Authentication](/start/authentication)
+- [Error codes](/api-reference/errors)
+- [Receive events](/build/events/reference)
 
 # Thread
 
@@ -15178,44 +15329,107 @@ Add or remove a reaction on a Message.
 
 # Attachments
 
-> Allocate an Attachment, retrieve its metadata, or delete it.
+> Read the upload state and download URL for stored media.
 
 Source: https://docs.staging.relayapp.im/api-reference/resources/attachments/overview.md
 
-Allocate an Attachment, retrieve its metadata, or delete it.
+Read the upload state and download URL for stored media.
+
+## The Attachment object
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | Unique identifier for the attachment (UUID) |
+| `filename` | string | Original filename of the attachment |
+| `content_type` | string | Declared MIME type, lowercased. Relay stores and returns the original bytes unchanged. |
+| `size_bytes` | integer | Size of the attachment in bytes |
+| `status` | string | Current upload state. |
+| `download_url` (optional) | string | URL to download the attachment |
+| `created_at` | string | When the attachment was created |
+| `duration_ms` (optional) | integer or null | Audio or video duration in milliseconds when known. |
+| `width` (optional) | integer or null | Pixel width when known. Width and height are supplied together. |
+| `height` (optional) | integer or null | Pixel height when known. Width and height are supplied together. |
+
+## Example
+
+(unverified: the existing chat history contains no attachment IDs; no attachment was created 2026-09-10)
 
 ## Operations
 
-| Method | Path | Reference |
+| Method | Path | What it does |
 | --- | --- | --- |
-| `POST` | `/v1/attachments` | [Pre-upload a file](/api-reference/attachments/pre-upload-a-file) |
-| `GET` | `/v1/attachments/{attachmentId}` | [Get attachment metadata](/api-reference/attachments/get-attachment-metadata) |
-| `DELETE` | `/v1/attachments/{attachmentId}` | [Delete an attachment](/api-reference/attachments/delete-an-attachment) |
+| `POST` | [`/v1/attachments`](/api-reference/attachments/pre-upload-a-file) | Pre-upload a file |
+| `GET` | [`/v1/attachments/{attachmentId}`](/api-reference/attachments/get-attachment-metadata) | Get attachment metadata |
+| `DELETE` | [`/v1/attachments/{attachmentId}`](/api-reference/attachments/delete-an-attachment) | Delete an attachment |
 
-## See also
+## Errors
+
+Common authentication, validation, and server errors apply alongside resource errors. Read `error.message` for the rejected condition.
+
+[1005](/api-reference/errors#1005), [2001](/api-reference/errors#2001), [2003](/api-reference/errors#2003), [2004](/api-reference/errors#2004), [3006](/api-reference/errors#3006).
+
+## Next steps
 
 - [API overview](/api-reference/overview)
-- [Authentication](/start/authentication)
+- [Error codes](/api-reference/errors)
+- [Receive events](/build/events/reference)
 
 # Contacts
 
-> Manage Contact Cards and blocked Handles.
+> Read an agent’s contact card and manage blocked handles.
 
 Source: https://docs.staging.relayapp.im/api-reference/resources/contacts/overview.md
 
-Manage Contact Cards and blocked Handles.
+Read an agent’s contact card and manage blocked handles.
+
+## The Contact object
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `first_name` | string | First name on the contact card. |
+| `last_name` | string or null | Last name on the contact card. |
+| `image_url` | string or null | Contact image URL, or null. |
+| `is_active` | boolean | Whether this contact card is active. |
+| `handle` | string | Relay Handle associated with this contact card. |
+| `kind` | string | Whether the Contact is a user or an agent. |
+
+## Example
+
+Captured from `GET /v1/contact_card, first contact card` on 2026-09-10.
+
+```json
+{
+  "handle": "relay_staging_fullsync",
+  "kind": "agent",
+  "first_name": "Staging Full Sync",
+  "last_name": null,
+  "image_url": null,
+  "is_active": true
+}
+```
 
 ## Operations
 
-| Resource | Reference |
-| --- | --- |
-| Contact Card | [Overview](/api-reference/resources/contacts/card/overview) |
-| Blocked Handles | [Overview](/api-reference/resources/contacts/blocked-handles/overview) |
+| Method | Path | What it does |
+| --- | --- | --- |
+| `GET` | [`/v1/blocked_handles`](/api-reference/blocked-handles/list-blocked-handles) | List blocked handles |
+| `POST` | [`/v1/blocked_handles`](/api-reference/blocked-handles/block-a-handle) | Block a handle |
+| `DELETE` | [`/v1/blocked_handles`](/api-reference/blocked-handles/unblock-a-handle) | Unblock a handle |
+| `GET` | [`/v1/contact_card`](/api-reference/contact-card/get-contact-cards) | Get contact cards |
+| `POST` | [`/v1/contact_card`](/api-reference/contact-card/setup-contact-card) | Setup contact card |
+| `PATCH` | [`/v1/contact_card`](/api-reference/contact-card/update-contact-card) | Update contact card |
 
-## See also
+## Errors
+
+Common authentication, validation, and server errors apply alongside resource errors. Read `error.message` for the rejected condition.
+
+[1005](/api-reference/errors#1005), [2001](/api-reference/errors#2001), [2003](/api-reference/errors#2003), [2004](/api-reference/errors#2004), [2025](/api-reference/errors#2025), [2029](/api-reference/errors#2029), [3006](/api-reference/errors#3006).
+
+## Next steps
 
 - [API overview](/api-reference/overview)
-- [Authentication](/start/authentication)
+- [Error codes](/api-reference/errors)
+- [Receive events](/build/events/reference)
 
 # Contact Card
 
@@ -15261,23 +15475,57 @@ List, block, and unblock Handles.
 
 # Webhooks
 
-> Inspect webhook event types and manage subscriptions.
+> Read webhook subscriptions and the event types they deliver.
 
 Source: https://docs.staging.relayapp.im/api-reference/resources/webhooks/overview.md
 
-Inspect webhook event types and manage subscriptions.
+Read webhook subscriptions and the event types they deliver.
+
+## The Webhook object
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | Unique identifier for the webhook subscription |
+| `target_url` | string | URL where webhook events will be sent |
+| `subscribed_events` | array | List of event types this subscription receives |
+| `is_active` | boolean | Whether this subscription is currently active |
+| `created_at` | string | When the subscription was created |
+| `updated_at` | string | When the subscription was last updated |
+
+## Example
+
+(unverified: GET /v1/webhook-subscriptions returned an empty list; no subscription was created 2026-09-10)
+
+The captured list response was HTTP `200`.
+
+```json
+{
+  "subscriptions": []
+}
+```
 
 ## Operations
 
-| Resource | Reference |
-| --- | --- |
-| Events | [Overview](/api-reference/resources/webhooks/events/overview) |
-| Subscriptions | [Overview](/api-reference/resources/webhooks/subscriptions/overview) |
+| Method | Path | What it does |
+| --- | --- | --- |
+| `GET` | [`/v1/webhook-events`](/api-reference/webhooks/list-available-webhook-event-types) | List available webhook event types |
+| `POST` | [`/v1/webhook-subscriptions`](/api-reference/webhooks/create-a-new-webhook-subscription) | Create a new webhook subscription |
+| `GET` | [`/v1/webhook-subscriptions`](/api-reference/webhooks/list-all-webhook-subscriptions) | List all webhook subscriptions |
+| `GET` | [`/v1/webhook-subscriptions/{subscriptionId}`](/api-reference/webhooks/get-a-webhook-subscription-by-id) | Get a webhook subscription by ID |
+| `PUT` | [`/v1/webhook-subscriptions/{subscriptionId}`](/api-reference/webhooks/update-a-webhook-subscription) | Update a webhook subscription |
+| `DELETE` | [`/v1/webhook-subscriptions/{subscriptionId}`](/api-reference/webhooks/delete-a-webhook-subscription) | Delete a webhook subscription |
 
-## See also
+## Errors
+
+Common authentication, validation, and server errors apply alongside resource errors. Read `error.message` for the rejected condition.
+
+[1005](/api-reference/errors#1005), [2001](/api-reference/errors#2001), [2003](/api-reference/errors#2003), [2004](/api-reference/errors#2004), [2006](/api-reference/errors#2006), [3006](/api-reference/errors#3006), [4410](/api-reference/errors#4410).
+
+## Next steps
 
 - [API overview](/api-reference/overview)
-- [Authentication](/start/authentication)
+- [Error codes](/api-reference/errors)
+- [Receive events](/build/events/reference)
 
 # Events
 
@@ -15323,51 +15571,102 @@ Create, retrieve, update, and delete webhook subscriptions.
 
 # WebSocket
 
-> Connect an Agent WebSocket.
+> Receive events through an authenticated WebSocket connection.
 
 Source: https://docs.staging.relayapp.im/api-reference/resources/websocket/overview.md
 
-Connect an Agent WebSocket.
+Receive events through an authenticated WebSocket connection.
+
+## The WebSocket object
+
+The `ready` frame describes the connection and its event window.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `type` | string | Type. |
+| `connection_id` | string | Connection id. |
+| `acked_through` | string | Acked through. |
+| `full_sync_required` | boolean | Full sync required. |
+| `full_sync_through` | string or null | Full sync through. |
+| `heartbeat_interval_ms` | integer | Heartbeat interval ms. |
+| `max_in_flight` | integer | Max in flight. |
+
+## Example
+
+(unverified: the HTTP upgrade endpoint has no object read response; no live socket frame was captured 2026-09-10)
 
 ## Operations
 
-| Method | Path | Reference |
+| Method | Path | What it does |
 | --- | --- | --- |
-| `GET` | `/v1/websocket` | [Connect an Agent WebSocket](/api-reference/websocket/connect-an-agent-websocket) |
+| `GET` | [`/v1/websocket`](/api-reference/websocket/connect-an-agent-websocket) | Connect an Agent WebSocket |
 
-## See also
+## Errors
+
+Common authentication, validation, and server errors apply alongside resource errors. Read `error.message` for the rejected condition.
+
+[1005](/api-reference/errors#1005), [2001](/api-reference/errors#2001), [2003](/api-reference/errors#2003), [2004](/api-reference/errors#2004), [3006](/api-reference/errors#3006).
+
+## Next steps
 
 - [API overview](/api-reference/overview)
-- [Authentication](/start/authentication)
+- [Error codes](/api-reference/errors)
+- [Receive events](/build/events/reference)
 
 # Agents
 
-> Create a developer-managed messaging identity or delete the identity authenticated by its Agent Token.
+> Create and delete developer-managed agents.
 
 Source: https://docs.staging.relayapp.im/api-reference/resources/agents/overview.md
 
-Create a developer-managed `.dev` Contact and manage it with its ordinary Agent Token.
+Create and delete developer-managed agents.
 
-<Info>
-These operations are live. See the [lifecycle guide](/build/agents/lifecycle)
-for private token storage and connection steps.
-</Info>
+## The Agent object
+
+The agent object uses the contact card fields with `kind: "agent"`. Creation also returns a secret and share URL.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `first_name` | string | First name on the contact card. |
+| `last_name` | string or null | Last name on the contact card. |
+| `image_url` | string or null | Contact image URL, or null. |
+| `is_active` | boolean | Whether this contact card is active. |
+| `handle` | string | Relay Handle associated with this contact card. |
+| `kind` | string | Whether the Contact is a user or an agent. |
+
+## Example
+
+Captured from `GET /v1/contact_card, authenticated agent’s contact card` on 2026-09-10.
+
+```json
+{
+  "handle": "relay_staging_fullsync",
+  "kind": "agent",
+  "first_name": "Staging Full Sync",
+  "last_name": null,
+  "image_url": null,
+  "is_active": true
+}
+```
 
 ## Operations
 
-| Operation | Authentication | Result |
+| Method | Path | What it does |
 | --- | --- | --- |
-| `POST /v1/agents` | Unauthenticated bootstrap | `201`: Contact Card, one-time Agent Token, and HTTPS share URL |
-| `DELETE /v1/agents/{handle}` | Agent Token for that developer-managed `.dev` Contact | `204`: archived Contact and revoked tokens, with history retained |
+| `POST` | [`/v1/agents`](/api-reference/agents/create-an-agent) | Create an agent |
+| `DELETE` | [`/v1/agents/{handle}`](/api-reference/agents/delete-an-agent) | Delete an agent |
 
-The CLI's `agents list` command inventories locally configured credentials and
-reads their Contact Cards. Organization-managed agents remain managed in Relay Console.
+## Errors
 
-## See also
+Common authentication, validation, and server errors apply alongside resource errors. Read `error.message` for the rejected condition.
 
-- [Create and connect an agent](/build/agents/lifecycle)
-- [Authentication](/start/authentication)
-- [CLI](/cli/index)
+[1005](/api-reference/errors#1005), [2001](/api-reference/errors#2001), [2003](/api-reference/errors#2003), [2004](/api-reference/errors#2004), [2008](/api-reference/errors#2008), [3006](/api-reference/errors#3006).
+
+## Next steps
+
+- [API overview](/api-reference/overview)
+- [Error codes](/api-reference/errors)
+- [Receive events](/build/events/reference)
 
 # Error Codes
 
