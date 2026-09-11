@@ -177,7 +177,7 @@ class IntegrationDocsTests(unittest.TestCase):
                 headings = re.findall(r"^## (.+)$", prose(text), re.M)
                 self.assertTrue(headings, "page needs a related-task section")
                 self.assertIn(headings[-1], FINISH)
-                if path.stem in {"claude-code", "codex", "cursor", "opencode", "cline", "vs-code", "gemini-cli", "claude-desktop", "hermes", "openclaw", "mcp", "your-own-backend", "chat-sdk", "cloudflare-think"}:
+                if path.stem in {"claude-code", "codex", "cursor", "opencode", "cline", "vs-code", "gemini-cli", "hermes", "openclaw", "mcp", "your-own-backend", "chat-sdk", "cloudflare-think"}:
                     # 2026-09-11 (relay-language skill): the install step is a
                     # sentence under Before you start and the page says what the
                     # agent can do, not what a run changed.

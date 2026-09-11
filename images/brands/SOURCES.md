@@ -29,7 +29,6 @@ the notes below.
 | Product | Mark to use | Why |
 | --- | --- | --- |
 | OpenAI Codex | `openai.svg` | Codex ships no mark of its own. Its VS Code extension icon and its CLI splash both carry the OpenAI mark. |
-| Claude Desktop | `claude.svg` | Claude Desktop ships the Claude mark. |
 | Vercel Chat SDK | `vercel.svg` | The Chat SDK is a Vercel product and carries the Vercel triangle. |
 
 ## Notes on the files that were already here
