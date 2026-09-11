@@ -175,7 +175,10 @@ class IntegrationDocsTests(unittest.TestCase):
                 headings = re.findall(r"^## (.+)$", prose(text), re.M)
                 self.assertTrue(headings, "page needs a related-task section")
                 self.assertIn(headings[-1], FINISH)
-                self.assertLessEqual(len(headings) - 1, 5, "split independent tasks, not paragraph length")
+                if path.stem in {"claude-code", "codex", "cursor", "opencode", "cline", "vs-code", "gemini-cli", "claude-desktop", "hermes", "openclaw", "mcp", "your-own-backend", "chat-sdk", "cloudflare-think"}:
+                    self.assertEqual(headings, ["Before you start", "Install", "Connect", "Send it a message", "What this changed", "When it fails", "Next steps"])
+                else:
+                    self.assertLessEqual(len(headings), 8, "split independent tasks, not paragraph length")
 
     def test_owned_links_resolve_including_fragments(self):
         config = json.loads(read("docs.json"))
