@@ -19,10 +19,6 @@ TASK_VERBS = set("Add Allocate Apply Block Choose Clear Configure Connect Create
 
 def validate_build_headings(page, body):
     headings = re.findall(r"^## (.+)$", body, re.M)
-    if page.startswith("build/events/reference/"):
-        if headings != ["Payload", "When it fires", "Example", "Next steps"]:
-            raise SystemExit(f"{page}: event skeleton must be Payload / When it fires / Example / Next steps")
-        return
     if not headings or headings[-1] != "Next steps":
         raise SystemExit(f"{page}: Next steps must be last")
     for heading in headings:

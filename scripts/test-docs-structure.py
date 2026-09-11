@@ -26,7 +26,7 @@ class DocumentationStructureTests(unittest.TestCase):
             validate_build_headings("build/messages/send", "## Background\n## Next steps\n")
 
     def test_event_heading_mutation(self):
-        with self.assertRaisesRegex(SystemExit, "event skeleton"):
+        with self.assertRaisesRegex(SystemExit, "imperative task"):
             validate_build_headings("build/events/reference/message-sent", "## Fields\n## Next steps\n")
 
     def test_current_site(self):

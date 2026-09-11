@@ -788,7 +788,7 @@ if (root / "skill.md").read_bytes() != (
 skill_text = (root / "skill.md").read_text()
 agent_prompt_page = (root / "connect/agent-prompt.mdx").read_text()
 prompt_match = re.search(
-    r"^## Relay agent prompt\n.*?^````text Relay agent prompt\n"
+    r"^### Relay agent prompt\n.*?^````text Relay agent prompt\n"
     r"(.*?)\n````$",
     agent_prompt_page,
     re.M | re.S,

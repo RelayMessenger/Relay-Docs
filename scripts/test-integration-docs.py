@@ -32,7 +32,7 @@ NATIVE = "connect/native-setup.mdx"
 SKILLS = "connect/skills.mdx"
 MCP = "connect/mcp.mdx"
 OBSERVER_REFERENCE = "build/events/websocket/observe-events.mdx"
-FENCE = re.compile(r"^```[^\n]*\n(.*?)^```\s*$", re.M | re.S)
+FENCE = re.compile(r"^(`{3,})[^\n]*\n(.*?)^\1[ \t]*$", re.M | re.S)
 FINISH = {"Next steps", "See also", "Related"}
 SOURCES = {
     CLI: "packages/cli",
@@ -82,7 +82,7 @@ def commands(text):
     """Join shell continuations without mistaking Markdown prose for commands."""
     return [
         line.strip()
-        for block in FENCE.findall(re.sub(
+        for _, block in FENCE.findall(re.sub(
             r"^```text captured-output\n.*?^```[ \t]*$", "", text, flags=re.M | re.S
         ))
         for line in re.sub(r"\\\s*\n\s*", " ", block).splitlines()

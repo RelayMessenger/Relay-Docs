@@ -13,7 +13,7 @@ agent_page_target = root / "connect/agent-prompt.mdx"
 
 def render_agent_page(page: str) -> str:
     pattern = re.compile(
-        r"(^## Relay agent prompt\n.*?^````text Relay agent prompt\n)"
+        r"(^### Relay agent prompt\n.*?^````text Relay agent prompt\n)"
         r".*?"
         r"(^````$)",
         re.M | re.S,
