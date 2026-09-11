@@ -26,14 +26,14 @@ class DocumentationStructureTests(unittest.TestCase):
 
     def test_onboarding_cannot_absorb_management(self):
         root, config = self.fixture()
-        config["navigation"]["tabs"][0]["groups"][0]["pages"].append("guides/agents/lifecycle")
+        config["navigation"]["tabs"][0]["groups"][0]["pages"].append("build/agents/lifecycle")
         with self.assertRaisesRegex(SystemExit, "Getting started"):
             validate_structure(root, config)
 
     def test_independent_sections_fail(self):
         root, config = self.fixture()
         path = root / f"{START_PAGES[1]}.mdx"
-        path.write_text(path.read_text() + "\n".join(f"## Task {i}" for i in range(6)))
+        path.write_text(path.read_text() + "\n".join(f"## Task {i}" for i in range(9)))
         with self.assertRaisesRegex(SystemExit, "split independent tasks"):
             validate_structure(root, config)
 

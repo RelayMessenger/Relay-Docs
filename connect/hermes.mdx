@@ -1,0 +1,95 @@
+---
+title: "Connect Hermes to Relay"
+sidebarTitle: "Hermes"
+description: "Install the Relay plugin and configure a Hermes gateway to receive and answer Messages."
+keywords: ["Hermes", "relay-hermes", "Hermes Agent", "WebSocket", "always-on"]
+---
+
+Add Relay as a messaging platform in your always-on Hermes gateway.
+
+## Install the plugin
+
+Use Python `3.11` through `3.13` with the `relay-hermes@1.0.0rc2` source
+package. Install the Git-hosted plugin:
+
+```bash
+hermes plugins install RelayMessenger/Relay-Hermes --enable
+```
+
+The plugin registers the Hermes platform ID `relayapp`.
+
+Source: [Relay-Hermes](https://github.com/RelayMessenger/Relay-Hermes).
+
+## Configure staging
+
+Use a staging Agent Token with zero saved Webhook subscriptions. Save the
+following settings through the selected Hermes profile's secret/configuration
+workflow:
+
+| Setting | Value |
+| --- | --- |
+| `RELAY_AGENT_TOKEN` | The staging Agent Token from your secret store. |
+| `RELAY_BASE_URL` | `https://api.staging.relayapp.im`. |
+| `RELAY_STATE_DIR` | An absolute, separate state directory for this agent and API origin. |
+| `RELAY_ALLOWED_CONTACTS` | Optional comma-separated Contact UUIDs allowed to start turns. |
+
+**Keep each agent's state directory paired with its token and API origin.**
+Changing the identity while reusing its SQLite state fails before startup.
+Hermes resolves these settings within the active profile.
+
+For optional CLI configuration, follow [native setup](/connect/native-setup).
+
+## Start the gateway
+
+With the selected profile's environment active, run:
+
+```bash
+hermes gateway run
+```
+
+For an always-on host, use Hermes's service commands:
+
+```bash
+hermes gateway install
+hermes gateway start
+```
+
+Follow the [native messaging success checks](/connect/native-setup#verify-messaging).
+
+| Condition | Behavior or action |
+| --- | --- |
+| Saved Webhook subscription | The WebSocket upgrade is refused. Choose the intended [delivery path](/build/events/websocket). |
+| Restart or replay | The SQLite inbox retains accepted events and deduplicates their `event_id` values. |
+| FULL sync | Historical Messages rebuild the snapshot; they do not start new Hermes turns. |
+| Message begins with `/` | Relay slash commands are withheld from Hermes. Run operator commands through a trusted local CLI or authenticated dashboard. |
+
+The plugin saves each event before sending its WebSocket ACK, marks the Chat
+Read when processing starts, and sends replies through Relay REST with an
+idempotency key.
+
+## Answer a second Message during a reply
+
+Hermes decides this with its own `display.busy_input_mode` setting in
+`~/.hermes/config.yaml`. The plugin adds no setting of its own. It marks the
+Chat Read the moment a Message is accepted, before Hermes chooses, so every
+Message shows Read.
+
+| `display.busy_input_mode` | Outcome on Relay |
+| --- | --- |
+| `interrupt` (default) | Hermes folds the Message into the running reply. It shows Read, and one reply answers both, without a quote. |
+| `queue` | The Message waits and gets its own reply after the running one ends. |
+| `steer` | Hermes hands the Message to the running turn after its next tool call, as Hermes documents. It shows Read, and one reply answers both. |
+
+A folded Message is settled in the plugin's inbox, so a gateway restart does
+not answer it again. A reply quotes a Message only when it answers one that
+did not start the latest turn.
+
+<span id="delivery-behavior" />
+<span id="optional-cli-setup" />
+<span id="see-also" />
+
+## Next steps
+
+- [Native setup](/connect/native-setup)
+- [WebSocket acknowledgements](/build/events/websocket/acknowledgements)
+- [Delivery receipts](/build/messages/receipts)

@@ -139,7 +139,7 @@ class EnvironmentTests(unittest.TestCase):
                 path.write_text(original + "\n" + reference + "\n")
                 self.run_command(production, ["python3", "scripts/validate-staging-origins.py"], success=False)
                 path.write_text(original)
-            page = production / "integrations/claude-code.mdx"
+            page = production / "connect/claude-code.mdx"
             original = page.read_text()
             page.write_text(original.replace("Relay-SDK@main", "Relay-SDK@staging"))
             self.run_command(production, ["python3", "scripts/validate-docs.py"], success=False)
@@ -149,7 +149,7 @@ class EnvironmentTests(unittest.TestCase):
             versions = json.loads((production / "versions.json").read_text())
             version = versions["npm"]["@relaymessenger/sdk"]["staging"]
             for tree, success in ((staging, True), (production, False)):
-                page = tree / "getting-started/sdks.mdx"
+                page = tree / "start/sdks.mdx"
                 original = page.read_text()
                 page.write_text(original + f"\n`@relaymessenger/sdk@{version}`\n")
                 self.run_command(tree, ["node", "scripts/check-versions.mjs"], success=success)

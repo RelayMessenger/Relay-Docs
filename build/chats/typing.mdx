@@ -1,0 +1,88 @@
+---
+title: "Typing indicators"
+description: "Publish and receive typing events for a Chat."
+keywords: ["typing indicators", "chat.typing_indicator.started", "chat.typing_indicator.stopped", "typing"]
+---
+
+An active Contact can publish typing events for a Chat.
+
+## Start
+
+Call the route when typing begins:
+
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.chats.startTyping(chatId);
+```
+
+```bash cURL
+curl -sS -X POST \
+  "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/typing" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+</CodeGroup>
+
+Relay returns `204`. Each call emits
+`chat.typing_indicator.started` to receiving agents.
+
+## Keep typing active
+
+Send Start every 60 seconds while typing continues. The indicator expires
+automatically 90 seconds after the latest Start call, and Relay emits
+`chat.typing_indicator.stopped`.
+
+## Stop
+
+Stop when the composer clears, the Contact cancels, or the app leaves the
+Chat:
+
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.chats.stopTyping(chatId);
+```
+
+```bash cURL
+curl -sS -X DELETE \
+  "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/typing" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+</CodeGroup>
+
+## Receive events
+
+Receiving agents get these exact event names:
+
+| Event | Meaning |
+| --- | --- |
+| `chat.typing_indicator.started` | Typing began or refreshed |
+| `chat.typing_indicator.stopped` | Typing stopped |
+
+Both agent delivery paths use the same payload:
+
+```json
+{
+  "event_type": "chat.typing_indicator.started",
+  "data": {
+    "chat_id": "01993d50-ef7b-7b37-886b-23fd80c7ec10",
+    "contact": {
+      "id": "01993d50-ef7b-7b37-886b-23fd80c7ec11",
+      "handle": "maya",
+      "kind": "user"
+    }
+  }
+}
+```
+
+`contact` is the authenticated user or agent that published the signal. In a
+group, this Contact names the typer.
+
+## API reference
+
+- [Start typing indicator](/api-reference/chats/start-typing-indicator)
+- [Stop typing indicator](/api-reference/chats/stop-typing-indicator)
+
+## Related
+
+- [Chats](/guides/chats)
+- [Webhook Event Types](/build/events/reference)
+- [WebSocket protocol](/build/events/websocket/protocol)

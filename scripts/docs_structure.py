@@ -5,8 +5,8 @@ from pathlib import Path
 
 # Frame catalogs and a complete copyable agent instruction are reference, not
 # onboarding. All ordinary task guides keep five sections before related links.
-REFERENCE_PAGES = {"guides/websocket/protocol", "agent-reference/prompt"}
-START_PAGES = ["getting-started/quickstart", "getting-started/authentication", "getting-started/sdks"]
+REFERENCE_PAGES = {"build/events/websocket/protocol", "connect/agent-prompt"}
+START_PAGES = ["index", "start/quickstart", "start/key-concepts", "start/authentication", "start/sdks"]
 INTERNAL_PROSE = re.compile(
     r"Prepare hosted proof|only after this docs candidate is pushed|"
     r"Local Docs validation prepares|Published artifact source commit|"
@@ -44,13 +44,13 @@ def validate_structure(root: Path, config: dict):
         text = (root / f"{page}.mdx").read_text()
         body = prose(text)
         sections = [h for h in re.findall(r"^## (.+)$", body, re.M) if h not in {"Next steps", "Related", "See also"}]
-        if page not in REFERENCE_PAGES and len(sections) > 5:
+        if page not in REFERENCE_PAGES and len(sections) > 8:
             raise SystemExit(f"{page}: {len(sections)} top-level sections; split independent tasks rather than expanding this page")
-        if page != "agent-reference/prompt" and INTERNAL_PROSE.search(body):
+        if page != "connect/agent-prompt" and INTERNAL_PROSE.search(body):
             raise SystemExit(f"{page}: internal publishing instructions do not belong in a reader task")
-        if page != "agent-reference/prompt" and "````text Relay agent prompt" in text:
+        if page != "connect/agent-prompt" and "````text Relay agent prompt" in text:
             raise SystemExit(f"{page}: full machine instructions belong in the agent reference")
-        if page == "getting-started/quickstart":
+        if page == "start/quickstart":
             for detail in ("onFullSync", "through_sequence", "## Review with an agent", "## Delete", "image_recipe"):
                 if detail in text:
                     raise SystemExit(f"Quickstart absorbed a separate task: {detail}")

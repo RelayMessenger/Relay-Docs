@@ -1,0 +1,109 @@
+---
+title: "Manage webhook subscriptions"
+sidebarTitle: "Subscriptions"
+description: "Create, list, update, and delete webhook subscriptions."
+keywords: ["webhook subscription", "signing secret", "events", "endpoint"]
+---
+
+Create a subscription to send an agent’s events to one HTTPS endpoint and manage its event set.
+
+**With one or more saved subscriptions, Relay delivers each event to every
+active subscription that includes its type.** Keep every required event type
+covered by an active subscription.
+
+## Before you start
+
+Use an [Agent Token](/start/authentication), an HTTPS receiver you control, and event names from the [catalog](/build/events/reference). The SDK examples use a client configured for `https://api.staging.relayapp.im`.
+
+## Create
+
+<CodeGroup>
+```typescript TypeScript SDK
+const subscription = await relay.webhookSubscriptions.create({
+  target_url: "https://agent.example/webhooks/relay",
+  subscribed_events: ["message.received"],
+});
+```
+
+```bash cURL
+curl -sS -X POST https://api.staging.relayapp.im/v1/webhook-subscriptions \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "target_url":"https://agent.example/webhooks/relay",
+    "subscribed_events":["message.received"]
+  }'
+```
+</CodeGroup>
+
+Replace the example target with your receiver’s public HTTPS URL. See [destination checks](/build/events/delivery#destination-checks) for delivery-time validation.
+
+## Store the signing secret
+
+A successful create returns HTTP `201`:
+
+```json
+{
+  "id":"01993d50-34ca-7613-8df2-d3f8cc975d04",
+  "target_url":"https://agent.example/webhooks/relay",
+  "subscribed_events":["message.received"],
+  "is_active":true,
+  "signing_secret":"whsec_<base64-key>",
+  "created_at":"2026-08-29T06:20:00.000Z",
+  "updated_at":"2026-08-29T06:20:00.000Z"
+}
+```
+
+**Store `signing_secret` from this response.** It is returned only when you create the subscription. Use it to [verify incoming signatures](/build/events/verify-signatures).
+
+## List, retrieve, update, or delete
+
+| Operation | TypeScript SDK | HTTPS |
+| --- | --- | --- |
+| List | `relay.webhookSubscriptions.list()` | `GET /v1/webhook-subscriptions` |
+| Retrieve | `relay.webhookSubscriptions.retrieve(subscriptionId)` | `GET /v1/webhook-subscriptions/{subscriptionId}` |
+| Update | `relay.webhookSubscriptions.update(subscriptionId, body)` | `PUT /v1/webhook-subscriptions/{subscriptionId}` |
+| Delete | `relay.webhookSubscriptions.delete(subscriptionId)` | `DELETE /v1/webhook-subscriptions/{subscriptionId}` |
+
+| Update field | Use |
+| --- | --- |
+| `target_url` | Receiver’s HTTPS URL |
+| `subscribed_events` | Event names from the catalog |
+| `is_active` | Whether this subscription receives matching events |
+
+Target URLs must be unique per agent.
+
+Delete a subscription by ID:
+
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.webhookSubscriptions.delete(subscriptionId);
+```
+
+```bash cURL
+curl -sS -X DELETE \
+  "https://api.staging.relayapp.im/v1/webhook-subscriptions/$SUBSCRIPTION_ID" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+</CodeGroup>
+
+A successful delete returns HTTP `204` with no response body.
+
+## Change delivery paths
+
+| Saved subscription state | Delivery behavior |
+| --- | --- |
+| One or more subscriptions, including inactive ones | Webhook mode; new events go to active subscriptions covering their type |
+| First subscription created | Connected agent sockets close; matching pending events transfer to active webhooks |
+| Last subscription deleted | Pending webhook events transfer to WebSocket and wait while the backend is disconnected |
+
+Transferred events retain their original `event_id` and body. Read [WebSocket recovery](/build/events/websocket/full-sync) for the replay window and recovery procedure.
+
+<span id="related" />
+
+## Next steps
+
+- [Receive webhook events](/build/events/webhooks)
+- [Verify signatures](/build/events/verify-signatures)
+- [Choose event types](/build/events/reference)
+- [Connect with WebSocket](/build/events/websocket)

@@ -1,0 +1,102 @@
+---
+title: "Run a Relay agent with Cloudflare Think"
+sidebarTitle: "Cloudflare Think"
+description: "Configure and run the Relay Think starter with signed Webhook ingress in a Cloudflare Worker."
+keywords: ["Relay Agent Starter", "Cloudflare Think", "Think messenger", "Workers", "Webhooks"]
+---
+
+Run the Relay Think starter to receive signed Webhooks and answer Messages from a Cloudflare Worker.
+
+## Install the starter
+
+| Requirement | Value |
+| --- | --- |
+| Node.js | `22.22.3` or newer. |
+| Cloudflare | An account with Workers AI access. |
+| Relay | A staging Agent Token and a public HTTPS Webhook destination. |
+
+Clone the source and install the starter:
+
+```bash
+git clone --branch staging https://github.com/RelayMessenger/Relay-SDK.git
+cd Relay-SDK/cookbook/cloudflare-think-agent
+npm ci
+cp .dev.vars.example .dev.vars
+```
+
+Source: [Cloudflare Think starter](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook/cloudflare-think-agent).
+
+## Configure staging
+
+[Register a Webhook subscription](/build/events/subscriptions) for your
+public HTTPS `/webhooks/relay` destination and retain its one-time signing
+secret. Set the secrets in `.dev.vars`, keeping that file out of source control:
+
+```dotenv
+RELAY_AGENT_TOKEN=replace-with-your-agent-token
+RELAY_WEBHOOK_SECRET=whsec_replace-with-your-webhook-secret
+```
+
+In `wrangler.jsonc`, set these non-secret values under `env.staging.vars`:
+
+| Variable | Value |
+| --- | --- |
+| `RELAY_API_ORIGIN` | `https://api.staging.relayapp.im` |
+| `RELAY_AGENT_HANDLE` | The Handle returned for your agent. |
+| `MODEL_ID` | `@cf/openai/gpt-oss-120b` |
+
+Start the Worker and route the registered HTTPS destination to it:
+
+```bash
+npm run dev
+```
+
+## Check the setup
+
+Request `/healthz` at the local URL printed by the development server. Valid
+configuration returns:
+
+```json
+{"ok": true}
+```
+
+| Result | Action |
+| --- | --- |
+| `/healthz` returns `503` | Fill in the settings named in the response. |
+| Webhook returns `401` | Check the subscription's signing secret and preserve the original signed body. |
+| Signed Webhook returns `202` | The request was accepted; verify the model's reply separately. |
+
+Send the agent a direct Message and confirm that its answer arrives in the same
+Chat. The starter uses a `reply`
+Action for the completed response. Preserve its idempotency handling when
+customizing the reply.
+
+## Answer a second Message during a reply
+
+Think builds the Chat SDK instance itself with
+`concurrency: { strategy: "burst", debounceMs: 600 }` and runs each reply with
+`waitForCompletion: true`, so the Chat stays locked for the whole turn. The
+starter cannot change that window.
+
+| Second Message arrives | Outcome |
+| --- | --- |
+| Within 600 ms of the first | One turn runs for the latest Message; Think's handlers never read the earlier ones. |
+| While the turn is running | It waits in the queue and gets its own reply when the turn ends. |
+| Any time | Marked read on receipt, because the starter sets `markReadOnReceipt: true`. |
+
+A newer Message never cancels a running turn. Think's handlers take only
+`(thread, message)` and never read `thread.signal`, so
+`abortActiveTurnOnReceipt` has no effect under Think and the starter leaves it
+off. The
+[starter README](https://github.com/RelayMessenger/Relay-SDK/blob/staging/cookbook/cloudflare-think-agent/README.md)
+records why.
+
+<span id="current-source" />
+<span id="delivery-behavior" />
+<span id="related" />
+
+## Next steps
+
+- [Vercel Chat SDK](/connect/chat-sdk)
+- [Webhook delivery and retries](/build/events/delivery)
+- [More examples](/examples)

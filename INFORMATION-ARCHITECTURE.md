@@ -61,7 +61,7 @@ Do not use formatting to disguise independent tasks inside one page.
 ## Machine-readable surfaces
 
 `skill.md` is the source for the navbar copy action, the Mintlify skill copy,
-and the full code block on `agent-reference/prompt.mdx`. The short AI coding
+and the full code block on `connect/agent-prompt.mdx`. The short AI coding
 agents page links there instead of embedding the full instruction file.
 
 `llms.txt` is a setup entry point and a compact page index. Endpoint entries

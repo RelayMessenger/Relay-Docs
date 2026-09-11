@@ -1,0 +1,88 @@
+---
+title: "Blocked Handles"
+description: "Control delivery from a Handle while preserving existing Chat history."
+keywords: ["blocked Handles", "block", "Contact", "direct Message"]
+---
+
+Block a registered Handle for the authenticated Contact.
+
+## Block
+
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.blockedHandles.block({
+  handle: "echo.acme",
+  reason: "No direct messages",
+});
+```
+
+```bash cURL
+curl -sS -X POST https://api.staging.relayapp.im/v1/blocked_handles \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"handle":"echo.acme","reason":"No direct messages"}'
+```
+</CodeGroup>
+
+Blocking is idempotent. The block follows the stable Contact when its Handle
+changes.
+
+## Behavior
+
+| Traffic | Result |
+| --- | --- |
+| Existing direct Chat, either direction blocked | Send is accepted and stored for the sender as `sent`; the other Contact receives no delivery |
+| Existing group Chat | A Contact does not receive new Messages from a Handle they blocked; the blocked Handle can still receive theirs, and other recipients continue normally |
+| Creating a Chat | Refused with `403`, code `2026`, when the sender and any recipient block each other |
+| Adding an agent to a Chat containing a user | Refused with `403`, code `2026`, when that agent and the user block each other |
+| Existing history | Preserved |
+| Block disclosure | Block status and reason stay private; a user's block removes their edge to the agent, so the agent receives `contact.removed`, and deletes any pending message request from it, so the agent receives `chat.request.updated` with `deleted` |
+
+**Blocking delivery differs from rejecting Chat admission.** Creating a Chat
+and adding a participant return `403`, code `2026`, for a blocked candidate.
+A send into an existing Chat never returns 2026.
+See [Chat creation](/guides/chats) and [membership](/build/chats/participants).
+
+A Message withheld from a recipient stays out of that recipient's history and
+events after unblocking, including an idempotent retry of the original send.
+
+## List
+
+<CodeGroup>
+```typescript TypeScript SDK
+const result = await relay.blockedHandles.list();
+```
+
+```bash cURL
+curl -sS https://api.staging.relayapp.im/v1/blocked_handles \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+</CodeGroup>
+
+## Unblock
+
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.blockedHandles.unblock({ handle: "echo.acme" });
+```
+
+```bash cURL
+curl -sS -X DELETE https://api.staging.relayapp.im/v1/blocked_handles \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"handle":"echo.acme"}'
+```
+</CodeGroup>
+
+Unblocking a Handle that is not blocked returns `404`, code `2025`.
+A block removed the user's edge to the agent, so after unblocking the agent's
+next first Message is a [message request](/build/identity/message-requests)
+again.
+
+<span id="related" />
+
+## Next steps
+
+- [Chats](/guides/chats)
+- [Message requests](/build/identity/message-requests)
+- [Error Codes](/error)

@@ -28,10 +28,11 @@ const published = (relative) => !relative.startsWith("scripts/")
 // here.
 const SCAN_DIRECTORIES = [
   "agent-reference",
-  "integrations",
+  "connect",
+  "cli",
   "examples",
-  "getting-started",
-  "guides",
+  "start",
+  "build",
   "error",
   "api-reference",
   ".agents",
