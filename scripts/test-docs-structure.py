@@ -4,7 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from docs_structure import START_PAGES, validate_structure
+from docs_structure import START_PAGES, validate_structure, validate_build_headings
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -20,6 +20,14 @@ class DocumentationStructureTests(unittest.TestCase):
             path.write_text("---\ntitle: Test\n---\nOne task.\n\n## Next steps\n")
         config = {"navigation": {"tabs": [{"groups": [{"group": "Getting started", "pages": list(START_PAGES)}]}]}}
         return root, config
+
+    def test_build_heading_mutation(self):
+        with self.assertRaisesRegex(SystemExit, "imperative task"):
+            validate_build_headings("build/messages/send", "## Background\n## Next steps\n")
+
+    def test_event_heading_mutation(self):
+        with self.assertRaisesRegex(SystemExit, "event skeleton"):
+            validate_build_headings("build/events/reference/message-sent", "## Fields\n## Next steps\n")
 
     def test_current_site(self):
         validate_structure(ROOT, json.loads((ROOT / "docs.json").read_text()))

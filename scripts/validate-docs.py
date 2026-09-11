@@ -335,10 +335,11 @@ for path in mdx_paths:
         text,
     ):
         if "TypeScript SDK" in block and "cURL" in block:
-            if block.index("TypeScript SDK") > block.index("cURL"):
-                raise SystemExit(
-                    f"TypeScript SDK must appear before cURL: {path.relative_to(root)}"
-                )
+            if path.relative_to(root).parts[0] == "build":
+                if block.index("cURL") > block.index("TypeScript SDK"):
+                    raise SystemExit(f"cURL must appear before TypeScript SDK: {path.relative_to(root)}")
+            elif block.index("TypeScript SDK") > block.index("cURL"):
+                raise SystemExit(f"TypeScript SDK must appear before cURL: {path.relative_to(root)}")
 
 private_contact_field = "is_" + "default"
 private_contact_phrase = "default " + "agent"
@@ -795,7 +796,8 @@ if disconnect_reasons != [
     raise SystemExit(f"WebSocket disconnect reasons drifted: {disconnect_reasons}")
 
 handwritten_paths = [*mdx_paths, root / "skill.md", root / "README.md"]
-handwritten_text = "\n".join(path.read_text() for path in handwritten_paths)
+# Verbatim payload text is user content, not product vocabulary.
+handwritten_text = "\n".join(re.sub(r"^```json captured-output\n.*?^```\s*$", "", path.read_text(), flags=re.M | re.S) for path in handwritten_paths)
 all_contract_text = handwritten_text + "\n" + openapi_text
 if target() == "production" and STAGING_INSTRUCTION_REFERENCE.search(handwritten_text):
     raise SystemExit("staging installation or credential guidance returned to production")

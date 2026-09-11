@@ -40,7 +40,7 @@ def example_errors(text: str, mode: str = "staging") -> list[str]:
         # `text captured-output` marks verbatim program output, not a runnable
         # example. CLI help prints environment-free docs links on both targets.
         # The marker never exempts bash, curl, or TypeScript request blocks.
-        if match[2].strip() == "text captured-output":
+        if match[2].strip() in {"text captured-output", "json captured-output"}:
             continue
         block = ENVIRONMENT_FREE_DOC_URL.sub("", match[3])
         if mode == "staging" and PRODUCTION.search(block):
@@ -56,6 +56,9 @@ def example_errors(text: str, mode: str = "staging") -> list[str]:
 class RegressionTests(unittest.TestCase):
     def test_captured_program_output_is_not_a_request(self):
         self.assertFalse(example_errors("```text captured-output\nDocs: https://docs.relayapp.im\n```\n"))
+
+    def test_captured_json_is_not_a_request(self):
+        self.assertFalse(example_errors('```json captured-output\n{"doc_url":"https://docs.relayapp.im/guides/webhooks/events"}\n```\n'))
 
     def test_output_marker_does_not_exempt_runnable_blocks(self):
         self.assertTrue(example_errors("```bash captured-output\ncurl https://api.relayapp.im/v1/chats\n```\n"))

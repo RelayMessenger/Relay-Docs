@@ -14,6 +14,26 @@ INTERNAL_PROSE = re.compile(
 )
 
 
+BUILD_FIXED = {"Before you start", "What you get back", "When it fails", "Next steps"}
+TASK_VERBS = set("Add Allocate Apply Block Choose Clear Configure Connect Create Debug Delete Derive Download Edit Follow Handle Inspect Install Keep Leave List Mark Observe Open Preserve Read Receive Refresh Register Remove Rename Reply Resolve Retrieve Retry Review Run Save Select Send Set Share Start Stop Store Subscribe Supply Target Track Unblock Unsend Update Upload Use Validate Verify Watch".split())
+
+def validate_build_headings(page, body):
+    headings = re.findall(r"^## (.+)$", body, re.M)
+    if page.startswith("build/events/reference/"):
+        if headings != ["Payload", "When it fires", "Example", "Next steps"]:
+            raise SystemExit(f"{page}: event skeleton must be Payload / When it fires / Example / Next steps")
+        return
+    if not headings or headings[-1] != "Next steps":
+        raise SystemExit(f"{page}: Next steps must be last")
+    for heading in headings:
+        if heading not in BUILD_FIXED and heading.split()[0] not in TASK_VERBS:
+            raise SystemExit(f"{page}: guide heading must name an imperative task: {heading}")
+    if "What you get back" in headings and "When it fails" not in headings:
+        raise SystemExit(f"{page}: response requires When it fails")
+    if "When it fails" in headings and headings[-2] != "When it fails":
+        raise SystemExit(f"{page}: When it fails must precede Next steps")
+
+
 def prose(text):
     return re.sub(r"^(`{3,})[^\n]*\n.*?^\1\s*$", "", text, flags=re.M | re.S)
 
@@ -44,7 +64,9 @@ def validate_structure(root: Path, config: dict):
         text = (root / f"{page}.mdx").read_text()
         body = prose(text)
         sections = [h for h in re.findall(r"^## (.+)$", body, re.M) if h not in {"Next steps", "Related", "See also"}]
-        if page not in REFERENCE_PAGES and len(sections) > 8:
+        if page.startswith("build/"):
+            validate_build_headings(page, body)
+        if not page.startswith("build/") and page not in REFERENCE_PAGES and len(sections) > 8:
             raise SystemExit(f"{page}: {len(sections)} top-level sections; split independent tasks rather than expanding this page")
         if page != "connect/agent-prompt" and INTERNAL_PROSE.search(body):
             raise SystemExit(f"{page}: internal publishing instructions do not belong in a reader task")
