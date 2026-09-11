@@ -82,7 +82,9 @@ def commands(text):
     """Join shell continuations without mistaking Markdown prose for commands."""
     return [
         line.strip()
-        for block in FENCE.findall(text)
+        for block in FENCE.findall(re.sub(
+            r"^```text captured-output\n.*?^```[ \t]*$", "", text, flags=re.M | re.S
+        ))
         for line in re.sub(r"\\\s*\n\s*", " ", block).splitlines()
         if line.strip()
     ]

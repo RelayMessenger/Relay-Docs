@@ -151,7 +151,9 @@ def validate() -> None:
             relative = path.relative_to(ROOT)
             if not path.is_file() or path.suffix not in CONTENT_SUFFIXES:
                 continue
-            if relative.as_posix() in {"versions.json", "api-reference/openapi.yaml"}:
+            # Build dependencies pin the CLI used to reproduce captured help.
+            # They are maintainer inputs, not reader installation examples.
+            if relative.as_posix() in {"versions.json", "api-reference/openapi.yaml", "package.json", "package-lock.json"}:
                 continue
             if SWEEP_EXEMPT & set(relative.parts) or path.suffix == ".mdx":
                 continue
