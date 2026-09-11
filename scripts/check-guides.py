@@ -18,7 +18,7 @@ from docs_structure import TASK_VERBS, authored_paths, is_task_guide, prose
 
 ROOT = Path(__file__).resolve().parents[1]
 FENCES = re.compile(r'^(`{3,})([^\n]*)\n(.*?)^\1[ \t]*$', re.M | re.S)
-CONNECT = ['Before you start', 'Install', 'Connect', 'Send it a message', 'What this changed', 'When it fails', 'Next steps']
+CONNECT = ['Before you start', 'Connect', 'Send it a message', 'What it can do', 'When it fails', 'Next steps']  # moved 2026-09-11 with the integrations rewrite
 FIXED = {'Before you start', 'What you get back', 'When it fails', 'Next steps'}
 
 

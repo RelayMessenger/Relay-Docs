@@ -4,37 +4,22 @@ description: "Connect Chat SDK to receive Relay messages and send replies."
 keywords: ["Relay", "Chat SDK", "connect"]
 ---
 
-Connect Chat SDK to receive Relay messages and send replies.
+Connect Chat SDK to Relay and answer messages from an HTTP handler.
 
 ## Before you start
 
-Use Node.js 22.22.3 or newer, an Agent Token, and a public HTTPS webhook route. Set `RELAY_API_URL` to `https://api.staging.relayapp.im`.
-
-## Install
-
-{/* Installation source: https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/chat-sdk-adapter */}
-
-Use Node.js `22.22.3` or newer for this setup:
+You need Node.js 22.22.3 or newer, an Agent Token, and a public HTTPS route for the webhook. Set `RELAY_API_URL` to `https://api.staging.relayapp.im`, the API the token comes from. [Create a webhook subscription](/events/webhooks/subscriptions) for that route and keep its one-time signing secret as `RELAY_WEBHOOK_SECRET`. Install Chat SDK, its in-memory state, and the Relay adapter, all from the same major version line:
 
 ```bash
 npm install chat@4.39.0 @chat-adapter/state-memory@4.39.0 \
   @relaymessenger/chat-sdk-adapter@staging
 ```
 
-Source: [Relay Chat SDK adapter](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/chat-sdk-adapter).
-
-
+The adapter's source is [packages/chat-sdk-adapter](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/chat-sdk-adapter). For a standalone Node HTTP server instead of a framework route, start from its [server example](https://github.com/RelayMessenger/Relay-SDK/blob/staging/packages/chat-sdk-adapter/examples/server.mjs).
 
 ## Connect
 
-
-| Input | Value |
-| --- | --- |
-| `RELAY_AGENT_TOKEN` | Agent Token issued by the staging API, loaded through your secret store. |
-| `RELAY_WEBHOOK_SECRET` | The one-time signing secret from the [Webhook subscription](/events/webhooks/subscriptions). |
-| Public endpoint | An HTTPS route that passes the original request body and headers to the adapter. |
-
-Create a Chat SDK instance and register a direct-message handler:
+Create one Chat SDK instance with the Relay adapter and register a direct-message handler. Three adapter settings matter. `burst` waits two seconds and then runs the handler once for the latest message. `markReadOnReceipt` marks the chat read as soon as the signature checks. `abortActiveTurnOnReceipt` lets a newer message cancel a running turn through `thread.signal`, so pass that signal to your model call. Mount `POST` at the route you registered:
 
 ```typescript
 import { Chat } from "chat";
@@ -46,7 +31,7 @@ const chat = new Chat({
   concurrency: { strategy: "burst", debounceMs: 2000 },
   adapters: {
     relay: createRelayAdapter({
-      baseUrl: "process.env.RELAY_API_URL!,
+      baseUrl: process.env.RELAY_API_URL!,
       token: process.env.RELAY_AGENT_TOKEN,
       webhookSecret: process.env.RELAY_WEBHOOK_SECRET,
       markReadOnReceipt: true,
@@ -65,98 +50,29 @@ export async function POST(request: Request): Promise<Response> {
 }
 ```
 
-Mount `POST` at your public HTTPS Webhook route and register that exact URL in
-the subscription. This example uses in-memory Chat SDK state for local setup.
-For a standalone Node HTTP handler, use the
-[source example](https://github.com/RelayMessenger/Relay-SDK/blob/staging/packages/chat-sdk-adapter/examples/server.mjs)
-and set its adapter's `baseUrl` to the staging origin.
-
-**Pass the raw body unchanged so the adapter can verify the signature.**
-Send a direct Message to the agent and confirm that the echo returns in the
-same Chat.
-
-
+Pass the request to the adapter with its body unchanged; the signature is over the raw bytes. In-memory state is for local work; swap it for a shared store before more than one instance runs.
 
 ## Send it a message
 
-Start your runtime and keep it open. Set `RELAY_SENDER_PROFILE` to a **different agent's** saved CLI profile and `RELAY_CHAT_ID` to a chat shared with the connected agent. Set `RELAY_PROFILE` to the connected agent's profile. The sender must be allowed by the runtime's admission rules.
+Open Relay on your phone and send a message to your agent's handle. Relay posts the event to your route, the adapter verifies it, and your handler runs. The echo comes back in the same chat. To watch the exchange from a terminal, run `npx relaymessenger@staging watch @<handle>`.
 
-In one terminal, watch the connected agent. In another, send the message.
+## What it can do
 
-```bash Watch
-npx relaymessenger@staging --profile "$RELAY_PROFILE" watch
-```
+The adapter gives your handler the Relay features below; the rest of the API is one import away.
 
-```bash Send from another agent
-npx relaymessenger@staging --profile "$RELAY_SENDER_PROFILE" chats messages send "$RELAY_CHAT_ID" \
-  --text "Hello, can you read this Relay message?" --idempotency-key "$RELAY_MESSAGE_KEY"
-```
-
-Set `RELAY_MESSAGE_KEY` to a fresh key for this message, and reuse it only when retrying the same send. Look for the agent's reply in the chat and the live view.
-
-```text Reply
-(unverified: reply not captured 2026-09-10)
-```
-
-## What this changed
-
-Your backend receives signed Relay webhooks. The CLI does not install or deploy this backend. These setup instructions were checked against the maintained source; the reply remains unverified below.
-
-### Handle retries and media
-
-| Situation | Behavior or action |
+| Relay feature | Chat SDK adapter |
 | --- | --- |
-| Reply during an inbound Webhook turn | The adapter derives the send key from `event_id` and the send ordinal. |
-| Send outside a Webhook turn | Supply an `idempotencyKeyResolver` based on a stable task identity. |
-| Empty response | The adapter sends no Relay Message. |
-| Invalid signature | Check the signing secret and exact request bytes before retrying delivery. |
-| Uncertain send | Reuse the same idempotency key and request content. |
+| Wakes when a message arrives | Yes, by webhook. |
+| Reply in the chat | Yes, with a send key derived from the event id and the send ordinal, so a retry never sends twice. |
+| Send attachments | Yes, from a public HTTPS URL or from file bytes; see [attachments](/concepts/messages/attachments). |
+| Read chat history | Yes. The adapter walks a chat's history backward, 100 messages a page. |
+| Second message during a reply | Waits or cancels the running turn, by the three settings above. |
 
-The adapter accepts public HTTPS media URLs and file bytes. For an uncertain
-media send, preserve the prepared Attachment identity rather than allocating a
-new one on retry; see [Attachments](/concepts/messages/attachments).
-
-
-### Answer a second Message during a reply
-
-Chat SDK `4.39.0` defaults `concurrency` to `drop`. Under `drop`, a Message
-that arrives while the handler is still running throws a `LockError` out of
-`chat.webhooks.relay`, the Webhook fails, and Relay
-[retries the delivery](/events/webhooks/delivery). The three settings in the
-example above replace that.
-
-| Setting | Effect |
-| --- | --- |
-| `concurrency: { strategy: "burst", debounceMs: 2000 }` | Waits 2 seconds after the first Message, then runs the handler once with the latest Message; earlier ones arrive in `context.skipped`. A Message that arrives mid-run is queued and handled when the run ends. |
-| `markReadOnReceipt: true` | Marks the Chat read as soon as the Webhook is verified, before the wait. |
-| `abortActiveTurnOnReceipt: true` | A newer Message aborts the running turn through `thread.signal`. Pass that signal to your model call, or the old turn finishes and posts. |
-
-Join the skipped Messages so one reply covers the burst:
-
-```typescript
-chat.onDirectMessage(async (thread, message, channel, context) => {
-  const text = [...(context?.skipped ?? []), message]
-    .map((m) => m.text)
-    .join("\n\n");
-  await thread.post(`Echo: ${text}`);
-});
-```
-
-
-
-
-
-
-
-
+Chat SDK's default `concurrency` is `drop`: a message that arrives during a running handler throws a `LockError`, the webhook fails, and Relay [retries the delivery](/events/webhooks/delivery). The `burst` setting replaces that. Earlier messages in a burst arrive in `context.skipped`; join them when one reply should cover the whole burst. A send outside a webhook turn needs your own `idempotencyKeyResolver` from a stable task identity, and an empty response sends no message.
 
 ## When it fails
 
-| Result | Next step |
-| --- | --- |
-| Signature verification fails | Use the subscription signing secret and the unchanged request body. |
-| No reply | Check backend logs and the handler that starts a turn. |
-| Send result is uncertain | Reuse the same idempotency key and request. |
+If signature verification fails, the secret is not the one from this subscription or the body was re-encoded before the adapter saw it. If no reply comes, read the handler's logs; the turn either threw or never started. If a send's result is uncertain, retry it with the same idempotency key and the same content, and keep the prepared attachment id rather than allocating a new one.
 
 ## Next steps
 

@@ -4,119 +4,56 @@ description: "Connect Codex to Relay and check its messaging setup."
 keywords: ["Relay", "Codex", "connect"]
 ---
 
-Adds Relay messaging tools to Codex.
+Connect Codex to Relay and talk to it from your phone.
 
 ## Before you start
 
-Use Node.js 22.22.3 or newer and an Agent Token from [Relay authentication](/live/authentication). Sign in to Codex with its own account or model provider before connecting.
-
-```bash Environment
-export RELAY_API_URL="https://api.staging.relayapp.im"
-```
-
-Pipe the token from your secret store into the Connect command below. `--with-token` reads it from stdin.
-
-## Install
-
-{/* Runtime installation source: https://github.com/openai/codex#quickstart */}
-
-```bash
-npm install --global @openai/codex
-```
-
-You can also run the runtime without a global install.
-
-```bash
-npx @openai/codex
-```
+Install Codex from [openai/codex](https://github.com/openai/codex#quickstart) and sign in to it. Install Node.js 22.22.3 or newer; the Relay CLI runs with `npx`. Set `RELAY_API_URL` to `https://api.staging.relayapp.im` so Relay talks to the API your agent lives on. You do not need an agent yet: the command below creates one and saves its token on this computer. If you already have an Agent Token, pipe it in with `--with-token`.
 
 ## Connect
 
-```bash
-npx relaymessenger@staging connect codex --with-token --yes --no-start --no-skill --api-url "$RELAY_API_URL"
-```
-
-```text captured-output
-Codex found  /Users/advaitpaliwal/.local/bin/codex
-That token is @relay_staging_fullsync  token saved privately on this computer
-Relay will do 1 thing. Continue?
-  1  run  codex mcp add relay --env RELAY_CONFIG_PATH=~/relay.json -- npx -y @relaymessenger/mcp@staging --profile relay_staging_fullsync  (adds the Relay MCP server to ~/.codex/config.toml)
-Relay MCP server added to Codex  ~/.codex/config.toml
-Relay is ready for Codex.
-Later:  relay watch relay_staging_fullsync  ·  relay doctor
-```
-
-## Send it a message
-
-Start your runtime and keep it open. Set `RELAY_SENDER_PROFILE` to a **different agent's** saved CLI profile and `RELAY_CHAT_ID` to a chat shared with the connected agent. Set `RELAY_PROFILE` to the connected agent's profile. The sender must be allowed by the runtime's admission rules.
-
-In one terminal, watch the connected agent. In another, send the message.
-
-```bash Watch
-npx relaymessenger@staging --profile "$RELAY_PROFILE" watch
-```
-
-```bash Send from another agent
-npx relaymessenger@staging --profile "$RELAY_SENDER_PROFILE" chats messages send "$RELAY_CHAT_ID" \
-  --text "Hello, can you read this Relay message?" --idempotency-key "$RELAY_MESSAGE_KEY"
-```
-
-Set `RELAY_MESSAGE_KEY` to a fresh key for this message, and reuse it only when retrying the same send. Look for the agent's reply in the chat and the live view.
-
-```text Reply
-(unverified: reply not captured 2026-09-10)
-```
-
-## What this changed
-
-The output above was captured with `relaymessenger@0.1.6-staging.5` and Codex 0.154.0. Connect saved the existing agent token in `~/relay.json` and registered `mcp_servers.relay` in `~/.codex/config.toml`. The MCP process receives `RELAY_CONFIG_PATH` and the saved profile name. Your normal paths are `~/.config/relay/config.json` and `~/.codex/config.toml`.
-
-The `relay` MCP entry launches `npx -y @relaymessenger/mcp@staging --profile <profile>`. The runtime calls these tools during a session. Keep the runtime running and ask it to read and answer the Relay chat.
-
-The message-reading probe used `codex -c features.mcp_2026_07_28=true` to expose the MCP tools in Codex 0.154.0. This is an under-development Codex feature. Review tool permissions in the local session.
-
-### Install locally
-
-Use Codex CLI `0.152.0` with the Relay plugin:
+Run this in a terminal. Relay finds Codex and creates an agent with a `.dev` handle. Then it prints what it will change before it changes anything: Codex's own `codex mcp add` writes the Relay MCP server into `~/.codex/config.toml`. It asks `Continue?` and does the work. It ends with `Relay is ready for Codex.` and the handle to message from your phone:
 
 ```bash
-npm install --global @openai/codex@0.152.0
+npx relaymessenger@staging connect codex
+```
+
+The last lines tell you what to do next. `Say anything to @<handle> from your phone.` is the invitation. `Later: relay watch <handle> · relay doctor` names the two commands that show the chat in the terminal and check the setup. Connect then waits for the agent's first reply and prints it as `Answered from your phone: …`.
+### Install the Relay plugin for Codex
+
+The Relay plugin for Codex is a different thing from the connection above. It gives Codex the Relay skill and a documentation search server named `relayDocs`, so Codex can look up how Relay works while it writes code for you. It does not create an agent and it cannot read your chats. Install it from a clone of the SDK:
+
+```bash
 git clone --branch staging https://github.com/RelayMessenger/Relay-SDK.git
 cd Relay-SDK
 codex plugin marketplace add "$PWD"
 codex plugin add relay@relay-plugin-marketplace
 ```
 
-Start a new Codex session after installation. The marketplace name is
-`relay-plugin-marketplace`; its Relay entry points to `plugins/relay`.
+Start a new Codex session after the install. The marketplace is named `relay-plugin-marketplace` and its Relay entry points at [plugins/relay](https://github.com/RelayMessenger/Relay-SDK/tree/staging/plugins/relay). For the difference between documentation search and the messaging tools, read [documentation search](/integrations/skills#connect-documentation-search).
 
-Source: [Relay plugin](https://github.com/RelayMessenger/Relay-SDK/tree/staging/plugins/relay)
-and [Codex marketplace](https://github.com/RelayMessenger/Relay-SDK/blob/staging/.agents/plugins/marketplace.json).
+## Send it a message
 
+Open Relay on your phone and send a message to the handle connect printed. Codex does not wake up on its own: the Relay MCP server gives it tools, and it uses them when you ask. In Codex, say `Read my Relay messages and answer them.` It lists the chat, reads your message, and sends its answer. The answer appears in the same chat on your phone, and in the terminal while connect is waiting. Start it: `codex`; connect offers to start it for you.
 
-### Confirm the installation
+## What it can do
 
-Confirm that the Relay skill is available in the new session and that the
-`relayDocs` MCP server is configured. Ask Codex to use the Relay skill for your
-next Relay integration task.
+The table says what the Relay CLI and the Relay MCP server give Codex. It comes from the connection code for `codex` and the tool list of `@relaymessenger/mcp`; anything not listed is not there.
 
-For the distinction between documentation search and authenticated messaging
-tools, see [documentation search](/integrations/skills#connect-documentation-search).
-
-
-
-
-
+| Relay feature | Codex |
+| --- | --- |
+| Connect | Codex's own `codex mcp add` writes the Relay MCP server into `~/.codex/config.toml`. |
+| Start | `codex`; connect offers to start it for you. |
+| Wakes when a message arrives | No. It reads the chat when you ask it to. |
+| Reply in the chat | Yes, text up to 10,000 characters, with a stable idempotency key. |
+| Send attachments | No. The MCP tools send text only. |
+| Read chat history | Yes, by chat, oldest or newest first, one page at a time. |
+| React, type, mark read | Yes, with reactions, typing indicators, and read marks. |
+| Contact card | Yes, read and set the agent's name and picture. |
 
 ## When it fails
 
-| CLI output | Next step |
-| --- | --- |
-| `Relay cannot ask which agent to connect.` | Pipe your existing token with `--with-token`, or run Connect in a terminal to choose an agent. |
-| `Profile default has no saved token. Run npx relaymessenger auth login --with-token to save one.` | [Save a token](/cli/auth) and select that profile. |
-| `Relay would not accept that token, so nothing was changed.` | Check the token and its API environment, then retry Connect. |
-| `<Runtime> was not found on this computer; you named it, so Relay will try anyway` | Install the runtime above before retrying. This line is a notice, not a successful installation. |
-| `<command> did not finish. It said: <runtime output>` | Follow the runtime's error, then repeat Connect with `--yes`. The CLI retains the agent token. |
+Every failure prints one line, and nothing else changes. `Relay cannot ask which agent to connect.` means you ran connect without a terminal and without a token; pipe one in with `--with-token`, or run it in a terminal. `Relay cannot ask you to confirm this plan.` means the same for the plan; add `--yes`. `Relay would not accept that token, so nothing was changed.` means the token and `RELAY_API_URL` come from different environments. `Codex was not found on this computer; you named it, so Relay will try anyway` is a notice, not an error: install Codex and run connect again. If a step stops with `did not finish`, your agent and its token are saved; fix what it said and run the same command again. `No reply yet. Run: relay watch @<handle>` means Codex has not read the chat: `Read my Relay messages and answer them.`
 
 ## Next steps
 
