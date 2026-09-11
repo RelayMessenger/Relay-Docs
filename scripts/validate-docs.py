@@ -203,6 +203,9 @@ actual_tabs = [tab["tab"] for tab in tabs]
 expected_tabs = ["Docs", "API reference", "CLI", "Changelog"]
 if actual_tabs != expected_tabs:
     raise SystemExit(f"top tab order changed: {actual_tabs}")
+changelog_tab = next(tab for tab in tabs if tab["tab"] == "Changelog")
+if changelog_tab.get("pages") != ["changelog"] or "groups" in changelog_tab:
+    raise SystemExit("the changelog page must stand alone, with no group repeating the tab name")
 
 # Page boundaries and navigation coverage are checked independently of a
 # frozen list of heading strings. Editorial changes must not require growing
@@ -251,14 +254,23 @@ required_paths = [
 for path in required_paths:
     if not path.exists():
         raise SystemExit(f"required atomic guide missing: {path.relative_to(root)}")
-# Each section index carries its section name in the sidebar; the API
-# reference keeps the Overview label its generated groups use.
-for path, label in [
-    (root / "messages/index.mdx", "Messaging"), (root / "chats/index.mdx", "Chats"),
-    (root / "api-reference/overview.mdx", "Overview"),
+# Owner ruling 2026-09-11: a group's first page is labelled Overview in the
+# sidebar, so the eyebrow and the H1 never say the same word. The title then
+# has to say what the page is, and is pinned here with its label.
+for path, label, title in [
+    (root / "agents/lifecycle.mdx", "Overview", "What an agent is"),
+    (root / "agents/message-requests.mdx", "Overview", "How message requests work"),
+    (root / "messages/index.mdx", "Overview", "Send and receive messages"),
+    (root / "chats/index.mdx", "Overview", "Direct and group chats"),
+    (root / "webhooks/index.mdx", "Overview", "Receive webhook events"),
+    (root / "api-reference/overview.mdx", "Overview", None),
+    (root / "changelog.mdx", "Changelog", "Product updates"),
 ]:
-    if f'sidebarTitle: "{label}"' not in path.read_text():
+    page_text = path.read_text()
+    if f'sidebarTitle: "{label}"' not in page_text:
         raise SystemExit(f"section sidebar label drifted: {path.relative_to(root)}")
+    if title is not None and f'title: "{title}"' not in page_text:
+        raise SystemExit(f"section title drifted back to its group name: {path.relative_to(root)}")
 
 for stale in [
     root / "chats/install-agents.mdx",

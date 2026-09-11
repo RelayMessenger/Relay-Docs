@@ -48,6 +48,17 @@ class NavigationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Error codes"):
             validate_api_navigation(self.config)
 
+    def test_event_reference_group_pinned(self):
+        events = next(g for g in self.api["groups"] if g["group"] == "Webhook events")
+        events["pages"].remove("events/message-sent")
+        with self.assertRaisesRegex(ValueError, "Webhook events"):
+            validate_api_navigation(self.config)
+
+    def test_event_reference_group_required_after_webhooks(self):
+        self.api["groups"] = [g for g in self.api["groups"] if g["group"] != "Webhook events"]
+        with self.assertRaisesRegex(ValueError, "resource tree"):
+            validate_api_navigation(self.config)
+
     def test_recursive_walk_preserves_order_and_parentage(self):
         self.assertEqual(
             list(walk_pages([{"group": "A", "pages": ["one", {"group": "B", "pages": ["two"]}]}])),

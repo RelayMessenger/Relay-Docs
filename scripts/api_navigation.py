@@ -4,6 +4,23 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# Owner ruling 2026-09-11: the nineteen webhook event pages are reference, so
+# they sit in the API reference tab in their own group right after Webhooks.
+# Their files never moved, so every /events path still resolves.
+RESOURCE_GROUPS = ["Chats", "Messages", "Attachments", "Contacts", "Webhooks", "WebSocket", "Agents"]
+RESOURCE_OBJECTS = {"Chats": "Chat", "Messages": "Message", "Attachments": "Attachment", "Contacts": "Contact", "Webhooks": "Webhook", "WebSocket": "WebSocket", "Agents": "Agent"}
+EVENT_GROUP = "Webhook events"
+EVENT_PAGES = [
+    "events/index", "events/chat-created", "events/chat-group-icon-updated",
+    "events/chat-group-name-updated", "events/chat-request-updated",
+    "events/chat-typing-indicator-started", "events/chat-typing-indicator-stopped",
+    "events/contact-added", "events/contact-removed", "events/message-delivered",
+    "events/message-edited", "events/message-failed", "events/message-read",
+    "events/message-received", "events/message-sent", "events/message-unsent",
+    "events/participant-added", "events/participant-removed",
+    "events/reaction-added", "events/reaction-removed",
+]
+
 
 def walk_pages(items, parents=()):
     for item in items:
@@ -22,11 +39,14 @@ def page_paths():
 def validate_api_navigation(config):
     api = next(tab for tab in config["navigation"]["tabs"] if tab["tab"] == "API reference")
     groups = api["groups"]
-    if not {"Chats", "Messages", "Attachments", "Contacts", "Webhooks", "WebSocket", "Agents"}.issubset({g["group"] for g in groups}):
+    if not set(RESOURCE_GROUPS).issubset({g["group"] for g in groups}):
         raise ValueError("API resources must have their own groups")
-    expected_groups = ["Overview", "Chats", "Messages", "Attachments", "Contacts", "Webhooks", "WebSocket", "Agents"]
+    expected_groups = ["Overview", *RESOURCE_GROUPS[:RESOURCE_GROUPS.index("WebSocket")], EVENT_GROUP, *RESOURCE_GROUPS[RESOURCE_GROUPS.index("WebSocket"):]]
     if [g["group"] for g in groups] != expected_groups:
         raise ValueError("API group order must match the resource tree")
+    events = next(g for g in groups if g["group"] == EVENT_GROUP)
+    if events["pages"] != EVENT_PAGES or events.get("expanded") is not False:
+        raise ValueError("Webhook events must collapse and list its index then every event page in order")
     if groups[0]["pages"] != ["api-reference/overview", "api-reference/errors"]:
         raise ValueError("API must start with Overview and Error codes")
     if api.get("openapi") != "api-reference/openapi.mint.yaml":
@@ -58,14 +78,15 @@ def validate_api_navigation(config):
             check_overviews(pages)
 
     check_overviews(groups)
-    for group in groups[1:]:
+    resources = [g for g in groups if g["group"] in set(RESOURCE_GROUPS)]
+    for group in resources:
         if any(not page.startswith(methods) for page in group["pages"][1:]):
             raise ValueError("Only generated endpoints may follow a resource overview")
     import re
-    for group in groups[1:]:
+    for group in resources:
         path = ROOT / (group["pages"][0] + ".mdx")
         headings = re.findall(r"^## (.+)$", path.read_text(), re.M)
-        resource = {"Chats": "Chat", "Messages": "Message", "Attachments": "Attachment", "Contacts": "Contact", "Webhooks": "Webhook", "WebSocket": "WebSocket", "Agents": "Agent"}[group["group"]]
+        resource = RESOURCE_OBJECTS[group["group"]]
         if headings != [f"The {resource} object", "Example", "Operations", "Errors", "Next steps"]:
             raise ValueError(f"Resource overview skeleton drifted: {path}")
     return found
