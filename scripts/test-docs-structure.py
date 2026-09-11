@@ -4,7 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from docs_structure import START_PAGES, validate_structure, validate_build_headings
+from docs_structure import LANDING_SECTIONS, START_PAGES, validate_structure, validate_build_headings
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -18,8 +18,16 @@ class DocumentationStructureTests(unittest.TestCase):
             path = root / f"{page}.mdx"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("---\ntitle: Test\n---\nOne task.\n\n## Next steps\n")
+        (root / "index.mdx").write_text("\n".join("## " + heading for heading in LANDING_SECTIONS) + "\n")
         config = {"navigation": {"tabs": [{"groups": [{"group": "Getting started", "pages": list(START_PAGES)}]}]}}
         return root, config
+
+    def test_landing_order_mutation(self):
+        root, config = self.fixture()
+        path = root / "index.mdx"
+        path.write_text(path.read_text().replace("## Going live", "## Another section"))
+        with self.assertRaisesRegex(SystemExit, "approved order"):
+            validate_structure(root, config)
 
     def test_build_heading_mutation(self):
         with self.assertRaisesRegex(SystemExit, "imperative task"):

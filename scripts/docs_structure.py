@@ -6,6 +6,7 @@ from pathlib import Path
 # Frame catalogs and a complete copyable agent instruction are reference, not
 # onboarding. All ordinary task guides keep five sections before related links.
 REFERENCE_PAGES = {"build/events/websocket/protocol", "connect/agent-prompt"}
+LANDING_SECTIONS = ["Start here", "What you need", "Connect your coding agent", "Message it from your phone", "Or build on the API", "Group chats and mentions", "Receive events", "Your agent’s identity", "Going live", "Next"]
 START_PAGES = ["index", "start/quickstart", "start/key-concepts", "start/authentication", "start/sdks"]
 INTERNAL_PROSE = re.compile(
     r"Prepare hosted proof|only after this docs candidate is pushed|"
@@ -60,9 +61,11 @@ def validate_structure(root: Path, config: dict):
         text = (root / f"{page}.mdx").read_text()
         body = prose(text)
         sections = [h for h in re.findall(r"^## (.+)$", body, re.M) if h not in {"Next steps", "Related", "See also"}]
+        if page == "index" and re.findall(r"^## (.+)$", body, re.M) != LANDING_SECTIONS:
+            raise SystemExit("index: landing sections must match the approved order")
         if page.startswith("build/"):
             validate_build_headings(page, body)
-        if not page.startswith("build/") and page not in REFERENCE_PAGES and page != "changelog" and len(sections) > 8:
+        if not page.startswith("build/") and page not in REFERENCE_PAGES and page not in {"changelog", "index"} and len(sections) > 8:
             raise SystemExit(f"{page}: {len(sections)} top-level sections; split independent tasks rather than expanding this page")
         if page != "connect/agent-prompt" and INTERNAL_PROSE.search(body):
             raise SystemExit(f"{page}: internal publishing instructions do not belong in a reader task")
