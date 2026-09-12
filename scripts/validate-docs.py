@@ -346,7 +346,11 @@ for path in mdx_paths:
                 raise SystemExit("Removed paths or flags need a Breaking change tag")
         continue
     headings = h2_headings(text)
-    if not headings or headings[-1] not in ({"Next"} if path == root / "index.mdx" else {"Next steps", "Related", "See also"}):
+    if path == root / "index.mdx":
+        # Owner ruling 2026-09-12: the Introduction is a gateway with cards only, no sections.
+        if headings:
+            raise SystemExit(f"the landing page carries no sections: {path}")
+    elif not headings or headings[-1] not in {"Next steps", "Related", "See also"}:
         raise SystemExit(f"page must end with Next steps, Related, or See also: {path}")
 
     for block in re.findall(

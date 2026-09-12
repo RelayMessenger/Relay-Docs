@@ -29,7 +29,8 @@ class DocumentationStructureTests(unittest.TestCase):
     def test_landing_order_mutation(self):
         root, config = self.fixture()
         path = root / "index.mdx"
-        path.write_text(path.read_text().replace("## Receive events", "## Another section"))
+        # The landing has no sections (owner ruling 2026-09-12); adding one must fail.
+        path.write_text(path.read_text() + "## Another section\n")
         with self.assertRaisesRegex(SystemExit, "approved order"):
             validate_structure(root, config)
 

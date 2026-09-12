@@ -6,7 +6,8 @@ from pathlib import Path
 # Frame catalogs and a complete copyable agent instruction are reference, not
 # onboarding. All ordinary task guides keep five sections before related links.
 REFERENCE_PAGES = {"websocket/protocol", "integrations/agent-prompt"}
-LANDING_SECTIONS = ["Start here", "Connect a runtime", "Build on the API", "Receive events", "Next"]
+# Owner ruling 2026-09-12: the Introduction is a gateway with no sections; the cards route the reader.
+LANDING_SECTIONS = []
 # Owner ruling 2026-09-11 (final tree): the Docs tab opens with the main page
 # alone, then a Getting started group that runs quickstart, authentication, the
 # API walkthrough, the SDKs and the checklist in that order.
