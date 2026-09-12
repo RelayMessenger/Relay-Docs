@@ -258,6 +258,7 @@ for path in required_paths:
 # sidebar, so the eyebrow and the H1 never say the same word. The title then
 # has to say what the page is, and is pinned here with its label.
 for path, label, title in [
+    (root / "console/index.mdx", "Overview", "Relay Console"),
     (root / "agents/lifecycle.mdx", "Overview", "What an agent is"),
     (root / "agents/message-requests.mdx", "Overview", "How message requests work"),
     (root / "messages/index.mdx", "Overview", "Send and receive messages"),
