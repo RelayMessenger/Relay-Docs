@@ -4,7 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Owner ruling 2026-09-11 (night): the nineteen webhook event pages are their
+# Owner ruling 2026-09-11 (night): the seventeen webhook event pages are their
 # own top tab, "Webhook events", next to API reference. Their files never
 # moved, so every /events path still resolves.
 RESOURCE_GROUPS = ["Chats", "Messages", "Attachments", "Contacts", "Webhooks", "WebSocket", "Agents"]
@@ -15,8 +15,8 @@ EVENT_PAGES = [
     "events/chat-group-name-updated", "events/chat-request-updated",
     "events/chat-typing-indicator-started", "events/chat-typing-indicator-stopped",
     "events/contact-added", "events/contact-removed", "events/message-delivered",
-    "events/message-edited", "events/message-failed", "events/message-read",
-    "events/message-received", "events/message-sent", "events/message-unsent",
+    "events/message-failed", "events/message-read",
+    "events/message-received", "events/message-sent",
     "events/participant-added", "events/participant-removed",
     "events/reaction-added", "events/reaction-removed",
 ]

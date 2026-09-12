@@ -478,10 +478,10 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # error 2030, contact_requests removed, Relay-Server PR 205, September 9, 2026.
 # A person's reply accepts a message request; the request route takes deleted
 # only, Relay-Server PR 207, September 9, 2026.
-# Source authority: Relay-Server staging commit 63d887d4ddc6d7bd04abc8cc14cdb7d1ca01868f; CLI publication is gated separately.
+# Source authority: Relay-Server staging commit fc3077e918f180f50b85beae79649d8ef214259b; CLI publication is gated separately.
 # The digest pins source bytes independently of the Server release commit.
 expected_openapi_sha256 = (
-    "19bc597eee8369938354f4eac91fbf527bed3ee9e2084675173c5e5035bfb693"
+    "8adc196c22e9cb3c59ed28c13107835c8f1826e073fa53c36d1cbba304b2942a"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
@@ -646,7 +646,6 @@ expected_operation_ids = {
     "createWebhookSubscription",
     "deleteAttachment",
     "deleteWebhookSubscription",
-    "editMessage",
     "getAttachment",
     "getChat",
     "getContactCard",
@@ -671,7 +670,6 @@ expected_operation_ids = {
     "startTyping",
     "stopTyping",
     "unblockHandle",
-    "unsendMessage",
     "updateChat",
     "updateContactCard",
     "updateWebhookSubscription",

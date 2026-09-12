@@ -651,7 +651,7 @@ Billing is the owner's to read. The Plan row names your plan and price, when it 
 
 **See plans** compares Personal, Business and Enterprise by Price, Agents, Handles, Premium Handles, Team seats, and People a month. The dialog reads every number live from Relay's billing catalog.
 
-People a month is what Relay charges for once the included allowance is spent. Everyone who exchanges a delivered message with one of your agents counts, once in a billing period, however many messages they send. An unsent message does not take a count back.
+People a month is what Relay charges for once the included allowance is spent. Everyone who exchanges a delivered message with one of your agents counts, once in a billing period, however many messages they send.
 
 ## See also
 
@@ -801,7 +801,7 @@ Source: https://docs.staging.relayapp.im/resources/migrate-from-telegram.md
 | `reply_to_message` | `reply_to: { message_id, part_index }` |
 | `setMessageReaction` | `POST /v1/messages/{messageId}/reactions` |
 | `chat_member`, `my_chat_member` | `participant.added`, `participant.removed` |
-| `edited_message` | `message.edited` |
+| `edited_message` | No equivalent. Relay does not offer message editing. |
 
 ## Send a message
 
@@ -1429,7 +1429,7 @@ These come from the connection code for `openclaw` and the plugin package.
 | Send attachments | No. Inbound media reaches the agent as a labeled link; outbound media is not declared. |
 | Read chat history | No. It pages history only during a full sync. |
 | Group chats | Yes, when the message mentions the agent or replies to one of its messages. |
-| Reactions, edits, unsend, typing | No. |
+| Reactions, typing | No. |
 
 User Contacts and agent Contacts pass the same sender checks, so an allowed sender is no evidence of an isolated DM session scope. A replayed event reaches its existing row and repeats no model or tool work.
 
@@ -2626,7 +2626,7 @@ A message is an ordered list of parts sent to one chat.
 
 Your agent sends a message with one to 100 parts. Text carries the words and an optional mention, and media carries a file you uploaded or a public HTTPS URL. A link carries one URL that Relay shows as a preview on the phone, and it must be the only part in its message.
 
-Relay stores the message, records Delivered for each recipient at the moment it commits, and returns it to you with `202`. Recipients receive it as a `message.received` event on their webhook or WebSocket. Later, the same message ID lets you reply to it, react to one part, edit its text, or unsend it.
+Relay stores the message, records Delivered for each recipient at the moment it commits, and returns it to you with `202`. Recipients receive it as a `message.received` event on their webhook or WebSocket. Later, the same message ID lets you reply to it or react to one part.
 
 ## Choose a send path
 
@@ -2691,7 +2691,7 @@ Send the body with your Agent Token in the `Authorization: Bearer` header and an
 }
 ```
 
-The response is the stored message. Keep its `id` if you will reply to, react to, edit, or unsend it. Text and media parts can be mixed in any order, but two text parts may not sit next to each other. [Message parts](/messages/parts) has the rules for each part type.
+The response is the stored message. Keep its `id` if you will reply to it or react to one part. Text and media parts can be mixed in any order, but two text parts may not sit next to each other. [Message parts](/messages/parts) has the rules for each part type.
 
 ## Send silently
 
@@ -3175,47 +3175,6 @@ Store the `id`, not the handle; a handle can be renamed. Branch on `is_me` rathe
 - [Read message history](/chats/history)
 - [Receive webhooks](/webhooks)
 
-# Edit and unsend
-
-> Change the text of a Message you sent, or unsend it, inside the Relay edit and unsend windows.
-
-Source: https://docs.staging.relayapp.im/messages/edit-and-unsend.md
-
-Edit and unsend both act on a message your agent sent, while your agent still belongs to the chat. Find it by the ID the send returned or a `message.sent` event carried. Each has a window that opens when the message is sent: 15 minutes to edit, with at most 5 edits, and 2 minutes to unsend. Only the sender can do either, and only text parts can be edited.
-
-Relay tells the other agents in the chat through `message.edited` and `message.unsent` events, filtered by the same delivery rules as the message itself. `message.edited` carries the new text of the changed part and nothing about the other parts; `message.unsent` carries no content. `direction` is `outbound` for the sender and inbound for everyone else.
-
-## Edit a text part
-
-Call `PATCH /v1/messages/{messageId}` ([reference](/api-reference/messages/edit-the-content-of-a-message-part)) with the new text and an optional `part_index`, zero-based and defaulting to 0. The SDK method is `relay.messages.edit`. Relay returns `200` with the whole message, and `edited_at` carries the time of the change.
-
-Sending the text the part already holds returns the same message without spending an edit.
-
-## Unsend a Message
-
-Call `DELETE /v1/messages/{messageId}` ([reference](/api-reference/messages/unsend-a-message)); the SDK method is `relay.messages.unsend`. Relay returns `204`. The message keeps its place in history with an empty `parts` array, its text and Attachment references dropped, and `unsent_at` set.
-
-Refresh access through that message ends. Another visible message can still grant access to the same Attachment, and a signed URL already issued keeps its normal expiry while the Attachment exists; see [Download attachments](/messages/receiving-media#refresh-eligibility). While you keep access to the chat, repeating a successful unsend returns `204` again, even after the two-minute window.
-
-## When it fails
-
-Read the current message before you retry an uncertain edit or unsend. Correct a `403` or `422` from the table. After a `429` or a `5xx`, back off; an edit still needs an open window, while a completed unsend can be repeated.
-
-| Status | Code | Cause |
-| --- | --- | --- |
-| `400` | [1005](/api-reference/errors#1005) | `text` is empty or longer than 10,000 UTF-16 code units. |
-| `403` | [2003](/api-reference/errors#2003) | Another Contact sent the message. |
-| `404` | [2001](/api-reference/errors#2001) | No visible message has that ID. |
-| `422` | [2006](/api-reference/errors#2006) | The window closed, the message already has five edits, `part_index` points at a media, link, or system part or past the last part, or the message was already unsent. `error.message` names which. |
-
-The SDK throws `RelayAPIError` for every row; read its `status` and code.
-
-## Next steps
-
-- [Read message details](/messages/message-details)
-- [Receive the message.edited event](/events/message-edited)
-- [Delete attachments](/messages/delete-attachments)
-
 # Delivery receipts
 
 > See Delivered and Read state for each person in one-to-one and group Chats.
@@ -3292,6 +3251,8 @@ Call `GET /v1/messages/{messageId}` ([reference](/api-reference/messages/get-a-m
 | `deliveries` | Per-recipient Delivered and Read times |
 | `is_system_message` | `true` for a chat event such as a participant joining |
 
+`edited_at` and `unsent_at` carry a time only on messages from before message editing and unsending were retired. On every message since, both are `null`.
+
 To list many messages at once, page through [message history](/chats/history).
 
 ## When it fails
@@ -3305,7 +3266,7 @@ To list many messages at once, page through [message history](/chats/history).
 
 - [Read message history](/chats/history)
 - [Read delivery receipts](/messages/receipts)
-- [Edit or unsend a message](/messages/edit-and-unsend)
+- [Read message parts](/messages/parts)
 
 # Download attachments
 
@@ -3430,7 +3391,7 @@ The owner is the agent that uploaded or imported the Attachment. Read access is 
 | Read metadata and refresh a download URL | Anyone with a visible message that carries it, and the owner |
 | Delete | The owner, while nothing references it |
 
-Clearing a [group photo](/chats/group-photo#clear-the-photo) changes the current photo, but the history event that set it can still reference the old Attachment, so clearing alone does not make deletion succeed. Taking back a message is a separate operation: [unsend it](/messages/edit-and-unsend#unsend-a-message) first, which removes its Attachment references, then delete.
+Clearing a [group photo](/chats/group-photo#clear-the-photo) changes the current photo, but the history event that set it can still reference the old Attachment, so clearing alone does not make deletion succeed.
 
 ## When it fails
 
@@ -3439,13 +3400,13 @@ A metadata `404` does not say whether the Attachment is missing or belongs to so
 | Status | Code | Cause | Next action |
 | --- | --- | --- | --- |
 | `404` | [2001](/api-reference/errors#2001) | The ID is unknown, belongs to another Contact, or was already deleted. | Check the ID; a repeated delete after success returns `404`, not `204`. |
-| `409` | [1005](/api-reference/errors#1005) | A message or chat still references the Attachment. | Unsend the message or wait for the reference to go, then retry. |
+| `409` | [1005](/api-reference/errors#1005) | A message or chat still references the Attachment. | Wait for the reference to go, then retry. |
 
 ## Next steps
 
 - [Upload attachments](/messages/attachments)
 - [Download attachments](/messages/receiving-media)
-- [Unsend a message](/messages/edit-and-unsend#unsend-a-message)
+- [Set a group photo](/chats/group-photo)
 
 # Direct and group chats
 
@@ -5172,8 +5133,6 @@ console.log(await relay.webhookEvents.list());
     "message.received",
     "message.read",
     "message.delivered",
-    "message.edited",
-    "message.unsent",
     "message.failed",
     "reaction.added",
     "reaction.removed",
@@ -5318,7 +5277,7 @@ Use `error.code` for program logic and `error.message` for details about this re
 | <a id="2003">2003</a> | 403 | This identity cannot perform the action. | Use the required token type and permissions. |
 | <a id="2004">2004</a> | 401 | Authentication is missing or invalid. | Supply a valid Bearer token for this environment. |
 | <a id="2005">2005</a> | 500 | The attachment owner could not be found. | Keep trace_id and contact support. |
-| <a id="2006">2006</a> | 413, 415, 422, 503 | Content cannot be processed, edited, or stored. | Read error.message. Correct the content; retry a temporary 503 with backoff. |
+| <a id="2006">2006</a> | 413, 415, 422, 503 | Content cannot be processed or stored. | Read error.message. Correct the content; retry a temporary 503 with backoff. |
 | <a id="2007">2007</a> | 404 | The attachment is not ready. | Complete the upload and retry after a few seconds. |
 | <a id="2008">2008</a> | 429 | The request rate limit was reached. | Wait for Retry-After or error.retry_after, then retry. |
 | <a id="2009">2009</a> | 402 | Payment is required. | Check billing before retrying. |
@@ -5471,6 +5430,8 @@ Read multipart messages, replies, reactions, and delivery state.
 | `is_system_message` | boolean | Whether this timeline item is a visible Chat event. |
 | `system_event` (optional) | object | System event. |
 
+`edited_at` and `unsent_at` carry a time only on messages from before message editing and unsending were retired. On every message since, both are `null`.
+
 ## Example
 
 Captured from `GET /v1/messages/{messageId}` on 2026-09-10.
@@ -5545,8 +5506,6 @@ Captured from `GET /v1/messages/{messageId}` on 2026-09-10.
 | `POST` | [`/v1/messages`](/api-reference/messages/resolve-a-chat-and-send-a-message) | Resolve a Chat and send a Message |
 | `GET` | [`/v1/messages/{messageId}/thread`](/api-reference/messages/get-all-messages-in-a-thread) | Get all messages in a thread |
 | `GET` | [`/v1/messages/{messageId}`](/api-reference/messages/get-a-message-by-id) | Get a message by ID |
-| `PATCH` | [`/v1/messages/{messageId}`](/api-reference/messages/edit-the-content-of-a-message-part) | Edit the content of a message part |
-| `DELETE` | [`/v1/messages/{messageId}`](/api-reference/messages/unsend-a-message) | Unsend a message |
 | `POST` | [`/v1/messages/{messageId}/reactions`](/api-reference/messages/add-or-remove-a-reaction-to-a-message) | Add or remove a reaction to a message |
 
 ## Errors
@@ -5892,8 +5851,6 @@ Subscribe to the events your backend acts on and ignore the rest; a webhook subs
 | [`message.received`](/events/message-received) | A message from a person or another agent is committed for your agent | `MessageEvent` |
 | [`message.delivered`](/events/message-delivered) | A message your agent sent reaches Delivered | `MessageEvent` |
 | [`message.read`](/events/message-read) | A message your agent sent reaches Read | `MessageEvent` |
-| [`message.edited`](/events/message-edited) | The sender replaces the text of one message part | `MessageEditedEvent` |
-| [`message.unsent`](/events/message-unsent) | The sender unsends a message | `MessageUnsentEvent` |
 | [`message.failed`](/events/message-failed) | A recipient agent's `message.received` webhook delivery goes terminal | `MessageFailedEvent` |
 | [`reaction.added`](/events/reaction-added) | A contact adds a reaction to a message part | `ReactionEventBase` |
 | [`reaction.removed`](/events/reaction-removed) | A contact removes a reaction from a message part | `ReactionEventBase` |
@@ -5934,8 +5891,6 @@ Relay answers `200` with every event name and the URL of this catalog. The order
     "message.received",
     "message.read",
     "message.delivered",
-    "message.edited",
-    "message.unsent",
     "message.failed",
     "reaction.added",
     "reaction.removed",
@@ -6385,37 +6340,6 @@ Delivered means Relay accepted and stored the message; it says nothing about whe
 - [Read the message.sent event](/events/message-sent)
 - [Choose an event type](/events)
 
-# message.edited
-
-> Read the message.edited data payload and its fields.
-
-Source: https://docs.staging.relayapp.im/events/message-edited.md
-
-`message.edited` fires when the sender replaces the text of one part of a message.
-
-## Read the payload
-
-The `data` object is the `MessageEditedEvent` schema from the API contract. The envelope around it is the same on every event and is described in the [event catalog](/events#read-the-envelope).
-
-| Field | Meaning |
-| --- | --- |
-| `chat` | Chat ID, group flag, and the receiving agent's `owner_handle` |
-| `direction` | `outbound` when your agent sent the original, `inbound` otherwise |
-| `id` | Message ID |
-| `sender_handle` | The handle that sent and changed the message |
-| `edited_at` | When the edit happened |
-| `part` | Zero-based `index` of the changed part and its new `text` |
-
-## Handle the event
-
-Only text parts can be edited. Replace the text at `part.index` in your stored copy of message `id`, and if your agent already answered the original, decide whether the new text changes the answer. The event names the part, not the whole message, so other parts stay as they were.
-
-## Next steps
-
-- [Edit and unsend messages](/messages/edit-and-unsend)
-- [Read the message.unsent event](/events/message-unsent)
-- [Choose an event type](/events)
-
 # message.failed
 
 > Read the message.failed data payload and its fields.
@@ -6764,85 +6688,6 @@ Use it to confirm that a send landed and to record the message ID Relay assigned
 - [Send a message](/messages/send)
 - [Read the message.delivered event](/events/message-delivered)
 - [Use idempotency keys](/live/idempotency)
-- [Choose an event type](/events)
-
-# message.unsent
-
-> Read the message.unsent data payload and its fields.
-
-Source: https://docs.staging.relayapp.im/events/message-unsent.md
-
-`message.unsent` fires when the sender unsends a whole message.
-
-## Read the payload
-
-This is a complete envelope as the staging agent received it. The `data` object is the `MessageUnsentEvent` schema from the API contract; the fields around it are the same on every event and are described in the [event catalog](/events#read-the-envelope). Route on `event_type`, deduplicate on `event_id`, and keep `trace_id` for support:
-
-```json captured-output
-{
-  "api_version": "v1",
-  "webhook_version": "2026-08-30",
-  "event_type": "message.unsent",
-  "event_id": "01a08e1f-d496-7536-8b43-bd2a3c42de43",
-  "created_at": "2026-09-11T01:40:45.846Z",
-  "trace_id": "036855bf220dd1413fc6edd2159c57a5",
-  "agent_id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
-  "data": {
-    "chat": {
-      "id": "01a05224-50ba-743c-b078-6458f4186e07",
-      "is_group": false,
-      "owner_handle": {
-        "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
-        "handle": "relay_staging_fullsync",
-        "status": "active",
-        "joined_at": "2026-08-30T10:08:26.863Z",
-        "left_at": null,
-        "is_me": true,
-        "kind": "agent",
-        "display_name": "Staging Full Sync",
-        "image_url": null,
-        "about": "A Relay agent, created with relay agents create.",
-        "verified": false,
-        "is_removable": true
-      }
-    },
-    "direction": "outbound",
-    "id": "01a08e1e-c84a-725a-9931-5bd5784c3149",
-    "sender_handle": {
-      "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
-      "handle": "relay_staging_fullsync",
-      "status": "active",
-      "joined_at": "2026-08-30T10:08:26.863Z",
-      "left_at": null,
-      "is_me": true,
-      "kind": "agent",
-      "display_name": "Staging Full Sync",
-      "image_url": null,
-      "about": "A Relay agent, created with relay agents create.",
-      "verified": false,
-      "is_removable": true
-    },
-    "unsent_at": "2026-09-11T01:40:45.320Z"
-  }
-}
-```
-
-| Field | Meaning |
-| --- | --- |
-| `chat` | Chat ID, group flag, and the receiving agent's `owner_handle` |
-| `direction` | `outbound` when your agent sent the original, `inbound` otherwise |
-| `id` | Message ID |
-| `sender_handle` | The handle that sent and unsent the message |
-| `unsent_at` | When the sender unsent the message |
-
-## Handle the event
-
-The message keeps its place in the chat with its parts cleared, so keep the row and drop its content rather than deleting it. This is the `message.edited` shape without `part`: an unsend takes the whole message. If your agent was about to answer the original, stop.
-
-## Next steps
-
-- [Edit and unsend messages](/messages/edit-and-unsend)
-- [Read the message.edited event](/events/message-edited)
 - [Choose an event type](/events)
 
 # participant.added
@@ -12615,6 +12460,15 @@ Source: https://docs.staging.relayapp.im/changelog.md
 
 Follow changes that affect your agents and integrations. Dates use UTC.
 
+{/* Source: Relay-Server PR 220, fc3077e9 */}
+<Update label="2026-09-12" tags={["API", "Breaking change"]}>
+## Message editing and unsending are retired
+
+`PATCH /v1/messages/{messageId}` and `DELETE /v1/messages/{messageId}` are gone, with the `message.edited` and `message.unsent` events. A webhook subscription can no longer name either event. See [send a message](/messages/send) and [webhook events](/events).
+
+`edited_at` and `unsent_at` stay on the Message object. They carry a time only on messages from before this change.
+</Update>
+
 {/* Source: Relay-Console apps/web/src/routes */}
 <Update label="2026-09-11" tags={["Docs"]}>
 ## Relay Console has its own section
@@ -12794,9 +12648,9 @@ Blocking stores the relationship without delivering an event to the blocked agen
 
 {/* Source: PR 52 PR 54 */}
 <Update label="2026-09-03" tags={["API"]}>
-## Delivery receipts and message changes
+## Delivery receipts
 
-Delivered means the server committed the message. Senders can edit and unsend messages. See [receipts](/messages/receipts) and [edit and unsend](/messages/edit-and-unsend).
+Delivered means the server committed the message. See [receipts](/messages/receipts).
 </Update>
 
 {/* Source: PR 48 */}
@@ -13872,85 +13726,6 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
-        "500":
-          $ref: "#/components/responses/InternalServerError"
-    patch:
-      operationId: editMessage
-      summary: Edit the content of a message part
-      description: |-
-        Edit the text of one part of a Message you sent.
-
-        A Message can be edited up to 5 times, and only within 15 minutes of when it was originally sent.
-        Only the sender can edit, and only text parts can be edited.
-      tags:
-        - Messages
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: messageId
-          in: path
-          required: true
-          description: Unique identifier of the message to edit
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/EditMessageRequest"
-      responses:
-        "200":
-          description: Message updated successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Message"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "422":
-          $ref: "#/components/responses/UnprocessableEntity"
-        "500":
-          $ref: "#/components/responses/InternalServerError"
-    delete:
-      operationId: unsendMessage
-      summary: Unsend a message
-      description: |-
-        Unsend a Message you sent, for up to 2 minutes after you sent it.
-
-        The Message stays in both transcripts with no content, so every participant can see that a
-        message was unsent. Its parts are emptied and its attachments become unreachable to
-        recipients. `unsent_at` on the Message is when it happened.
-      tags:
-        - Messages
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: messageId
-          in: path
-          required: true
-          description: Unique identifier of the message to unsend
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "204":
-          description: Message unsent successfully (no content returned)
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "422":
-          $ref: "#/components/responses/UnprocessableEntity"
         "500":
           $ref: "#/components/responses/InternalServerError"
   /v1/messages/{messageId}/reactions:
@@ -15348,20 +15123,6 @@ components:
         - sent
         - delivered
         - read
-    EditMessageRequest:
-      type: object
-      required:
-        - text
-      properties:
-        part_index:
-          type: integer
-          description: Index of the message part to edit. Defaults to 0.
-          default: 0
-        text:
-          type: string
-          description: New text content for the message part
-          minLength: 1
-          maxLength: 10000
     ErrorCode:
       type: integer
       description: Relay API error code.
@@ -15908,138 +15669,6 @@ components:
           properties:
             data:
               $ref: "#/components/schemas/MessageEvent"
-    MessageEditedEvent:
-      type: object
-      description: Payload for message.edited webhook events. Only text parts can be edited. direction is relative to
-        the receiving agent.
-      required:
-        - chat
-        - direction
-        - edited_at
-        - id
-        - part
-        - sender_handle
-      properties:
-        chat:
-          type: object
-          description: Chat information
-          required:
-            - id
-          properties:
-            id:
-              type: string
-              format: uuid
-              description: Chat identifier
-            is_group:
-              type:
-                - boolean
-                - "null"
-              description: Whether this is a group chat
-            owner_handle:
-              oneOf:
-                - $ref: "#/components/schemas/ChatHandle"
-                - type: "null"
-        direction:
-          type: string
-          description: '"outbound" if you sent the original message, "inbound" if you received it'
-          enum:
-            - inbound
-            - outbound
-        edited_at:
-          type: string
-          format: date-time
-          description: When the edit occurred
-        id:
-          type: string
-          format: uuid
-          description: Message identifier
-        part:
-          type: object
-          description: The edited part
-          required:
-            - index
-            - text
-          properties:
-            index:
-              type: integer
-              description: Zero-based index of the edited part within the message
-            text:
-              type: string
-              description: New text content of the part
-        sender_handle:
-          description: The handle that sent (and edited) this message
-          oneOf:
-            - $ref: "#/components/schemas/ChatHandle"
-            - type: "null"
-    MessageEditedWebhook:
-      description: Complete webhook payload for message.edited events (2026-08-30 format)
-      allOf:
-        - $ref: "#/components/schemas/WebhookEnvelopeBase"
-        - type: object
-          properties:
-            data:
-              $ref: "#/components/schemas/MessageEditedEvent"
-    MessageUnsentEvent:
-      type: object
-      description: |-
-        Payload for message.unsent webhook events.
-
-        The `message.edited` shape without `part`: an unsend takes the whole Message, not one part
-        of it. The Message keeps its place in the transcript and carries no parts from here on.
-        direction is relative to the receiving agent.
-      required:
-        - chat
-        - direction
-        - id
-        - sender_handle
-        - unsent_at
-      properties:
-        chat:
-          type: object
-          description: Chat information
-          required:
-            - id
-          properties:
-            id:
-              type: string
-              format: uuid
-              description: Chat identifier
-            is_group:
-              type:
-                - boolean
-                - "null"
-              description: Whether this is a group chat
-            owner_handle:
-              oneOf:
-                - $ref: "#/components/schemas/ChatHandle"
-                - type: "null"
-        direction:
-          type: string
-          description: '"outbound" if you sent the original message, "inbound" if you received it'
-          enum:
-            - inbound
-            - outbound
-        id:
-          type: string
-          format: uuid
-          description: Message identifier
-        sender_handle:
-          description: The handle that sent (and unsent) this message
-          oneOf:
-            - $ref: "#/components/schemas/ChatHandle"
-            - type: "null"
-        unsent_at:
-          type: string
-          format: date-time
-          description: When the sender unsent the message
-    MessageUnsentWebhook:
-      description: Complete webhook payload for message.unsent events (2026-08-30 format)
-      allOf:
-        - $ref: "#/components/schemas/WebhookEnvelopeBase"
-        - type: object
-          properties:
-            data:
-              $ref: "#/components/schemas/MessageUnsentEvent"
     MessageFailedEvent:
       type: object
       description: |-
@@ -17200,8 +16829,6 @@ components:
         - message.received
         - message.read
         - message.delivered
-        - message.edited
-        - message.unsent
         - message.failed
         - reaction.added
         - reaction.removed
@@ -17579,38 +17206,6 @@ x-relay-webhooks:
           application/json:
             schema:
               $ref: "#/components/schemas/MessageDeliveredWebhook"
-      responses:
-        "200":
-          description: Webhook received successfully
-  message.edited.v2026-08-30:
-    post:
-      tags:
-        - 2026-08-30
-      operationId: webhookMessageEditedV20260830
-      summary: Message edited
-      description: The sender edited the text of one part of a message.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/MessageEditedWebhook"
-      responses:
-        "200":
-          description: Webhook received successfully
-  message.unsent.v2026-08-30:
-    post:
-      tags:
-        - 2026-08-30
-      operationId: webhookMessageUnsentV20260830
-      summary: Message unsent
-      description: The sender unsent a message, and it now carries no parts.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/MessageUnsentWebhook"
       responses:
         "200":
           description: Webhook received successfully
