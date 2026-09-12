@@ -21,7 +21,7 @@ class DocumentationStructureTests(unittest.TestCase):
             path.write_text("---\ntitle: Test\n---\nOne task.\n\n## Next steps\n")
         (root / "index.mdx").write_text("\n".join("## " + heading for heading in LANDING_SECTIONS) + "\n")
         config = {"navigation": {"tabs": [{"tab": "Guides", "groups": [
-            {"group": "Introduction", "pages": list(OVERVIEW_PAGES)},
+            {"group": "Overview", "pages": list(OVERVIEW_PAGES)},
             {"group": "Getting started", "pages": list(START_PAGES)},
         ]}]}}
         return root, config

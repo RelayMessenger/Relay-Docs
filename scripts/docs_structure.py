@@ -67,7 +67,7 @@ def validate_structure(root: Path, config: dict):
     if guides is None:
         raise SystemExit("Guides tab is required")
     groups = guides["groups"]
-    overview = next((group for group in groups if group.get("group") == "Introduction"), None)
+    overview = next((group for group in groups if group.get("group") == "Overview"), None)
     if overview is None or overview.get("pages") != OVERVIEW_PAGES:
         raise SystemExit("Introduction must stay the main page on its own")
     start = next((group for group in groups if group.get("group") == "Getting started"), None)
