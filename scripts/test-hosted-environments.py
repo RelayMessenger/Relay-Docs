@@ -191,6 +191,35 @@ class HostedEnvironmentTests(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "source content"):
             hosted.check_page_content(page, b'<h1>Payload</h1><script>Preserve this distinctive current payload exactly.</script>')
 
+    def test_agent_prompt_allows_mintlify_wrapper_and_link_rendering_only(self):
+        source = (
+            b"Connect this project to Relay. Read https://docs.staging.relayapp.im/llms.txt "
+            b"and follow its Agent onboarding section before you run anything. Open "
+            b"https://docs.staging.relayapp.im/llms-full.txt when a step needs a page's full text. "
+            b"Use only the endpoints, commands, and files those documents name; if a step cannot "
+            b"be verified there, stop and say so.\n"
+        )
+        hosted_body = (
+            b"> ## Documentation Index\n"
+            b"> Fetch the complete documentation index at: https://docs.staging.relayapp.im/llms.txt\n"
+            b"> Use this file to discover all available pages before exploring further.\n\n"
+            b"# Agent prompt\n\n"
+            b"Connect this project to Relay. Read "
+            b"[https://docs.staging.relayapp.im/llms.txt](https://docs.staging.relayapp.im/llms.txt) "
+            b"and follow its Agent onboarding section before you run anything. Open "
+            b"[https://docs.staging.relayapp.im/llms-full.txt](https://docs.staging.relayapp.im/llms-full.txt) "
+            b"when a step needs a page's full text. Use only the endpoints, commands, and files those "
+            b"documents name; if a step cannot be verified there, stop and say so.\n"
+        )
+        self.assertTrue(hosted.source_body_matches("agent-prompt.md", hosted_body, source))
+        self.assertFalse(
+            hosted.source_body_matches(
+                "agent-prompt.md",
+                hosted_body.replace(b"stop and say so", b"continue anyway"),
+                source,
+            )
+        )
+
     def test_full_route_checks_have_bounded_concurrency(self):
         active = 0
         maximum = 0

@@ -218,6 +218,37 @@ def response_pair(canonical, busted):
             for name, response in (("canonical", canonical), ("cache_busted", busted))}
 
 
+def normalize_hosted_agent_prompt(body):
+    """Remove only Mintlify's generated wrapper from /agent-prompt.md.
+
+    Mintlify publishes this one Markdown file through its documentation
+    renderer. The renderer prepends a Documentation Index and turns bare
+    Markdown URLs into links. The authored prompt remains strict: after those
+    presentation-only changes, every word and URL must still match.
+    """
+    text = body.decode("utf-8")
+    text = re.sub(
+        r"\A> ## Documentation Index\n"
+        r"> Fetch the complete documentation index at: .+\n"
+        r"> Use this file to discover all available pages before exploring further\.\n\n",
+        "",
+        text,
+    )
+    text = re.sub(r"\A# Agent prompt\n\n", "", text)
+    text = re.sub(
+        r"\[([^\]\n]+)\]\(([^)\n]+)\)",
+        lambda match: match.group(1) if match.group(1) == match.group(2) else match.group(0),
+        text,
+    )
+    return "\n".join(line.rstrip() for line in text.strip().splitlines())
+
+
+def source_body_matches(path, actual, expected):
+    if path == "agent-prompt.md":
+        return normalize_hosted_agent_prompt(actual) == normalize_hosted_agent_prompt(expected)
+    return actual == expected
+
+
 def hosted_source_pairs(fetch, expected, require_edge_fresh=False):
     """Check published source bytes; keep non-source cache checks unchanged."""
     for path in CANONICAL_PATHS:
@@ -226,7 +257,11 @@ def hosted_source_pairs(fetch, expected, require_edge_fresh=False):
             continue
         canonical = fetch(path)
         busted = fetch(path, cache_busted=True)
-        if busted["body"] != expected[path]:
+        if not source_body_matches(path, busted["body"], expected[path]):
+            if path == "agent-prompt.md":
+                raise SystemExit(
+                    f"/{path} served content does not match expected checkout prompt"
+                )
             raise SystemExit(f"/{path} served body does not match expected checkout source bytes")
         if canonical["body"] != busted["body"]:
             if require_edge_fresh:
