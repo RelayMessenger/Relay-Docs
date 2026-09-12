@@ -16,8 +16,11 @@ from origins import origin, production_text, target
 ROOT = Path(__file__).resolve().parents[1]
 AGENT_PAGES = tuple(f"agents/{name}" for name in (
     "lifecycle", "create-agent", "create-agent-api", "list-agents",
-    "delete-agent", "console-agent",
+    "delete-agent",
 ))
+# The Console page moved into the Console group (owner, 2026-09-11); it keeps
+# every guarantee the agent pages have, at its own path.
+CONSOLE_AGENT_PAGE = "console/agents"
 CLI_TASKS = tuple(f"cli/{name}" for name in (
     "auth", "watch",
 ))
@@ -152,7 +155,7 @@ class AgentOnboardingTests(unittest.TestCase):
         )
         # Both released CLI channels have these operations. Do not require a
         # dated availability announcement or a particular tutorial order.
-        for slug in ("cli/index", *CLI_TASKS, *AGENT_PAGES):
+        for slug in ("cli/index", *CLI_TASKS, *AGENT_PAGES, CONSOLE_AGENT_PAGE):
             self.assertNotRegex(visible_document_text(self.page(slug)),
                                 r"(?i)\bcoming soon\b|\bcoming release\b")
 
@@ -203,8 +206,8 @@ class AgentOnboardingTests(unittest.TestCase):
     def test_agent_management_router_is_short_and_links_to_tasks(self):
         router = self.page("agents/lifecycle")
         self.assertLess(len(router.splitlines()), 50)
-        self.assert_links_to_pages(router, *AGENT_PAGES[1:], PHOTO_PAGE,
-                                   "integrations/claude-code")
+        self.assert_links_to_pages(router, *AGENT_PAGES[1:], CONSOLE_AGENT_PAGE,
+                                   PHOTO_PAGE, "integrations/claude-code")
         self.assertFalse(code_blocks(router, "bash"))
         self.assertFalse(code_blocks(router, "typescript"))
 
@@ -484,7 +487,7 @@ class AgentOnboardingTests(unittest.TestCase):
     def test_new_pages_and_operations_are_integrated(self):
         config = json.loads((ROOT / "docs.json").read_text())
         navigation = navigation_pages(config["navigation"])
-        for slug in (*AGENT_PAGES, *CLI_TASKS, PHOTO_PAGE, RECIPE_PAGE, OBSERVER_PAGE, PROMPT_PAGE,
+        for slug in (*AGENT_PAGES, CONSOLE_AGENT_PAGE, *CLI_TASKS, PHOTO_PAGE, RECIPE_PAGE, OBSERVER_PAGE, PROMPT_PAGE,
                      "integrations/claude-code", "api-reference/resources/agents/overview"):
             with self.subTest(page=slug):
                 self.page(slug)
