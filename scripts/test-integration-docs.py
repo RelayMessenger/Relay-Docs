@@ -249,6 +249,8 @@ class IntegrationDocsTests(unittest.TestCase):
             self.assertIn(api, read(page), page)
         for page in (CLI, MCP, "integrations/openclaw.mdx", "integrations/claude-code.mdx"):
             self.assertIn("22.22.3", read(page), "Keep the supported Node minimum at the install task")
+        for page in ("integrations/openclaw.mdx", "integrations/claude-code.mdx", "integrations/codex.mdx", "integrations/cursor.mdx", "integrations/opencode.mdx", "integrations/cline.mdx", "integrations/vs-code.mdx", "integrations/gemini-cli.mdx", "integrations/hermes.mdx"):
+            self.assertNotIn("RELAY_API_URL", read(page), page)
         self.assertIn(">=2026.8.1 <2026.9.0", read("integrations/openclaw.mdx"))
         for version in ("3.11", "3.13"):
             self.assertIn(version, read("integrations/hermes.mdx"))
