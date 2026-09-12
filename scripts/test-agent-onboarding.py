@@ -329,10 +329,11 @@ class AgentOnboardingTests(unittest.TestCase):
                             for link in config["navbar"]["links"]))
 
     def test_native_guides_link_setup_without_dated_availability_claims(self):
-        for name in ("openclaw", "hermes", "claude-code"):
+        # Owner ruling 2026-09-12: no runtime is the default; sibling guides route to the runtimes index.
+        for name in ("openclaw", "hermes"):
             with self.subTest(integration=name):
                 text = self.page(f"integrations/{name}")
-                self.assert_links_to_pages(text, "integrations/claude-code")
+                self.assert_links_to_pages(text, "integrations/index")
         self.assert_identifiers(self.page("integrations/openclaw"),
                                 "openclaw plugins install @relaymessenger/openclaw-plugin@staging")
         self.assert_identifiers(self.page("integrations/hermes"), "hermes plugins install")

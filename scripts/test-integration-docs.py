@@ -312,9 +312,11 @@ class IntegrationDocsTests(unittest.TestCase):
         self.assertLink(OBSERVE, "/integrations/claude-code")
 
     def test_native_runtimes_route_setup_to_the_owning_guide(self):
+        # Owner ruling 2026-09-12: no runtime is the default; each native guide routes to the runtimes index.
         for runtime in ("openclaw", "hermes", "claude-code"):
             page = f"integrations/{runtime}.mdx"
-            self.assertLink(page, "/" + NATIVE.removesuffix(".mdx"))
+            if runtime != "claude-code":
+                self.assertLink(page, "/integrations/index")
             self.assertNotRegex("\n".join(commands(read(page))), r"\bconnect\b.*--(?:yes|allow|token)",
                                 "Keep connect flags canonical on the connect page")
 
