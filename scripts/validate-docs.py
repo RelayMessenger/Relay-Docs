@@ -198,9 +198,9 @@ if navigated != files:
 tabs = config["navigation"]["tabs"]
 actual_tabs = [tab["tab"] for tab in tabs]
 # Owner ruling 2026-09-11 (final tree): one guides tab, the API reference, the
-# CLI, then the changelog as its own tab. Integrations moved into the Docs
-# sidebar as the Coding agents and Integrations groups.
-expected_tabs = ["Docs", "API reference", "CLI", "Changelog"]
+# Webhook events as its own tab (owner ruling 2026-09-11 night), CLI, then the
+# changelog as its own tab. Integrations live in the Docs sidebar.
+expected_tabs = ["Docs", "API reference", "Webhook events", "CLI", "Changelog"]
 if actual_tabs != expected_tabs:
     raise SystemExit(f"top tab order changed: {actual_tabs}")
 changelog_tab = next(tab for tab in tabs if tab["tab"] == "Changelog")
