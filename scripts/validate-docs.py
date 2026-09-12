@@ -481,7 +481,7 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server staging commit fc3077e918f180f50b85beae79649d8ef214259b; CLI publication is gated separately.
 # The digest pins source bytes independently of the Server release commit.
 expected_openapi_sha256 = (
-    "8adc196c22e9cb3c59ed28c13107835c8f1826e073fa53c36d1cbba304b2942a"
+    "2febcdd44b00ed558f9f32698826d0661881d620d3d25bb8eedd2861f637ea70"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()

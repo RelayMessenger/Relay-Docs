@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # Update only after reading and synchronizing a newly agreed upstream contract.
 UPSTREAM_COMMIT = "fc3077e918f180f50b85beae79649d8ef214259b"
 UPSTREAM_STAGING_COMMIT = "fc3077e918f180f50b85beae79649d8ef214259b"
-UPSTREAM_SHA256 = "8adc196c22e9cb3c59ed28c13107835c8f1826e073fa53c36d1cbba304b2942a"
+UPSTREAM_SHA256 = "2febcdd44b00ed558f9f32698826d0661881d620d3d25bb8eedd2861f637ea70"
 
 
 class ContractSourceTests(unittest.TestCase):
