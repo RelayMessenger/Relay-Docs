@@ -243,12 +243,16 @@ class IntegrationDocsTests(unittest.TestCase):
         self.assertIn(expected("@relaymessenger/chat-sdk-adapter@staging"), adapter_commands)
 
     def test_environment_pairing_and_runtime_requirements(self):
+        # Owner ruling 2026-09-12: the CLI sets the API origin. Backend pages
+        # (a developer's own code) still name it; runtime pages never ask the
+        # user to set RELAY_API_URL and need not name the origin at all.
         api = f"https://{origin('api.staging.relayapp.im')}"
-        for page in (AUTH, NATIVE, "integrations/chat-sdk.mdx", "integrations/openclaw.mdx",
-                     "integrations/claude-code.mdx", "integrations/hermes.mdx", "integrations/cloudflare-think.mdx"):
+        for page in (AUTH, "integrations/chat-sdk.mdx", "integrations/cloudflare-think.mdx"):
             self.assertIn(api, read(page), page)
         for page in (CLI, MCP, "integrations/openclaw.mdx", "integrations/claude-code.mdx"):
             self.assertIn("22.22.3", read(page), "Keep the supported Node minimum at the install task")
+        for page in ("integrations/claude-code.mdx", "integrations/codex.mdx", "integrations/cursor.mdx", "integrations/opencode.mdx", "integrations/cline.mdx", "integrations/vs-code.mdx", "integrations/gemini-cli.mdx", "integrations/hermes.mdx", "integrations/openclaw.mdx", "start/quickstart.mdx"):
+            self.assertNotIn("RELAY_API_URL", read(page), page)
         self.assertIn(">=2026.8.1 <2026.9.0", read("integrations/openclaw.mdx"))
         for version in ("3.11", "3.13"):
             self.assertIn(version, read("integrations/hermes.mdx"))
@@ -320,7 +324,9 @@ class IntegrationDocsTests(unittest.TestCase):
         hermes = read("integrations/hermes.mdx")
         for text in (openclaw, claude, hermes):
             self.assertConcept(text, r"zero saved webhook subscriptions", "Native channels use the WebSocket path")
-        for pattern in (r"allowfrom", r"contact uuids", r"stable.id", r"session scope", r"token.*api origin"):
+        # 2026-09-12: the "token and API origin" pairing sentence left with the
+        # RELAY_API_URL ruling; the CLI pairs them, the page does not.
+        for pattern in (r"allowfrom", r"contact uuids", r"stable.id", r"session scope"):
             self.assertConcept(openclaw, pattern, "Keep account-specific admission and session boundaries")
         self.assertConcept(claude, r"allowlist", "Claude requires explicit sender permission")
         self.assertConcept(claude, r"permission prompts remain local", "Relay cannot grant Claude tool permissions")
