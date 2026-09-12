@@ -14,52 +14,71 @@ Run this command from your project folder.
 npx relaymessenger connect
 ```
 
-Relay asks one question, `Where does your agent run?` Choose one item. The first detected runtime is the default. You can also name it directly with `connect <agent>`.
+Relay asks one question, `Where does your agent run?` The runtimes found on this computer come first, and the first of them is the default. The rest follow, marked `not found`, and you can still pick one. You can also name the runtime directly with `connect <agent>`.
 
-If saved agents exist and this folder is not linked, Relay asks `Which agent?`. `New agent` is the default. The other choices are saved handles.
+If saved agents exist and this folder is not linked, Relay asks `Which agent?`. `New agent` is the default. The other choices are the saved handles on this computer.
 
-Relay shows a short plan, then asks `Continue? (Y/n)`. Press Enter to continue.
+Relay shows a plan, then asks `Continue? (Y/n)`. Press Enter to continue. Nothing is created or written before you answer.
 
 ## What Relay writes
 
-Relay writes one line for each file it changes.
+Relay writes one line for each file it changes or command it runs. The plan names the same files before you continue.
 
-- The tool's own configuration in the tool's own scope.
-- `.relay/agent.json` in the current folder. Relay adds `.relay` to `.gitignore`.
-- The token stays in Relay's private profile store.
+- The runtime's own configuration, in the runtime's own scope.
+- `.relay/agent.json` in the current folder. When the folder has a `.gitignore`, Relay adds `.relay` to it.
+- The token stays in Relay's private profile store on this computer.
 
-Codex writes `./.codex/config.toml` in the project. Codex loads it when the folder is trusted. Claude Code's Relay channel reads `./.relay/agent.json` first. Cursor, Gemini CLI, OpenCode, and Cline run from the folder and write nothing. Hermes and OpenClaw use one agent per install. OpenClaw's native command is `openclaw channels add relay --token …` once its plugin ships.
+| Runtime | What connect does |
+| --- | --- |
+| Claude Code | Installs the Relay plugin and writes a channel `.env` with the token. Then it shows the QR and waits for your first message, and asks whether to allow that sender. |
+| Codex | Writes `./.codex/config.toml` with Relay's MCP server. Codex loads it when the folder is trusted. |
+| Cursor, OpenCode, Cline, Gemini CLI | Writes nothing. Relay drives the runtime over ACP and hands its tools into the session. |
+| VS Code | Adds `servers.relay` to the VS Code MCP file. Restart VS Code to load Relay. |
+| Hermes | Installs the Relay plugin and writes Hermes's `.env`. Hermes has one Relay agent per install. |
+| OpenClaw | Runs OpenClaw's own commands: the plugin install, then `openclaw channels add relay`. The token goes to OpenClaw's channel store. |
 
 ## One agent per folder
 
-A folder link works like `vercel link`. It points the folder to one saved agent. Re-running connect in a linked folder reuses that agent and prints `Linked to @handle; run connect --new for another`.
+A folder link works like `vercel link`. It points the folder, and every folder under it, to one saved agent. Re-running connect in a linked folder reuses that agent and prints `Linked to @handle; run connect --new for another, or --profile <handle> to link a saved one`.
 
-Use these options to choose the link.
+Use these commands to choose the link.
 
 ```bash
 npx relaymessenger connect --new
-npx relaymessenger connect --profile HANDLE
+npx relaymessenger --profile <handle> connect
 ```
 
-Relay resolves an agent in this order: the folder link, `RELAY_AGENT`, then the global default. The global default is the last agent you connected. Use `--handle` when creating a new agent.
+`--profile` is a [global option](/cli/global-options), so it goes before the command. Relay resolves an agent in this order: the folder link, `RELAY_AGENT`, then the last agent you connected. Use `--handle` when creating a new agent.
 
 ## Success
 
-Success prints one line for each file written, then prints `Say hi from your phone` with the link and shows the QR.
+Success prints `Say hi from your phone`, the agent's link, and the QR. Scan it in Relay's New Chat screen and send a message.
+
+Relay then waits up to five minutes for the runtime's first reply and prints `Answered from your phone:` with the text. Without one it prints `No reply yet. Run: relay watch @handle`.
+
+<Info>
+When `connect` runs inside a runtime, it runs non-interactively and asks no questions. Name the runtime and pass `--yes`.
+</Info>
 
 ## Flags
 
 | Flag | Action |
 | --- | --- |
-| `--new` | Create a new agent for this folder. |
-| `--profile HANDLE` | Link a saved agent. |
-| `--handle <handle>` | Choose the handle for a new agent. |
-| `--yes` | Accept the plan without asking. |
-| `--json` | Print the non-interactive JSON result. |
-| `--dry-run` | Show the plan without changing anything. |
-| `--api-url <url>` | Use a different Relay API address. |
+| `--new` | Create a new agent instead of using one you already have. |
+| `--handle <handle>` | The `.dev` handle for a new agent. Leave it out and Relay picks one. |
+| `--name <name>` | The name people see next to a new agent. |
+| `--about <text>` | The one line people see above your agent's first message. |
+| `--image <path-or-url>` | A picture for a new agent: a file on this computer, or an `https://` address. |
+| `--with-token` | Use an agent you already have. Its token is read from a pipe. |
+| `--token <token>` | Use an agent you already have, by its token. The value is visible in `ps` and shell history. |
+| `--allow <handles>` | The handles allowed to message this agent, separated by commas. Skips sender pairing, not the reply wait. |
+| `-y`, `--yes` | Take the plan as it is. |
+| `--dry-run` | Print the plan and change nothing. |
+| `--no-start` | Skip the start offer, but still wait for the first reply. |
+| `--no-skill` | Do not offer the Relay skill at the end. |
+| `--json` | Print the result as JSON. |
 
-Non-interactive and CI behavior is unchanged. Use `--json` when another process reads the result.
+Use `--json` when another process reads the result. Without a terminal, connect needs the runtime name and `--yes`, and exits `2` otherwise. See the [command reference](/cli/reference/connect) for the captured help.
 
 ## Next steps
 
