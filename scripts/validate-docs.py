@@ -153,6 +153,9 @@ def h2_headings(text):
     return re.findall(r"^## (.+)$", prose, re.M)
 
 
+LANDING_SECTIONS = ["Start here", "The Relay model", "Build with Relay", "Next steps"]
+
+
 def openapi_path_block(text, path):
     marker = f"  {path}:"
     start = text.index(marker)
@@ -346,9 +349,8 @@ for path in mdx_paths:
         continue
     headings = h2_headings(text)
     if path == root / "index.mdx":
-        # Owner ruling 2026-09-12: the Introduction is a gateway with cards only, no sections.
-        if headings:
-            raise SystemExit(f"the landing page carries no sections: {path}")
+        if headings != LANDING_SECTIONS:
+            raise SystemExit(f"the landing page sections changed: {path}")
     elif not headings or headings[-1] not in {"Next steps", "Related", "See also"}:
         raise SystemExit(f"page must end with Next steps, Related, or See also: {path}")
 

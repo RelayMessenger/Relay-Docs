@@ -6,8 +6,9 @@ from pathlib import Path
 # Frame catalogs and a complete copyable agent instruction are reference, not
 # onboarding. All ordinary task guides keep five sections before related links.
 REFERENCE_PAGES = {"websocket/protocol", "integrations/agent-prompt"}
-# Owner ruling 2026-09-12: the Introduction is a gateway with no sections; the cards route the reader.
-LANDING_SECTIONS = []
+# Introduction follows the Mintlify starter's short gateway shape, adapted to
+# Relay: starting points, the product model, build paths, then related links.
+LANDING_SECTIONS = ["Start here", "The Relay model", "Build with Relay", "Next steps"]
 # Owner ruling 2026-09-12: Guides follows Linq's order. Introduction is the
 # landing page, followed by Getting started and the product task groups.
 OVERVIEW_PAGES = ["index"]
