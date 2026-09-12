@@ -659,181 +659,6 @@ People a month is what Relay charges for once the included allowance is spent. E
 - [Agents](/console/agents)
 - [Create an agent](/agents/create-agent)
 
-# Migrate from Linq
-
-> Coming from Linq? Most request bodies are the same. Here is what changes.
-
-Source: https://docs.staging.relayapp.im/resources/migrate-from-linq.md
-
-## What changes
-
-- The base URL and the token. Relay's is an Agent Token from the Console, sent as `Authorization: Bearer`.
-- `to` takes a handle. An agent has a handle like `wren.acme` and a share link; a person messages it in Relay.
-- One network. There is no SMS or RCS fallback and no `preferred_service`.
-- The agent's first message to a person is a request. It waits in their Requests until they reply.
-- Delivered means Relay stored the message. Read is set when the person opens the chat.
-
-## Map
-
-| Linq | Relay |
-| --- | --- |
-| Number and line | Handle and share link |
-| `POST /v3/messages` with `to`, `message.parts` | `POST /v1/messages`, same body, `to` holds handles |
-| Parts `text`, `media`, `link` | Same three, same limits |
-| `reply_to: { message_id, part_index }` | Same |
-| Six tapbacks plus custom emoji | Same six, plus `custom` |
-| `POST /v3/chats/{chatId}/voicememo` | `POST /v1/chats/{chatId}/voicememo` |
-| `POST /v3/webhook-subscriptions` with `target_url`, `subscribed_events` | `POST /v1/webhook-subscriptions`, same fields |
-| 45 event types | 19 event types, see [Webhook events](/events/index) |
-| `idempotency_key` inside `message` | Same place, scoped to the sending agent |
-
-## Send a message
-
-The body does not change. The address does:
-
-```bash
-curl -X POST https://api.staging.relayapp.im/v1/messages \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"to":["alice"],"message":{"parts":[{"type":"text","value":"Hi! How can we help?"}]}}'
-```
-
-The response carries `chat_id` and `created_new_chat`, as Linq's does.
-
-## Receive events
-
-Create a subscription with the same two fields, then verify each delivery with the subscription's secret. [Webhooks](/webhooks/index) has the handler; [Verify signatures](/webhooks/verify-signatures) has the check. Event names differ; the table on [Webhook events](/events/index) lists all nineteen.
-
-## Not in Relay
-
-SMS, MMS and RCS. Numbers, line pooling and reputation. Delivery into Apple Messages. Polls, message effects, text styles and chat backgrounds. Payments, location sharing and calls.
-
-## Next steps
-
-- [Quickstart](/start/quickstart)
-- [Webhooks](/webhooks/index)
-- [API reference](/api-reference/overview)
-
-# Migrate from Photon
-
-> Coming from Photon? Here is what maps to what, and what changes.
-
-Source: https://docs.staging.relayapp.im/resources/migrate-from-photon.md
-
-## What changes
-
-- The address. Photon rents a phone line; Relay gives the agent a handle and a share link, and the person messages it in Relay.
-- Sending is an HTTPS call. You do not run a live `spectrum-ts` process or hold a `Space` to reply.
-- Events are typed. Photon emits one `messages` event; Relay emits nineteen, from `message.received` to `chat.request.updated`.
-- Relay has delivery receipts and message requests. Photon has neither.
-
-## Map
-
-| Photon | Relay |
-| --- | --- |
-| Agent, your Spectrum server | Agent, an identity with a token and a handle |
-| `Space` | Chat, direct or group |
-| `User` | Participant, a handle in the chat |
-| Provider, platform, line | None. Relay is one network |
-| `projectId` and `projectSecret` | Agent Token |
-| `Message` with one `Content` arm | Message with 1 to 100 ordered parts |
-| `message.react(emoji)` on the whole message | A reaction on one part, six types plus `custom` |
-| `message.reply(...)` | `reply_to: { message_id, part_index }` |
-| Webhook event `messages` | 19 events, see [Webhook events](/events/index) |
-
-## Send a message
-
-Photon:
-
-```ts
-await space.send("Hello, world.");
-```
-
-Relay:
-
-```ts
-await relay.chats.messages.send(chatId, {
-  message: { parts: [{ type: "text", value: "Hello, world." }], idempotency_key: crypto.randomUUID() },
-});
-```
-
-Without a chat ID, `POST /v1/messages` with `to: ["alice"]` finds or creates the chat.
-
-## Receive a message
-
-Photon hands you the space and the message inside `app.webhook`. Relay delivers a signed event to your endpoint; you verify it, commit it, and reply with the chat ID it carries. [Webhooks](/webhooks/index) has the handler, and [WebSocket](/websocket/observe-events) is the other way to receive.
-
-## Not in Relay
-
-Other channels: WhatsApp, Telegram, terminal, custom platforms. Voice calls. Polls, message effects, chat backgrounds and streaming text. Relay has voice memos, not calls.
-
-## Next steps
-
-- [Quickstart](/start/quickstart)
-- [Webhooks](/webhooks/index)
-- [API reference](/api-reference/overview)
-
-# Migrate from Telegram
-
-> Running a Telegram bot? Here is what maps to what, and what changes.
-
-Source: https://docs.staging.relayapp.im/resources/migrate-from-telegram.md
-
-## What changes
-
-- The bot token becomes an Agent Token, sent as a header, not in the URL.
-- `@username` and `t.me` become a handle and a share link. There is no `/start`; the person sends a message.
-- `getUpdates` or `setWebhook` become a WebSocket or a webhook subscription.
-- Text has no `parse_mode` and no entities. A message is 1 to 100 parts: text, media or link.
-- Relay has delivery and read receipts, and typing, in both directions.
-- A chat holds one person and up to six agents. The agent may write first; the message waits in the person's Requests.
-
-## Map
-
-| Telegram | Relay |
-| --- | --- |
-| Bot | Agent |
-| `@username`, `t.me/<username>` | Handle, share link |
-| `Update` | Event, see [Webhook events](/events/index) |
-| `Message.text` | `parts[].type: "text"` |
-| `photo`, `document`, `audio`, `video` | `parts[].type: "media"` with an attachment or a public URL |
-| `voice` | Voice memo, `POST /v1/chats/{chatId}/voicememo` |
-| `reply_to_message` | `reply_to: { message_id, part_index }` |
-| `setMessageReaction` | `POST /v1/messages/{messageId}/reactions` |
-| `chat_member`, `my_chat_member` | `participant.added`, `participant.removed` |
-| `edited_message` | No equivalent. Relay does not offer message editing. |
-
-## Send a message
-
-Telegram:
-
-```bash
-curl "https://api.telegram.org/bot$TOKEN/sendMessage" -d chat_id=123 -d text="Hello"
-```
-
-Relay:
-
-```bash
-curl -X POST https://api.staging.relayapp.im/v1/messages \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"to":["alice"],"message":{"parts":[{"type":"text","value":"Hello"}]}}'
-```
-
-## Receive a message
-
-A Telegram `Update` with a `message` field becomes a `message.received` event. Subscribe a webhook and verify each delivery, or hold a WebSocket open and acknowledge frames. [Webhooks](/webhooks/index) and [WebSocket](/websocket/observe-events) show both.
-
-## Not in Relay
-
-Commands and the command menu. Inline and reply keyboards. Channels. Stickers. Payments. Text formatting and entities. Telegram's published throughput limits; Relay answers `429` with `retry_after`.
-
-## Next steps
-
-- [Quickstart](/start/quickstart)
-- [Webhooks](/webhooks/index)
-- [API reference](/api-reference/overview)
-
 # Connect your coding agent
 
 > Connect the coding agent you use and talk to it from your phone.
@@ -5030,6 +4855,181 @@ If a request fails and you have no trace ID, the response never reached you: che
 - [Handle delivery and retries](/webhooks/delivery)
 - [Acknowledge WebSocket events](/websocket/acknowledgements)
 
+# Migrate from Linq
+
+> Coming from Linq? Most request bodies are the same. Here is what changes.
+
+Source: https://docs.staging.relayapp.im/resources/migrate-from-linq.md
+
+## What changes
+
+- The base URL and the token. Relay's is an Agent Token from the Console, sent as `Authorization: Bearer`.
+- `to` takes a handle. An agent has a handle like `wren.acme` and a share link; a person messages it in Relay.
+- One network. There is no SMS or RCS fallback and no `preferred_service`.
+- The agent's first message to a person is a request. It waits in their Requests until they reply.
+- Delivered means Relay stored the message. Read is set when the person opens the chat.
+
+## Map
+
+| Linq | Relay |
+| --- | --- |
+| Number and line | Handle and share link |
+| `POST /v3/messages` with `to`, `message.parts` | `POST /v1/messages`, same body, `to` holds handles |
+| Parts `text`, `media`, `link` | Same three, same limits |
+| `reply_to: { message_id, part_index }` | Same |
+| Six tapbacks plus custom emoji | Same six, plus `custom` |
+| `POST /v3/chats/{chatId}/voicememo` | `POST /v1/chats/{chatId}/voicememo` |
+| `POST /v3/webhook-subscriptions` with `target_url`, `subscribed_events` | `POST /v1/webhook-subscriptions`, same fields |
+| 45 event types | 19 event types, see [Webhook events](/events/index) |
+| `idempotency_key` inside `message` | Same place, scoped to the sending agent |
+
+## Send a message
+
+The body does not change. The address does:
+
+```bash
+curl -X POST https://api.staging.relayapp.im/v1/messages \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"to":["alice"],"message":{"parts":[{"type":"text","value":"Hi! How can we help?"}]}}'
+```
+
+The response carries `chat_id` and `created_new_chat`, as Linq's does.
+
+## Receive events
+
+Create a subscription with the same two fields, then verify each delivery with the subscription's secret. [Webhooks](/webhooks/index) has the handler; [Verify signatures](/webhooks/verify-signatures) has the check. Event names differ; the table on [Webhook events](/events/index) lists all nineteen.
+
+## Not in Relay
+
+SMS, MMS and RCS. Numbers, line pooling and reputation. Delivery into Apple Messages. Polls, message effects, text styles and chat backgrounds. Payments, location sharing and calls.
+
+## Next steps
+
+- [Quickstart](/start/quickstart)
+- [Webhooks](/webhooks/index)
+- [API reference](/api-reference/overview)
+
+# Migrate from Photon
+
+> Coming from Photon? Here is what maps to what, and what changes.
+
+Source: https://docs.staging.relayapp.im/resources/migrate-from-photon.md
+
+## What changes
+
+- The address. Photon rents a phone line; Relay gives the agent a handle and a share link, and the person messages it in Relay.
+- Sending is an HTTPS call. You do not run a live `spectrum-ts` process or hold a `Space` to reply.
+- Events are typed. Photon emits one `messages` event; Relay emits nineteen, from `message.received` to `chat.request.updated`.
+- Relay has delivery receipts and message requests. Photon has neither.
+
+## Map
+
+| Photon | Relay |
+| --- | --- |
+| Agent, your Spectrum server | Agent, an identity with a token and a handle |
+| `Space` | Chat, direct or group |
+| `User` | Participant, a handle in the chat |
+| Provider, platform, line | None. Relay is one network |
+| `projectId` and `projectSecret` | Agent Token |
+| `Message` with one `Content` arm | Message with 1 to 100 ordered parts |
+| `message.react(emoji)` on the whole message | A reaction on one part, six types plus `custom` |
+| `message.reply(...)` | `reply_to: { message_id, part_index }` |
+| Webhook event `messages` | 19 events, see [Webhook events](/events/index) |
+
+## Send a message
+
+Photon:
+
+```ts
+await space.send("Hello, world.");
+```
+
+Relay:
+
+```ts
+await relay.chats.messages.send(chatId, {
+  message: { parts: [{ type: "text", value: "Hello, world." }], idempotency_key: crypto.randomUUID() },
+});
+```
+
+Without a chat ID, `POST /v1/messages` with `to: ["alice"]` finds or creates the chat.
+
+## Receive a message
+
+Photon hands you the space and the message inside `app.webhook`. Relay delivers a signed event to your endpoint; you verify it, commit it, and reply with the chat ID it carries. [Webhooks](/webhooks/index) has the handler, and [WebSocket](/websocket/observe-events) is the other way to receive.
+
+## Not in Relay
+
+Other channels: WhatsApp, Telegram, terminal, custom platforms. Voice calls. Polls, message effects, chat backgrounds and streaming text. Relay has voice memos, not calls.
+
+## Next steps
+
+- [Quickstart](/start/quickstart)
+- [Webhooks](/webhooks/index)
+- [API reference](/api-reference/overview)
+
+# Migrate from Telegram
+
+> Running a Telegram bot? Here is what maps to what, and what changes.
+
+Source: https://docs.staging.relayapp.im/resources/migrate-from-telegram.md
+
+## What changes
+
+- The bot token becomes an Agent Token, sent as a header, not in the URL.
+- `@username` and `t.me` become a handle and a share link. There is no `/start`; the person sends a message.
+- `getUpdates` or `setWebhook` become a WebSocket or a webhook subscription.
+- Text has no `parse_mode` and no entities. A message is 1 to 100 parts: text, media or link.
+- Relay has delivery and read receipts, and typing, in both directions.
+- A chat holds one person and up to six agents. The agent may write first; the message waits in the person's Requests.
+
+## Map
+
+| Telegram | Relay |
+| --- | --- |
+| Bot | Agent |
+| `@username`, `t.me/<username>` | Handle, share link |
+| `Update` | Event, see [Webhook events](/events/index) |
+| `Message.text` | `parts[].type: "text"` |
+| `photo`, `document`, `audio`, `video` | `parts[].type: "media"` with an attachment or a public URL |
+| `voice` | Voice memo, `POST /v1/chats/{chatId}/voicememo` |
+| `reply_to_message` | `reply_to: { message_id, part_index }` |
+| `setMessageReaction` | `POST /v1/messages/{messageId}/reactions` |
+| `chat_member`, `my_chat_member` | `participant.added`, `participant.removed` |
+| `edited_message` | No equivalent. Relay does not offer message editing. |
+
+## Send a message
+
+Telegram:
+
+```bash
+curl "https://api.telegram.org/bot$TOKEN/sendMessage" -d chat_id=123 -d text="Hello"
+```
+
+Relay:
+
+```bash
+curl -X POST https://api.staging.relayapp.im/v1/messages \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"to":["alice"],"message":{"parts":[{"type":"text","value":"Hello"}]}}'
+```
+
+## Receive a message
+
+A Telegram `Update` with a `message` field becomes a `message.received` event. Subscribe a webhook and verify each delivery, or hold a WebSocket open and acknowledge frames. [Webhooks](/webhooks/index) and [WebSocket](/websocket/observe-events) show both.
+
+## Not in Relay
+
+Commands and the command menu. Inline and reply keyboards. Channels. Stickers. Payments. Text formatting and entities. Telegram's published throughput limits; Relay answers `429` with `retry_after`.
+
+## Next steps
+
+- [Quickstart](/start/quickstart)
+- [Webhooks](/webhooks/index)
+- [API reference](/api-reference/overview)
+
 # Examples
 
 > Choose a runnable Relay recipe or an agent integration with published source.
@@ -5920,576 +5920,6 @@ A `401` means the Agent Token is missing or revoked. An event name that is not i
 - [Connect with WebSocket](/websocket)
 - [Read the message.received event](/events/message-received)
 
-# chat.created
-
-> Read the chat.created data payload and its fields.
-
-Source: https://docs.staging.relayapp.im/events/chat-created.md
-
-`chat.created` fires when Relay creates a chat that includes your agent.
-
-## Read the payload
-
-This is a complete envelope as the staging agent received it. The `data` object is the `ChatCreatedEvent` schema from the API contract; the fields around it are the same on every event and are described in the [event catalog](/events#read-the-envelope). Route on `event_type`, deduplicate on `event_id`, and keep `trace_id` for support:
-
-```json captured-output
-{
-  "api_version": "v1",
-  "webhook_version": "2026-08-30",
-  "event_type": "chat.created",
-  "event_id": "01a08e5a-19b8-77be-839e-414b3f2c2e78",
-  "created_at": "2026-09-11T02:44:24.632Z",
-  "trace_id": "f01080133a18602e0a764728933c2bd0",
-  "agent_id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
-  "data": {
-    "id": "01a08e5a-13cd-707f-ad0b-29eec3010341",
-    "display_name": "relay",
-    "group_chat_icon": null,
-    "handles": [
-      {
-        "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
-        "handle": "relay_staging_fullsync",
-        "status": "active",
-        "joined_at": "2026-09-11T02:44:23.152Z",
-        "left_at": null,
-        "is_me": true,
-        "kind": "agent",
-        "display_name": "Staging Full Sync",
-        "image_url": null,
-        "about": "A Relay agent, created with relay agents create.",
-        "verified": false,
-        "is_removable": true
-      },
-      {
-        "id": "01a0537e-27a7-757c-a614-c28ca730478d",
-        "handle": "relay",
-        "status": "active",
-        "joined_at": "2026-09-11T02:44:23.152Z",
-        "left_at": null,
-        "is_me": false,
-        "kind": "agent",
-        "display_name": "Relay",
-        "image_url": "https://relayapp.im/relay-agent-avatar.png",
-        "about": "Relay's official agent",
-        "verified": true,
-        "is_removable": false
-      }
-    ],
-    "is_group": false,
-    "created_at": "2026-09-11T02:44:23.435Z",
-    "updated_at": "2026-09-11T02:44:23.435Z"
-  }
-}
-```
-
-| Field | Meaning |
-| --- | --- |
-| `id` | Chat ID |
-| `display_name` | Chat display name |
-| `group_chat_icon` | Group icon URL, or `null` |
-| `handles` | Every handle in the chat and its membership state |
-| `is_group` | Whether this is a group chat |
-| `request_state` | The caller's side of a message request, when one exists |
-| `created_at` | Chat creation time |
-| `updated_at` | Chat update time |
-
-## Handle the event
-
-Create the chat in your own store with its handles before the first `message.received` for it arrives. `handles` carries every participant with `is_me` set on your agent. The first message in a new chat may be a [message request](/agents/message-requests), so do not treat creation as consent to reply.
-
-## Next steps
-
-- [Read message requests](/agents/message-requests)
-- [Read the message.received event](/events/message-received)
-- [Manage group chats](/chats/group-chats)
-- [Choose an event type](/events)
-
-# chat.group_icon_updated
-
-> Read the chat.group_icon_updated data payload and its fields.
-
-Source: https://docs.staging.relayapp.im/events/chat-group-icon-updated.md
-
-`chat.group_icon_updated` fires when a group chat's icon changes.
-
-## Read the payload
-
-The `data` object is the `ChatGroupIconUpdatedEvent` schema from the API contract. The envelope around it is the same on every event and is described in the [event catalog](/events#read-the-envelope).
-
-| Field | Meaning |
-| --- | --- |
-| `chat_id` | Group chat ID |
-| `old_value` | Previous icon URL, or `null` |
-| `new_value` | New icon URL, or `null` when removed |
-| `changed_by_handle` | The handle that made the change, or `null` |
-| `updated_at` | When the icon URL changed |
-
-## Handle the event
-
-Replace the stored icon for `chat_id` with `new_value`, and treat `null` as no icon. Fetch the image when you need it rather than assuming the URL stays valid for long.
-
-## Next steps
-
-- [Update a group photo](/chats/group-photo)
-- [Read the chat.group_name_updated event](/events/chat-group-name-updated)
-- [Choose an event type](/events)
-
-# chat.group_name_updated
-
-> Read the chat.group_name_updated data payload and its fields.
-
-Source: https://docs.staging.relayapp.im/events/chat-group-name-updated.md
-
-`chat.group_name_updated` fires when a group chat's name changes.
-
-## Read the payload
-
-The `data` object is the `ChatGroupNameUpdatedEvent` schema from the API contract. The envelope around it is the same on every event and is described in the [event catalog](/events#read-the-envelope).
-
-| Field | Meaning |
-| --- | --- |
-| `chat_id` | Group chat ID |
-| `old_value` | Previous name, or `null` |
-| `new_value` | New name, or `null` when removed |
-| `changed_by_handle` | The handle that made the change, or `null` |
-| `updated_at` | When the name changed |
-
-## Handle the event
-
-Replace the stored name for `chat_id` with `new_value`. `changed_by_handle` is `null` when Relay made the change rather than a participant, and `new_value` is `null` when the name was cleared.
-
-## Next steps
-
-- [Update a group profile](/chats/group-profile)
-- [Read the chat.group_icon_updated event](/events/chat-group-icon-updated)
-- [Choose an event type](/events)
-
-# chat.request.updated
-
-> Read the chat.request.updated data payload and its fields.
-
-Source: https://docs.staging.relayapp.im/events/chat-request-updated.md
-
-`chat.request.updated` fires when a person answers the message request your agent's first message opened: they replied, or they deleted it.
-
-## Read the payload
-
-The `data` object is the `ChatRequestUpdatedEvent` schema from the API contract. The envelope around it is the same on every event and is described in the [event catalog](/events#read-the-envelope).
-
-| Field | Meaning |
-| --- | --- |
-| `chat_id` | The chat the person answered on |
-| `state` | `accepted` when the person replied and your messages now reach their inbox; `deleted` when they removed the request and left the chat |
-| `updated_at` | When the person replied or deleted the request |
-
-## Handle the event
-
-On `accepted`, carry on in `chat_id`; an accepted request also sends [`contact.added`](/events/contact-added) with the same chat. On `deleted`, stop: a later message to that person opens a fresh chat, which is a fresh request. A pending request is silent, and every agent in the chat receives this event. A block deletes any pending request from the blocked handle.
-
-## Next steps
-
-- [Read message requests](/agents/message-requests)
-- [Read the contact.added event](/events/contact-added)
-- [Read the chat.created event](/events/chat-created)
-- [Choose an event type](/events)
-
-# chat.typing_indicator.started
-
-> Read the chat.typing_indicator.started data payload and its fields.
-
-Source: https://docs.staging.relayapp.im/events/chat-typing-indicator-started.md
-
-`chat.typing_indicator.started` fires when a contact starts or refreshes typing in a chat your agent is in.
-
-## Read the payload
-
-This is a complete envelope as the staging agent received it. The `data` object is the `ChatTypingIndicatorStartedEvent` schema from the API contract; the fields around it are the same on every event and are described in the [event catalog](/events#read-the-envelope). Route on `event_type`, deduplicate on `event_id`, and keep `trace_id` for support:
-
-```json captured-output
-{
-  "api_version": "v1",
-  "webhook_version": "2026-08-30",
-  "event_type": "chat.typing_indicator.started",
-  "event_id": "01a08e5a-50a5-757a-aa71-8ac837b5cd48",
-  "created_at": "2026-09-11T02:44:38.693Z",
-  "trace_id": "7d31d823606241d8961a309fbb4e2996",
-  "agent_id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
-  "data": {
-    "chat_id": "01a08e5a-13cd-707f-ad0b-29eec3010341",
-    "contact": {
-      "id": "01a0537e-27a7-757c-a614-c28ca730478d",
-      "handle": "relay",
-      "kind": "agent"
-    }
-  }
-}
-```
-
-| Field | Meaning |
-| --- | --- |
-| `chat_id` | Chat ID |
-| `contact` | The typing contact's `id`, `handle`, and `kind` (`user` or `agent`) |
-
-## Handle the event
-
-Show a typing state for `contact` in `chat_id` if your agent surfaces one, and expect a refresh every 60 seconds while typing continues. Most backends ignore this event; it never carries message content and needs no reply.
-
-## Next steps
-
-- [Send typing indicators](/chats/typing)
-- [Read the chat.typing_indicator.stopped event](/events/chat-typing-indicator-stopped)
-- [Choose an event type](/events)
-
-# chat.typing_indicator.stopped
-
-> Read the chat.typing_indicator.stopped data payload and its fields.
-
-Source: https://docs.staging.relayapp.im/events/chat-typing-indicator-stopped.md
-
-`chat.typing_indicator.stopped` fires when a contact's typing indicator ends in a chat your agent is in.
-
-## Read the payload
-
-This is a complete envelope as the staging agent received it. The `data` object is the `ChatTypingIndicatorStoppedEvent` schema from the API contract; the fields around it are the same on every event and are described in the [event catalog](/events#read-the-envelope). Route on `event_type`, deduplicate on `event_id`, and keep `trace_id` for support:
-
-```json captured-output
-{
-  "api_version": "v1",
-  "webhook_version": "2026-08-30",
-  "event_type": "chat.typing_indicator.stopped",
-  "event_id": "01a08e5a-9673-708a-a63f-5b0ef543b302",
-  "created_at": "2026-09-11T02:44:56.563Z",
-  "trace_id": "46d94605af904672a91d1df71619532e",
-  "agent_id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
-  "data": {
-    "chat_id": "01a08e5a-13cd-707f-ad0b-29eec3010341",
-    "contact": {
-      "id": "01a0537e-27a7-757c-a614-c28ca730478d",
-      "handle": "relay",
-      "kind": "agent"
-    }
-  }
-}
-```
-
-| Field | Meaning |
-| --- | --- |
-| `chat_id` | Chat ID |
-| `contact` | The typing contact's `id`, `handle`, and `kind` (`user` or `agent`) |
-
-## Handle the event
-
-Clear the typing state for `contact` in `chat_id`. Relay also ends an indicator on its own after 90 seconds without a refresh, so clear the state on that timer too and treat this event as confirmation.
-
-## Next steps
-
-- [Send typing indicators](/chats/typing)
-- [Read the chat.typing_indicator.started event](/events/chat-typing-indicator-started)
-- [Choose an event type](/events)
-
-# contact.added
-
-> Read the contact.added data payload and its fields.
-
-Source: https://docs.staging.relayapp.im/events/contact-added.md
-
-`contact.added` fires when a person wrote to your agent for the first time, or replied to its message request.
-
-## Read the payload
-
-The `data` object is the `ContactAddedEvent` schema from the API contract. The envelope around it is the same on every event and is described in the [event catalog](/events#read-the-envelope).
-
-| Field | Meaning |
-| --- | --- |
-| `contact` | The person's `id`, `handle`, and `display_name` |
-| `chat_id` | The direct chat created or reused for this contact |
-
-## Handle the event
-
-From now on the person holds a contact edge to your agent, so your messages reach their inbox. Store `contact.id` as the stable key; `handle` and `display_name` can change. When the person accepted a message request, [`chat.request.updated`](/events/chat-request-updated) arrives with the same `chat_id`.
-
-## Next steps
-
-- [Read message requests](/agents/message-requests)
-- [Read the chat.request.updated event](/events/chat-request-updated)
-- [Read the contact.removed event](/events/contact-removed)
-- [Choose an event type](/events)
-
-# contact.removed
-
-> Read the contact.removed data payload and its fields.
-
-Source: https://docs.staging.relayapp.im/events/contact-removed.md
-
-`contact.removed` fires when a person removes or blocks your agent.
-
-## Read the payload
-
-The `data` object is the `ContactRemovedEvent` schema from the API contract. The envelope around it is the same on every event and is described in the [event catalog](/events#read-the-envelope).
-
-| Field | Meaning |
-| --- | --- |
-| `contact` | The person's `id`, `handle`, and `display_name` |
-
-## Handle the event
-
-Stop sending to this person; your messages no longer reach their inbox. Keep `contact.id` so a later `contact.added` for the same ID is recognized as a return, not a stranger. The event does not say whether it was a removal or a block, and your agent should not need to know.
-
-## Next steps
-
-- [Read message requests](/agents/message-requests)
-- [Read the contact.added event](/events/contact-added)
-- [Choose an event type](/events)
-
-# message.delivered
-
-> Read the message.delivered data payload and its fields.
-
-Source: https://docs.staging.relayapp.im/events/message-delivered.md
-
-`message.delivered` fires when a message your agent sent reaches Delivered.
-
-## Read the payload
-
-This is a complete envelope as the staging agent received it. The `data` object is the `MessageEvent` schema from the API contract; the fields around it are the same on every event and are described in the [event catalog](/events#read-the-envelope). Route on `event_type`, deduplicate on `event_id`, and keep `trace_id` for support:
-
-```json captured-output
-{
-  "api_version": "v1",
-  "webhook_version": "2026-08-30",
-  "event_type": "message.delivered",
-  "event_id": "01a08e1e-cae0-70bb-a44f-97a598fa4f83",
-  "created_at": "2026-09-11T01:39:37.824Z",
-  "trace_id": "27a398912ad9ffb0db553fecfaeb6652",
-  "agent_id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
-  "data": {
-    "chat": {
-      "id": "01a05224-50ba-743c-b078-6458f4186e07",
-      "is_group": false,
-      "owner_handle": {
-        "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
-        "handle": "relay_staging_fullsync",
-        "status": "active",
-        "joined_at": "2026-08-30T10:08:26.863Z",
-        "left_at": null,
-        "is_me": true,
-        "kind": "agent",
-        "display_name": "Staging Full Sync",
-        "image_url": null,
-        "about": "A Relay agent, created with relay agents create.",
-        "verified": false,
-        "is_removable": true
-      }
-    },
-    "id": "01a08e1e-c84a-725a-9931-5bd5784c3149",
-    "idempotency_key": "ci_docs_connect_a91f",
-    "direction": "outbound",
-    "sender_handle": {
-      "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
-      "handle": "relay_staging_fullsync",
-      "status": "active",
-      "joined_at": "2026-08-30T10:08:26.863Z",
-      "left_at": null,
-      "is_me": true,
-      "kind": "agent",
-      "display_name": "Staging Full Sync",
-      "image_url": null,
-      "about": "A Relay agent, created with relay agents create.",
-      "verified": false,
-      "is_removable": true
-    },
-    "parts": [
-      {
-        "type": "text",
-        "value": "ci_docs_connect_a91f Reply with a short greeting that confirms you can read this Relay message.",
-        "text_decorations": null,
-        "mention": null,
-        "mention_range": null,
-        "reactions": null
-      }
-    ],
-    "sent_at": "2026-09-11T01:39:37.162Z",
-    "delivered_at": "2026-09-11T01:39:37.162Z",
-    "read_at": null,
-    "reply_to": null
-  }
-}
-```
-
-| Field | Meaning |
-| --- | --- |
-| `chat` | Chat ID, group flag, and the receiving agent's `owner_handle` |
-| `id` | Message ID |
-| `idempotency_key` | The sender's idempotency key, or `null` |
-| `direction` | `outbound` when your agent sent it, `inbound` when it received it |
-| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent` |
-| `parts` | Text, media, or link parts |
-| `sent_at` | Send timestamp |
-| `delivered_at` | Delivered timestamp |
-| `read_at` | Read timestamp, or `null` before Read |
-| `reply_to` | Referenced message and part, or `null` |
-
-## Handle the event
-
-Delivered means Relay accepted and stored the message; it says nothing about whether the person has seen it. Use `delivered_at` to update a status you show, and ignore the event if you show none. Read the [receipt rules](/messages/receipts) before you build anything on it.
-
-## Next steps
-
-- [Read delivery receipts](/messages/receipts)
-- [Read the message.read event](/events/message-read)
-- [Read the message.sent event](/events/message-sent)
-- [Choose an event type](/events)
-
-# message.failed
-
-> Read the message.failed data payload and its fields.
-
-Source: https://docs.staging.relayapp.im/events/message-failed.md
-
-`message.failed` fires when the `message.received` webhook for a message your agent sent went terminal at the recipient agent.
-
-## Read the payload
-
-This is a complete envelope as the staging agent received it. The `data` object is the `MessageFailedEvent` schema from the API contract; the fields around it are the same on every event and are described in the [event catalog](/events#read-the-envelope). Route on `event_type`, deduplicate on `event_id`, and keep `trace_id` for support:
-
-```json captured-output
-{
-  "api_version": "v1",
-  "webhook_version": "2026-08-30",
-  "event_type": "message.failed",
-  "event_id": "01a08e1e-e134-708b-afba-7e76c5567827",
-  "created_at": "2026-09-11T01:39:43.540Z",
-  "trace_id": "c86014b4778f3b556008a9e2a61a06fd",
-  "agent_id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
-  "data": {
-    "chat_id": "01a05224-50ba-743c-b078-6458f4186e07",
-    "message_id": "01a08e1e-c84a-725a-9931-5bd5784c3149",
-    "code": 3006,
-    "reason": "HTTP 401",
-    "detail_code": 401,
-    "failed_at": "2026-09-11T01:39:43.043Z"
-  }
-}
-```
-
-| Field | Meaning |
-| --- | --- |
-| `chat_id` | Chat holding the message |
-| `message_id` | Message whose event delivery failed |
-| `code` | Relay error code, `3006` |
-| `reason` | Text description of the failure |
-| `detail_code` | HTTP status from the terminal attempt, or `null` when the destination never answered |
-| `failed_at` | When Relay detected the failure |
-
-## Handle the event
-
-Relay sends this to the agent that sent the message. The message itself stays in the chat and stays readable through the API; only the recipient agent's webhook failed. Log `detail_code` and include it in a support request, but do not branch on it. Only a recipient agent's webhook produces it; a person reading on their phone never does.
-
-## Next steps
-
-- [Handle delivery and retries](/webhooks/delivery)
-- [Debug with trace IDs](/live/debugging)
-- [Look up error codes](/api-reference/errors)
-- [Choose an event type](/events)
-
-# message.read
-
-> Read the message.read data payload and its fields.
-
-Source: https://docs.staging.relayapp.im/events/message-read.md
-
-`message.read` fires when a message your agent sent reaches Read.
-
-## Read the payload
-
-This is a complete envelope as the staging agent received it. The `data` object is the `MessageEvent` schema from the API contract; the fields around it are the same on every event and are described in the [event catalog](/events#read-the-envelope). Route on `event_type`, deduplicate on `event_id`, and keep `trace_id` for support:
-
-```json captured-output
-{
-  "api_version": "v1",
-  "webhook_version": "2026-08-30",
-  "event_type": "message.read",
-  "event_id": "01a08e5a-4198-77db-8ddd-19338c911a4d",
-  "created_at": "2026-09-11T02:44:34.840Z",
-  "trace_id": "95a41b60c92e11add008a9e69005924e",
-  "agent_id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
-  "data": {
-    "chat": {
-      "id": "01a08e5a-13cd-707f-ad0b-29eec3010341",
-      "is_group": false,
-      "owner_handle": {
-        "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
-        "handle": "relay_staging_fullsync",
-        "status": "active",
-        "joined_at": "2026-09-11T02:44:23.152Z",
-        "left_at": null,
-        "is_me": true,
-        "kind": "agent",
-        "display_name": "Staging Full Sync",
-        "image_url": null,
-        "about": "A Relay agent, created with relay agents create.",
-        "verified": false,
-        "is_removable": true
-      }
-    },
-    "id": "01a08e5a-150b-7299-bd77-915beb631840",
-    "idempotency_key": null,
-    "direction": "outbound",
-    "sender_handle": {
-      "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
-      "handle": "relay_staging_fullsync",
-      "status": "active",
-      "joined_at": "2026-09-11T02:44:23.152Z",
-      "left_at": null,
-      "is_me": true,
-      "kind": "agent",
-      "display_name": "Staging Full Sync",
-      "image_url": null,
-      "about": "A Relay agent, created with relay agents create.",
-      "verified": false,
-      "is_removable": true
-    },
-    "parts": [
-      {
-        "type": "text",
-        "value": "Admission check after migration 0038.",
-        "text_decorations": null,
-        "mention": null,
-        "mention_range": null,
-        "reactions": null
-      }
-    ],
-    "sent_at": "2026-09-11T02:44:23.435Z",
-    "delivered_at": "2026-09-11T02:44:23.435Z",
-    "read_at": "2026-09-11T02:44:33.813Z",
-    "reply_to": null
-  }
-}
-```
-
-| Field | Meaning |
-| --- | --- |
-| `chat` | Chat ID, group flag, and the receiving agent's `owner_handle` |
-| `id` | Message ID |
-| `idempotency_key` | The sender's idempotency key, or `null` |
-| `direction` | `outbound` when your agent sent it, `inbound` when it received it |
-| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent` |
-| `parts` | Text, media, or link parts |
-| `sent_at` | Send timestamp |
-| `delivered_at` | Delivered timestamp |
-| `read_at` | Read timestamp, or `null` before Read |
-| `reply_to` | Referenced message and part, or `null` |
-
-## Handle the event
-
-Read is optional and advances only when the other side marks the chat read, so treat its absence as unknown rather than unread. `read_at` is set in this event and `null` in the earlier `message.sent` and `message.delivered` events for the same message. In a group chat the app does not show read labels.
-
-## Next steps
-
-- [Read delivery receipts](/messages/receipts)
-- [Read the message.delivered event](/events/message-delivered)
-- [Choose an event type](/events)
-
 # message.received
 
 > Read the message.received data payload and its fields.
@@ -6690,6 +6120,522 @@ Use it to confirm that a send landed and to record the message ID Relay assigned
 - [Use idempotency keys](/live/idempotency)
 - [Choose an event type](/events)
 
+# message.delivered
+
+> Read the message.delivered data payload and its fields.
+
+Source: https://docs.staging.relayapp.im/events/message-delivered.md
+
+`message.delivered` fires when a message your agent sent reaches Delivered.
+
+## Read the payload
+
+This is a complete envelope as the staging agent received it. The `data` object is the `MessageEvent` schema from the API contract; the fields around it are the same on every event and are described in the [event catalog](/events#read-the-envelope). Route on `event_type`, deduplicate on `event_id`, and keep `trace_id` for support:
+
+```json captured-output
+{
+  "api_version": "v1",
+  "webhook_version": "2026-08-30",
+  "event_type": "message.delivered",
+  "event_id": "01a08e1e-cae0-70bb-a44f-97a598fa4f83",
+  "created_at": "2026-09-11T01:39:37.824Z",
+  "trace_id": "27a398912ad9ffb0db553fecfaeb6652",
+  "agent_id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+  "data": {
+    "chat": {
+      "id": "01a05224-50ba-743c-b078-6458f4186e07",
+      "is_group": false,
+      "owner_handle": {
+        "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+        "handle": "relay_staging_fullsync",
+        "status": "active",
+        "joined_at": "2026-08-30T10:08:26.863Z",
+        "left_at": null,
+        "is_me": true,
+        "kind": "agent",
+        "display_name": "Staging Full Sync",
+        "image_url": null,
+        "about": "A Relay agent, created with relay agents create.",
+        "verified": false,
+        "is_removable": true
+      }
+    },
+    "id": "01a08e1e-c84a-725a-9931-5bd5784c3149",
+    "idempotency_key": "ci_docs_connect_a91f",
+    "direction": "outbound",
+    "sender_handle": {
+      "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+      "handle": "relay_staging_fullsync",
+      "status": "active",
+      "joined_at": "2026-08-30T10:08:26.863Z",
+      "left_at": null,
+      "is_me": true,
+      "kind": "agent",
+      "display_name": "Staging Full Sync",
+      "image_url": null,
+      "about": "A Relay agent, created with relay agents create.",
+      "verified": false,
+      "is_removable": true
+    },
+    "parts": [
+      {
+        "type": "text",
+        "value": "ci_docs_connect_a91f Reply with a short greeting that confirms you can read this Relay message.",
+        "text_decorations": null,
+        "mention": null,
+        "mention_range": null,
+        "reactions": null
+      }
+    ],
+    "sent_at": "2026-09-11T01:39:37.162Z",
+    "delivered_at": "2026-09-11T01:39:37.162Z",
+    "read_at": null,
+    "reply_to": null
+  }
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `chat` | Chat ID, group flag, and the receiving agent's `owner_handle` |
+| `id` | Message ID |
+| `idempotency_key` | The sender's idempotency key, or `null` |
+| `direction` | `outbound` when your agent sent it, `inbound` when it received it |
+| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent` |
+| `parts` | Text, media, or link parts |
+| `sent_at` | Send timestamp |
+| `delivered_at` | Delivered timestamp |
+| `read_at` | Read timestamp, or `null` before Read |
+| `reply_to` | Referenced message and part, or `null` |
+
+## Handle the event
+
+Delivered means Relay accepted and stored the message; it says nothing about whether the person has seen it. Use `delivered_at` to update a status you show, and ignore the event if you show none. Read the [receipt rules](/messages/receipts) before you build anything on it.
+
+## Next steps
+
+- [Read delivery receipts](/messages/receipts)
+- [Read the message.read event](/events/message-read)
+- [Read the message.sent event](/events/message-sent)
+- [Choose an event type](/events)
+
+# message.read
+
+> Read the message.read data payload and its fields.
+
+Source: https://docs.staging.relayapp.im/events/message-read.md
+
+`message.read` fires when a message your agent sent reaches Read.
+
+## Read the payload
+
+This is a complete envelope as the staging agent received it. The `data` object is the `MessageEvent` schema from the API contract; the fields around it are the same on every event and are described in the [event catalog](/events#read-the-envelope). Route on `event_type`, deduplicate on `event_id`, and keep `trace_id` for support:
+
+```json captured-output
+{
+  "api_version": "v1",
+  "webhook_version": "2026-08-30",
+  "event_type": "message.read",
+  "event_id": "01a08e5a-4198-77db-8ddd-19338c911a4d",
+  "created_at": "2026-09-11T02:44:34.840Z",
+  "trace_id": "95a41b60c92e11add008a9e69005924e",
+  "agent_id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+  "data": {
+    "chat": {
+      "id": "01a08e5a-13cd-707f-ad0b-29eec3010341",
+      "is_group": false,
+      "owner_handle": {
+        "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+        "handle": "relay_staging_fullsync",
+        "status": "active",
+        "joined_at": "2026-09-11T02:44:23.152Z",
+        "left_at": null,
+        "is_me": true,
+        "kind": "agent",
+        "display_name": "Staging Full Sync",
+        "image_url": null,
+        "about": "A Relay agent, created with relay agents create.",
+        "verified": false,
+        "is_removable": true
+      }
+    },
+    "id": "01a08e5a-150b-7299-bd77-915beb631840",
+    "idempotency_key": null,
+    "direction": "outbound",
+    "sender_handle": {
+      "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+      "handle": "relay_staging_fullsync",
+      "status": "active",
+      "joined_at": "2026-09-11T02:44:23.152Z",
+      "left_at": null,
+      "is_me": true,
+      "kind": "agent",
+      "display_name": "Staging Full Sync",
+      "image_url": null,
+      "about": "A Relay agent, created with relay agents create.",
+      "verified": false,
+      "is_removable": true
+    },
+    "parts": [
+      {
+        "type": "text",
+        "value": "Admission check after migration 0038.",
+        "text_decorations": null,
+        "mention": null,
+        "mention_range": null,
+        "reactions": null
+      }
+    ],
+    "sent_at": "2026-09-11T02:44:23.435Z",
+    "delivered_at": "2026-09-11T02:44:23.435Z",
+    "read_at": "2026-09-11T02:44:33.813Z",
+    "reply_to": null
+  }
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `chat` | Chat ID, group flag, and the receiving agent's `owner_handle` |
+| `id` | Message ID |
+| `idempotency_key` | The sender's idempotency key, or `null` |
+| `direction` | `outbound` when your agent sent it, `inbound` when it received it |
+| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent` |
+| `parts` | Text, media, or link parts |
+| `sent_at` | Send timestamp |
+| `delivered_at` | Delivered timestamp |
+| `read_at` | Read timestamp, or `null` before Read |
+| `reply_to` | Referenced message and part, or `null` |
+
+## Handle the event
+
+Read is optional and advances only when the other side marks the chat read, so treat its absence as unknown rather than unread. `read_at` is set in this event and `null` in the earlier `message.sent` and `message.delivered` events for the same message. In a group chat the app does not show read labels.
+
+## Next steps
+
+- [Read delivery receipts](/messages/receipts)
+- [Read the message.delivered event](/events/message-delivered)
+- [Choose an event type](/events)
+
+# message.failed
+
+> Read the message.failed data payload and its fields.
+
+Source: https://docs.staging.relayapp.im/events/message-failed.md
+
+`message.failed` fires when the `message.received` webhook for a message your agent sent went terminal at the recipient agent.
+
+## Read the payload
+
+This is a complete envelope as the staging agent received it. The `data` object is the `MessageFailedEvent` schema from the API contract; the fields around it are the same on every event and are described in the [event catalog](/events#read-the-envelope). Route on `event_type`, deduplicate on `event_id`, and keep `trace_id` for support:
+
+```json captured-output
+{
+  "api_version": "v1",
+  "webhook_version": "2026-08-30",
+  "event_type": "message.failed",
+  "event_id": "01a08e1e-e134-708b-afba-7e76c5567827",
+  "created_at": "2026-09-11T01:39:43.540Z",
+  "trace_id": "c86014b4778f3b556008a9e2a61a06fd",
+  "agent_id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+  "data": {
+    "chat_id": "01a05224-50ba-743c-b078-6458f4186e07",
+    "message_id": "01a08e1e-c84a-725a-9931-5bd5784c3149",
+    "code": 3006,
+    "reason": "HTTP 401",
+    "detail_code": 401,
+    "failed_at": "2026-09-11T01:39:43.043Z"
+  }
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `chat_id` | Chat holding the message |
+| `message_id` | Message whose event delivery failed |
+| `code` | Relay error code, `3006` |
+| `reason` | Text description of the failure |
+| `detail_code` | HTTP status from the terminal attempt, or `null` when the destination never answered |
+| `failed_at` | When Relay detected the failure |
+
+## Handle the event
+
+Relay sends this to the agent that sent the message. The message itself stays in the chat and stays readable through the API; only the recipient agent's webhook failed. Log `detail_code` and include it in a support request, but do not branch on it. Only a recipient agent's webhook produces it; a person reading on their phone never does.
+
+## Next steps
+
+- [Handle delivery and retries](/webhooks/delivery)
+- [Debug with trace IDs](/live/debugging)
+- [Look up error codes](/api-reference/errors)
+- [Choose an event type](/events)
+
+# chat.created
+
+> Read the chat.created data payload and its fields.
+
+Source: https://docs.staging.relayapp.im/events/chat-created.md
+
+`chat.created` fires when Relay creates a chat that includes your agent.
+
+## Read the payload
+
+This is a complete envelope as the staging agent received it. The `data` object is the `ChatCreatedEvent` schema from the API contract; the fields around it are the same on every event and are described in the [event catalog](/events#read-the-envelope). Route on `event_type`, deduplicate on `event_id`, and keep `trace_id` for support:
+
+```json captured-output
+{
+  "api_version": "v1",
+  "webhook_version": "2026-08-30",
+  "event_type": "chat.created",
+  "event_id": "01a08e5a-19b8-77be-839e-414b3f2c2e78",
+  "created_at": "2026-09-11T02:44:24.632Z",
+  "trace_id": "f01080133a18602e0a764728933c2bd0",
+  "agent_id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+  "data": {
+    "id": "01a08e5a-13cd-707f-ad0b-29eec3010341",
+    "display_name": "relay",
+    "group_chat_icon": null,
+    "handles": [
+      {
+        "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+        "handle": "relay_staging_fullsync",
+        "status": "active",
+        "joined_at": "2026-09-11T02:44:23.152Z",
+        "left_at": null,
+        "is_me": true,
+        "kind": "agent",
+        "display_name": "Staging Full Sync",
+        "image_url": null,
+        "about": "A Relay agent, created with relay agents create.",
+        "verified": false,
+        "is_removable": true
+      },
+      {
+        "id": "01a0537e-27a7-757c-a614-c28ca730478d",
+        "handle": "relay",
+        "status": "active",
+        "joined_at": "2026-09-11T02:44:23.152Z",
+        "left_at": null,
+        "is_me": false,
+        "kind": "agent",
+        "display_name": "Relay",
+        "image_url": "https://relayapp.im/relay-agent-avatar.png",
+        "about": "Relay's official agent",
+        "verified": true,
+        "is_removable": false
+      }
+    ],
+    "is_group": false,
+    "created_at": "2026-09-11T02:44:23.435Z",
+    "updated_at": "2026-09-11T02:44:23.435Z"
+  }
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Chat ID |
+| `display_name` | Chat display name |
+| `group_chat_icon` | Group icon URL, or `null` |
+| `handles` | Every handle in the chat and its membership state |
+| `is_group` | Whether this is a group chat |
+| `request_state` | The caller's side of a message request, when one exists |
+| `created_at` | Chat creation time |
+| `updated_at` | Chat update time |
+
+## Handle the event
+
+Create the chat in your own store with its handles before the first `message.received` for it arrives. `handles` carries every participant with `is_me` set on your agent. The first message in a new chat may be a [message request](/agents/message-requests), so do not treat creation as consent to reply.
+
+## Next steps
+
+- [Read message requests](/agents/message-requests)
+- [Read the message.received event](/events/message-received)
+- [Manage group chats](/chats/group-chats)
+- [Choose an event type](/events)
+
+# chat.group_name_updated
+
+> Read the chat.group_name_updated data payload and its fields.
+
+Source: https://docs.staging.relayapp.im/events/chat-group-name-updated.md
+
+`chat.group_name_updated` fires when a group chat's name changes.
+
+## Read the payload
+
+The `data` object is the `ChatGroupNameUpdatedEvent` schema from the API contract. The envelope around it is the same on every event and is described in the [event catalog](/events#read-the-envelope).
+
+| Field | Meaning |
+| --- | --- |
+| `chat_id` | Group chat ID |
+| `old_value` | Previous name, or `null` |
+| `new_value` | New name, or `null` when removed |
+| `changed_by_handle` | The handle that made the change, or `null` |
+| `updated_at` | When the name changed |
+
+## Handle the event
+
+Replace the stored name for `chat_id` with `new_value`. `changed_by_handle` is `null` when Relay made the change rather than a participant, and `new_value` is `null` when the name was cleared.
+
+## Next steps
+
+- [Update a group profile](/chats/group-profile)
+- [Read the chat.group_icon_updated event](/events/chat-group-icon-updated)
+- [Choose an event type](/events)
+
+# chat.group_icon_updated
+
+> Read the chat.group_icon_updated data payload and its fields.
+
+Source: https://docs.staging.relayapp.im/events/chat-group-icon-updated.md
+
+`chat.group_icon_updated` fires when a group chat's icon changes.
+
+## Read the payload
+
+The `data` object is the `ChatGroupIconUpdatedEvent` schema from the API contract. The envelope around it is the same on every event and is described in the [event catalog](/events#read-the-envelope).
+
+| Field | Meaning |
+| --- | --- |
+| `chat_id` | Group chat ID |
+| `old_value` | Previous icon URL, or `null` |
+| `new_value` | New icon URL, or `null` when removed |
+| `changed_by_handle` | The handle that made the change, or `null` |
+| `updated_at` | When the icon URL changed |
+
+## Handle the event
+
+Replace the stored icon for `chat_id` with `new_value`, and treat `null` as no icon. Fetch the image when you need it rather than assuming the URL stays valid for long.
+
+## Next steps
+
+- [Update a group photo](/chats/group-photo)
+- [Read the chat.group_name_updated event](/events/chat-group-name-updated)
+- [Choose an event type](/events)
+
+# chat.request.updated
+
+> Read the chat.request.updated data payload and its fields.
+
+Source: https://docs.staging.relayapp.im/events/chat-request-updated.md
+
+`chat.request.updated` fires when a person answers the message request your agent's first message opened: they replied, or they deleted it.
+
+## Read the payload
+
+The `data` object is the `ChatRequestUpdatedEvent` schema from the API contract. The envelope around it is the same on every event and is described in the [event catalog](/events#read-the-envelope).
+
+| Field | Meaning |
+| --- | --- |
+| `chat_id` | The chat the person answered on |
+| `state` | `accepted` when the person replied and your messages now reach their inbox; `deleted` when they removed the request and left the chat |
+| `updated_at` | When the person replied or deleted the request |
+
+## Handle the event
+
+On `accepted`, carry on in `chat_id`; an accepted request also sends [`contact.added`](/events/contact-added) with the same chat. On `deleted`, stop: a later message to that person opens a fresh chat, which is a fresh request. A pending request is silent, and every agent in the chat receives this event. A block deletes any pending request from the blocked handle.
+
+## Next steps
+
+- [Read message requests](/agents/message-requests)
+- [Read the contact.added event](/events/contact-added)
+- [Read the chat.created event](/events/chat-created)
+- [Choose an event type](/events)
+
+# chat.typing_indicator.started
+
+> Read the chat.typing_indicator.started data payload and its fields.
+
+Source: https://docs.staging.relayapp.im/events/chat-typing-indicator-started.md
+
+`chat.typing_indicator.started` fires when a contact starts or refreshes typing in a chat your agent is in.
+
+## Read the payload
+
+This is a complete envelope as the staging agent received it. The `data` object is the `ChatTypingIndicatorStartedEvent` schema from the API contract; the fields around it are the same on every event and are described in the [event catalog](/events#read-the-envelope). Route on `event_type`, deduplicate on `event_id`, and keep `trace_id` for support:
+
+```json captured-output
+{
+  "api_version": "v1",
+  "webhook_version": "2026-08-30",
+  "event_type": "chat.typing_indicator.started",
+  "event_id": "01a08e5a-50a5-757a-aa71-8ac837b5cd48",
+  "created_at": "2026-09-11T02:44:38.693Z",
+  "trace_id": "7d31d823606241d8961a309fbb4e2996",
+  "agent_id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+  "data": {
+    "chat_id": "01a08e5a-13cd-707f-ad0b-29eec3010341",
+    "contact": {
+      "id": "01a0537e-27a7-757c-a614-c28ca730478d",
+      "handle": "relay",
+      "kind": "agent"
+    }
+  }
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `chat_id` | Chat ID |
+| `contact` | The typing contact's `id`, `handle`, and `kind` (`user` or `agent`) |
+
+## Handle the event
+
+Show a typing state for `contact` in `chat_id` if your agent surfaces one, and expect a refresh every 60 seconds while typing continues. Most backends ignore this event; it never carries message content and needs no reply.
+
+## Next steps
+
+- [Send typing indicators](/chats/typing)
+- [Read the chat.typing_indicator.stopped event](/events/chat-typing-indicator-stopped)
+- [Choose an event type](/events)
+
+# chat.typing_indicator.stopped
+
+> Read the chat.typing_indicator.stopped data payload and its fields.
+
+Source: https://docs.staging.relayapp.im/events/chat-typing-indicator-stopped.md
+
+`chat.typing_indicator.stopped` fires when a contact's typing indicator ends in a chat your agent is in.
+
+## Read the payload
+
+This is a complete envelope as the staging agent received it. The `data` object is the `ChatTypingIndicatorStoppedEvent` schema from the API contract; the fields around it are the same on every event and are described in the [event catalog](/events#read-the-envelope). Route on `event_type`, deduplicate on `event_id`, and keep `trace_id` for support:
+
+```json captured-output
+{
+  "api_version": "v1",
+  "webhook_version": "2026-08-30",
+  "event_type": "chat.typing_indicator.stopped",
+  "event_id": "01a08e5a-9673-708a-a63f-5b0ef543b302",
+  "created_at": "2026-09-11T02:44:56.563Z",
+  "trace_id": "46d94605af904672a91d1df71619532e",
+  "agent_id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+  "data": {
+    "chat_id": "01a08e5a-13cd-707f-ad0b-29eec3010341",
+    "contact": {
+      "id": "01a0537e-27a7-757c-a614-c28ca730478d",
+      "handle": "relay",
+      "kind": "agent"
+    }
+  }
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `chat_id` | Chat ID |
+| `contact` | The typing contact's `id`, `handle`, and `kind` (`user` or `agent`) |
+
+## Handle the event
+
+Clear the typing state for `contact` in `chat_id`. Relay also ends an indicator on its own after 90 seconds without a refresh, so clear the state on that timer too and treat this event as confirmation.
+
+## Next steps
+
+- [Send typing indicators](/chats/typing)
+- [Read the chat.typing_indicator.started event](/events/chat-typing-indicator-started)
+- [Choose an event type](/events)
+
 # participant.added
 
 > Read the participant.added data payload and its fields.
@@ -6744,6 +6690,60 @@ Mark the handle as gone in your stored membership for `chat_id`; `participant.st
 
 - [Manage participants](/chats/participants)
 - [Read the participant.added event](/events/participant-added)
+- [Choose an event type](/events)
+
+# contact.added
+
+> Read the contact.added data payload and its fields.
+
+Source: https://docs.staging.relayapp.im/events/contact-added.md
+
+`contact.added` fires when a person wrote to your agent for the first time, or replied to its message request.
+
+## Read the payload
+
+The `data` object is the `ContactAddedEvent` schema from the API contract. The envelope around it is the same on every event and is described in the [event catalog](/events#read-the-envelope).
+
+| Field | Meaning |
+| --- | --- |
+| `contact` | The person's `id`, `handle`, and `display_name` |
+| `chat_id` | The direct chat created or reused for this contact |
+
+## Handle the event
+
+From now on the person holds a contact edge to your agent, so your messages reach their inbox. Store `contact.id` as the stable key; `handle` and `display_name` can change. When the person accepted a message request, [`chat.request.updated`](/events/chat-request-updated) arrives with the same `chat_id`.
+
+## Next steps
+
+- [Read message requests](/agents/message-requests)
+- [Read the chat.request.updated event](/events/chat-request-updated)
+- [Read the contact.removed event](/events/contact-removed)
+- [Choose an event type](/events)
+
+# contact.removed
+
+> Read the contact.removed data payload and its fields.
+
+Source: https://docs.staging.relayapp.im/events/contact-removed.md
+
+`contact.removed` fires when a person removes or blocks your agent.
+
+## Read the payload
+
+The `data` object is the `ContactRemovedEvent` schema from the API contract. The envelope around it is the same on every event and is described in the [event catalog](/events#read-the-envelope).
+
+| Field | Meaning |
+| --- | --- |
+| `contact` | The person's `id`, `handle`, and `display_name` |
+
+## Handle the event
+
+Stop sending to this person; your messages no longer reach their inbox. Keep `contact.id` so a later `contact.added` for the same ID is recognized as a return, not a stranger. The event does not say whether it was a removal or a block, and your agent should not need to know.
+
+## Next steps
+
+- [Read message requests](/agents/message-requests)
+- [Read the contact.added event](/events/contact-added)
 - [Choose an event type](/events)
 
 # reaction.added
