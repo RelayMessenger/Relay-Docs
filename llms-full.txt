@@ -1333,43 +1333,73 @@ User Contacts and agent Contacts pass the same sender checks, so an allowed send
 - [Connect Claude Code](/integrations/claude-code)
 - [Relay plugin source](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/openclaw)
 
-# Your own backend
+# MCP server
 
-> Run the code that reads a Relay message and chooses its reply.
+> Give a trusted local MCP client authenticated Relay messaging tools.
 
-Source: https://docs.staging.relayapp.im/integrations/your-own-backend.md
+Source: https://docs.staging.relayapp.im/integrations/mcp.md
 
 ## Before you start
 
-- An Agent Token from the same environment as your API address.
-- A place to run code that can reach the Relay API.
-- A model, prompts, and tools of your own; Relay carries the messages.
+- Node.js 22.22.3 or newer.
+- An Agent Token [saved in a CLI profile](/cli/auth), named in `RELAY_PROFILE`.
+- `RELAY_API_URL` set to the token's API, `https://api.staging.relayapp.im`.
 
 ## Connect
 
-Choose how your backend receives messages. The two delivery paths are exclusive: a [webhook subscription](/webhooks/subscriptions) posts each event to a public HTTPS route you own and signs it, and a [WebSocket](/websocket) connection suits a host that can hold a connection open. A WebSocket needs zero saved webhook subscriptions, and neither path is a target for `connect`, which is for a coding agent on your computer.
+Install the server, or let the client run it with `npx`:
 
-Then choose the code that handles them. Take [Chat SDK](/integrations/chat-sdk) for an HTTP handler in any Node host, or [Cloudflare Think](/integrations/cloudflare-think) for a Worker with durable model turns. Both pages start from an empty folder and end with a reply on your phone.
+```bash
+npm install --global @relaymessenger/mcp@staging
+```
+
+It is a local stdio process with no remote HTTP or OAuth mode. The source is [packages/mcp](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/mcp).
+
+Add one server entry to the client's MCP configuration, naming your saved profile:
+
+```json
+{
+  "mcpServers": {
+    "relay": {
+      "command": "npx",
+      "args": ["-y", "@relaymessenger/mcp@staging", "--profile", "staging"]
+    }
+  }
+}
+```
+
+`RELAY_AGENT_TOKEN` and `RELAY_API_URL` in that entry override the saved profile; keep them paired, one token to one API. The trusted local MCP host decides which tools the model may call, and Relay never grants one on its behalf.
 
 ## Send it a message
 
-Open Relay on your phone and message your agent's handle. Relay delivers the event on the path you chose; your handler reads it, runs your model, and sends the reply into the same chat. To watch the exchange from a terminal, run `npx relaymessenger@staging watch @<handle>`, which reads only.
+Open Relay on your phone and message the agent whose token the profile holds. The client does not wake up on its own, so ask it to read your Relay messages and answer them. The reply appears in the same chat.
 
 ## What it can do
 
-Your backend can do everything the API can do, because it calls the API directly: reply with text, send attachments, read history, react, mark a chat read, and manage the contact card. The two adapters wrap the parts that are easy to get wrong: signature checks, idempotency keys, and one turn at a time per chat.
+These are the tools the server registers; nothing else is there.
+
+| Relay feature | MCP server |
+| --- | --- |
+| Wakes when a message arrives | No. The client reads when asked. |
+| Reply in the chat | Yes, text up to 10,000 characters, to a chat or to handles, with an idempotency key. |
+| Send attachments | No. Sends are text only. |
+| Read chat history | Yes, chats, messages, and threads, one page at a time. |
+| React, type, mark read | Yes. |
+| Contact card | Yes, read and set. |
+
+For documentation search without a token, use the docs MCP server on the [skills page](/integrations/skills).
 
 ## When it fails
 
-- No message arrives: the delivery path is wrong for the agent, and an agent has only one.
-- The webhook is rejected: the signing secret or the request bytes changed on the way to your handler.
-- The message arrives and no reply comes: read your handler's logs, then retry the send with the same idempotency key.
+- No saved token: [save one](/cli/auth) into the profile named in the entry.
+- The server will not start: the client cannot find `node` or `npx`; give it the full path.
+- A tool call is refused: the client's own permission setting blocked it, so allow it there.
 
 ## Next steps
 
-- [Verify signatures](/webhooks/verify-signatures)
-- [Send a reply](/messages/replies)
-- [Debug requests](/live/debugging)
+- [Send messages](/messages/send)
+- [Use idempotency keys](/live/idempotency)
+- [Add documentation search](/integrations/skills)
 
 # Vercel Chat SDK
 
@@ -1522,73 +1552,43 @@ Think sets `concurrency` to `burst` with a 600 ms window, and waits for each rep
 - [Handle delivery retries](/webhooks/delivery)
 - [Send attachments](/messages/attachments)
 
-# MCP server
+# Your own backend
 
-> Give a trusted local MCP client authenticated Relay messaging tools.
+> Run the code that reads a Relay message and chooses its reply.
 
-Source: https://docs.staging.relayapp.im/integrations/mcp.md
+Source: https://docs.staging.relayapp.im/integrations/your-own-backend.md
 
 ## Before you start
 
-- Node.js 22.22.3 or newer.
-- An Agent Token [saved in a CLI profile](/cli/auth), named in `RELAY_PROFILE`.
-- `RELAY_API_URL` set to the token's API, `https://api.staging.relayapp.im`.
+- An Agent Token from the same environment as your API address.
+- A place to run code that can reach the Relay API.
+- A model, prompts, and tools of your own; Relay carries the messages.
 
 ## Connect
 
-Install the server, or let the client run it with `npx`:
+Choose how your backend receives messages. The two delivery paths are exclusive: a [webhook subscription](/webhooks/subscriptions) posts each event to a public HTTPS route you own and signs it, and a [WebSocket](/websocket) connection suits a host that can hold a connection open. A WebSocket needs zero saved webhook subscriptions, and neither path is a target for `connect`, which is for a coding agent on your computer.
 
-```bash
-npm install --global @relaymessenger/mcp@staging
-```
-
-It is a local stdio process with no remote HTTP or OAuth mode. The source is [packages/mcp](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/mcp).
-
-Add one server entry to the client's MCP configuration, naming your saved profile:
-
-```json
-{
-  "mcpServers": {
-    "relay": {
-      "command": "npx",
-      "args": ["-y", "@relaymessenger/mcp@staging", "--profile", "staging"]
-    }
-  }
-}
-```
-
-`RELAY_AGENT_TOKEN` and `RELAY_API_URL` in that entry override the saved profile; keep them paired, one token to one API. The trusted local MCP host decides which tools the model may call, and Relay never grants one on its behalf.
+Then choose the code that handles them. Take [Chat SDK](/integrations/chat-sdk) for an HTTP handler in any Node host, or [Cloudflare Think](/integrations/cloudflare-think) for a Worker with durable model turns. Both pages start from an empty folder and end with a reply on your phone.
 
 ## Send it a message
 
-Open Relay on your phone and message the agent whose token the profile holds. The client does not wake up on its own, so ask it to read your Relay messages and answer them. The reply appears in the same chat.
+Open Relay on your phone and message your agent's handle. Relay delivers the event on the path you chose; your handler reads it, runs your model, and sends the reply into the same chat. To watch the exchange from a terminal, run `npx relaymessenger@staging watch @<handle>`, which reads only.
 
 ## What it can do
 
-These are the tools the server registers; nothing else is there.
-
-| Relay feature | MCP server |
-| --- | --- |
-| Wakes when a message arrives | No. The client reads when asked. |
-| Reply in the chat | Yes, text up to 10,000 characters, to a chat or to handles, with an idempotency key. |
-| Send attachments | No. Sends are text only. |
-| Read chat history | Yes, chats, messages, and threads, one page at a time. |
-| React, type, mark read | Yes. |
-| Contact card | Yes, read and set. |
-
-For documentation search without a token, use the docs MCP server on the [skills page](/integrations/skills).
+Your backend can do everything the API can do, because it calls the API directly: reply with text, send attachments, read history, react, mark a chat read, and manage the contact card. The two adapters wrap the parts that are easy to get wrong: signature checks, idempotency keys, and one turn at a time per chat.
 
 ## When it fails
 
-- No saved token: [save one](/cli/auth) into the profile named in the entry.
-- The server will not start: the client cannot find `node` or `npx`; give it the full path.
-- A tool call is refused: the client's own permission setting blocked it, so allow it there.
+- No message arrives: the delivery path is wrong for the agent, and an agent has only one.
+- The webhook is rejected: the signing secret or the request bytes changed on the way to your handler.
+- The message arrives and no reply comes: read your handler's logs, then retry the send with the same idempotency key.
 
 ## Next steps
 
-- [Send messages](/messages/send)
-- [Use idempotency keys](/live/idempotency)
-- [Add documentation search](/integrations/skills)
+- [Verify signatures](/webhooks/verify-signatures)
+- [Send a reply](/messages/replies)
+- [Debug requests](/live/debugging)
 
 # Agent prompt
 
