@@ -22,13 +22,13 @@ class HostedCacheTests(unittest.TestCase):
             CANONICAL_PATHS, ("", "start/quickstart", "llms.txt", "llms-full.txt", "skill.md", "agent-prompt.md")
         )
         fetch, calls = self.responses()
-        self.assertEqual(len(list(canonical_cache_pairs(fetch))), 5)
+        self.assertEqual(len(list(canonical_cache_pairs(fetch))), 6)
         self.assertEqual(
             calls, [(path, busted) for path in CANONICAL_PATHS for busted in (False, True)]
         )
 
     def test_stale_skill_is_rejected_even_when_every_other_page_is_current(self):
-        fetch, _ = self.responses(stale="skill.md", "agent-prompt.md")
+        fetch, _ = self.responses(stale="skill.md")
         with self.assertRaisesRegex(SystemExit, r"/skill\.md canonical body .* does not match"):
             list(canonical_cache_pairs(fetch))
 
@@ -39,7 +39,7 @@ class HostedCacheTests(unittest.TestCase):
 
     def test_matching_source_bytes_are_accepted(self):
         fetch, _ = self.responses()
-        self.assertEqual(len(list(canonical_cache_pairs(fetch, {"skill.md": b"current"}))), 5)
+        self.assertEqual(len(list(canonical_cache_pairs(fetch, {"skill.md": b"current"}))), 6)
 
     def test_existing_llms_cache_gate_is_preserved(self):
         fetch, _ = self.responses(stale="llms-full.txt")
