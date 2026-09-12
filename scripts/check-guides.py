@@ -202,7 +202,10 @@ def check_12(root):
             assert dest.path not in seen, f'error.doc_url redirect cycle: {url}'
             seen.add(dest.path); dest = urlsplit(redirects[dest.path])
         page = root / (dest.path.lstrip('/') + '.mdx')
-        assert page.is_file() and dest.fragment and dest.fragment in re.findall(r'\bid=["\']([^"\']+)', page.read_text()), f'error.doc_url unresolved: {url}'
+        if dest.fragment:
+            assert page.is_file() and dest.fragment in re.findall(r'\bid=["\']([^"\']+)', page.read_text()), f'error.doc_url unresolved: {url}'
+        else:
+            assert page.is_file(), f'error.doc_url unresolved: {url}'
 
 
 def check_13(root):

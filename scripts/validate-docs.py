@@ -284,7 +284,6 @@ for stale in [
     root / "build/identity/agent-greetings.mdx",
     root / "build/identity/add-requests.mdx",
     root / "api-reference/resources/contacts/requests/overview.mdx",
-    root / "error/codes/2xxx/2009.mdx",
     root / "error/codes/2xxx/2027.mdx",
     root / "ecosystem",
     root / "error/codes/2xxx/2014.mdx",

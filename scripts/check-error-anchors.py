@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check code anchors and legacy error.doc_url redirects.
+"""Check code anchors and per-code error pages.
 
 Source snapshot: Relay-Server deba0b500870549e0af878d8117eb4e5545b9abd.
 server/src/errors.ts maps HTTP statuses (including 402 -> 2009); literal
@@ -58,8 +58,9 @@ def check(root=ROOT, server_repo=None):
     assert set(map(int, anchors)) == codes, 'Error code anchors do not match sources'
     for code in codes:
         route = f'/error/codes/{code // 1000}xxx/{code}'
-        assert redirects.get(route) == f'/api-reference/errors#{code}', f'Broken redirect: {route}'
-    assert not list((root / 'error/codes').rglob('*.mdx')), 'Per-code pages remain'
+        page = root / (route.lstrip('/') + '.mdx')
+        assert page.is_file(), f'Missing per-code error page: {route}'
+        assert route not in redirects, f'Per-code error page is still redirected: {route}'
     return len(codes)
 
 
