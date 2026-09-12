@@ -29,7 +29,7 @@ INTERNAL_PROSE = re.compile(
 
 
 BUILD_FIXED = {"Before you start", "What you get back", "When it fails", "Next steps"}
-TASK_VERBS = set("Add Allocate Apply Block Choose Clear Configure Connect Create Debug Delete Derive Download Edit Follow Handle Inspect Install Keep Leave List Mark Observe Open Preserve Read Receive Refresh Register Remove Rename Reply Resolve Retrieve Retry Review Run Save Select Send Set Share Start Stop Store Subscribe Supply Target Track Unblock Unsend Update Upload Use Validate Verify Watch".split())
+TASK_VERBS = set("Add Allocate Apply Block Choose Clear Configure Connect Create Debug Delete Derive Download Edit Follow Handle Inspect Install Keep Leave List Mark Observe Open Preserve Read Receive Refresh Register Remove Rename Reply Resolve Retrieve Retry Review Run Save Select Send Set Share Start Stop Store Subscribe Supply Target Track Unblock Update Upload Use Validate Verify Watch".split())
 
 def validate_build_headings(page, body):
     headings = re.findall(r"^## (.+)$", body, re.M)
