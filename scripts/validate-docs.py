@@ -27,7 +27,7 @@ source_company_pattern = "|".join(
 root = Path(__file__).resolve().parents[1]
 config = json.loads((root / "docs.json").read_text())
 
-agent_instructions = (root / "skill.md", "agent-prompt.md").read_text()
+agent_instructions = (root / "skill.md").read_text()
 # The first Message is the request (2026-09-09); contact.added still names the
 # direct Chat once the user writes first or accepts. Nothing may teach a scripted opener.
 if not re.search(r"contact\.added", agent_instructions):
@@ -369,7 +369,7 @@ public_contract_paths = [
     root / "docs.json",
     root / "README.md",
     root / "INFORMATION-ARCHITECTURE.md",
-    root / "skill.md", "agent-prompt.md",
+    root / "skill.md", root / "agent-prompt.md",
     root / ".mintlify/skills/relay/SKILL.md",
     root / "agent-prompt.js",
     root / "api-reference/openapi.yaml",
@@ -445,7 +445,7 @@ def contract_shape(path):
 
 contract_shapes = {contract_shape(path) for path in contract_paths}
 path_mention = re.compile(r"/v1(?:/[A-Za-z0-9_\-{}$<>:]+)+")
-for path in [*mdx_paths, root / "skill.md", "agent-prompt.md"]:
+for path in [*mdx_paths, root / "skill.md", root / "agent-prompt.md"]:
     for number, line in enumerate(path.read_text().splitlines(), 1):
         for mention in path_mention.findall(line):
             if contract_shape(mention) in contract_shapes:
@@ -772,7 +772,7 @@ if disconnect_reasons != [
 ]:
     raise SystemExit(f"WebSocket disconnect reasons drifted: {disconnect_reasons}")
 
-handwritten_paths = [*mdx_paths, root / "skill.md", "agent-prompt.md", root / "README.md"]
+handwritten_paths = [*mdx_paths, root / "skill.md", root / "agent-prompt.md", root / "README.md"]
 # A migration guide quotes the other product on purpose: its routes, and the
 # "Not in Relay" list of features Relay does not have, are that product's
 # vocabulary, not ours. Everything a migration guide says about Relay is
@@ -843,11 +843,11 @@ if route_versions != {"1"}:
 
 if "Relay" not in (root / "index.mdx").read_text():
     raise SystemExit("Introduction must identify the product as Relay")
-if (root / "skill.md", "agent-prompt.md").read_bytes() != (
+if (root / "skill.md").read_bytes() != (
     root / ".mintlify/skills/relay/SKILL.md"
 ).read_bytes():
     raise SystemExit("published Relay skill drifted from skill.md")
-skill_text = (root / "skill.md", "agent-prompt.md").read_text()
+skill_text = (root / "skill.md").read_text()
 agent_prompt_page = (root / "integrations/agent-prompt.mdx").read_text()
 prompt_match = re.search(
     r"^### Relay agent prompt\n.*?^````text Relay agent prompt\n"
