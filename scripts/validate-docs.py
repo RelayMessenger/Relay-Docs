@@ -848,6 +848,7 @@ if (root / "skill.md").read_bytes() != (
 ).read_bytes():
     raise SystemExit("published Relay skill drifted from skill.md")
 skill_text = (root / "skill.md").read_text()
+agent_prompt_text = (root / "agent-prompt.md").read_text()
 agent_prompt_page = (root / "integrations/agent-prompt.mdx").read_text()
 prompt_match = re.search(
     r"^### Relay agent prompt\n.*?^````text Relay agent prompt\n"
@@ -855,8 +856,8 @@ prompt_match = re.search(
     agent_prompt_page,
     re.M | re.S,
 )
-if not prompt_match or prompt_match.group(1) + "\n" != skill_text:
-    raise SystemExit("visible Relay agent prompt drifted from skill.md")
+if not prompt_match or prompt_match.group(1) + "\n" != agent_prompt_text:
+    raise SystemExit("visible Relay agent prompt drifted from agent-prompt.md")
 agent_prompt_script = (root / "agent-prompt.js").read_text()
 prompt_assignment = re.search(
     r"const RELAY_AGENT_PROMPT = (.+);$",
@@ -865,9 +866,9 @@ prompt_assignment = re.search(
 )
 if (
     not prompt_assignment
-    or json.loads(prompt_assignment.group(1)) != skill_text
+    or json.loads(prompt_assignment.group(1)) != agent_prompt_text
 ):
-    raise SystemExit("agent-prompt.js payload drifted from skill.md")
+    raise SystemExit("agent-prompt.js payload drifted from agent-prompt.md")
 if (
     'const FALLBACK_PATH = "/integrations/agent-prompt#relay-agent-prompt";'
     not in agent_prompt_script
