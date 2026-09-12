@@ -317,7 +317,7 @@ class AgentOnboardingTests(unittest.TestCase):
         self.assert_identifiers(skill, "contact.added")
         visible = re.search(r"^````text Relay agent prompt\n(.*?)^````$", prompt, re.M | re.S)
         self.assertIsNotNone(visible)
-        self.assertEqual(visible.group(1), skill.rstrip("\n") + "\n")
+        self.assertEqual(visible.group(1), (ROOT / "agent-prompt.md").read_text())
         # Owner ruling 2026-09-11 (final tree): the main page is an overview
         # and the quickstart owns coding-agent onboarding, so the quickstart
         # carries the link to the prompt. The main page still may not embed it.

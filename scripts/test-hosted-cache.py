@@ -19,10 +19,10 @@ class HostedCacheTests(unittest.TestCase):
 
     def test_all_canonical_surfaces_are_checked_twice(self):
         self.assertEqual(
-            CANONICAL_PATHS, ("", "start/quickstart", "llms.txt", "llms-full.txt", "skill.md")
+            CANONICAL_PATHS, ("", "start/quickstart", "llms.txt", "llms-full.txt", "skill.md", "agent-prompt.md")
         )
         fetch, calls = self.responses()
-        self.assertEqual(len(list(canonical_cache_pairs(fetch))), 5)
+        self.assertEqual(len(list(canonical_cache_pairs(fetch))), 6)
         self.assertEqual(
             calls, [(path, busted) for path in CANONICAL_PATHS for busted in (False, True)]
         )
@@ -39,7 +39,7 @@ class HostedCacheTests(unittest.TestCase):
 
     def test_matching_source_bytes_are_accepted(self):
         fetch, _ = self.responses()
-        self.assertEqual(len(list(canonical_cache_pairs(fetch, {"skill.md": b"current"}))), 5)
+        self.assertEqual(len(list(canonical_cache_pairs(fetch, {"skill.md": b"current"}))), 6)
 
     def test_existing_llms_cache_gate_is_preserved(self):
         fetch, _ = self.responses(stale="llms-full.txt")

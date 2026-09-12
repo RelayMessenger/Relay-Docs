@@ -134,11 +134,12 @@ class EnvironmentTests(unittest.TestCase):
             # A production validator must reject regression, not merely accept
             # whatever the derivation currently emits.
             for reference in CASES:
-                path = production / "skill.md"
-                original = path.read_text()
-                path.write_text(original + "\n" + reference + "\n")
-                self.run_command(production, ["python3", "scripts/validate-staging-origins.py"], success=False)
-                path.write_text(original)
+                for filename in ("skill.md", "agent-prompt.md"):
+                    path = production / filename
+                    original = path.read_text()
+                    path.write_text(original + "\n" + reference + "\n")
+                    self.run_command(production, ["python3", "scripts/validate-staging-origins.py"], success=False)
+                    path.write_text(original)
             page = production / "integrations/claude-code.mdx"
             original = page.read_text()
             page.write_text(original.replace("Relay-SDK@main", "Relay-SDK@staging"))

@@ -62,7 +62,7 @@ class HostedEnvironmentTests(unittest.TestCase):
         index.append('- [Generated operation](https://docs.test/api-reference/things/list.md)')
         package = "@relaymessenger/sdk" + ("@staging" if environment == "staging" else "")
         complete.append(f'```bash\nnpm install {package}\n```\n\n{contract}')
-        for name, text in (("skill.md", "Canonical instruction bytes.\n"),
+        for name, text in (("skill.md", "Canonical instruction bytes.\n"), ("agent-prompt.md", "Canonical instruction bytes.\n"),
                            ("llms.txt", "\n".join(index)), ("llms-full.txt", "\n".join(complete))):
             (root / name).write_text(text)
             self.bodies[name] = text.encode()
