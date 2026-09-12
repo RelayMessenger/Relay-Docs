@@ -93,8 +93,8 @@ for (const [name, entry] of Object.entries(versions.npm)) {
 const packageConfig = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
 const lock = JSON.parse(await readFile(path.join(root, 'package-lock.json'), 'utf8'));
 const capturedCLI = packageConfig.devDependencies?.relaymessenger;
-if (capturedCLI !== '0.1.6-staging.32' || lock.packages?.['node_modules/relaymessenger']?.version !== capturedCLI) {
-  throw new Error('CLI capture requires relaymessenger@0.1.6-staging.32 in package.json and package-lock.json');
+if (capturedCLI !== '0.1.6-staging.33' || lock.packages?.['node_modules/relaymessenger']?.version !== capturedCLI) {
+  throw new Error('CLI capture requires relaymessenger@0.1.6-staging.33 in package.json and package-lock.json');
 }
 if (capturedCLI && lock.packages?.['node_modules/relaymessenger']?.version === capturedCLI) {
   expected.get('relaymessenger').add(capturedCLI);
