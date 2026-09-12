@@ -20,6 +20,16 @@ EVENT_PAGES = [
     "events/participant-added", "events/participant-removed",
     "events/reaction-added", "events/reaction-removed",
 ]
+# The tab groups events by subject, in the API reference's resource order.
+EVENT_TAB_GROUPS = [
+    ("Overview", ["events/index"]),
+    ("Messages", ["events/message-received", "events/message-sent", "events/message-delivered", "events/message-read", "events/message-failed"]),
+    ("Chats", ["events/chat-created", "events/chat-group-name-updated", "events/chat-group-icon-updated", "events/chat-request-updated", "events/chat-typing-indicator-started", "events/chat-typing-indicator-stopped"]),
+    ("Participants", ["events/participant-added", "events/participant-removed"]),
+    ("Contacts", ["events/contact-added", "events/contact-removed"]),
+    ("Reactions", ["events/reaction-added", "events/reaction-removed"]),
+]
+assert sorted(page for _, pages in EVENT_TAB_GROUPS for page in pages) == sorted(EVENT_PAGES)
 
 
 def walk_pages(items, parents=()):
@@ -48,8 +58,11 @@ def validate_api_navigation(config):
     if events_tab is None:
         raise ValueError("Webhook events must be its own tab")
     events_groups = events_tab.get("groups", [])
-    if len(events_groups) != 1 or events_groups[0]["group"] != EVENT_GROUP or events_groups[0]["pages"] != EVENT_PAGES:
-        raise ValueError("The Webhook events tab holds one group: its index then every event page in order")
+    if [g["group"] for g in events_groups] != [name for name, _ in EVENT_TAB_GROUPS]:
+        raise ValueError("The Webhook events tab groups events by subject: Overview, Messages, Chats, Participants, Contacts, Reactions")
+    for (name, expected_pages), group in zip(EVENT_TAB_GROUPS, events_groups):
+        if group["pages"] != expected_pages:
+            raise ValueError(f"Webhook events group {name} must list exactly its event pages in order")
     if groups[0]["pages"] != ["api-reference/overview", "api-reference/errors"]:
         raise ValueError("API must start with Overview and Error codes")
     if api.get("openapi") != "api-reference/openapi.mint.yaml":
