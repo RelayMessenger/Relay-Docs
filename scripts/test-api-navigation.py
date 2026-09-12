@@ -48,14 +48,19 @@ class NavigationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Error codes"):
             validate_api_navigation(self.config)
 
-    def test_event_reference_group_pinned(self):
-        events = next(g for g in self.api["groups"] if g["group"] == "Webhook events")
-        events["pages"].remove("events/message-sent")
+    def test_event_tab_pinned(self):
+        events_tab = next(tab for tab in self.config["navigation"]["tabs"] if tab["tab"] == "Webhook events")
+        events_tab["groups"][0]["pages"].remove("events/message-sent")
         with self.assertRaisesRegex(ValueError, "Webhook events"):
             validate_api_navigation(self.config)
 
-    def test_event_reference_group_required_after_webhooks(self):
-        self.api["groups"] = [g for g in self.api["groups"] if g["group"] != "Webhook events"]
+    def test_event_tab_required(self):
+        self.config["navigation"]["tabs"] = [tab for tab in self.config["navigation"]["tabs"] if tab["tab"] != "Webhook events"]
+        with self.assertRaisesRegex(ValueError, "its own tab"):
+            validate_api_navigation(self.config)
+
+    def test_event_group_no_longer_inside_api_reference(self):
+        self.api["groups"].insert(6, {"group": "Webhook events", "pages": ["events/index"]})
         with self.assertRaisesRegex(ValueError, "resource tree"):
             validate_api_navigation(self.config)
 
