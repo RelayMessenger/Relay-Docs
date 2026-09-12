@@ -1,0 +1,1 @@
+Connect this project to Relay. Read https://docs.staging.relayapp.im/llms.txt and follow its Agent onboarding section before you run anything. Open https://docs.staging.relayapp.im/llms-full.txt when a step needs a page's full text. Use only the endpoints, commands, and files those documents name; if a step cannot be verified there, stop and say so.

@@ -19,7 +19,7 @@ class HostedCacheTests(unittest.TestCase):
 
     def test_all_canonical_surfaces_are_checked_twice(self):
         self.assertEqual(
-            CANONICAL_PATHS, ("", "start/quickstart", "llms.txt", "llms-full.txt", "skill.md")
+            CANONICAL_PATHS, ("", "start/quickstart", "llms.txt", "llms-full.txt", "skill.md", "agent-prompt.md")
         )
         fetch, calls = self.responses()
         self.assertEqual(len(list(canonical_cache_pairs(fetch))), 5)
@@ -28,7 +28,7 @@ class HostedCacheTests(unittest.TestCase):
         )
 
     def test_stale_skill_is_rejected_even_when_every_other_page_is_current(self):
-        fetch, _ = self.responses(stale="skill.md")
+        fetch, _ = self.responses(stale="skill.md", "agent-prompt.md")
         with self.assertRaisesRegex(SystemExit, r"/skill\.md canonical body .* does not match"):
             list(canonical_cache_pairs(fetch))
 

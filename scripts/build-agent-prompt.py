@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
-source = (root / "skill.md").read_text()
+source = (root / "agent-prompt.md").read_text()
 target = root / "agent-prompt.js"
 mintlify_skill_target = root / ".mintlify/skills/relay/SKILL.md"
 agent_page_target = root / "integrations/agent-prompt.mdx"
@@ -155,7 +155,7 @@ if "--check" in sys.argv:
         )
     print(
         "Copy action, visible prompt, and Mintlify skill are synchronized "
-        "with skill.md"
+        "with agent-prompt.md"
     )
 else:
     target.write_text(output)
@@ -163,5 +163,5 @@ else:
     agent_page_target.write_text(render_agent_page(agent_page_target.read_text()))
     print(
         "Built agent-prompt.js, visible prompt, and Mintlify skill "
-        "from skill.md"
+        "from agent-prompt.md"
     )

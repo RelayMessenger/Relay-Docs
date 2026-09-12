@@ -49,7 +49,7 @@ const SCAN_DIRECTORIES = [
 const SCAN_FILES = [
   "index.mdx",
   "README.md",
-  "skill.md",
+  "skill.md", "agent-prompt.md",
   "AGENTS.md",
   "INFORMATION-ARCHITECTURE.md",
   "agent-prompt.js",

@@ -24,7 +24,7 @@ import origins
 from hosted_cache import CANONICAL_PATHS, canonical_cache_pairs
 
 ROOT = Path(__file__).resolve().parents[1]
-AGENT_SOURCES = ("skill.md", "llms.txt", "llms-full.txt")
+AGENT_SOURCES = ("skill.md", "agent-prompt.md", "llms.txt", "llms-full.txt")
 USER_AGENT = "Relay-Docs-Hosted-Validator/3.0"
 ENDPOINT = re.compile(r"^(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS) /v1/")
 FENCE = re.compile(r"^[ \t]*(`{3,}|~{3,})([^\n]*)\n(.*?)^[ \t]*\1[ \t]*$", re.M | re.S)
