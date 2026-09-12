@@ -1,10 +1,10 @@
 # Brand mark sources
 
 Every file in this folder, where it came from, and the terms it is published
-under. Retrieved 2026-09-11. No mark in this folder has been drawn, cropped, or
-otherwise reshaped. The only edits are hardcoded-black to `fill="currentColor"`
-so a monochrome mark follows the light or dark theme; each such edit is named in
-the notes below.
+under. Retrieved 2026-09-11 unless a row says otherwise. No mark in this folder
+has been drawn or reshaped. The only edits are hardcoded-black to
+`fill="currentColor"` so a monochrome mark follows the light or dark theme, and
+the 256 px resize of `hermes.png`; each such edit is named in the notes below.
 
 | File | Product | Source URL | Licence or brand guidelines | Retrieved |
 | --- | --- | --- | --- | --- |
@@ -14,7 +14,7 @@ the notes below.
 | `cloudflare.svg` | Cloudflare | https://github.com/simple-icons/simple-icons/blob/develop/icons/cloudflare.svg | CC0 1.0, https://github.com/simple-icons/simple-icons#license | 2026-09-11 |
 | `cursor.svg` | Cursor | https://ptht05hbb1ssoooe.public.blob.vercel-storage.com/assets/brand/cursor-brand-assets.zip, `General Logos/Cube/SVG/CUBE_25D.svg` | https://cursor.com/brand | 2026-09-11 |
 | `gemini.svg` | Google Gemini | https://www.gstatic.com/lamda/images/gemini_sparkle_aurora_33f86dc0c0257da337c63.svg | https://about.google/brand-resource-center/ | 2026-09-11 |
-| `hermes.png` | Hermes Agent | Relay original monogram (an "H"); the project publishes no clean logo mark | Relay original, no third-party asset | 2026-09-11 |
+| `hermes.png` | Hermes Agent | https://raw.githubusercontent.com/NousResearch/hermes-agent/main/apps/desktop/public/intro-nous-girl.png, from https://github.com/NousResearch/hermes-agent | MIT, https://github.com/NousResearch/hermes-agent/blob/main/LICENSE ("Copyright (c) 2025 Nous Research") | 2026-09-12 |
 | `linq.png` | Linq | https://docs.linqapp.com/favicon-light.png | https://linqapp.com, no published brand page | 2026-09-11 |
 | `openai.svg` | OpenAI | https://github.com/openai/openai-realtime-agents/blob/main/public/openai-logomark.svg | https://openai.com/brand, MIT | 2026-09-11 |
 | `openclaw.svg` | OpenClaw | https://openclaw.ai/favicon.svg (byte-identical to https://docs.openclaw.ai/assets/openclaw.svg) | https://github.com/openclaw/openclaw, MIT | 2026-09-11 |
@@ -62,13 +62,18 @@ the notes below.
   for the mark). Cloudflare's official orange logomark needs the company's written
   permission (https://www.cloudflare.com/trademark/) and ships no direct asset
   URL, so the CC0 mark is used. Path unchanged.
-- `hermes.png` is a Relay-drawn monogram: a white "H" on a saturated blue
-  tile (the monogram-avatar rule, saturated ground + white letter), an
-  original letterform that carries no third-party rights. The Hermes Agent
-  project (https://github.com/NousResearch/hermes-agent) publishes no clean
-  logo mark: only the Nous Research seal (the owner rejected it as the wrong
-  mark, 2026-09-11) and a character illustration, which Relay does not
-  reproduce in its docs. So Hermes carries an original monogram instead.
+- `hermes.png` is the Hermes Agent character illustration, the "Nous girl",
+  from the hermes-agent repository (https://github.com/NousResearch/hermes-agent),
+  file `apps/desktop/public/intro-nous-girl.png`, raw URL
+  https://raw.githubusercontent.com/NousResearch/hermes-agent/main/apps/desktop/public/intro-nous-girl.png.
+  Retrieved 2026-09-12. The repository is MIT licensed
+  (https://github.com/NousResearch/hermes-agent/blob/main/LICENSE, "Copyright
+  (c) 2025 Nous Research"), which permits copying and redistribution with the
+  notice kept, as it is here. The 512 px source is square already, so the file
+  is a 256 px resize of the whole image (face fully inside); no crop was
+  needed. The README on main carries only the `assets/banner.png` wordmark, so
+  the illustration is taken from the desktop app assets. This replaces the
+  Relay "H" monogram of 2026-09-11.
 
 ## Marks that follow the theme with `currentColor`
 
