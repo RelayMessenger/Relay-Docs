@@ -50,8 +50,15 @@ class NavigationTests(unittest.TestCase):
 
     def test_event_tab_pinned(self):
         events_tab = next(tab for tab in self.config["navigation"]["tabs"] if tab["tab"] == "Webhook events")
-        events_tab["groups"][0]["pages"].remove("events/message-sent")
-        with self.assertRaisesRegex(ValueError, "Webhook events"):
+        messages = next(g for g in events_tab["groups"] if g["group"] == "Messages")
+        messages["pages"].remove("events/message-sent")
+        with self.assertRaisesRegex(ValueError, "Webhook events group Messages"):
+            validate_api_navigation(self.config)
+
+    def test_event_tab_groups_by_subject(self):
+        events_tab = next(tab for tab in self.config["navigation"]["tabs"] if tab["tab"] == "Webhook events")
+        events_tab["groups"] = [{"group": "Webhook events", "pages": [p for g in events_tab["groups"] for p in g["pages"]]}]
+        with self.assertRaisesRegex(ValueError, "groups events by subject"):
             validate_api_navigation(self.config)
 
     def test_event_tab_required(self):
