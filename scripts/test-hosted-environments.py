@@ -220,6 +220,38 @@ class HostedEnvironmentTests(unittest.TestCase):
             )
         )
 
+    def test_rendered_image_alt_text_counts_as_page_content(self):
+        page = {
+            "page": "illustrated",
+            "title": "Illustrated",
+            "body": (
+                '<img src="/illustration.svg" '
+                'alt="A distinctive current illustration for this page." />\n'
+            ),
+        }
+        hosted.check_page_content(
+            page,
+            b'<main><h1>Illustrated</h1><img alt="A distinctive current illustration for this page."></main>',
+        )
+        with self.assertRaisesRegex(SystemExit, "source content"):
+            hosted.check_page_content(
+                page,
+                b'<main><h1>Illustrated</h1><img alt="An old illustration."></main>',
+            )
+
+    def test_rendered_typographic_quotes_are_presentation_only(self):
+        page = {
+            "page": "quotes",
+            "title": "Quotes",
+            "body": "The agent's current reply is durable and visible.",
+        }
+        hosted.check_page_content(
+            page,
+            "The agent’s current reply is durable and visible.".join(
+                ("<main><h1>Quotes</h1>", "</main>")
+            ).encode(),
+        )
+
     def test_full_route_checks_have_bounded_concurrency(self):
         active = 0
         maximum = 0

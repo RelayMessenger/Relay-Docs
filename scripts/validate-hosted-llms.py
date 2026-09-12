@@ -400,6 +400,10 @@ class VisibleHTML(HTMLParser):
         if not self.hidden:
             if tag in self.BLOCKS:
                 self.parts.append("\n")
+            if tag == "img":
+                alt = dict(attrs).get("alt")
+                if alt:
+                    self.parts.append(alt)
             if tag == "h1":
                 self.in_title = True
                 self.titles.append("")
@@ -423,13 +427,26 @@ class VisibleHTML(HTMLParser):
 def prose(text):
     """Normalize presentation only. Keep words, case, numbers and punctuation."""
     text = re.sub(r"\{/[\*].*?[\*]/\}|<!--.*?-->", "", text, flags=re.S)
+    text = re.sub(
+        r"<img\b([^>]*)/?>",
+        lambda match: (
+            re.search(r'\balt\s*=\s*["\']([^"\']*)["\']', match[1], re.I) or
+            re.search(r"\balt\s*=\s*([^\s>]+)", match[1], re.I)
+        ).group(1) if (
+            re.search(r'\balt\s*=\s*["\']([^"\']*)["\']', match[1], re.I) or
+            re.search(r"\balt\s*=\s*([^\s>]+)", match[1], re.I)
+        ) else "",
+        text,
+        flags=re.I,
+    )
     text = re.sub(r"</?[A-Z][A-Za-z0-9.]*\b[^>]*>", "\n", text)
     text = re.sub(r"</?(?:p|div|span|br|strong|em|a|code)\b[^>]*>", "", text)
     text = re.sub(r"!?\[([^]\n]*)\]\([^\n]*?\)", r"\1", text)
     text = re.sub(r"^\s*\|?[ :|\-]+\|\s*$", "", text, flags=re.M)
     text = re.sub(r"^\s*(?:#{1,6}\s+|>\s*|[-*+]\s+|\d+\.\s+)", "", text, flags=re.M)
     text = text.replace("**", "").replace("`", "").replace("|", " ")
-    text = re.sub(r"\\([`*_{}\[\]()#+.!|<>-])", r"\1", text)
+    text = re.sub(r"\\([`*_{}\[\]()#+.!|<>:-])", r"\1", text)
+    text = text.translate(str.maketrans({"’": "'", "‘": "'", "“": '"', "”": '"'}))
     return " ".join(html.unescape(text).split())
 
 
