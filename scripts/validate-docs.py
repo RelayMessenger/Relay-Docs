@@ -153,7 +153,9 @@ def h2_headings(text):
     return re.findall(r"^## (.+)$", prose, re.M)
 
 
-LANDING_SECTIONS = ["Start here", "The Relay model", "Build with Relay", "Next steps"]
+# Owner ruling 2026-09-12: Introduction is a hero (title and four cards) with
+# no sections under it. docs_structure.py pins the same shape.
+LANDING_SECTIONS = []
 
 
 def openapi_path_block(text, path):
