@@ -44,7 +44,7 @@ PRERELEASE = r"\d+\.\d+\.\d+-staging\.\d+"
 PACKAGE_REWRITES = (
     (re.compile(rf"({PACKAGE})@{PRERELEASE}\b"), r"\1"),
     (re.compile(rf"({PACKAGE})@staging\b"), r"\1"),
-    (re.compile(rf"`{PRERELEASE}`"), "`latest`"),
+    (re.compile(rf"(?<![\w@]){PRERELEASE}\b"), "latest"),
 )
 STAGING_PACKAGE_REFERENCE = re.compile(rf"{PACKAGE}@staging\b|{PRERELEASE}")
 

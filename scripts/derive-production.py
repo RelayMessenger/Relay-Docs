@@ -40,6 +40,7 @@ EXPECTED_PACKAGE_REWRITES = {
         "openclaw plugins install @relaymessenger/openclaw-plugin",
     "`@relaymessenger/sdk@0.3.0-staging.8`": "`@relaymessenger/sdk`",
     "`relay-claude-channel@0.3.0-staging.4`": "`relay-claude-channel`",
+    "relaymessenger 0.1.6-staging.37": "relaymessenger latest",
     "| `@relaymessenger/sdk` | `0.3.0-staging.8` |": "| `@relaymessenger/sdk` | `latest` |",
     "/plugin marketplace add RelayMessenger/Relay-SDK@staging":
         "/plugin marketplace add RelayMessenger/Relay-SDK@main",
@@ -58,7 +59,15 @@ EXPECTED_INSTRUCTION_REWRITES = {
 CONTENT_SUFFIXES = {".mdx", ".md", ".json", ".yaml", ".yml", ".txt", ".js", ".mjs", ".svg"}
 SKIP_DIRS = {".git", "node_modules", ".mint", "scripts", ".github"}
 # Immutable contract and registry observations are inputs, not content to derive.
-SKIP_FILES = {"api-reference/openapi.yaml", "versions.json"}
+SKIP_FILES = {
+    "api-reference/openapi.yaml",
+    "versions.json",
+    # Build inputs stay pinned to the staging capture used to regenerate the
+    # docs. They are not reader-facing content and are already excluded from
+    # the production origin sweep.
+    "package.json",
+    "package-lock.json",
+}
 GENERATORS = (
     ["python3", "scripts/build-staging-openapi.py"],
     ["scripts/build-mint-openapi.sh"],
