@@ -198,7 +198,7 @@ class AgentOnboardingTests(unittest.TestCase):
                 # sweep of the docs for the retired words.
                 for obsolete in ("agents setup", "--token-stdin", "--from-env",
                                  "auth login --connect", "--confirm-configure",
-                                 "--runtime-stopped", "--acknowledge-events", "--forward-to"):
+                                 "--runtime-stopped", "--acknowledge-events"):
                     self.assertNotIn(obsolete, commands)
                 self.assertNotRegex(commands, r"\btoken (?:import|status|clear)\b|\bevents\s+listen\b")
                 self.assertNotRegex(commands, r"(?m)^\s*relay (?:agents|auth|profiles|doctor|events|connect|watch)\b")
@@ -430,7 +430,7 @@ class AgentOnboardingTests(unittest.TestCase):
                          if row.strip().startswith("|") and "Docs MCP" in row]
         self.assertTrue(docs_mcp_rows)
         for row in docs_mcp_rows:
-            self.assertRegex(row, r"\|\s*(?:None|No credential)\s*\|")
+            self.assertRegex(row, r"\|\s*Agent Token in `Authorization: Bearer`\s*\|")
         self.assert_identifiers(skills, "Relay Agent Token")
         install_commands = [line for language in ("bash", "powershell")
                             for block in code_blocks(skills, language)

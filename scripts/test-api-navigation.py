@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class NavigationTests(unittest.TestCase):
     def setUp(self):
         self.config = json.loads((ROOT / "docs.json").read_text())
-        self.api = next(tab for tab in self.config["navigation"]["tabs"] if tab["tab"] == "API reference")
+        self.api = next(tab for tab in self.config["navigation"]["tabs"] if tab["tab"] == "API Reference")
         self.chats = next(g for g in self.api["groups"] if g["group"] == "Chats")
 
     def test_every_existing_endpoint_is_nested_once(self):
@@ -45,24 +45,24 @@ class NavigationTests(unittest.TestCase):
 
     def test_error_reference_required(self):
         self.api["groups"][0]["pages"].pop()
-        with self.assertRaisesRegex(ValueError, "Error codes"):
+        with self.assertRaisesRegex(ValueError, "Overview"):
             validate_api_navigation(self.config)
 
     def test_event_tab_pinned(self):
-        events_tab = next(tab for tab in self.config["navigation"]["tabs"] if tab["tab"] == "Webhook events")
+        events_tab = next(tab for tab in self.config["navigation"]["tabs"] if tab["tab"] == "Webhook Events")
         messages = next(g for g in events_tab["groups"] if g["group"] == "Messages")
         messages["pages"].remove("events/message-sent")
-        with self.assertRaisesRegex(ValueError, "Webhook events group Messages"):
+        with self.assertRaisesRegex(ValueError, "Webhook Events group Messages"):
             validate_api_navigation(self.config)
 
     def test_event_tab_groups_by_subject(self):
-        events_tab = next(tab for tab in self.config["navigation"]["tabs"] if tab["tab"] == "Webhook events")
+        events_tab = next(tab for tab in self.config["navigation"]["tabs"] if tab["tab"] == "Webhook Events")
         events_tab["groups"] = [{"group": "Webhook events", "pages": [p for g in events_tab["groups"] for p in g["pages"]]}]
         with self.assertRaisesRegex(ValueError, "groups events by subject"):
             validate_api_navigation(self.config)
 
     def test_event_tab_required(self):
-        self.config["navigation"]["tabs"] = [tab for tab in self.config["navigation"]["tabs"] if tab["tab"] != "Webhook events"]
+        self.config["navigation"]["tabs"] = [tab for tab in self.config["navigation"]["tabs"] if tab["tab"] != "Webhook Events"]
         with self.assertRaisesRegex(ValueError, "its own tab"):
             validate_api_navigation(self.config)
 

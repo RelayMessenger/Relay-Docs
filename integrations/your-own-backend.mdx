@@ -1,37 +1,51 @@
 ---
 title: "Your own backend"
 description: "Run the code that reads a Relay message and chooses its reply."
-keywords: ["Relay", "Your own backend", "connect"]
+keywords: ["Relay", "backend", "webhooks", "local development"]
 ---
+
+Run the same message handler on your laptop through signed local forwarding and in production through a webhook subscription.
 
 ## Before you start
 
-- An Agent Token from the same environment as your API address.
-- A place to run code that can reach the Relay API.
-- A model, prompts, and tools of your own; Relay carries the messages.
+- An Agent Token for the staging agent you will message.
+- A local server for development or a public HTTPS endpoint for deployment.
+- A model, prompts, and tools of your own. Relay carries the Messages.
 
 ## Connect
 
-Choose how your backend receives messages. The two delivery paths are exclusive: a [webhook subscription](/webhooks/subscriptions) posts each event to a public HTTPS route you own and signs it, and a [WebSocket](/websocket) connection suits a host that can hold a connection open. A WebSocket needs zero saved webhook subscriptions, and neither path is a target for `connect`, which is for a runtime on your computer.
+### On your laptop
 
-Then choose the code that handles them. Take [Chat SDK](/integrations/chat-sdk) for an HTTP handler in any Node host, or [Cloudflare Think](/integrations/cloudflare-think) for a Worker with durable model turns. Both pages start from an empty folder and end with a reply on your phone.
+The signed local forwarder is pending the CLI release. The staging CLI published today does not include it yet.
+
+```bash
+npx relaymessenger@staging listen --forward-to http://localhost:3000/webhooks/relay
+```
+
+The command will POST signed Relay events to your local route. Set the printed signing secret as `RELAY_WEBHOOK_SECRET`, pass the raw request body to your verifier, and then run the same handler you will deploy.
+
+### Deployed
+
+Create one [webhook subscription](/webhooks/subscriptions) for your public HTTPS route and save its signing secret with the backend. Relay posts each subscribed event to that route. Verify the raw body before parsing, commit the event before returning success, and send replies with stable idempotency keys.
+
+Use [Chat SDK](/integrations/chat-sdk) for a Node handler or [Cloudflare Think](/integrations/cloudflare-think) for a Worker with durable model turns.
 
 ## Send it a message
 
-Open Relay on your phone and message your agent's handle. Relay delivers the event on the path you chose; your handler reads it, runs your model, and sends the reply into the same chat. To watch the exchange from a terminal, run `npx relaymessenger@staging watch @<handle>`, which reads only.
+Open Relay on your phone and message the agent's Handle. Your local or deployed handler receives the event, runs your model, and sends the reply into the same Chat.
 
 ## What it can do
 
-Your backend can do everything the API can do, because it calls the API directly: reply with text, send attachments, read history, react, mark a chat read, and manage the contact card. The two adapters wrap the parts that are easy to get wrong: signature checks, idempotency keys, and one turn at a time per chat.
+Your backend can call the Relay API to send replies, upload attachments, read history, react, mark a Chat read, and manage the Contact Card. The [WebSocket guide](/websocket) covers the separate long-lived backend transport.
 
 ## When it fails
 
-- No message arrives: the delivery path is wrong for the agent, and an agent has only one.
-- The webhook is rejected: the signing secret or the request bytes changed on the way to your handler.
-- The message arrives and no reply comes: read your handler's logs, then retry the send with the same idempotency key.
+- No event arrives: check the target route and the subscription's selected events.
+- The webhook is rejected: the signing secret or raw request body changed.
+- The event arrives and no reply comes: read your handler logs, then retry the send with the same idempotency key.
 
 ## Next steps
 
-- [Verify signatures](/webhooks/verify-signatures)
+- [Verify webhook signatures](/webhooks/verify-signatures)
 - [Send a reply](/messages/replies)
 - [Debug requests](/live/debugging)

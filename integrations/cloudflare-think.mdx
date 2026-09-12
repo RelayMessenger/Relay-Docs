@@ -1,63 +1,72 @@
 ---
 title: "Cloudflare Think"
 description: "Connect Cloudflare Think to receive Relay messages and send replies."
-keywords: ["Relay", "Cloudflare Think", "connect"]
+keywords: ["Relay", "Cloudflare Think", "Workers", "webhooks", "local development"]
 icon: "/images/brands/cloudflare.svg"
 ---
 
+Use the local signed forwarder with `wrangler dev` on your laptop, then use a webhook subscription for the deployed Worker.
+
 ## Before you start
 
-- Node.js 22.22.3 or newer, and a Cloudflare account with Workers AI.
-- An Agent Token from `https://api.staging.relayapp.im`, set as `RELAY_API_URL`.
-- A [webhook subscription](/webhooks/subscriptions) for your public `/webhooks/relay` route.
+- Node.js `22.22.3` or newer.
+- A Cloudflare account with Workers AI.
+- A staging agent, Agent Token, and webhook signing secret.
 
 ## Connect
 
-Clone the starter, install it, and copy the secrets template, which stays out of source control:
+### On your laptop
+
+The signed local forwarding path is pending the CLI release. The staging CLI published today does not include it yet.
+
+Clone the starter, install it, and start the local Worker:
 
 ```bash
 git clone --branch staging https://github.com/RelayMessenger/Relay-SDK.git
 cd Relay-SDK/cookbook/cloudflare-think-agent
 npm ci
 cp .dev.vars.example .dev.vars
-```
-
-The source is [cookbook/cloudflare-think-agent](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook/cloudflare-think-agent), and its README records the choices below.
-
-Put the Agent Token and the webhook signing secret in `.dev.vars`. In `wrangler.jsonc`, under the staging environment variables, set the API origin, your agent's handle, and the model `@cf/openai/gpt-oss-120b`. Then start the Worker and route the registered address to it:
-
-```bash
 npm run dev
 ```
 
-The Worker verifies each webhook, commits the event, and runs one Think turn per message. Deploy it the way you deploy any Worker; the same variables go into the deployed environment.
+Run the forwarder in a second terminal when the CLI release is available:
+
+```bash
+npx relaymessenger@staging listen --forward-to http://localhost:8787/webhooks/relay
+```
+
+Set the printed local signing secret as `RELAY_WEBHOOK_SECRET` in the Worker. The Worker verifies the signed request, acknowledges it with `202`, and runs the Think turn after receipt.
+
+### Deployed
+
+Deploy the Worker and create a [webhook subscription](/webhooks/subscriptions) for its public `/webhooks/relay` route. Store the subscription signing secret and Agent Token in the deployed Worker secrets. The deployed path uses the same handler and signature verification as local forwarding.
+
+The source is [cookbook/cloudflare-think-agent](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook/cloudflare-think-agent). Its non-secret staging settings use `https://api.staging.relayapp.im` as the API origin, the agent Handle, and the Workers AI model ID.
 
 ## Send it a message
 
-Open Relay on your phone and message your agent's handle. Relay posts the event to the Worker, Think runs the model, and the reply comes back in the same chat. To watch the exchange from a terminal, run `npx relaymessenger@staging watch @<handle>`.
+Open Relay on your phone and message the agent's Handle. The local Worker or deployed Worker receives the event, Think runs the model, and the reply returns in the same Chat.
 
 ## What it can do
 
-The starter builds the Chat SDK instance itself, so these are Think's rules, not settings.
-
 | Relay feature | Cloudflare Think starter |
 | --- | --- |
-| Wakes when a message arrives | Yes, by webhook. |
-| Reply in the chat | Yes, one turn per message, with the chat locked for the whole turn. |
+| Receive a Message | Yes, through signed local forwarding or a webhook subscription. |
+| Reply in the Chat | Yes, one complete idempotent Message per model turn. |
 | Send attachments | Yes, through the Chat SDK adapter it wraps. |
-| Read chat history | Yes, through the adapter's history walk. |
-| Marks the chat read | Yes, on receipt. |
+| Read Chat history | Yes, through the adapter's history walk. |
+| Mark the Chat read | Yes, on receipt. |
 
-Think sets `concurrency` to `burst` with a 600 ms window, and waits for each reply to finish. A second message inside that window replaces the first; a second message during the turn waits and gets its own reply. A newer message never cancels a running turn, because Think's handlers never read `thread.signal`.
+Think uses one durable root state per Relay Chat. Its current burst window is 600 ms, and a newer Message does not cancel a running turn.
 
 ## When it fails
 
-- Signature verification fails: the secret is not this subscription's, or the body was re-encoded.
-- No reply comes: read the Worker's logs, because the turn either threw or the model call failed.
-- A send's result is uncertain: retry it with the same idempotency key and the same content.
+- Signature verification fails: the secret does not belong to this delivery path, or the request body changed.
+- No reply arrives: read the Worker logs to find whether the turn or model call failed.
+- A send result is uncertain: retry with the same idempotency key and content.
 
 ## Next steps
 
 - [Verify webhook signatures](/webhooks/verify-signatures)
+- [Manage webhook subscriptions](/webhooks/subscriptions)
 - [Handle delivery retries](/webhooks/delivery)
-- [Send attachments](/messages/attachments)

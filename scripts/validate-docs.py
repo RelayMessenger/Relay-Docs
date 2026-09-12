@@ -197,10 +197,9 @@ if navigated != files:
 
 tabs = config["navigation"]["tabs"]
 actual_tabs = [tab["tab"] for tab in tabs]
-# Owner ruling 2026-09-11 (final tree): one guides tab, the API reference, the
-# Webhook events as its own tab (owner ruling 2026-09-11 night), CLI, then the
-# changelog as its own tab. Integrations live in the Docs sidebar.
-expected_tabs = ["Docs", "API reference", "Webhook events", "CLI", "Changelog"]
+# Owner ruling 2026-09-12: Linq-shaped Guides, then CLI, Webhook Events, Error
+# Codes, API Reference, and Changelog.
+expected_tabs = ["Guides", "CLI", "Webhook Events", "Error Codes", "API Reference", "Changelog"]
 if actual_tabs != expected_tabs:
     raise SystemExit(f"top tab order changed: {actual_tabs}")
 changelog_tab = next(tab for tab in tabs if tab["tab"] == "Changelog")
@@ -216,7 +215,7 @@ expected_guide_groups = [group["group"] for group in tabs[0]["groups"]]
 
 
 
-api_tab = next(tab for tab in tabs if tab["tab"] == "API reference")
+api_tab = next(tab for tab in tabs if tab["tab"] == "API Reference")
 if api_tab.get("openapi") != "api-reference/openapi.mint.yaml":
     raise SystemExit("generated API groups must sit directly under API Reference")
 try:
@@ -961,7 +960,7 @@ for name, pattern in {
         raise SystemExit(f"stale {name}")
 
 print(
-    f"validated {len(files)} Relay public pages, four tabs, "
+    f"validated {len(files)} Relay public pages, six tabs, "
     "Console CTA, Copy agent prompt action, logo destination, Quickstart sidebar placement, "
     "atomic guide groups, "
     "focused page boundaries, "

@@ -4,12 +4,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Owner ruling 2026-09-11 (night): the seventeen webhook event pages are their
-# own top tab, "Webhook events", next to API reference. Their files never
+# Owner ruling 2026-09-12: the webhook event pages are their own top tab,
+# "Webhook Events", next to API Reference. Their files never
 # moved, so every /events path still resolves.
 RESOURCE_GROUPS = ["Chats", "Messages", "Attachments", "Contacts", "Webhooks", "WebSocket", "Agents"]
 RESOURCE_OBJECTS = {"Chats": "Chat", "Messages": "Message", "Attachments": "Attachment", "Contacts": "Contact", "Webhooks": "Webhook", "WebSocket": "WebSocket", "Agents": "Agent"}
-EVENT_GROUP = "Webhook events"
+EVENT_GROUP = "Webhook Events"
 EVENT_PAGES = [
     "events/index", "events/chat-created", "events/chat-group-icon-updated",
     "events/chat-group-name-updated", "events/chat-request-updated",
@@ -47,7 +47,7 @@ def page_paths():
 
 
 def validate_api_navigation(config):
-    api = next(tab for tab in config["navigation"]["tabs"] if tab["tab"] == "API reference")
+    api = next(tab for tab in config["navigation"]["tabs"] if tab["tab"] == "API Reference")
     groups = api["groups"]
     if not set(RESOURCE_GROUPS).issubset({g["group"] for g in groups}):
         raise ValueError("API resources must have their own groups")
@@ -56,15 +56,15 @@ def validate_api_navigation(config):
         raise ValueError("API group order must match the resource tree")
     events_tab = next((tab for tab in config["navigation"]["tabs"] if tab["tab"] == EVENT_GROUP), None)
     if events_tab is None:
-        raise ValueError("Webhook events must be its own tab")
+        raise ValueError("Webhook Events must be its own tab")
     events_groups = events_tab.get("groups", [])
     if [g["group"] for g in events_groups] != [name for name, _ in EVENT_TAB_GROUPS]:
-        raise ValueError("The Webhook events tab groups events by subject: Overview, Messages, Chats, Participants, Contacts, Reactions")
+        raise ValueError("The Webhook Events tab groups events by subject: Overview, Messages, Chats, Participants, Contacts, Reactions")
     for (name, expected_pages), group in zip(EVENT_TAB_GROUPS, events_groups):
         if group["pages"] != expected_pages:
-            raise ValueError(f"Webhook events group {name} must list exactly its event pages in order")
-    if groups[0]["pages"] != ["api-reference/overview", "api-reference/errors"]:
-        raise ValueError("API must start with Overview and Error codes")
+            raise ValueError(f"Webhook Events group {name} must list exactly its event pages in order")
+    if groups[0]["pages"] != ["api-reference/overview"]:
+        raise ValueError("API must start with its Overview page")
     if api.get("openapi") != "api-reference/openapi.mint.yaml":
         raise ValueError("API must use the generated OpenAPI bundle")
     entries = list(walk_pages(groups))

@@ -1,26 +1,49 @@
 ---
-title: "MCP server"
-description: "Give a trusted local MCP client authenticated Relay messaging tools."
-keywords: ["Relay", "MCP server", "connect"]
+title: "MCP"
+description: "Choose Relay's hosted remote MCP or local stdio MCP transport."
+keywords: ["Relay", "MCP", "remote MCP", "stdio", "Agent Token"]
 ---
+
+Choose the hosted remote MCP for documentation search, or the local stdio MCP for Relay messaging tools.
 
 ## Before you start
 
-- Node.js 22.22.3 or newer.
-- An Agent Token [saved in a CLI profile](/cli/auth), named in `RELAY_PROFILE`.
-- Optional: `RELAY_API_URL`, only when the token comes from another Relay environment; the default is `https://api.staging.relayapp.im`.
+- An Agent Token for the Relay API tools.
+- An MCP client that supports remote HTTP or local stdio servers.
+- Node.js `22.22.3` or newer for the local server.
 
 ## Connect
 
-Install the server, or let the client run it with `npx`:
+### Hosted remote MCP
+
+The hosted endpoint is available at `https://docs.staging.relayapp.im/mcp`. It is staging-only in the current implementation and authenticates with an Agent Token in the `Authorization: Bearer` header.
+
+Add it as a remote MCP server in a client that supports URL transports:
+
+```json
+{
+  "mcpServers": {
+    "relay-docs": {
+      "url": "https://docs.staging.relayapp.im/mcp",
+      "headers": {
+        "Authorization": "Bearer <Agent Token>"
+      }
+    }
+  }
+}
+```
+
+The hosted server provides documentation search. Keep the Agent Token in your MCP client's secret store, not in a checked-in configuration file.
+
+### Local stdio MCP
+
+Install the Relay API MCP server, or let the client run it with `npx`:
 
 ```bash
 npm install --global @relaymessenger/mcp@staging
 ```
 
-It is a local stdio process with no remote HTTP or OAuth mode. The source is [packages/mcp](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/mcp).
-
-Add one server entry to the client's MCP configuration, naming your saved profile:
+Add the local process to the client's MCP configuration. The server reads the Agent Token from the selected CLI profile, `RELAY_PROFILE`, or `RELAY_AGENT_TOKEN`; no API URL setting is needed for the default staging setup.
 
 ```json
 {
@@ -33,35 +56,33 @@ Add one server entry to the client's MCP configuration, naming your saved profil
 }
 ```
 
-`RELAY_AGENT_TOKEN` and `RELAY_API_URL` in that entry override the saved profile; keep them paired, one token to one API. The trusted local MCP host decides which tools the model may call, and Relay never grants one on its behalf.
+The source is [packages/mcp](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/mcp). The local server runs as a process-spawned stdio transport and exposes Relay messaging tools to the trusted MCP client.
 
 ## Send it a message
 
-Open Relay on your phone and message the agent whose token the profile holds. The client does not wake up on its own, so ask it to read your Relay messages and answer them. The reply appears in the same chat.
+With the local stdio server, ask your MCP client to read the Relay Chat and send a reply. The hosted remote server is for documentation search and does not send Messages.
 
 ## What it can do
 
-These are the tools the server registers; nothing else is there.
+| Capability | Hosted remote MCP | Local stdio MCP |
+| --- | --- | --- |
+| Documentation search | Yes | No |
+| Read Chats and Messages | No | Yes |
+| Send a Message | No | Yes, with a caller-supplied idempotency key. |
+| Send attachments | No | No, sends are text only. |
+| Contact Card and read state | No | Yes |
+| Wakes on its own | No | No, the MCP client calls the tool. |
 
-| Relay feature | MCP server |
-| --- | --- |
-| Wakes when a message arrives | No. The client reads when asked. |
-| Reply in the chat | Yes, text up to 10,000 characters, to a chat or to handles, with an idempotency key. |
-| Send attachments | No. Sends are text only. |
-| Read chat history | Yes, chats, messages, and threads, one page at a time. |
-| React, type, mark read | Yes. |
-| Contact card | Yes, read and set. |
-
-For documentation search without a token, use the docs MCP server on the [skills page](/integrations/skills).
+The MCP client remains the security boundary. Allow only the tools and servers you trust.
 
 ## When it fails
 
-- No saved token: [save one](/cli/auth) into the profile named in the entry.
-- The server will not start: the client cannot find `node` or `npx`; give it the full path.
-- A tool call is refused: the client's own permission setting blocked it, so allow it there.
+- Hosted connection fails: confirm the client supports remote URL transports and sends the `Authorization: Bearer <Agent Token>` header.
+- Local server will not start: confirm that the client can find `node` and `npx`, then run `relay-mcp --help`.
+- A local tool call is refused: change the MCP client's permission setting or use the correct Agent Token profile.
 
 ## Next steps
 
-- [Send messages](/messages/send)
-- [Use idempotency keys](/live/idempotency)
-- [Add documentation search](/integrations/skills)
+- [Save an Agent Token with the CLI](/cli/auth)
+- [Read the API reference](/api-reference/overview)
+- [Install Relay guidance](/integrations/skills)

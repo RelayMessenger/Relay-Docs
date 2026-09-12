@@ -56,19 +56,9 @@ collect([]);
 // Commander supplies help at every group; one canonical page covers the help command.
 collect(['help']);
 const navigation = JSON.parse(readFileSync(path.join(root, 'docs.json'), 'utf8'));
-let owner;
-function find(value) {
-  if (Array.isArray(value)) value.forEach(find);
-  else if (value && typeof value === 'object') {
-    if (value.group === 'CLI' || value.group === 'Overview') owner = value;
-    Object.values(value).forEach(find);
-  }
-}
-find(navigation.navigation);
-if (!owner) throw new Error('CLI navigation group not found');
 const slugs = [...pages.keys()].sort();
 const tab = navigation.navigation.tabs.find(tab => tab.tab === 'CLI');
-const roots = [...new Set(slugs.map(slug => slug === 'index' ? 'help' : slug.split('-')[0]))];
+if (!tab) throw new Error('CLI navigation tab not found');
 // Multiword top-level commands are distinct resources.
 const commandRoots = children(rootHelp, true).concat('help');
 const grouped = new Map(commandRoots.map(command => [command, []]));
@@ -76,8 +66,27 @@ for (const slug of slugs) {
   const command = commandRoots.find(command => slug === command || slug.startsWith(command + '-')) || 'help';
   grouped.get(command).push(`cli/reference/${slug}`);
 }
-owner = { group: 'Overview', pages: ['cli/index', 'cli/global-options', 'cli/reference/index', 'cli/reference/help'] };
-tab.groups = [owner, ...[...grouped].filter(([group, pages]) => group !== 'help' && pages.length).map(([group, pages]) => ({group, expanded: false, pages: ['connect', 'watch', 'doctor', 'agents', 'auth'].includes(group) ? [`cli/${group}`, ...pages] : pages}))];
+const gettingStarted = {
+  group: 'Getting started',
+  pages: ['cli/index', 'cli/connect', 'cli/watch', 'cli/auth'],
+};
+const commands = {
+  group: 'Commands',
+  pages: ['cli/global-options', 'cli/reference/index', 'cli/reference/help'],
+};
+tab.groups = [
+  gettingStarted,
+  commands,
+  ...[...grouped]
+    .filter(([group, pages]) => group !== 'help' && pages.length)
+    .map(([group, pages]) => ({
+      group,
+      expanded: false,
+      pages: ['doctor', 'agents'].includes(group)
+        ? [`cli/${group}`, ...pages]
+        : pages,
+    })),
+];
 const outputs = new Map([...pages].map(([slug, content]) => [path.join(directory, `${slug}.mdx`), content]));
 outputs.set(path.join(root, 'docs.json'), JSON.stringify(navigation, null, 2) + '\n');
 const stale = existsSync(directory) ? readdirSync(directory).filter(name => name.endsWith('.mdx') && !pages.has(name.slice(0, -4))) : [];

@@ -1,19 +1,35 @@
 ---
 title: "Vercel Chat SDK"
 description: "Connect Chat SDK to receive Relay messages and send replies."
-keywords: ["Relay", "Chat SDK", "connect"]
+keywords: ["Relay", "Chat SDK", "webhooks", "local development"]
 icon: "/images/brands/vercel.svg"
 ---
 
+Use the local forwarder while you develop on your laptop, then point the same handler at a webhook subscription when you deploy.
+
 ## Before you start
 
-- Node.js 22.22.3 or newer, and a public HTTPS route for the webhook.
-- An Agent Token from `https://api.staging.relayapp.im`, set as `RELAY_API_URL`.
-- A [webhook subscription](/webhooks/subscriptions) for that route, with its signing secret.
+- Node.js `22.22.3` or newer.
+- [Chat SDK](https://chat-sdk.dev) `4.39.0`, its memory state adapter, and Relay's adapter.
+- An Agent Token and a webhook signing secret for your staging agent.
 
 ## Connect
 
-Install Chat SDK, its in-memory state, and the Relay adapter from one major version line:
+### On your laptop
+
+The signed local forwarder is pending the CLI release. The staging CLI published today does not include this command yet.
+
+```bash
+npx relaymessenger@staging listen --forward-to http://localhost:3000/webhooks/relay
+```
+
+The command will read the agent's WebSocket events and POST each one to your local route with the same signature headers used by a deployed webhook. Set the printed local signing secret as `RELAY_WEBHOOK_SECRET` while the process runs.
+
+### Deployed
+
+Create a [webhook subscription](/webhooks/subscriptions) whose target is your public HTTPS route, then store its signing secret as `RELAY_WEBHOOK_SECRET`. Relay sends the same signed request to both paths, so your handler does not need an environment-specific branch.
+
+Install the packages from one Chat SDK major version line:
 
 ```bash
 npm install chat@4.39.0 @chat-adapter/state-memory@4.39.0 \
@@ -22,7 +38,7 @@ npm install chat@4.39.0 @chat-adapter/state-memory@4.39.0 \
 
 The source is [packages/chat-sdk-adapter](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/chat-sdk-adapter), with a [standalone server example](https://github.com/RelayMessenger/Relay-SDK/blob/staging/packages/chat-sdk-adapter/examples/server.mjs).
 
-Create one Chat SDK instance with the Relay adapter, register a direct-message handler, and mount `POST` at your route:
+Create one Chat SDK instance with the Relay adapter and mount `POST /webhooks/relay`:
 
 ```typescript
 import { Chat } from "chat";
@@ -34,7 +50,7 @@ const chat = new Chat({
   concurrency: { strategy: "burst", debounceMs: 2000 },
   adapters: {
     relay: createRelayAdapter({
-      baseUrl: process.env.RELAY_API_URL!,
+      baseUrl: "https://api.staging.relayapp.im",
       token: process.env.RELAY_AGENT_TOKEN,
       webhookSecret: process.env.RELAY_WEBHOOK_SECRET,
       markReadOnReceipt: true,
@@ -53,36 +69,30 @@ export async function POST(request: Request): Promise<Response> {
 }
 ```
 
-Pass the request body unchanged, because the signature is over the raw bytes. Swap the in-memory state for a shared store before more than one instance runs.
-
-Three adapter settings matter. `burst` waits two seconds and runs the handler once for the latest message, and `markReadOnReceipt` marks the chat read as soon as the signature checks. `abortActiveTurnOnReceipt` lets a newer message cancel a running turn through `thread.signal`, so pass that signal to your model call.
+Pass the request body unchanged because the signature covers the raw bytes. Use a shared state adapter before running more than one instance.
 
 ## Send it a message
 
-Open Relay on your phone and message your agent's handle. Relay posts the event to your route, the adapter verifies it, and your handler answers in the same chat. To watch the exchange from a terminal, run `npx relaymessenger@staging watch @<handle>`.
+Open Relay on your phone and message the agent's Handle. Relay sends the event to your local route or deployed endpoint, the adapter verifies it, and your handler replies in the same Chat.
 
 ## What it can do
 
-The adapter gives your handler these; the rest of the API is one import away.
-
 | Relay feature | Chat SDK adapter |
 | --- | --- |
-| Wakes when a message arrives | Yes, by webhook. |
-| Reply in the chat | Yes, with a send key derived from the event id and the send ordinal, so a retry never sends twice. |
-| Send attachments | Yes, from a public HTTPS URL or from file bytes; see [attachments](/messages/attachments). |
-| Read chat history | Yes. The adapter walks a chat's history backward, 100 messages a page. |
-| Second message during a reply | Waits or cancels the running turn, by the three settings above. |
-
-Chat SDK's default `concurrency` is `drop`: a message that arrives during a running handler throws, the webhook fails, and Relay [retries the delivery](/webhooks/delivery). The `burst` setting replaces that, and earlier messages in a burst arrive in `context.skipped`.
+| Receive a Message | Yes, through the local signed forwarder or a webhook subscription. |
+| Reply in the Chat | Yes, with an idempotency key derived from the event ID. |
+| Send attachments | Yes, from a public HTTPS URL or file bytes. See [attachments](/messages/attachments). |
+| Read Chat history | Yes, one page at a time. |
+| Handle a second Message | `burst` waits two seconds and keeps the latest Message; `abortActiveTurnOnReceipt` can cancel the active turn through `thread.signal`. |
 
 ## When it fails
 
-- Signature verification fails: the secret is not this subscription's, or the body was re-encoded.
-- No reply comes: read the handler's logs, because the turn either threw or never started.
-- A send's result is uncertain: retry it with the same idempotency key and content, and keep the prepared attachment id.
+- Signature verification fails: the secret does not belong to this delivery path, or the body was re-encoded.
+- No reply arrives: read the handler logs to find whether the turn threw or never started.
+- A send result is uncertain: retry with the same idempotency key and content.
 
 ## Next steps
 
 - [Verify webhook signatures](/webhooks/verify-signatures)
+- [Manage webhook subscriptions](/webhooks/subscriptions)
 - [Handle delivery retries](/webhooks/delivery)
-- [Send attachments](/messages/attachments)

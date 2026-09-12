@@ -8,12 +8,11 @@ from pathlib import Path
 REFERENCE_PAGES = {"websocket/protocol", "integrations/agent-prompt"}
 # Owner ruling 2026-09-12: the Introduction is a gateway with no sections; the cards route the reader.
 LANDING_SECTIONS = []
-# Owner ruling 2026-09-11 (final tree): the Docs tab opens with the main page
-# alone, then a Getting started group that runs quickstart, authentication, the
-# API walkthrough, the SDKs and the checklist in that order.
+# Owner ruling 2026-09-12: Guides follows Linq's order. Introduction is the
+# landing page, followed by Getting started and the product task groups.
 OVERVIEW_PAGES = ["index"]
-START_PAGES = ["start/quickstart", "live/authentication", "start/build-on-the-api",
-               "live/sdks", "live/best-practices"]
+START_PAGES = ["start/quickstart", "live/authentication", "live/sdks",
+               "start/build-on-the-api", "live/best-practices"]
 GUIDE_PREFIXES = ("agents/", "chats/", "messages/", "webhooks/", "events/", "websocket/", "live/")
 # The SDK page moved out of start/ unchanged; it is a reference page, not a
 # task guide, so the imperative-heading rule does not apply to it.
@@ -63,10 +62,13 @@ def authored_paths(value):
 
 
 def validate_structure(root: Path, config: dict):
-    groups = config["navigation"]["tabs"][0]["groups"]
-    overview = next((group for group in groups if group.get("group") == "Overview"), None)
+    guides = next((tab for tab in config["navigation"]["tabs"] if tab.get("tab") == "Guides"), None)
+    if guides is None:
+        raise SystemExit("Guides tab is required")
+    groups = guides["groups"]
+    overview = next((group for group in groups if group.get("group") == "Introduction"), None)
     if overview is None or overview.get("pages") != OVERVIEW_PAGES:
-        raise SystemExit("Overview must stay the main page on its own")
+        raise SystemExit("Introduction must stay the main page on its own")
     start = next((group for group in groups if group.get("group") == "Getting started"), None)
     if start is None or start.get("pages") != START_PAGES:
         raise SystemExit("Getting started must stay the quickstart, authentication, the API walkthrough, the SDKs and the checklist")

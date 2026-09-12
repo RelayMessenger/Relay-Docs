@@ -243,9 +243,9 @@ class IntegrationDocsTests(unittest.TestCase):
         self.assertIn(expected("@relaymessenger/chat-sdk-adapter@staging"), adapter_commands)
 
     def test_environment_pairing_and_runtime_requirements(self):
-        # Owner ruling 2026-09-12: the CLI sets the API origin. Backend pages
-        # (a developer's own code) still name it; runtime pages never ask the
-        # user to set RELAY_API_URL and need not name the origin at all.
+        # Owner ruling 2026-09-12: runtime and MCP pages do not ask readers to
+        # set RELAY_API_URL. Backend examples may pin the staging origin in
+        # code, but do not turn it into a user environment setup step.
         api = f"https://{origin('api.staging.relayapp.im')}"
         for page in (AUTH, "integrations/chat-sdk.mdx", "integrations/cloudflare-think.mdx"):
             self.assertIn(api, read(page), page)
@@ -258,8 +258,10 @@ class IntegrationDocsTests(unittest.TestCase):
             self.assertIn(version, read("integrations/hermes.mdx"))
         self.assertConcept(read("integrations/claude-code.mdx"), r"channels.*research.preview", "Keep channel availability prerequisite")
         self.assertLink(MCP, "/cli/auth")
-        self.assertIn("RELAY_API_URL", read(MCP))
-        self.assertConcept(read(MCP), r"(?:match|pair).*token", "MCP environment overrides must stay paired")
+        self.assertNotIn("RELAY_API_URL", read(MCP))
+        self.assertConcept(read(MCP), r"bearer.*agent token", "Hosted MCP must document Bearer Agent Token auth")
+        self.assertConcept(read(MCP), r"hosted.*remote.*mcp", "MCP must document its hosted remote transport")
+        self.assertConcept(read(MCP), r"local.*stdio.*mcp", "MCP must document its local stdio transport")
 
     def test_cli_routes_to_task_owners_without_copying_agent_flows(self):
         for task in ("create-agent", "list-agents", "delete-agent"):
@@ -341,11 +343,11 @@ class IntegrationDocsTests(unittest.TestCase):
 
     def test_api_mcp_and_docs_search_have_one_explanation(self):
         self.assertIn("stdio", read(MCP))
-        self.assertConcept(read(MCP), r"trusted local", "The MCP host is the security boundary")
+        self.assertConcept(read(MCP), r"trusted (?:local )?mcp client|mcp client remains the security boundary", "The MCP host is the security boundary")
         self.assertIn("RELAY_PROFILE", read(MCP))
         text = read(SKILLS)
         self.assertIn(f"https://{origin('docs.staging.relayapp.im')}/mcp", text)
-        self.assertConcept(text, r"docs mcp.*none.*read.only", "Docs search needs no Agent Token")
+        self.assertConcept(text, r"docs mcp.*agent token", "Hosted docs MCP needs an Agent Token")
         self.assertConcept(text, r"api mcp.*agent token", "API tools require an Agent Token")
         self.assertConcept(text, r"installing a skill alone.*does not confirm", "Skill installation is not MCP connection proof")
         self.assertLink(SKILLS, "/integrations/mcp")
