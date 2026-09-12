@@ -478,7 +478,9 @@ class AgentOnboardingTests(unittest.TestCase):
             self.assert_concept(text, r"agent Contacts?")
             self.assert_concept(text, r"allowlist|allowFrom")
             self.assert_concept(text, r"session")
-            self.assert_concept(text, r"API origin")
+            # Owner ruling 2026-09-12: the CLI sets the API origin, so a
+            # runtime page never tells the user to set RELAY_API_URL.
+            self.assertNotIn("RELAY_API_URL", text)
         self.assert_concept(claude, r"reply.origin")
         self.assert_concept(claude, r"contact\.is_me|agent.s own delivery row")
         self.assert_concept(claude, r"authenticat")
