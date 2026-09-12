@@ -2469,6 +2469,7 @@ A message is an ordered list of parts sent to one chat.
 Your agent sends a message with one to 100 parts. Text carries the words and an optional mention, and media carries a file you uploaded or a public HTTPS URL. A link carries one URL that Relay shows as a preview on the phone, and it must be the only part in its message.
 
 Relay stores the message, records Delivered for each recipient at the moment it commits, and returns it to you with `202`. Recipients receive it as a `message.received` event on their webhook or WebSocket. Later, the same message ID lets you reply to it or react to one part.
+A read-back message also carries its `thread` originator; see [Threads](/messages/replies#read-threads).
 
 ## Choose a send path
 
@@ -2902,7 +2903,44 @@ Send the reply through either [send path](/messages/send) with `reply_to` inside
 
 The response is the new message, and its `reply_to` echoes the target. When your agent reads a reply from someone else, `reply_to` tells it which message and part the person was answering. That matters in a group where several things are in flight.
 
-## List a thread
+## Read threads
+
+A thread contains every reply to the same original message, keyed by that message's id and part index; a reply to a reply stays in the original message's thread.
+
+When you read a message, `thread` is either `null` or the originator that opened its thread:
+
+```json
+{
+  "thread": {
+    "originator_message_id": "01J9Z7M3N8Q2R4S6T8V0W1X2Y3",
+    "originator_part_index": 0
+  }
+}
+```
+
+`originator_message_id` is the ID of the Message that opened the thread. `originator_part_index` is the zero-based index of the originator's part that opened it. A reply to a reply carries the same values.
+
+To read one thread in a chat, pass its originator message ID to `thread_originator_message_id` when you list messages:
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" \
+  "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages?thread_originator_message_id=01J9Z7M3N8Q2R4S6T8V0W1X2Y3" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+const page = await relay.chats.messages.list(chatId, { thread_originator_message_id: "01J9Z7M3N8Q2R4S6T8V0W1X2Y3" });
+```
+</CodeGroup>
+
+```json
+{"messages": [{"thread": {"originator_message_id": "01J9Z7M3N8Q2R4S6T8V0W1X2Y3", "originator_part_index": 0}}]}
+```
+
+On send, `reply_to` names the message being answered. The server derives `thread` from that target and its part index.
+
+## What you get back
 
 Ask for the thread with `order=asc` to read replies oldest first and `limit` up to the page size you want. The response is `200`, with a `next_cursor` that is null on the last page. Pass the cursor back unchanged, with the same `order`, to read the next page.
 
