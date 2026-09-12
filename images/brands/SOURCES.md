@@ -36,8 +36,8 @@ the notes below.
 - `anthropic.svg` carries `fill="#D97757"`. That is Claude's brand colour.
   Simple Icons records `#191919` for this mark. The path is correct.
 - `claude.svg` carries `fill="#D97757"`, which is correct for Claude.
-- `vercel.svg` carries `fill="#737373"`. Vercel's mark is `#000000`
-  (https://vercel.com/geist/brands). The path is correct.
+- `vercel.svg` carries `fill="#000000"`, Vercel's mark colour
+  (https://vercel.com/geist/brands); dark mode inverts it to white.
 - `openai.png` was the OpenAI mark at 128 px with no transparency, a white box
   on dark. Replaced 2026-09-11 by `openai.svg`. OpenAI's brand page publishes
   only construction diagrams, misuse examples and a Photoshop template zip, and
@@ -58,8 +58,8 @@ the notes below.
   we set `fill="currentColor"` on 2026-09-11; it renders dark on light and light
   on dark, matching the pair with one file. Path unchanged.
 - `cloudflare.svg` is the simple-icons Cloudflare cloud (CC0), added 2026-09-11
-  for the Cloudflare Think page, with `fill="currentColor"` so it follows the
-  theme. Cloudflare's official orange logomark needs the company's written
+  for the Cloudflare Think page, filled with Cloudflare's brand orange `#F38020` (the hex simple-icons records
+  for the mark). Cloudflare's official orange logomark needs the company's written
   permission (https://www.cloudflare.com/trademark/) and ships no direct asset
   URL, so the CC0 mark is used. Path unchanged.
 - `hermes.png` is a Relay-drawn monogram: a white "H" on a saturated blue
