@@ -147,7 +147,7 @@ class AgentOnboardingTests(unittest.TestCase):
 
     def test_cli_front_door_routes_to_owning_tasks(self):
         cli = self.page("cli/index")
-        self.assert_identifiers(cli, "npx relaymessenger@0.1.6-staging.40 --help", "--json")
+        self.assert_identifiers(cli, "npx relaymessenger@0.1.6-staging.41 --help", "--json")
         self.assert_links_to_pages(
             cli, *CLI_TASKS, "agents/create-agent",
             "agents/list-agents", "agents/delete-agent",
