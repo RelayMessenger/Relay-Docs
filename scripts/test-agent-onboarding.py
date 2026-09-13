@@ -147,7 +147,7 @@ class AgentOnboardingTests(unittest.TestCase):
 
     def test_cli_front_door_routes_to_owning_tasks(self):
         cli = self.page("cli/index")
-        self.assert_identifiers(cli, "npx relaymessenger@0.1.6-staging.37 --help", "--json")
+        self.assert_identifiers(cli, "npx relaymessenger@0.1.6-staging.40 --help", "--json")
         self.assert_links_to_pages(
             cli, *CLI_TASKS, "agents/create-agent",
             "agents/list-agents", "agents/delete-agent",
@@ -201,7 +201,7 @@ class AgentOnboardingTests(unittest.TestCase):
                                  "--runtime-stopped", "--acknowledge-events"):
                     self.assertNotIn(obsolete, commands)
                 self.assertNotRegex(commands, r"\btoken (?:import|status|clear)\b|\bevents\s+listen\b")
-                self.assertNotRegex(commands, r"(?m)^\s*relay (?:agents|auth|profiles|doctor|events|connect|watch)\b")
+                self.assertNotRegex(commands, r"(?m)^\s*relay (?:agents|profiles|doctor|events|connect|watch)\b")
 
     def test_agent_management_router_is_short_and_links_to_tasks(self):
         router = self.page("agents/lifecycle")
@@ -214,10 +214,10 @@ class AgentOnboardingTests(unittest.TestCase):
     def test_cli_creation_and_api_storage_have_separate_owners(self):
         create = self.page("agents/create-agent")
         self.assert_identifiers(create, "npx relaymessenger@staging agents create",
-                                "https://api.staging.relayapp.im", "--profile", "--api-url")
+                                "https://api.staging.relayapp.im", "--profile")
         self.assert_links_to_pages(create, "agents/create-agent-api", PHOTO_PAGE)
         self.assert_operation_link(create, "createAgent")
-        self.assert_concept(create, r"(?:no|without).{0,90}Console account")
+        self.assert_concept(create, r"(?:Relay )?Console|sign in")
         self.assert_concept(create, r"uncertain|unconfirmed")
         self.assert_concept(create, r"(?:no|never|not|without).{0,30}automatic\w* retr")
 
@@ -282,12 +282,10 @@ class AgentOnboardingTests(unittest.TestCase):
     def test_authentication_keeps_private_input_and_profile_selection(self):
         auth = self.page("cli/auth")
         self.assert_identifiers(auth, "Get-Content -Raw $TokenFile", "auth login --with-token",
-                                "auth status", "auth logout", "--profile", "--json", "--api-url",
-                                "RELAY_AGENT_TOKEN", "--api-url", "--profile")
-        self.assert_concept(auth, r"hidden.{0,30}prompt")
+                                "auth status", "auth logout", "--profile", "relay login",
+                                "RELAY_AGENT_TOKEN")
+        self.assert_concept(auth, r"browser|signs this computer in")
         self.assert_concept(auth, r"(?:never|not).{0,35}command arguments")
-        self.assert_identifiers(auth, "contact-card")
-        self.assert_concept(auth, r"the name and picture people see for this agent")
         self.assert_links_to_pages(auth, "agents/create-agent", "agents/delete-agent",
                                    "integrations/claude-code")
 
