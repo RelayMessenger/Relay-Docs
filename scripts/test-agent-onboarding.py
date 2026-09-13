@@ -445,7 +445,7 @@ class AgentOnboardingTests(unittest.TestCase):
             self.assertNotRegex(
                 command,
                 r"\b[A-Z][A-Z0-9_]*_(?:API_KEY|TOKEN|SECRET)\b"
-                r"|--(?:api-key|token|secret)\b|rly_live_",
+                r"|--(?:api-key|token|secret)\b|rel_token_",
             )
         skill = self.page("skill")
         self.assert_links_to_pages(skill, "integrations/skills")

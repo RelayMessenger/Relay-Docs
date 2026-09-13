@@ -384,7 +384,7 @@ class IntegrationDocsTests(unittest.TestCase):
     def test_safety_guard_detects_literal_token_or_production_origin(self):
         example = "```bash\nnpx relaymessenger@staging connect claude --token \"$RELAY_AGENT_TOKEN\" --yes\n```\n"
         self.assertEqual(connect_command_errors(example), [])
-        self.assertTrue(connect_command_errors(example.replace('"$RELAY_AGENT_TOKEN"', "rly_live_abc123")))
+        self.assertTrue(connect_command_errors(example.replace('"$RELAY_AGENT_TOKEN"', "rel_token_abc123")))
         self.assertTrue(connect_command_errors(example.replace("--yes", "--api-url https://api.relayapp.im")))
         self.assertTrue(connect_command_errors("```bash\nnpx relaymessenger@staging doctor\n```\n"))
 
