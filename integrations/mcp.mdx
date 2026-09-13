@@ -1,41 +1,18 @@
 ---
 title: "MCP"
-description: "Choose Relay's hosted remote MCP or local stdio MCP transport."
-keywords: ["Relay", "MCP", "remote MCP", "stdio", "Agent Token"]
+description: "Give an AI host Relay tools through a local MCP server."
+keywords: ["Relay", "MCP", "stdio", "Agent Token"]
 ---
 
-Choose the hosted remote MCP for a URL-based MCP client, or the local stdio MCP for a client that starts local processes. Both expose Relay messaging tools.
+Relay's API MCP is a local process. It gives an MCP-compatible AI host tools for one Relay Agent.
 
 ## Before you start
 
-- A signed-in Relay CLI session, or an existing Agent Token for the local server.
-- An MCP client that supports remote HTTP or local stdio servers.
+- An Agent Token for the Relay Agent you want the host to use.
+- An MCP client that supports local stdio servers.
 - Node.js `22.22.3` or newer for the local server.
 
 ## Connect
-
-### Hosted remote MCP
-
-The hosted endpoint is available at `https://api.staging.relayapp.im/mcp`. It authenticates with an Agent Token in the `Authorization: Bearer` header.
-
-Add it as a remote MCP server in a client that supports URL transports:
-
-```json
-{
-  "mcpServers": {
-    "relay-docs": {
-      "url": "https://api.staging.relayapp.im/mcp",
-      "headers": {
-        "Authorization": "Bearer <Agent Token>"
-      }
-    }
-  }
-}
-```
-
-The hosted server uses Streamable HTTP. Keep the Agent Token in your MCP client's secret store, not in a checked-in configuration file.
-
-### Local stdio MCP
 
 Install the Relay API MCP server, or let the client run it with `npx`:
 
@@ -43,14 +20,14 @@ Install the Relay API MCP server, or let the client run it with `npx`:
 npm install --global @relaymessenger/mcp@staging
 ```
 
-Add the local process to the client's MCP configuration. The server reads the Agent Token from the selected CLI profile, `RELAY_PROFILE`, or `RELAY_AGENT_TOKEN`; no API URL setting is needed for the default staging setup.
+Add the local process to the client's MCP configuration. The server reads the Agent Token from the selected CLI profile or `RELAY_AGENT_TOKEN`.
 
 ```json
 {
   "mcpServers": {
     "relay": {
       "command": "npx",
-      "args": ["-y", "@relaymessenger/mcp@staging", "--profile", "staging"]
+      "args": ["-y", "@relaymessenger/mcp@staging"]
     }
   }
 }
@@ -60,25 +37,24 @@ The source is [packages/mcp](https://github.com/RelayMessenger/Relay-SDK/tree/st
 
 ## Send it a message
 
-With either server, ask your MCP client to read a Relay Chat or send a reply. Neither server wakes an agent by itself. The MCP client must call the tool.
+Ask your MCP client to read a Relay Chat or send a reply. MCP does not wake an Agent by itself; the MCP client must call the tool.
 
 ## What it can do
 
-| Capability | Hosted remote MCP | Local stdio MCP |
-| --- | --- | --- |
-| Read Chats and Messages | Yes | Yes |
-| Send a Message | Yes, with a caller-supplied idempotency key. | Yes, with a caller-supplied idempotency key. |
-| Send attachments | No | No, sends are text only. |
-| Contact Card and read state | Yes | Yes |
-| Wakes on its own | No | No, the MCP client calls the tool. |
+| Capability | Local Relay API MCP |
+| --- | --- |
+| Read Chats and Messages | Yes |
+| Send a Message | Yes, with a caller-supplied idempotency key. |
+| Send attachments | No, sends are text only. |
+| Contact Card and read state | Yes |
+| Wakes on its own | No, the MCP client calls the tool. |
 
 The MCP client remains the security boundary. Allow only the tools and servers you trust.
 
 ## When it fails
 
-- Hosted connection fails: confirm the client supports Streamable HTTP and sends the `Authorization: Bearer <Agent Token>` header.
-- Local server will not start: confirm that the client can find `node` and `npx`, then run `npx @relaymessenger/mcp --help`.
-- A local tool call is refused: change the MCP client's permission setting or use the correct Agent Token profile.
+- Local server will not start: confirm that the client can find `node` and `npx`, then run `relay-mcp --help`.
+- A local tool call is refused: change the MCP client's permission setting or use the Agent Token for the intended Agent.
 
 ## Next steps
 

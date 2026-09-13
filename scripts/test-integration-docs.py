@@ -259,8 +259,6 @@ class IntegrationDocsTests(unittest.TestCase):
         self.assertConcept(read("integrations/claude-code.mdx"), r"channels.*research.preview", "Keep channel availability prerequisite")
         self.assertLink(MCP, "/cli/auth")
         self.assertNotIn("RELAY_API_URL", read(MCP))
-        self.assertConcept(read(MCP), r"bearer.*agent token", "Hosted MCP must document Bearer Agent Token auth")
-        self.assertConcept(read(MCP), r"hosted.*remote.*mcp", "MCP must document its hosted remote transport")
         self.assertConcept(read(MCP), r"local.*stdio.*mcp", "MCP must document its local stdio transport")
 
     def test_cli_routes_to_task_owners_without_copying_agent_flows(self):
@@ -343,12 +341,11 @@ class IntegrationDocsTests(unittest.TestCase):
     def test_api_mcp_and_docs_search_have_one_explanation(self):
         self.assertIn("stdio", read(MCP))
         self.assertConcept(read(MCP), r"trusted (?:local )?mcp client|mcp client remains the security boundary", "The MCP host is the security boundary")
-        self.assertIn("RELAY_PROFILE", read(MCP))
+        self.assertConcept(read(MCP), r"selected cli profile|relay_agent_token", "The local MCP must explain local credential resolution")
         text = read(SKILLS)
-        self.assertIn(f"https://{origin('docs.staging.relayapp.im')}/mcp", text)
-        self.assertConcept(text, r"docs mcp.*agent token", "Hosted docs MCP needs an Agent Token")
-        self.assertConcept(text, r"api mcp.*agent token", "API tools require an Agent Token")
-        self.assertConcept(text, r"installing a skill alone.*does not confirm", "Skill installation is not MCP connection proof")
+        self.assertConcept(text, r"Mintlify provides documentation search|documentation search", "Mintlify owns docs search")
+        self.assertConcept(text, r"read-only", "Docs search must be read-only")
+        self.assertConcept(text, r"relay api mcp.*separately", "API tools remain an optional local install")
         self.assertLink(SKILLS, "/integrations/mcp")
         for page in (MCP, "integrations/codex.mdx", "integrations/cursor.mdx"):
             self.assertLink(page, "/integrations/skills")
