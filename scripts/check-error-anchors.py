@@ -16,7 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVER_CODES = {1004, 1005, 2001, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
-                2015, 2023, 2025, 2026, 2028, 2029, 2030, 3006}
+                2015, 2023, 2025, 2026, 2028, 2030, 3006}
 
 
 def check(root=ROOT, server_repo=None):
