@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI-specific checks for the source-generated .37 help projection."""
+"""CLI-specific checks for the source-generated staging help projection."""
 import json
 import os
 import re
@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "node_modules/relaymessenger/dist/cli.js"
-EXPECTED = "0.1.6-staging.37"
+EXPECTED = "0.1.6-staging.40"
 
 
 def captured(text):
