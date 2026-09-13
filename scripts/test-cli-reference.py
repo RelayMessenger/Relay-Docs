@@ -36,8 +36,6 @@ class CLIReferenceTests(unittest.TestCase):
             env={**os.environ, "NO_COLOR": "1", "FORCE_COLOR": "0"},
         )
         actual = result.stdout.replace("\r\n", "\n").rstrip()
-        generated = captured((ROOT / "cli/reference/index.mdx").read_text()).rstrip()
-        self.assertEqual(generated, actual)
         for heading in ("VERSION", "USAGE", "TOPICS", "COMMANDS"):
             self.assertIn(f"\n{heading}\n", actual)
         self.assertNotRegex(actual, r"(?m)^Options:\s*$")
@@ -47,22 +45,47 @@ class CLIReferenceTests(unittest.TestCase):
         text = (ROOT / "cli/index.mdx").read_text()
         self.assertEqual(len(re.findall(r"^```text command-tree$", text, re.M)), 1)
         tree = re.search(r"^```text command-tree\n(.*?)^```", text, re.M | re.S).group(1)
-        root_help = captured((ROOT / "cli/reference/index.mdx").read_text())
+        root_help = subprocess.check_output(["node", str(CLI), "--agent", "no", "--help"], text=True)
         root_commands = re.findall(r"^  ([a-z][a-z-]*)\s{2,}", root_help, re.M)
         for name in root_commands:
             self.assertRegex(tree, rf"[├└]── {re.escape(name)}(?:\s|$)")
         for name in ("chats", "messages", "attachments", "blocked-handles", "webhooks", "contact-card", "profiles", "listen", "login", "whoami", "logout"):
             self.assertRegex(tree, rf"[├└]── {re.escape(name)}(?:\s|$)")
 
-    def test_generated_pages_are_owned_once_by_cli_commands_group(self):
+    def test_approved_task_tree_and_page_anatomy(self):
+        spec = json.loads((ROOT / "scripts/cli-tree-spec.json").read_text())
         config = json.loads((ROOT / "docs.json").read_text())
         cli = next(tab for tab in config["navigation"]["tabs"] if tab["tab"] == "CLI")
-        command_group = next(group for group in cli["groups"] if group["group"] == "Commands")
-        generated = sorted(str(path.relative_to(ROOT).with_suffix("")) for path in (ROOT / "cli/reference").glob("*.mdx"))
-        self.assertEqual(sorted(page for page in command_group["pages"] if page.startswith("cli/reference/")), generated)
-        all_pages = [page for group in cli["groups"] for page in group["pages"]]
-        for page in generated:
-            self.assertEqual(all_pages.count(page), 1, page)
+        self.assertEqual(cli["groups"], spec["groups"])
+        def flatten(items):
+            for item in items:
+                if isinstance(item, str):
+                    yield item
+                else:
+                    yield from flatten(item["pages"])
+        all_pages = list(flatten(cli["groups"]))
+        self.assertEqual(set(all_pages), set(spec["pages"]))
+        self.assertEqual(len(all_pages), len(set(all_pages)))
+        generated = {str(path.relative_to(ROOT).with_suffix("")) for path in (ROOT / "cli/reference").glob("*.mdx")}
+        self.assertEqual(generated, {page for page in all_pages if page.startswith("cli/reference/")})
+        for page, expected in spec["pages"].items():
+            text = (ROOT / (page + ".mdx")).read_text()
+            self.assertIn('title: ' + json.dumps(expected["title"]) + '\n', text, page)
+            if "sidebarTitle" in expected:
+                self.assertIn('sidebarTitle: ' + json.dumps(expected["sidebarTitle"]), text)
+            if "command" in expected:
+                self.assertEqual(re.search(r"^```bash\n(.*?)^```", text, re.M | re.S).group(1).strip(), "npx " + expected["command"])
+                self.assertLess(text.index("```bash"), text.index("## Usage"))
+                self.assertNotIn("## Output", text)
+                # Three links: the family's concept guide (a page that exists), then the two CLI pages.
+                steps = text.split("## Next steps\n\n")[1]
+                guide = re.match(r"- \[[^\]]+\]\((/[^)]+)\)\n", steps)
+                self.assertIsNotNone(guide, page)
+                target = guide.group(1).lstrip("/")
+                self.assertTrue((ROOT / (target + ".mdx")).exists() or (ROOT / target / "index.mdx").exists(), guide.group(1))
+                self.assertEqual(steps[guide.end():], "- [CLI](/cli/index)\n- [Global options](/cli/global-options)\n")
+        for page in spec["dropped_generated_pages"]:
+            self.assertFalse((ROOT / (page + ".mdx")).exists(), page)
 
 
 if __name__ == "__main__":

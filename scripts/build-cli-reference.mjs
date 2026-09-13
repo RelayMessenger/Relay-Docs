@@ -58,28 +58,245 @@ function supportedChildren(command) {
   );
 }
 
+// The concept guide each command family belongs to: the third Next steps
+// link (check-guides needs 3 to 5), pointing at the page that explains the
+// thing the command operates on.
+const GUIDE_LINKS = {
+  agents: ['What an agent is', '/agents/lifecycle'],
+  auth: ['Authentication', '/live/authentication'],
+  login: ['Authentication', '/live/authentication'],
+  logout: ['Authentication', '/live/authentication'],
+  whoami: ['Authentication', '/live/authentication'],
+  profiles: ['Authentication', '/live/authentication'],
+  chats: ['Direct and group chats', '/chats'],
+  messages: ['Send and receive messages', '/messages'],
+  attachments: ['Upload attachments', '/messages/attachments'],
+  'blocked-handles': ['Blocked handles', '/agents/blocked-handles'],
+  webhooks: ['Receive webhook events', '/webhooks'],
+  listen: ['Receive webhook events', '/webhooks'],
+  'contact-card': ['Contact cards', '/agents/contact-card'],
+  docs: ['Quickstart', '/start/quickstart'],
+  'config-path': ['Quickstart', '/start/quickstart'],
+  help: ['Quickstart', '/start/quickstart'],
+};
+
+const TITLES = {
+  "agents-create": "Create an agent",
+  "agents-list": "List agents",
+  "agents-delete": "Delete an agent",
+  "auth-login": "Save a token",
+  "auth-status": "Check the token",
+  "auth-logout": "Remove the token",
+  "login": "Log in with a token",
+  "logout": "Log out",
+  "whoami": "Show the identity",
+  "profiles-add": "Add a profile",
+  "profiles-use": "Choose the default profile",
+  "profiles-remove": "Remove a profile",
+  "profiles-list": "List profiles",
+  "chats-list": "List chats",
+  "chats-get": "Show a chat",
+  "chats-create": "Create a chat",
+  "chats-update": "Rename a group",
+  "chats-leave": "Leave a chat",
+  "chats-read": "Mark a chat as read",
+  "chats-voice-memo": "Send a voice memo",
+  "chats-messages-list": "List messages",
+  "chats-messages-send": "Send to a chat",
+  "chats-participants-add": "Add a participant",
+  "chats-participants-remove": "Remove a participant",
+  "chats-typing-start": "Start typing",
+  "chats-typing-stop": "Stop typing",
+  "messages-send": "Send to handles",
+  "messages-get": "Show a message",
+  "messages-thread": "List replies",
+  "messages-react": "React to a message",
+  "attachments-allocate": "Reserve an upload",
+  "attachments-upload": "Upload a file",
+  "attachments-get": "Show an attachment",
+  "attachments-delete": "Delete an attachment",
+  "blocked-handles-list": "List blocked handles",
+  "blocked-handles-add": "Block a handle",
+  "blocked-handles-remove": "Unblock a handle",
+  "webhooks-events": "List event types",
+  "listen": "Forward events locally",
+  "webhooks-subscriptions-list": "List subscriptions",
+  "webhooks-subscriptions-get": "Show a subscription",
+  "webhooks-subscriptions-create": "Create a subscription",
+  "webhooks-subscriptions-update": "Update a subscription",
+  "webhooks-subscriptions-delete": "Delete a subscription",
+  "contact-card-get": "Show the contact card",
+  "contact-card-setup": "Set up the contact card",
+  "contact-card-update": "Update the contact card",
+  "contact-card-share": "Share the contact card",
+  "docs": "Print the docs",
+  "config-path": "Print the config path",
+  "help": "Help"
+};
+
+const CLI_GROUPS = [
+  {
+    "group": "Getting started",
+    "pages": [
+      "cli/index",
+      "cli/connect",
+      "cli/watch",
+      "cli/global-options"
+    ]
+  },
+  {
+    "group": "Agents",
+    "pages": [
+      "cli/agents",
+      "cli/reference/agents-create",
+      "cli/reference/agents-list",
+      "cli/reference/agents-delete"
+    ]
+  },
+  {
+    "group": "Tokens",
+    "pages": [
+      "cli/auth",
+      "cli/reference/auth-login",
+      "cli/reference/auth-status",
+      "cli/reference/auth-logout",
+      "cli/reference/login",
+      "cli/reference/logout",
+      "cli/reference/whoami",
+      {
+        "group": "Profiles",
+        "pages": [
+          "cli/reference/profiles-add",
+          "cli/reference/profiles-use",
+          "cli/reference/profiles-remove",
+          "cli/reference/profiles-list"
+        ]
+      }
+    ]
+  },
+  {
+    "group": "Chats",
+    "pages": [
+      "cli/reference/chats-list",
+      "cli/reference/chats-get",
+      "cli/reference/chats-create",
+      "cli/reference/chats-update",
+      "cli/reference/chats-leave",
+      "cli/reference/chats-read",
+      "cli/reference/chats-voice-memo",
+      {
+        "group": "Messages in a chat",
+        "pages": [
+          "cli/reference/chats-messages-list",
+          "cli/reference/chats-messages-send"
+        ]
+      },
+      {
+        "group": "Participants",
+        "pages": [
+          "cli/reference/chats-participants-add",
+          "cli/reference/chats-participants-remove"
+        ]
+      },
+      {
+        "group": "Typing",
+        "pages": [
+          "cli/reference/chats-typing-start",
+          "cli/reference/chats-typing-stop"
+        ]
+      }
+    ]
+  },
+  {
+    "group": "Messages",
+    "pages": [
+      "cli/reference/messages-send",
+      "cli/reference/messages-get",
+      "cli/reference/messages-thread",
+      "cli/reference/messages-react"
+    ]
+  },
+  {
+    "group": "Attachments",
+    "pages": [
+      "cli/reference/attachments-allocate",
+      "cli/reference/attachments-upload",
+      "cli/reference/attachments-get",
+      "cli/reference/attachments-delete"
+    ]
+  },
+  {
+    "group": "Blocked handles",
+    "pages": [
+      "cli/reference/blocked-handles-list",
+      "cli/reference/blocked-handles-add",
+      "cli/reference/blocked-handles-remove"
+    ]
+  },
+  {
+    "group": "Webhooks",
+    "pages": [
+      "cli/reference/webhooks-events",
+      "cli/reference/listen",
+      {
+        "group": "Subscriptions",
+        "pages": [
+          "cli/reference/webhooks-subscriptions-list",
+          "cli/reference/webhooks-subscriptions-get",
+          "cli/reference/webhooks-subscriptions-create",
+          "cli/reference/webhooks-subscriptions-update",
+          "cli/reference/webhooks-subscriptions-delete"
+        ]
+      }
+    ]
+  },
+  {
+    "group": "Contact card",
+    "pages": [
+      "cli/reference/contact-card-get",
+      "cli/reference/contact-card-setup",
+      "cli/reference/contact-card-update",
+      "cli/reference/contact-card-share"
+    ]
+  },
+  {
+    "group": "Tools",
+    "pages": [
+      "cli/doctor",
+      "cli/reference/docs",
+      "cli/reference/config-path",
+      "cli/reference/help"
+    ]
+  }
+];
+
 const pages = new Map();
 function collect(commandPath) {
-  const command = commandPath[0] === 'help' ? undefined : commandAt(commandPath);
+  const command = commandPath[0] === 'help' ? program._helpCommand : commandAt(commandPath);
+  if (commandPath[0] !== 'help' && command.commands.length) {
+    for (const child of supportedChildren(command)) collect([...commandPath, child.name()]);
+    return;
+  }
+  if (!commandPath.length || ['connect', 'watch', 'doctor'].includes(commandPath[0])) return;
   const text = commandPath.length ? help([...commandPath, '--help']) : rootHelp;
   if (commandPath.length && commandPath[0] !== 'help' && !text.startsWith('Usage: relaymessenger')) {
     throw new Error(`Unexpected help for ${commandPath.join(' ')}`);
   }
   const slug = commandPath.length ? commandPath.join('-') : 'index';
   if (pages.has(slug)) throw new Error(`Duplicate command slug ${slug}`);
-  const title = ['relaymessenger', ...commandPath].join(' ');
+  const title = TITLES[slug];
+  if (!title) throw new Error(`Missing CLI title for ${slug}`);
+  const invocation = ['relaymessenger', ...commandPath].join(' ');
+  const guide = GUIDE_LINKS[commandPath[0]];
+  if (!guide) throw new Error(`Missing guide link for ${commandPath[0]}`);
+  const rawDescription = command.description();
+  const description = rawDescription.charAt(0).toUpperCase() + rawDescription.slice(1).replace(/[.]+$/, '') + '.';
   const options = text.split('\nOptions:\n')[1]?.split('\n\n')[0];
   const optionsSection = commandPath.length && commandPath[0] !== 'help'
     ? `## Options\n\n${options ? `${fence}text captured-output\n${options}\n${fence}` : 'This command lists its subcommands in Usage.'}\n\n### Global options\n\n${fence}text captured-output\n${globalOptions}\n${fence}\n\n`
     : '';
-  const introduction = commandPath.length && commandPath[0] !== 'help'
-    ? "Read the command's usage and options below."
-    : "Read the CLI's captured help below.";
-  const content = `---\ntitle: ${JSON.stringify(title)}\ndescription: ${JSON.stringify(`Command help for ${title}.`)}\nkeywords: ${JSON.stringify(['CLI', ...commandPath, 'command reference'])}\n---\n\n${introduction}\n\n{/* Generated by scripts/build-cli-reference.mjs. Do not edit by hand. */}\n\n## Usage\n\n${fence}text captured-output\n${text}\n${fence}\n\n${optionsSection}## Output\n\nThe Usage block is the captured help output, not a live API response. Resource commands describe their operation in that output.\n\n## Exit codes\n\n${fence}text captured-output\n${exitCodes}\n${fence}\n\n## Next steps\n\n- [CLI](/cli/index)\n- [Command reference](/cli/reference/index)\n- [Global options](/cli/global-options)\n`;
+  const content = `---\ntitle: ${JSON.stringify(title)}\ndescription: ${JSON.stringify(description)}\nkeywords: ${JSON.stringify(['CLI', ...commandPath, 'command reference'])}\n---\n\n${fence}bash\nnpx ${invocation}\n${fence}\n\n{/* Generated by scripts/build-cli-reference.mjs. Do not edit by hand. */}\n\n## Usage\n\n${fence}text captured-output\n${text}\n${fence}\n\n${optionsSection}## Exit codes\n\n${fence}text captured-output\n${exitCodes}\n${fence}\n\n## Next steps\n\n- [${guide[0]}](${guide[1]})\n- [CLI](/cli/index)\n- [Global options](/cli/global-options)\n`;
   pages.set(slug, content);
-  if (command) {
-    for (const child of supportedChildren(command)) collect([...commandPath, child.name()]);
-  }
 }
 collect([]);
 collect(['help']);
@@ -125,22 +342,104 @@ function commandTree() {
 const navigation = JSON.parse(readFileSync(path.join(root, 'docs.json'), 'utf8'));
 const tab = navigation.navigation.tabs.find((candidate) => candidate.tab === 'CLI');
 if (!tab) throw new Error('CLI navigation tab not found');
-const slugs = [...pages.keys()].sort();
-tab.groups = [
-  { group: 'Getting started', pages: ['cli/index', 'cli/connect', 'cli/watch', 'cli/auth'] },
+tab.groups = CLI_GROUPS;
+// Preserve incoming links to the removed command-family pages.
+const redirects = [
   {
-    group: 'Commands',
-    pages: [
-      'cli/global-options',
-      'cli/doctor',
-      'cli/agents',
-      ...slugs.map((slug) => `cli/reference/${slug}`),
-    ],
+    "source": "/cli/reference/agents",
+    "destination": "/cli/reference/agents-create",
+    "permanent": true
   },
+  {
+    "source": "/cli/reference/attachments",
+    "destination": "/cli/reference/attachments-allocate",
+    "permanent": true
+  },
+  {
+    "source": "/cli/reference/auth",
+    "destination": "/cli/reference/auth-login",
+    "permanent": true
+  },
+  {
+    "source": "/cli/reference/blocked-handles",
+    "destination": "/cli/reference/blocked-handles-list",
+    "permanent": true
+  },
+  {
+    "source": "/cli/reference/chats",
+    "destination": "/cli/reference/chats-list",
+    "permanent": true
+  },
+  {
+    "source": "/cli/reference/chats-messages",
+    "destination": "/cli/reference/chats-messages-list",
+    "permanent": true
+  },
+  {
+    "source": "/cli/reference/chats-participants",
+    "destination": "/cli/reference/chats-participants-add",
+    "permanent": true
+  },
+  {
+    "source": "/cli/reference/chats-typing",
+    "destination": "/cli/reference/chats-typing-start",
+    "permanent": true
+  },
+  {
+    "source": "/cli/reference/connect",
+    "destination": "/cli/connect",
+    "permanent": true
+  },
+  {
+    "source": "/cli/reference/contact-card",
+    "destination": "/cli/reference/contact-card-get",
+    "permanent": true
+  },
+  {
+    "source": "/cli/reference/doctor",
+    "destination": "/cli/doctor",
+    "permanent": true
+  },
+  {
+    "source": "/cli/reference/index",
+    "destination": "/cli/index",
+    "permanent": true
+  },
+  {
+    "source": "/cli/reference/messages",
+    "destination": "/cli/reference/messages-send",
+    "permanent": true
+  },
+  {
+    "source": "/cli/reference/profiles",
+    "destination": "/cli/reference/profiles-add",
+    "permanent": true
+  },
+  {
+    "source": "/cli/reference/watch",
+    "destination": "/cli/watch",
+    "permanent": true
+  },
+  {
+    "source": "/cli/reference/webhooks",
+    "destination": "/cli/reference/webhooks-events",
+    "permanent": true
+  },
+  {
+    "source": "/cli/reference/webhooks-subscriptions",
+    "destination": "/cli/reference/webhooks-subscriptions-list",
+    "permanent": true
+  }
 ];
+for (const redirect of redirects) {
+  const existing = navigation.redirects.findIndex((entry) => entry.source === redirect.source);
+  if (existing === -1) navigation.redirects.push(redirect);
+  else navigation.redirects[existing] = redirect;
+}
 
 const overview = `---
 title: "CLI"
+sidebarTitle: "Introduction"
 description: "Connect and manage an agent from your terminal."
 keywords: ["CLI", "relaymessenger", "command reference"]
 ---
@@ -187,7 +486,6 @@ With ${tick}--json${tick}, failures use an object with ${tick}error${tick}, ${ti
 - [Connect](/cli/connect)
 - [Watch](/cli/watch)
 - [Authentication](/cli/auth)
-- [Command reference](/cli/reference/index)
 `;
 
 const outputs = new Map([...pages].map(([slug, content]) => [path.join(directory, `${slug}.mdx`), content]));
