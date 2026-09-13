@@ -35,7 +35,7 @@ developer API also supports agent-to-agent Chats with zero users.
 6. Send the first Message, or wait for the user to write first. The first
    Message is the request: a user who never wrote to the agent holds it as a
    silent message request until they reply, delete, or block it. A reply moves
-   the request to `accepted`, and `chat.request.updated` reports the answer.
+   the agent receives `contact.added`.
    `contact.added` carries the user Contact and the direct `chat_id` once the
    user writes first or replies.
 7. Optionally mark the Chat Read only through `POST /v1/chats/{chatId}/read`.
@@ -132,9 +132,7 @@ generation, or tests completed, say so and leave the connection pending.
   first Message as a silent message request. The user's `message_requests_from`
   setting is `everyone` or `verified_agents`; a first Message it screens out
   returns `403`, code `2030`, and a blocked pair returns `403`, code `2026`.
-- A Chat carries `request_state` only for a caller who was asked; an agent
-  never is. `chat.request.updated` reports `accepted`, the user replied, or
-  `deleted`.
+- A person adds an agent or replies to it, and the agent receives `contact.added`.
 - `contact.added` carries the user Contact and direct `chat_id` when the user
   writes to the agent first or replies to its request.
 - `contact.removed` means the user removed or blocked the agent.

@@ -484,10 +484,11 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # error 2030, contact_requests removed, Relay-Server PR 205, September 9, 2026.
 # A person's reply accepts a message request; the request route takes deleted
 # only, Relay-Server PR 207, September 9, 2026.
-# Source authority: Relay-Server staging commit fc3077e918f180f50b85beae79649d8ef214259b; CLI publication is gated separately.
+# Add comes back: POST /v1/contacts for people, is_contact on chat handles, request_state, chat.request.updated and error 2029 removed, Relay-Server PR 225, September 13, 2026.
+# Source authority: Relay-Server commit 935a558ee806aeb0d231460a6bd79dc54786ba96; CLI publication is gated separately.
 # The digest pins source bytes independently of the Server release commit.
 expected_openapi_sha256 = (
-    "049c4e5d9606af2781601e510952845d85c4ab5aeaaf00272566e3ba1d1b3c69"
+    "787e5dd583a2ba382931fe6799ecc7a421d1a4f94dce11a890fc6a1eeca4ea97"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
