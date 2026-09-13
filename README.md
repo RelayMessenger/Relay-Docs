@@ -14,8 +14,9 @@ Guides
   Contacts
   Webhooks
   WebSocket
-  Integrations (including CLI and coding agents)
-  Platform
+  Integrations
+  Console
+  Reliability
   Examples
 Error Codes
 API Reference

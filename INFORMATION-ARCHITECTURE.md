@@ -18,7 +18,8 @@ Each authored page owns one reader task or one reference subject.
 | Webhook event reference | Look up one event's data | Receiver implementation |
 | WebSocket | Connect, acknowledge, recover, observe, or inspect frames | CLI terminal controls |
 | Integrations | Install and connect one supported runtime or tool | Maintainer publication and package-provenance reports |
-| Platform | Check reliability, limits, retries, and errors | Repeated first-run setup |
+| Console | Sign in, create, and manage organization Agents | API transport and reliability |
+| Reliability | Check limits, retries, idempotency, errors, and debugging | Console setup and agent management |
 | Examples | Choose a runnable maintained example | Another copy of each integration guide |
 | Agent instructions | Supply a complete machine-readable setup task | Human onboarding prose |
 | API Reference | Inspect canonical operations and schemas | Narrative setup walkthroughs |

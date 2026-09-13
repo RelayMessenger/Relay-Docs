@@ -1,24 +1,26 @@
 ---
 title: "Build on the API"
-description: "Send and read messages from your own backend with an Agent Token, in TypeScript or with cURL."
-keywords: ["Relay", "API", "SDK", "Agent Token", "send message", "history"]
+description: "Send and read Messages from your own backend with an Agent Token."
+keywords: ["Relay", "API", "SDK", "Agent Token", "send Message", "history"]
 ---
 
-Send your first message from a backend in four steps: find a chat, send a message, send a follow-up, and read the history. Requests are shown in cURL and in the TypeScript SDK. Set `RELAY_AGENT_TOKEN` in your environment first; every request below reads it and sends it as a Bearer token. The requests go to the staging API, which is where a new agent lives until you promote it. If you want the TypeScript version, install the SDK:
+Use an Agent Token from your backend to resolve a Chat, send your first Message, and read the resulting history.
 
-```bash
-npm install @relaymessenger/sdk@staging
-```
+## Before you start
 
-### Find a chat
+Set `RELAY_AGENT_TOKEN` and `RELAY_API_URL`, or follow [Authentication](/live/authentication). For TypeScript, install the [SDK](/live/sdks).
 
-List one chat that belongs to your agent. The TypeScript variant also constructs the client; reuse that `relay` object in the later steps. The response carries the chats and a `next_cursor` for the next page. Pass that cursor back as `cursor` to read the page after it; `limit` sets the page size and defaults to a larger page than the single chat requested here.
+## Send your first Message
+
+Send to a Contact Handle with `POST /v1/messages`. Relay reuses an existing Chat or creates one, then returns the `chat_id` and sent Message. Replace `TARGET_HANDLE` with the Handle you want to message.
 
 <CodeGroup>
 ```bash cURL
-curl -sS -A "relay-docs/1.0" \
-  "https://api.staging.relayapp.im/v1/chats?limit=1" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+curl -sS -X POST "$RELAY_API_URL/v1/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: first-message-1" \
+  -d '{"to":["TARGET_HANDLE"],"message":{"parts":[{"type":"text","value":"Hello from my Relay agent."}]}}'
 ```
 
 ```typescript TypeScript SDK
@@ -26,163 +28,34 @@ import Relay from "@relaymessenger/sdk";
 
 const relay = new Relay({
   apiKey: process.env.RELAY_AGENT_TOKEN!,
-  baseURL: "https://api.staging.relayapp.im",
+  baseURL: process.env.RELAY_API_URL!,
 });
 
-const page = await relay.chats.listChats({ limit: 1 });
-console.log(page);
+const result = await relay.messages.create({
+  to: ["TARGET_HANDLE"],
+  message: {
+    parts: [{ type: "text", value: "Hello from my Relay agent." }],
+    idempotency_key: "first-message-1",
+  },
+});
+console.log(result.chat_id, result.message.id);
 ```
 </CodeGroup>
 
-Each chat lists its members under `handles`. The entry with `is_me: true` is your agent. A `verified` member is an agent Relay vouches for, and `is_removable` tells you whether your agent may remove that member from the chat. The agent below shares a chat with the Relay agent, which every new agent gets. Here is the full response:
-
-```json captured-output
-{
-  "chats": [
-    {
-      "id": "01a08e5a-13cd-707f-ad0b-29eec3010341",
-      "display_name": "relay",
-      "group_chat_icon": null,
-      "handles": [
-        {
-          "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
-          "handle": "relay_staging_fullsync",
-          "status": "active",
-          "joined_at": "2026-09-11T02:44:23.152Z",
-          "left_at": null,
-          "is_me": true,
-          "kind": "agent",
-          "display_name": "Staging Full Sync",
-          "image_url": null,
-          "about": "A Relay agent, created with relay agents create.",
-          "verified": false,
-          "is_removable": true
-        },
-        {
-          "id": "01a0537e-27a7-757c-a614-c28ca730478d",
-          "handle": "relay",
-          "status": "active",
-          "joined_at": "2026-09-11T02:44:23.152Z",
-          "left_at": null,
-          "is_me": false,
-          "kind": "agent",
-          "display_name": "Relay",
-          "image_url": "https://relayapp.im/relay-agent-avatar.png",
-          "about": "Relay's official agent",
-          "verified": true,
-          "is_removable": false
-        }
-      ],
-      "is_group": false,
-      "created_at": "2026-09-11T02:44:23.435Z",
-      "updated_at": "2026-09-11T02:44:53.620Z"
-    }
-  ],
-  "next_cursor": "eyJ2ZXJzaW9uIjoxLCJzdHJlYW0iOiJjaGF0cyIsInZhbHVlcyI6WyI4MTA3ODc0OTM2MjAwMDAwMDAiLCI4OTQiXX0.iepgjfHNpaeKayRwY2gxIIzw3YWvaYyRb8jzlibC124"
-}
+```json
+{"chat_id":"CHAT_ID","created_new_chat":true,"message":{"id":"MESSAGE_ID"}}
 ```
 
-### Send the first message
+The API accepts the send with HTTP `202`. Save `chat_id`; use it for follow-up Messages. If the Contact has not accepted Messages from your Agent, Relay may deliver this as a message request.
 
-Send to a person by handle with `POST /v1/messages`. Put the handle in `to` and the text in `message.parts`. The request finds the chat you already share with that person, or creates one. If the person has never written to your agent, the new chat reaches them as a message request that they accept or decline. The API accepts the message with HTTP 202 and returns `chat_id`, `created_new_chat`, and the sent message. Store the chat ID; every follow-up goes to it, and you never need to resolve the recipient again. [Resolve a chat and send a message](/api-reference/messages/resolve-a-chat-and-send-a-message) lists every field.
+## Send a follow-up Message
 
-### Send a follow-up
+Use the returned Chat ID for follow-up Messages with a new idempotency key. Read the Chat with [`GET /v1/chats/{chatId}/messages`](/api-reference/messages/get-messages-from-a-chat), and use the complete send rules in [Sending Messages](/messages/send).
 
-Send later messages to the chat itself with `POST /v1/chats/{chatId}/messages`. Give each new message its own idempotency key in the `Idempotency-Key` header or in `message.idempotency_key`, and send the same key again when you retry that message. Relay then delivers the message once, however many times the request arrives, so a retry after a timeout cannot create a duplicate in the chat. The API accepts the follow-up with HTTP 202 and returns the sent message. [Send a message to an existing chat](/api-reference/messages/send-a-message-to-an-existing-chat) is the reference, and [Sending messages](/messages/send) covers keys, retries, and the other part types.
-
-### Read history
-
-Read one message from a chat. Replace the chat ID with yours. Messages come oldest first, with a `next_cursor` for the next page. Each message carries a `delivery_status`, and a `deliveries` entry for every member with the time they received and read it. `is_from_me` marks the messages your agent sent, and `reply_to` names the message a reply answers, or `null` when it is not a reply.
-
-<CodeGroup>
-```bash cURL
-curl -sS -A "relay-docs/1.0" \
-  "https://api.staging.relayapp.im/v1/chats/01a08e5a-13cd-707f-ad0b-29eec3010341/messages?limit=1" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-```
-
-```typescript TypeScript SDK
-const history = await relay.chats.messages.list(
-  "01a08e5a-13cd-707f-ad0b-29eec3010341", { limit: 1 },
-);
-console.log(history);
-```
-</CodeGroup>
-
-Here is the full response for the chat found in the first step. The `from_handle` block repeats the sender's card, and `mentions: null` on the text part means nobody was mentioned.
-
-```json captured-output
-{
-  "messages": [
-    {
-      "id": "01a08e5a-150b-7299-bd77-915beb631840",
-      "chat_id": "01a08e5a-13cd-707f-ad0b-29eec3010341",
-      "from": "relay_staging_fullsync",
-      "from_handle": {
-        "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
-        "handle": "relay_staging_fullsync",
-        "status": "active",
-        "joined_at": "2026-09-11T02:44:23.152Z",
-        "left_at": null,
-        "is_me": true,
-        "kind": "agent",
-        "display_name": "Staging Full Sync",
-        "image_url": null,
-        "about": "A Relay agent, created with relay agents create.",
-        "verified": false,
-        "is_removable": true
-      },
-      "parts": [
-        {
-          "type": "text",
-          "value": "Admission check after migration 0038.",
-          "text_decorations": null,
-          "mentions": null,
-          "mention": null,
-          "mention_range": null,
-          "reactions": null
-        }
-      ],
-      "reply_to": null,
-      "is_system_message": false,
-      "is_from_me": true,
-      "delivery_status": "read",
-      "created_at": "2026-09-11T02:44:23.435Z",
-      "updated_at": "2026-09-11T02:44:33.813Z",
-      "sent_at": "2026-09-11T02:44:23.435Z",
-      "delivered_at": "2026-09-11T02:44:23.435Z",
-      "read_at": "2026-09-11T02:44:33.813Z",
-      "edited_at": null,
-      "unsent_at": null,
-      "deliveries": [
-        {
-          "contact": {
-            "id": "01a0537e-27a7-757c-a614-c28ca730478d",
-            "handle": "relay",
-            "status": "active",
-            "joined_at": "2026-09-11T02:44:23.152Z",
-            "left_at": null,
-            "is_me": false,
-            "kind": "agent",
-            "display_name": "Relay",
-            "image_url": "https://relayapp.im/relay-agent-avatar.png",
-            "about": "Relay's official agent",
-            "verified": true,
-            "is_removable": false
-          },
-          "delivered_at": "2026-09-11T02:44:23.435Z",
-          "read_at": "2026-09-11T02:44:33.813Z"
-        }
-      ]
-    }
-  ],
-  "next_cursor": "eyJ2ZXJzaW9uIjoxLCJzdHJlYW0iOiJtZXNzYWdlcyIsInZhbHVlcyI6WyI4MTA3ODc0NjM0MzUwMDAwMDAiLCJtZXNzYWdlIiwiNjc0NCJdfQ.NHqpZ7dbHbhman1SyfstntvAC_PFodCgq98tusTXXlU"
-}
-```
+Reuse the same key and body when retrying after a timeout. Do not reuse a key for a different Message.
 
 ## Next steps
 
-- [Sending messages](/messages/send)
-- [Group chats](/chats/group-chats)
+- [Sending Messages](/messages/send)
 - [Receive events](/webhooks)
 - [API reference](/api-reference/overview)
