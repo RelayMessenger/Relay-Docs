@@ -12,7 +12,7 @@ RESOURCE_OBJECTS = {"Chats": "Chat", "Messages": "Message", "Attachments": "Atta
 EVENT_GROUP = "Webhook Events"
 EVENT_PAGES = [
     "events/index", "events/chat-created", "events/chat-group-icon-updated",
-    "events/chat-group-name-updated", "events/chat-request-updated",
+    "events/chat-group-name-updated",
     "events/chat-typing-indicator-started", "events/chat-typing-indicator-stopped",
     "events/contact-added", "events/contact-removed", "events/message-delivered",
     "events/message-failed", "events/message-read",
@@ -24,7 +24,7 @@ EVENT_PAGES = [
 EVENT_TAB_GROUPS = [
     ("Overview", ["events/index"]),
     ("Messages", ["events/message-received", "events/message-sent", "events/message-delivered", "events/message-read", "events/message-failed"]),
-    ("Chats", ["events/chat-created", "events/chat-group-name-updated", "events/chat-group-icon-updated", "events/chat-request-updated", "events/chat-typing-indicator-started", "events/chat-typing-indicator-stopped"]),
+    ("Chats", ["events/chat-created", "events/chat-group-name-updated", "events/chat-group-icon-updated", "events/chat-typing-indicator-started", "events/chat-typing-indicator-stopped"]),
     ("Participants", ["events/participant-added", "events/participant-removed"]),
     ("Contacts", ["events/contact-added", "events/contact-removed"]),
     ("Reactions", ["events/reaction-added", "events/reaction-removed"]),

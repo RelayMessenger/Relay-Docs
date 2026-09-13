@@ -10,9 +10,9 @@ from origins import target
 ROOT = Path(__file__).resolve().parents[1]
 # Exact customization contract at the confirmed Server staging merge.
 # Update only after reading and synchronizing a newly agreed upstream contract.
-UPSTREAM_COMMIT = "fc3077e918f180f50b85beae79649d8ef214259b"
-UPSTREAM_STAGING_COMMIT = "fc3077e918f180f50b85beae79649d8ef214259b"
-UPSTREAM_SHA256 = "049c4e5d9606af2781601e510952845d85c4ab5aeaaf00272566e3ba1d1b3c69"
+UPSTREAM_COMMIT = "935a558ee806aeb0d231460a6bd79dc54786ba96"
+UPSTREAM_STAGING_COMMIT = "935a558ee806aeb0d231460a6bd79dc54786ba96"
+UPSTREAM_SHA256 = "787e5dd583a2ba382931fe6799ecc7a421d1a4f94dce11a890fc6a1eeca4ea97"
 
 
 class ContractSourceTests(unittest.TestCase):
@@ -39,14 +39,13 @@ class ContractSourceTests(unittest.TestCase):
         self.assertTrue((ROOT / f"{page}.mdx").is_file())
         for path in ("llms.txt", "llms-full.txt"):
             self.assertIn(page, (ROOT / path).read_text())
-        for path in ("api-reference/openapi.staging.yaml", "api-reference/openapi.mint.yaml"):
-            with self.subTest(path=path):
-                text = (ROOT / path).read_text()
-                self.assertIn("code: 2029", text)
-                self.assertIn("is_removable:", text)
+        # Error 2029 and Contact.is_removable left with "Add comes back"
+        # (owner ruling 2026-09-13): every agent is removable, so the errors
+        # page must not list the code. The vendored contract loses it when the
+        # lead re-vendors after the Server PR merges; validate-docs pins bytes.
         page_text = (ROOT / f"{page}.mdx").read_text()
-        self.assertIn('<a id="2029">2029</a> | 403', page_text)
-        self.assertIn("This agent cannot be removed.", page_text)
+        self.assertNotIn('<a id="2029">2029</a>', page_text)
+        self.assertNotIn("This agent cannot be removed.", page_text)
 
 
 if __name__ == "__main__":
