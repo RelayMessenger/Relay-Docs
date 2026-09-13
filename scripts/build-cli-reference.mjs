@@ -326,7 +326,11 @@ function commandTree() {
     }
   }
   const sourceNames = program.commands
-    .filter((command) => command.helpGroup() !== '' && command.name() !== 'exit-codes')
+    .filter((command) =>
+      !command._hidden
+      && command.helpGroup() !== ''
+      && command.name() !== 'exit-codes'
+    )
     .map((command) => command.name());
   const names = [...new Set([...topicNames, ...commandNames, ...sourceNames])]
     .filter((name) => name !== 'help');
