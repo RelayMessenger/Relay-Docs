@@ -15,6 +15,7 @@ from pathlib import Path
 import re
 import secrets
 import struct
+import subprocess
 import textwrap
 from urllib.parse import urlencode, urljoin, urlsplit, unquote
 from urllib.request import Request, urlopen
@@ -405,7 +406,7 @@ class VisibleHTML(HTMLParser):
             if tag == "img":
                 alt = dict(attrs).get("alt")
                 if alt:
-                    self.parts.append(alt)
+                    self.parts.extend(("\n", alt, "\n"))
             if tag == "h1":
                 self.in_title = True
                 self.titles.append("")
@@ -613,7 +614,22 @@ def authored_route(page):
     return page.removesuffix("/index")
 
 
-def check_all_pages(fetch, authored, workers=6):
+def frame_renderer(base_url):
+    def render(route):
+        url = urljoin(base_url.rstrip("/") + "/", route)
+        result = subprocess.run(
+            ["node", str(ROOT / "scripts/render-hosted-page.mjs"), url],
+            capture_output=True, text=True, timeout=90,
+        )
+        if result.returncode:
+            raise SystemExit(f"frame rendering failed for {url}: {result.stderr.strip()}")
+        rendered = json.loads(result.stdout)
+        rendered["body"] = rendered.pop("html").encode("utf-8")
+        return rendered
+    return render
+
+
+def check_all_pages(fetch, authored, workers=6, render_frame=None):
     if not 1 <= workers <= 16:
         raise SystemExit("--workers must be between 1 and 16")
 
@@ -622,8 +638,23 @@ def check_all_pages(fetch, authored, workers=6):
         markdown = page["page"] + ".md"
         receipt = {}
         for path, canonical, busted in canonical_cache_pairs(fetch, paths=[route, markdown]):
-            check_page_content(page, canonical["body"], markdown=path == markdown)
+            actual = canonical
+            rendered = None
+            if path == route and page.get("mode") == "frame":
+                if render_frame is None:
+                    raise SystemExit(f"/{page['page']} frame page requires a rendered DOM")
+                rendered = render_frame(route)
+                for header in ("x-served-version", "x-version"):
+                    if (canonical["headers"].get(header)
+                            and rendered["headers"].get(header) != canonical["headers"][header]):
+                        raise SystemExit(f"/{page['page']} rendered a different deployment")
+                actual = rendered
+            check_page_content(page, actual["body"], markdown=path == markdown)
             receipt["/" + path] = response_pair(canonical, busted)
+            if rendered is not None:
+                receipt["/" + path]["rendered"] = {
+                    key: value for key, value in rendered.items() if key != "body"
+                }
         return receipt
 
     pages = {}
@@ -700,7 +731,8 @@ def run(args, root=ROOT, fetch=None, get_json=github_json):
     brand = check_brand(fetch, bodies[""], root, settings)
     if args.all_pages:
         check_authored_inventory(root, authored)
-        pages.update(check_all_pages(fetch, authored, args.workers))
+        pages.update(check_all_pages(fetch, authored, args.workers,
+                                     render_frame=frame_renderer(args.base_url)))
     deployment = check_deployment(args.expected_sha, settings["environment"], args.base_url, get_json) if args.expected_sha else None
     return {"schema_version": 2, "checked_at": datetime.now(timezone.utc).isoformat(),
             "base_url": args.base_url.rstrip("/"), "environment": settings["environment"],
@@ -708,6 +740,7 @@ def run(args, root=ROOT, fetch=None, get_json=github_json):
             "github_deployment": deployment, "brand": brand, "pages": pages,
             "authored_pages": len(authored), "contract_operation_ids": contract_ids,
             "sdk_install_commands": install_count, "all_pages": args.all_pages,
+            "require_edge_fresh": args.require_edge_fresh,
             "deleted_wording": list(deleted_wording), "verdict": "passed"}
 
 
@@ -715,7 +748,8 @@ def argument_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("base_url")
     parser.add_argument("--production", action="store_true", help="Select production checks; source bytes remain exact")
-    parser.add_argument("--require-edge-fresh", action="store_true", help="Also require canonical source bytes to match origin")
+    parser.add_argument("--require-edge-fresh", action="store_true", default=True,
+                        help="Require canonical source bytes to match origin (default; retained for compatibility)")
     parser.add_argument("--all-pages", action="store_true", help="Check every navigation-authored route and its Markdown")
     parser.add_argument("--workers", type=int, default=6, help="Concurrent page checks, 1–16 (default: 6)")
     parser.add_argument("--expected-sha")

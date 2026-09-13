@@ -219,6 +219,10 @@ class IntegrationDocsTests(unittest.TestCase):
         relay_cli_version = package["devDependencies"]["relaymessenger"]
         self.assertEqual(lock["packages"]["node_modules/relaymessenger"]["version"],
                          relay_cli_version)
+        if target() == "staging":
+            published = json.loads((ROOT / "versions.json").read_text())
+            self.assertEqual(relay_cli_version, published["npm"]["relaymessenger"]["staging"],
+                             "The current staging install needs a fresh CLI help capture")
         installs = {
             CLI: f"npm install --global relaymessenger@{relay_cli_version}",
             MCP: "npm install --global @relaymessenger/mcp@staging",

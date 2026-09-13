@@ -154,6 +154,10 @@ class AgentOnboardingTests(unittest.TestCase):
         captured_cli = package["devDependencies"]["relaymessenger"]
         self.assertEqual(lock["packages"]["node_modules/relaymessenger"]["version"],
                          captured_cli)
+        if target() == "staging":
+            published = json.loads((ROOT / "versions.json").read_text())
+            self.assertEqual(captured_cli, published["npm"]["relaymessenger"]["staging"],
+                             "Refresh the installed CLI and recapture its help after publishing")
         self.assert_identifiers(
             cli,
             f"npx relaymessenger@{captured_cli} --help",

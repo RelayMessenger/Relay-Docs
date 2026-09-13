@@ -121,6 +121,9 @@ class HostedEnvironmentTests(unittest.TestCase):
         self.assertTrue(args.production)
         self.assertTrue(args.all_pages)
         self.assertEqual(args.workers, 3)
+        self.assertTrue(args.require_edge_fresh)
+        self.assertTrue(hosted.argument_parser().parse_args(
+            ["https://docs.test"]).require_edge_fresh)
         with self.assertRaisesRegex(SystemExit, "between 1 and 16"):
             hosted.check_all_pages(lambda *a, **k: None, [], workers=17)
 
@@ -257,6 +260,33 @@ class HostedEnvironmentTests(unittest.TestCase):
         ):
             with self.subTest(mutation=mutation), self.assertRaises(SystemExit):
                 hosted.check_page_content(page, mutation, markdown=True)
+
+    def test_frame_full_page_check_requires_and_verifies_rendered_dom(self):
+        page, rendered, markdown = self.frame_fixture()
+
+        def fetch(path, cache_busted=False):
+            # The static shell is not proof of client-rendered cards.
+            return response(markdown if path.endswith(".md") else b"<h1>Documentation</h1>")
+
+        with self.assertRaisesRegex(SystemExit, "requires a rendered DOM"):
+            hosted.check_all_pages(fetch, [page], workers=1)
+        result = hosted.check_all_pages(fetch, [page], workers=1,
+                                       render_frame=lambda route: response(rendered))
+        self.assertIn("rendered", result["/"])
+        with self.assertRaises(SystemExit):
+            hosted.check_all_pages(fetch, [page], workers=1,
+                                   render_frame=lambda route: response(
+                                       rendered.replace(b"Send your first message", b"Old copy")))
+
+    def test_adjacent_rendered_images_preserve_separate_alt_text(self):
+        page = {"page": "images", "title": "Images",
+                "body": '<img alt="First meaningful screenshot." />\n'
+                        '<img alt="Second meaningful screenshot." />'}
+        rendered = (b'<h1>Images</h1><img alt="First meaningful screenshot." />'
+                    b'<img alt="Second meaningful screenshot." />')
+        hosted.check_page_content(page, rendered)
+        with self.assertRaises(SystemExit):
+            hosted.check_page_content(page, rendered.replace(b"Second meaningful", b"Stale"))
 
     def test_agent_prompt_allows_mintlify_wrapper_and_link_rendering_only(self):
         source = (
@@ -411,7 +441,7 @@ class HostedEnvironmentTests(unittest.TestCase):
         self.assertEqual(output.getvalue(), "")
 
     def test_require_edge_fresh_rejects_stale_edge(self):
-        self.assertFalse(hosted.argument_parser().parse_args(["https://docs.test"]).require_edge_fresh)
+        self.assertTrue(hosted.argument_parser().parse_args(["https://docs.test"]).require_edge_fresh)
         self.assertTrue(hosted.argument_parser().parse_args(
             ["https://docs.test", "--require-edge-fresh"]).require_edge_fresh)
         with self.assertRaisesRegex(SystemExit, "canonical body .* does not match current origin body"):
