@@ -649,7 +649,6 @@ if leaked_private_operations:
         f"private operation entered public OpenAPI: {leaked_private_operations}"
     )
 expected_operation_ids = {
-    "createAgent",
     "deleteAgent",
     "addParticipant",
     "blockHandle",

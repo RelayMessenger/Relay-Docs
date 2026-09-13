@@ -310,6 +310,14 @@ class IntegrationDocsTests(unittest.TestCase):
         self.assertConcept(text, r"credential remains stored|stored privately", "Keep credentials local")
         self.assertConcept(text, r"logout.*(?:only|selected|that profile)", "Logout scope is local")
         self.assertLink(AUTH, "/agents/delete-agent")
+        self.assertIn("relay login --with-token", text)
+        self.assertIn("rel_org_", text)
+        self.assertIn("rly_org_", text)
+        self.assertIn("organization_key", text)
+        self.assertIn("OAuth", text)
+        self.assertIn("Console-only", text)
+        self.assertNotIn("RELAY_API_URL", text)
+        self.assertNotIn("`relay logout` removes the saved Agent Token profile", text)
 
     def test_observation_delegates_protocol_without_becoming_a_consumer(self):
         self.assertLink(OBSERVE, "/websocket/observe-events")
@@ -363,6 +371,17 @@ class IntegrationDocsTests(unittest.TestCase):
         self.assertLink(SKILLS, "/integrations/mcp")
         for page in (MCP, "integrations/codex.mdx", "integrations/cursor.mdx"):
             self.assertLink(page, "/integrations/skills")
+
+    def test_api_mcp_has_exactly_the_two_current_tools(self):
+        text = read(MCP)
+        rows = re.findall(r"^\| `([a-z_]+)` \|", text, re.M)
+        self.assertEqual(rows, ["search_docs", "execute"])
+        self.assertIn("async function run(client)", text)
+        self.assertIn("client.contactCard.retrieve()", text)
+        self.assertIn("packaged", text)
+        self.assertNotIn("text only", text)
+        self.assertNotRegex(text, r"`(?:talk|relay_[a-z_]+)`")
+        self.assertNotIn("RELAY_API_URL", text)
 
     def test_setup_pages_do_not_regrow_release_or_maintainer_checklists(self):
         for path in assigned_pages():
