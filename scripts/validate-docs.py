@@ -918,7 +918,7 @@ for stale_hook in ["Implement this in the agent backend's connection flow", "## 
         raise SystemExit("agent instructions must not add a backend connection hook")
 for required in [
     "GET /v1/chats?limit=1", "Do not require `/v1/agents/me`",
-    "The first\n   Message is the request", "`contact.added`", "`chat.request.updated`",
+    "The first\n   Message is the request", "`contact.added`", "adds an agent or replies",
 ]:
     if required not in skill_text:
         raise SystemExit(f"setup prompt lost safety guidance: {required}")
