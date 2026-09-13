@@ -334,7 +334,9 @@ def read_page(root, page):
         value = json.loads(value)
     elif value.startswith("'") and value.endswith("'"):
         value = value[1:-1].replace("''", "'")
-    return {"page": page, "title": value, "body": match[2]}
+    mode = re.search(r"^mode:\s*[\"']?(\w+)", match[1], re.M)
+    return {"page": page, "title": value, "body": match[2],
+            "mode": mode[1] if mode else None}
 
 
 def check_discovery(root, config, index, complete):
@@ -440,6 +442,7 @@ def prose(text):
         flags=re.I,
     )
     text = re.sub(r"</?[A-Z][A-Za-z0-9.]*\b[^>]*>", "\n", text)
+    text = re.sub(r"</?h[1-6]\b[^>]*>", "\n", text)
     text = re.sub(r"</?(?:p|div|span|br|strong|em|a|code)\b[^>]*>", "", text)
     text = re.sub(r"!?\[([^]\n]*)\]\([^\n]*?\)", r"\1", text)
     text = re.sub(r"^\s*\|?[ :|\-]+\|\s*$", "", text, flags=re.M)
@@ -448,6 +451,92 @@ def prose(text):
     text = re.sub(r"\\([`*_{}\[\]()#+.!|<>:-])", r"\1", text)
     text = text.translate(str.maketrans({"’": "'", "‘": "'", "“": '"', "”": '"'}))
     return " ".join(html.unescape(text).split())
+
+
+def rendered_frame_source(body):
+    """Expand literal local JSX components; never ignore their reader content.
+
+    Frame pages own their H1 and may define small presentation components.
+    Mintlify reformats their JavaScript when generating Markdown. Compare the
+    rendered literals, not return-statement punctuation. Unsupported component
+    shapes fail closed rather than silently dropping a source requirement.
+    """
+    components = {}
+    declaration = re.compile(
+        r"^export const (\w+) = \(\{\s*([\w,\s]+)\}\) => \{\s*return\s*"
+        r"(.*?)^\};[ \t]*\n?", re.M | re.S)
+
+    def remember(match):
+        expression = match[3].strip().removesuffix(";").strip()
+        if expression.startswith("(") and expression.endswith(")"):
+            expression = expression[1:-1].strip()
+        if not expression.startswith("<") or not expression.endswith(">"):
+            raise SystemExit(f"unsupported frame component: {match[1]}")
+        components[match[1]] = (
+            {name.strip() for name in match[2].split(",") if name.strip()},
+            expression,
+        )
+        return ""
+
+    body = declaration.sub(remember, body)
+    if re.search(r"^export\s", body, re.M):
+        raise SystemExit("unsupported frame component declaration")
+    for name, (parameters, template) in components.items():
+        invocation = re.compile(r"<" + re.escape(name) + r"\b([^>]*?)/>", re.S)
+
+        def expand(match):
+            attributes = dict(re.findall(r'(\w+)="([^"]*)"', match[1]))
+            remainder = re.sub(r'\w+="[^"]*"', "", match[1]).strip()
+            if remainder or set(attributes) != parameters:
+                raise SystemExit(f"nonliteral or incomplete frame component: {name}")
+            values = {key: html.unescape(value) for key, value in attributes.items()}
+
+            def value(key):
+                if key not in values:
+                    raise SystemExit(f"unknown frame component property: {name}.{key}")
+                return values[key]
+
+            expanded = re.sub(
+                r"=\{`([^`]+)`\}",
+                lambda m: '="' + html.escape(re.sub(
+                    r"\$\{(\w+)\}", lambda p: value(p[1]), m[1]), quote=True) + '"',
+                template,
+            )
+            expanded = re.sub(r"=\{(\w+)\}",
+                              lambda m: '="' + html.escape(value(m[1]), quote=True) + '"',
+                              expanded)
+            return re.sub(r"\{(\w+)\}", lambda m: html.escape(value(m[1])), expanded)
+
+        body = invocation.sub(expand, body)
+        if re.search(r"<" + re.escape(name) + r"\b", body):
+            raise SystemExit(f"unsupported frame component invocation: {name}")
+    return body
+
+
+class FrameLinks(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.links = set()
+        self.href = None
+        self.parts = []
+
+    def handle_starttag(self, tag, attrs):
+        values = dict(attrs)
+        if tag == "a" and values.get("href"):
+            self.href = values["href"]
+            self.parts = []
+        if tag == "img" and self.href:
+            self.parts.append(values.get("alt", ""))
+
+    def handle_data(self, data):
+        if self.href:
+            self.parts.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "a" and self.href:
+            self.links.add((self.href, prose(" ".join(self.parts))))
+            self.href = None
+            self.parts = []
 
 
 def source_fragments(body):
@@ -466,6 +555,31 @@ def code_blocks(body):
 def check_page_content(page, body, markdown=False):
     text = body.decode("utf-8")
     title = prose(page["title"])
+    source = page["body"]
+    frame = page.get("mode") == "frame"
+    if frame:
+        source = rendered_frame_source(source)
+        source_html = VisibleHTML()
+        source_html.feed(source)
+        if len(source_html.titles) != 1:
+            raise SystemExit(f"/{page['page']} frame source must own exactly one H1")
+        frame_title = prose(source_html.titles[0])
+        if markdown:
+            text = rendered_frame_source(text)
+            rendered_html = VisibleHTML()
+            rendered_html.feed(text)
+            frame_titles = [prose(value) for value in rendered_html.titles]
+            frame_titles += [prose(value) for value in re.findall(
+                r"^#\s+(.+)$", FENCE.sub("", text), re.M)]
+            if frame_title not in frame_titles:
+                raise SystemExit(f"/{page['page']} has a missing or stale frame H1")
+        else:
+            title = frame_title
+        source_links, hosted_links = FrameLinks(), FrameLinks()
+        source_links.feed(source)
+        hosted_links.feed(text)
+        if source_links.links - hosted_links.links:
+            raise SystemExit(f"/{page['page']} has missing or stale frame links")
     if markdown:
         titles = [prose(value) for value in re.findall(r"^#\s+(.+)$", FENCE.sub("", text), re.M)]
         front = re.match(r"\A---\n(.*?)\n---", text, re.S)
@@ -485,7 +599,7 @@ def check_page_content(page, body, markdown=False):
         visible = prose("".join(parser.parts))
     if title not in titles:
         raise SystemExit(f"/{page['page']} has a missing or stale title: {page['title']}")
-    fragments = source_fragments(page["body"])
+    fragments = source_fragments(source)
     if not fragments:
         raise SystemExit(f"/{page['page']} has no distinctive source prose to verify")
     for fragment in fragments:

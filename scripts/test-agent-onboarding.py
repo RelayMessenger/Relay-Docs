@@ -147,11 +147,16 @@ class AgentOnboardingTests(unittest.TestCase):
 
     def test_cli_front_door_routes_to_owning_tasks(self):
         cli = self.page("cli/index")
-        versions = json.loads((ROOT / "versions.json").read_text())
-        cli_versions = versions["npm"]["relaymessenger"]
+        # build-cli-reference.mjs captures the exact installed devDependency.
+        # A moving registry tag must not relabel that immutable help capture.
+        package = json.loads((ROOT / "package.json").read_text())
+        lock = json.loads((ROOT / "package-lock.json").read_text())
+        captured_cli = package["devDependencies"]["relaymessenger"]
+        self.assertEqual(lock["packages"]["node_modules/relaymessenger"]["version"],
+                         captured_cli)
         self.assert_identifiers(
             cli,
-            f"npx relaymessenger@{cli_versions['staging']} --help",
+            f"npx relaymessenger@{captured_cli} --help",
             "--json",
         )
         self.assert_links_to_pages(

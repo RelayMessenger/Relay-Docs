@@ -212,11 +212,13 @@ class IntegrationDocsTests(unittest.TestCase):
                     self.assertIn(f"--branch {source_ref()}", command)
 
     def test_install_commands_select_actual_packages_and_plugin_trees(self):
-        relay_cli_version = json.loads(
-            (ROOT / "versions.json").read_text()
-        )["npm"]["relaymessenger"][
-            "latest" if target() == "production" else "staging"
-        ]
+        # CLI reference is an immutable capture of the installed generator
+        # binary, not a claim that its version follows the moving registry tag.
+        package = json.loads((ROOT / "package.json").read_text())
+        lock = json.loads((ROOT / "package-lock.json").read_text())
+        relay_cli_version = package["devDependencies"]["relaymessenger"]
+        self.assertEqual(lock["packages"]["node_modules/relaymessenger"]["version"],
+                         relay_cli_version)
         installs = {
             CLI: f"npm install --global relaymessenger@{relay_cli_version}",
             MCP: "npm install --global @relaymessenger/mcp@staging",
