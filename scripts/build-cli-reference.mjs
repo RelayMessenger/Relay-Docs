@@ -212,6 +212,13 @@ const CLI_GROUPS = [
     ]
   },
   {
+    "group": "Organization",
+    "pages": [
+      "cli/reference/organization-show",
+      "cli/reference/organization-update"
+    ]
+  },
+  {
     "group": "Messages",
     "pages": [
       "cli/reference/messages-send",
