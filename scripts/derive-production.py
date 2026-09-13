@@ -40,7 +40,7 @@ EXPECTED_PACKAGE_REWRITES = {
         "openclaw plugins install @relaymessenger/openclaw-plugin",
     "`@relaymessenger/sdk@0.3.0-staging.8`": "`@relaymessenger/sdk`",
     "`relay-claude-channel@0.3.0-staging.4`": "`relay-claude-channel`",
-    "relaymessenger 0.1.6-staging.37": "relaymessenger latest",
+    "relaymessenger 0.1.6-staging.40": "relaymessenger latest",
     "| `@relaymessenger/sdk` | `0.3.0-staging.8` |": "| `@relaymessenger/sdk` | `latest` |",
     "/plugin marketplace add RelayMessenger/Relay-SDK@staging":
         "/plugin marketplace add RelayMessenger/Relay-SDK@main",
