@@ -23,6 +23,16 @@ class CLIReferenceTests(unittest.TestCase):
         expected = package["devDependencies"]["relaymessenger"]
         self.assertEqual(lock["packages"]["node_modules/relaymessenger"]["version"], expected)
 
+    def test_creation_reference_uses_organization_handle(self):
+        text = (ROOT / "cli/reference/agents-create.mdx").read_text()
+        self.assertIn("Relay adds your organization namespace", captured(text))
+        self.assertNotIn("--token-name", text)
+        self.assertNotIn(".dev handle", text)
+        guide = (ROOT / "agents/create-agent.mdx").read_text()
+        self.assertIn("pass only the local name", guide)
+        self.assertIn("`--name` accepts 1 to 30 characters", guide)
+        self.assertNotIn("npx relaymessenger@staging login", guide)
+
     def test_root_help_is_real_braille_sections_without_options(self):
         result = subprocess.run(
             ["node", str(CLI), "--agent", "no", "--help"],
