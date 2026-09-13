@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "node_modules/relaymessenger/dist/cli.js"
-EXPECTED = "0.1.6-staging.40"
+EXPECTED = "0.1.6-staging.41"
 
 
 def captured(text):

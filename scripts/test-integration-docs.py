@@ -213,7 +213,7 @@ class IntegrationDocsTests(unittest.TestCase):
 
     def test_install_commands_select_actual_packages_and_plugin_trees(self):
         installs = {
-            CLI: "npm install --global relaymessenger@0.1.6-staging.40",
+            CLI: "npm install --global relaymessenger@0.1.6-staging.41",
             MCP: "npm install --global @relaymessenger/mcp@staging",
             "integrations/openclaw.mdx": "openclaw plugins install @relaymessenger/openclaw-plugin@staging",
             "integrations/hermes.mdx": "hermes plugins install RelayMessenger/Relay-Hermes --enable",
@@ -222,7 +222,7 @@ class IntegrationDocsTests(unittest.TestCase):
         }
         for page, command in installs.items():
             self.assertIn(expected(command), commands(read(page)), page)
-        self.assertIn(expected("npx relaymessenger@0.1.6-staging.40 --help"), commands(read(CLI)))
+        self.assertIn(expected("npx relaymessenger@0.1.6-staging.41 --help"), commands(read(CLI)))
         self.assertIn(
             expected("/plugin marketplace add RelayMessenger/Relay-SDK@staging"),
             commands(read("integrations/claude-code.mdx")),
