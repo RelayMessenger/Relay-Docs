@@ -147,7 +147,13 @@ class AgentOnboardingTests(unittest.TestCase):
 
     def test_cli_front_door_routes_to_owning_tasks(self):
         cli = self.page("cli/index")
-        self.assert_identifiers(cli, "npx relaymessenger@0.1.6-staging.41 --help", "--json")
+        versions = json.loads((ROOT / "versions.json").read_text())
+        cli_versions = versions["npm"]["relaymessenger"]
+        self.assert_identifiers(
+            cli,
+            f"npx relaymessenger@{cli_versions['staging']} --help",
+            "--json",
+        )
         self.assert_links_to_pages(
             cli, *CLI_TASKS, "agents/create-agent",
             "agents/list-agents", "agents/delete-agent",
@@ -428,7 +434,7 @@ class AgentOnboardingTests(unittest.TestCase):
                          if row.strip().startswith("|") and "Docs MCP" in row]
         self.assertTrue(docs_mcp_rows)
         for row in docs_mcp_rows:
-            self.assertRegex(row, r"\|\s*Agent Token in `Authorization: Bearer`\s*\|")
+            self.assertRegex(row, r"\|\s*None\s*\|")
         self.assert_identifiers(skills, "Relay Agent Token")
         install_commands = [line for language in ("bash", "powershell")
                             for block in code_blocks(skills, language)

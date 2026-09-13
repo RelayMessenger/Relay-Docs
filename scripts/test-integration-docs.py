@@ -212,8 +212,13 @@ class IntegrationDocsTests(unittest.TestCase):
                     self.assertIn(f"--branch {source_ref()}", command)
 
     def test_install_commands_select_actual_packages_and_plugin_trees(self):
+        relay_cli_version = json.loads(
+            (ROOT / "versions.json").read_text()
+        )["npm"]["relaymessenger"][
+            "latest" if target() == "production" else "staging"
+        ]
         installs = {
-            CLI: "npm install --global relaymessenger@0.1.6-staging.41",
+            CLI: f"npm install --global relaymessenger@{relay_cli_version}",
             MCP: "npm install --global @relaymessenger/mcp@staging",
             "integrations/openclaw.mdx": "openclaw plugins install @relaymessenger/openclaw-plugin@staging",
             "integrations/hermes.mdx": "hermes plugins install RelayMessenger/Relay-Hermes --enable",
@@ -222,7 +227,10 @@ class IntegrationDocsTests(unittest.TestCase):
         }
         for page, command in installs.items():
             self.assertIn(expected(command), commands(read(page)), page)
-        self.assertIn(expected("npx relaymessenger@0.1.6-staging.41 --help"), commands(read(CLI)))
+        self.assertIn(
+            expected(f"npx relaymessenger@{relay_cli_version} --help"),
+            commands(read(CLI)),
+        )
         self.assertIn(
             expected("/plugin marketplace add RelayMessenger/Relay-SDK@staging"),
             commands(read("integrations/claude-code.mdx")),
