@@ -10,6 +10,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const check = process.argv.includes('--check');
 const require = createRequire(import.meta.url);
 const cli = process.env.CLI_REFERENCE_BIN || require.resolve('relaymessenger/dist/cli.js');
+const cliVersion = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).devDependencies.relaymessenger;
 const programModule = await import(pathToFileURL(require.resolve('relaymessenger/dist/program.js')).href);
 const directory = path.join(root, 'cli/reference');
 const tick = '`';
@@ -451,11 +452,11 @@ Use Node.js 22.22.3 or newer.
 ## Install
 
 ${fence}bash
-npm install --global relaymessenger@0.1.6-staging.37
-npx relaymessenger@0.1.6-staging.37 --help
+npm install --global relaymessenger@${cliVersion}
+npx relaymessenger@${cliVersion} --help
 ${fence}
 
-Run ${tick}npx relaymessenger@0.1.6-staging.37 <command> --help${tick} for one command's options. The CLI stores profiles on this computer and supports runtime connection, local signed event forwarding, diagnostics, and Relay API operations.
+Run ${tick}npx relaymessenger@${cliVersion} <command> --help${tick} for one command's options. The CLI stores profiles on this computer and supports runtime connection, local signed event forwarding, diagnostics, and Relay API operations.
 
 Use ${tick}--json${tick} for machine-readable results. [Create an agent](/agents/create-agent), [list agents](/agents/list-agents), or [delete an agent](/agents/delete-agent) from the CLI.
 

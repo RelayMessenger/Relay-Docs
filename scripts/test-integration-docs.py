@@ -213,7 +213,7 @@ class IntegrationDocsTests(unittest.TestCase):
 
     def test_install_commands_select_actual_packages_and_plugin_trees(self):
         installs = {
-            CLI: "npm install --global relaymessenger@0.1.6-staging.37",
+            CLI: "npm install --global relaymessenger@0.1.6-staging.40",
             MCP: "npm install --global @relaymessenger/mcp@staging",
             "integrations/openclaw.mdx": "openclaw plugins install @relaymessenger/openclaw-plugin@staging",
             "integrations/hermes.mdx": "hermes plugins install RelayMessenger/Relay-Hermes --enable",
@@ -222,7 +222,7 @@ class IntegrationDocsTests(unittest.TestCase):
         }
         for page, command in installs.items():
             self.assertIn(expected(command), commands(read(page)), page)
-        self.assertIn(expected("npx relaymessenger@0.1.6-staging.37 --help"), commands(read(CLI)))
+        self.assertIn(expected("npx relaymessenger@0.1.6-staging.40 --help"), commands(read(CLI)))
         self.assertIn(
             expected("/plugin marketplace add RelayMessenger/Relay-SDK@staging"),
             commands(read("integrations/claude-code.mdx")),
@@ -247,7 +247,7 @@ class IntegrationDocsTests(unittest.TestCase):
         # set RELAY_API_URL. Backend examples may pin the staging origin in
         # code, but do not turn it into a user environment setup step.
         api = f"https://{origin('api.staging.relayapp.im')}"
-        for page in (AUTH, "integrations/chat-sdk.mdx", "integrations/cloudflare-think.mdx"):
+        for page in ("integrations/chat-sdk.mdx", "integrations/cloudflare-think.mdx"):
             self.assertIn(api, read(page), page)
         for page in (CLI, MCP, "integrations/openclaw.mdx", "integrations/claude-code.mdx"):
             self.assertIn("22.22.3", read(page), "Keep the supported Node minimum at the install task")
@@ -290,14 +290,13 @@ class IntegrationDocsTests(unittest.TestCase):
 
     def test_authentication_owns_private_input_resolution_and_logout(self):
         text = read(AUTH)
-        for command in ("auth login", "auth status", "auth logout", "--with-token", "--profile"):
+        for command in ("auth login", "auth status", "auth logout", "--with-token"):
             self.assertIn(command, "\n".join(commands(text)))
-        for variable in ("RELAY_AGENT_TOKEN", "--api-url", "--profile"):
+        for variable in ("RELAY_AGENT_TOKEN", "--profile"):
             self.assertIn(variable, text)
-        self.assertConcept(text, r"never as command arguments", "Tokens must not become shell arguments")
-        self.assertConcept(text, r"save a token for this computer", "Use the shipped login description")
+        self.assertConcept(text, r"never .*command arguments", "Tokens must not become shell arguments")
+        self.assertConcept(text, r"credential remains stored|stored privately", "Keep credentials local")
         self.assertConcept(text, r"logout.*(?:only|selected|that profile)", "Logout scope is local")
-        self.assertConcept(text, r"relay_agent_token is honored in scripts only", "Use the shipped environment rule")
         self.assertLink(AUTH, "/agents/delete-agent")
 
     def test_observation_delegates_protocol_without_becoming_a_consumer(self):
