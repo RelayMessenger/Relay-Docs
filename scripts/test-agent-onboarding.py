@@ -15,7 +15,7 @@ from origins import origin, production_text, target
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENT_PAGES = tuple(f"agents/{name}" for name in (
-    "lifecycle", "create-agent", "create-agent-api", "list-agents",
+    "lifecycle", "create-agent", "list-agents",
     "delete-agent",
 ))
 # The Console page moved into the Console group (owner, 2026-09-11); it keeps
@@ -133,25 +133,39 @@ class AgentOnboardingTests(unittest.TestCase):
         paths = json.loads((ROOT / "scripts/api-page-paths.json").read_text())
         self.assertIn(route(paths[operation]["href"]), links(text))
 
-    def test_canonical_bootstrap_and_scoped_delete(self):
+    def test_registration_is_organization_owned_and_legacy_delete_remains(self):
         source = (ROOT / "api-reference/openapi.yaml").read_text()
-        create = source.split("  /v1/agents:\n", 1)[1].split("  /v1/agents/{handle}:\n", 1)[0]
         delete = source.split("  /v1/agents/{handle}:\n", 1)[1].split("  /v1/chats:\n", 1)[0]
-        self.assertIn("operationId: createAgent", create)
-        self.assertIn("security: []", create)
+        registration = re.search(r"^  /v1/agents:\n(.*?)(?=^  /|\ncomponents:|\Z)",
+                                 source, re.M | re.S)
+        if registration:
+            self.assertNotRegex(registration[1], r"(?m)^    post:")
+        self.assertNotIn("operationId: createAgent\n", source)
+        self.assertNotIn("    CreateAgentRequest:", source)
+        self.assertNotIn("    CreateAgentResponse:", source)
         self.assertIn("operationId: deleteAgent", delete)
         self.assertIn("- BearerAuth: []", delete)
         self.assertIn('"409":', delete)
-        self.assertNotRegex(create, r"(?m)^    get:")
+        self.assertIn("`.dev`", delete)
+        self.assertIn("Organization-managed", delete)
         self.assertNotIn("x-mint:", source)
 
     def test_cli_front_door_routes_to_owning_tasks(self):
         cli = self.page("cli/index")
-        versions = json.loads((ROOT / "versions.json").read_text())
-        cli_versions = versions["npm"]["relaymessenger"]
+        # build-cli-reference.mjs captures the exact installed devDependency.
+        # A moving registry tag must not relabel that immutable help capture.
+        package = json.loads((ROOT / "package.json").read_text())
+        lock = json.loads((ROOT / "package-lock.json").read_text())
+        captured_cli = package["devDependencies"]["relaymessenger"]
+        self.assertEqual(lock["packages"]["node_modules/relaymessenger"]["version"],
+                         captured_cli)
+        if target() == "staging":
+            published = json.loads((ROOT / "versions.json").read_text())
+            self.assertEqual(captured_cli, published["npm"]["relaymessenger"]["staging"],
+                             "Refresh the installed CLI and recapture its help after publishing")
         self.assert_identifiers(
             cli,
-            f"npx relaymessenger@{cli_versions['staging']} --help",
+            f"npx relaymessenger@{captured_cli} --help",
             "--json",
         )
         self.assert_links_to_pages(
@@ -217,52 +231,51 @@ class AgentOnboardingTests(unittest.TestCase):
         self.assertFalse(code_blocks(router, "bash"))
         self.assertFalse(code_blocks(router, "typescript"))
 
-    def test_cli_creation_and_api_storage_have_separate_owners(self):
+    def test_cli_creation_uses_the_organization_front_door(self):
         create = self.page("agents/create-agent")
         self.assert_identifiers(create, "npx relaymessenger@staging agents create",
-                                "https://api.staging.relayapp.im", "--profile")
-        self.assert_links_to_pages(create, "agents/create-agent-api", PHOTO_PAGE)
-        self.assert_operation_link(create, "createAgent")
+                                "--profile", "share_url", "stored")
+        self.assertNotIn("npx relaymessenger@staging login", command_examples(create))
+        self.assert_concept(create, r"starts browser OAuth sign.in automatically")
+        self.assert_links_to_pages(create, "cli/auth", "cli/reference/agents-create",
+                                   CONSOLE_AGENT_PAGE, PHOTO_PAGE)
         self.assert_concept(create, r"(?:Relay )?Console|sign in")
+        self.assert_concept(create, r"organization")
         self.assert_concept(create, r"uncertain|unconfirmed")
-        self.assert_concept(create, r"(?:no|never|not|without).{0,30}automatic\w* retr")
+        self.assertFalse((ROOT / "agents/create-agent-api.mdx").exists())
+        self.assertNotIn("Relay.createAgent", create)
+        self.assertNotIn("10 per caller address", create)
 
-        api = self.page("agents/create-agent-api")
-        self.assert_identifiers(api, "Relay.createAgent", "maxRetries: 0", "mode: 0o600",
-                                'flag: "wx"', "Retry-After", "8192", "Cache-Control: no-store")
-        self.assert_operation_link(api, "createAgent")
-        sdk = "\n".join(code_blocks(api, "typescript"))
-        https = "\n".join(code_blocks(api, "bash"))
-        self.assertLess(sdk.index("mkdtemp("), sdk.index("Relay.createAgent("))
-        self.assertLess(sdk.index("writeFile("), sdk.index("console.log("))
-        self.assertNotRegex(sdk, r"console\.log\(\s*created(?:\.secret)?\s*\)")
-        self.assert_identifiers(https, "umask 077", "mktemp -d", "--output", "POST", "/v1/agents")
-        self.assertLess(https.index("mktemp -d"), https.index("curl "))
-        self.assertNotRegex(https, r"--retry\b|Authorization:")
-        self.assert_links_to_pages(api, PHOTO_PAGE)
+    def test_retired_registration_is_not_an_active_published_instruction(self):
+        paths = list(ROOT.rglob("*.mdx")) + [ROOT / "skill.md"]
+        for path in paths:
+            if "node_modules" in path.parts or any(part.startswith(".") for part in path.relative_to(ROOT).parts):
+                continue
+            text = path.read_text()
+            with self.subTest(path=path.relative_to(ROOT)):
+                self.assertNotIn("Relay.createAgent", text)
+                self.assertNotRegex(text, r"(?:POST|--request\s+POST|-X\s+POST)\s+(?:https?://[^\s/]+)?/v1/agents(?:[`\s\"']|$)")
+                self.assertNotRegex(text, r"(?i)anonymous creation|create an agent without a Console account")
+        self.assertIn("existing developer-managed `.dev`", self.page("agents/lifecycle"))
 
     def test_cli_agent_json_is_flat_safe_and_consistent(self):
-        created = [item for item in self.json_examples(self.page("agents/create-agent"))
-                   if isinstance(item, dict) and "profile" in item]
-        self.assertEqual(len(created), 1)
-        record = created[0]
-        keys = {"profile", "handle", "display_name", "image_url", "share_url", "api_url", "token"}
-        self.assertEqual(set(record), keys)
-        self.assertEqual(record["token"], "stored")
-        self.assertEqual(record["api_url"], f"https://{origin('api.staging.relayapp.im')}")
-        self.assertTrue(record["share_url"].startswith("https://"))
-        self.assertTrue(urlsplit(record["share_url"]).path.endswith(f'/@{record["handle"]}'))
-        self.assertIn(urlsplit(record["share_url"]).hostname, {
-            origin("staging.relayapp.im"), origin("go.staging.relayapp.im"),
-        })
-
+        # Creation is described without a fabricated live response. Inspect
+        # the saved-profile example, where an image may already be cleared.
+        create = self.page("agents/create-agent")
+        self.assertIn("metadata only", create)
+        self.assertIn("stored privately", create)
+        keys = {"profile", "handle", "display_name", "image_url", "api_url", "token"}
         listing = self.page("agents/list-agents")
         self.assert_identifiers(listing, "agents list --json")
         examples = self.json_examples(listing)
         inventories = [item for item in examples if isinstance(item, dict) and "agents" in item]
         self.assertEqual(len(inventories), 1)
         self.assertEqual(set(inventories[0]), {"agents"})
-        self.assertEqual(inventories[0]["agents"], [{key: record[key] for key in keys - {"share_url"}}])
+        self.assertEqual(len(inventories[0]["agents"]), 1)
+        record = inventories[0]["agents"][0]
+        self.assertEqual(set(record), keys)
+        self.assertEqual(record["token"], "stored")
+        self.assertEqual(record["api_url"], f"https://{origin('api.staging.relayapp.im')}")
         failures = [item for item in examples if isinstance(item, dict) and "error" in item]
         self.assertEqual(len(failures), 1)
         self.assertEqual(set(failures[0]), {"profile", "api_url", "token", "error"})
@@ -295,15 +308,16 @@ class AgentOnboardingTests(unittest.TestCase):
         self.assert_links_to_pages(auth, "agents/create-agent", "agents/delete-agent",
                                    "integrations/claude-code")
 
-    def test_start_supports_anonymous_or_existing_token_without_console(self):
+    def test_start_keeps_organization_creation_separate_from_existing_tokens(self):
         skill = self.page("skill")
         start = skill.split("## Start\n", 1)[1].split("\n## ", 1)[0]
-        self.assert_identifiers(start, "POST /v1/agents", "Agent Token", "RELAY_API_URL",
+        self.assert_identifiers(start, "relay login", "relay login --with-token",
+                                "Agent Token", "RELAY_API_URL",
                                 "GET /v1/chats?limit=1", "event_id", "/v1/websocket")
-        self.assert_concept(start, r"anonymous|unauthenticated")
+        self.assert_concept(start, r"organization")
         self.assert_concept(start, r"existing.{0,25}Agent Token")
-        self.assert_concept(start, r"(?:Neither|without|no|not requir).{0,80}Console account")
-        self.assertNotRegex(start, r"created in that environment.s\s+Console")
+        self.assertNotIn("POST /v1/agents", start)
+        self.assertNotIn("Neither path requires a Console account", start)
         self.assert_links_to_pages(skill, "agents/create-agent", "cli/auth",
                                    "integrations/claude-code", PHOTO_PAGE, "agents/delete-agent",
                                    "integrations/skills")
@@ -346,13 +360,14 @@ class AgentOnboardingTests(unittest.TestCase):
 
     def test_custom_profile_uses_existing_recipe_and_rendered_image_pair(self):
         spec = (ROOT / "api-reference/openapi.yaml").read_text()
-        request = spec.split("    CreateAgentRequest:\n", 1)[1].split("    AgentImageRecipe:\n", 1)[0]
-        for field in ("handle:", "first_name:", "image_url:", "image_recipe:"):
+        request = spec.split("    UpdateContactCardRequest:\n", 1)[1].split("    UpdateWebhookSubscriptionRequest:\n", 1)[0]
+        for field in ("first_name:", "image_url:", "attachment_id:", "image_recipe:"):
             self.assertIn(field, request)
-        self.assertIn("dependentRequired:", request)
-        self.assertIn("image_recipe:\n          - image_url", request)
+        self.assertIn("dependentSchemas:", request)
+        self.assertIn("required: [attachment_id]", request)
+        self.assertIn("required: [image_url]", request)
         # Field rules belong to the generated operation, rendering to recipes.
-        self.assert_operation_link(self.page("agents/create-agent"), "createAgent")
+        self.assert_operation_link(self.page(PHOTO_PAGE), "updateContactCard")
         recipes = self.page(RECIPE_PAGE)
         self.assert_links_to_pages(self.page(PHOTO_PAGE), RECIPE_PAGE)
         self.assert_links_to_pages(recipes, PHOTO_PAGE)
@@ -374,7 +389,7 @@ class AgentOnboardingTests(unittest.TestCase):
             self.assertRegex(example, r"(?:--request|-X)\s+PATCH\b")
         self.assert_concept(recipes, r"rendered|render\w* (?:image|PNG)")
         self.assert_concept(recipes, r"recipe.only.{0,70}(?:400|render)|(?:400|render).{0,70}recipe.only")
-        for slug in ("agents/lifecycle", "agents/create-agent", "agents/create-agent-api"):
+        for slug in ("agents/lifecycle", "agents/create-agent"):
             self.assert_links_to_pages(self.page(slug), PHOTO_PAGE)
             self.assertNotRegex(self.page(slug), r'"recipe"\s*:\s*\{\s*"monogram"')
 
@@ -499,8 +514,9 @@ class AgentOnboardingTests(unittest.TestCase):
             with self.subTest(page=slug):
                 self.page(slug)
                 self.assertIn(slug, navigation)
-        for operation in ("POST /v1/agents", "DELETE /v1/agents/{handle}"):
-            self.assertIn(operation, navigation)
+        self.assertIn("DELETE /v1/agents/{handle}", navigation)
+        self.assertNotIn("POST /v1/agents", navigation)
+        self.assertNotIn("agents/create-agent-api", navigation)
 
     def test_getting_started_excludes_management_ai_and_checklist_pages(self):
         config = json.loads((ROOT / "docs.json").read_text())

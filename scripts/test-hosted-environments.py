@@ -121,6 +121,9 @@ class HostedEnvironmentTests(unittest.TestCase):
         self.assertTrue(args.production)
         self.assertTrue(args.all_pages)
         self.assertEqual(args.workers, 3)
+        self.assertTrue(args.require_edge_fresh)
+        self.assertTrue(hosted.argument_parser().parse_args(
+            ["https://docs.test"]).require_edge_fresh)
         with self.assertRaisesRegex(SystemExit, "between 1 and 16"):
             hosted.check_all_pages(lambda *a, **k: None, [], workers=17)
 
@@ -190,6 +193,100 @@ class HostedEnvironmentTests(unittest.TestCase):
         hosted.check_page_content(page, b'<main><h1>Payload</h1><p>Preserve this distinctive current payload exactly.</p></main>')
         with self.assertRaisesRegex(SystemExit, "source content"):
             hosted.check_page_content(page, b'<h1>Payload</h1><script>Preserve this distinctive current payload exactly.</script>')
+
+    def frame_fixture(self):
+        definition = '''export const Card = ({ title, description, href }) => {
+  return (
+    <a href={href}><h3>{title}</h3><span>{description}</span></a>
+  );
+};
+'''
+        body = definition + '''
+<h1>Documentation</h1>
+<p>Connect the agent you build to the current messenger.</p>
+<Card title="Quickstart" description="Send your first message with the current API." href="/start/quickstart" />
+'''
+        page = {"page": "index", "title": "Relay", "mode": "frame", "body": body}
+        rendered = b'''<h1>Documentation</h1>
+<p>Connect the agent you build to the current messenger.</p>
+<a href="/start/quickstart"><h3>Quickstart</h3><span>Send your first message with the current API.</span></a>'''
+        markdown = ("# Relay\n\n" + body.replace("return (\n", "return ").replace(
+            "\n  );", ";")).encode()
+        return page, rendered, markdown
+
+    def test_frame_uses_source_h1_and_rendered_component_literals(self):
+        page, rendered, markdown = self.frame_fixture()
+        hosted.check_page_content(page, rendered)
+        hosted.check_page_content(page, markdown, markdown=True)
+        self.fixture()
+        (self.root / "index.mdx").write_text(
+            '---\ntitle: "Relay"\nmode: "frame"\n---\n' + page["body"])
+        self.assertEqual(hosted.read_page(self.root, "index")["mode"], "frame")
+
+    def test_frame_does_not_waive_missing_heading_copy_cards_or_links(self):
+        page, rendered, markdown = self.frame_fixture()
+        for original, replacement in (
+            (b"Documentation", b"Old heading"),
+            (b"Connect the agent you build", b"Old introductory copy"),
+            (b"Quickstart", b"Old card"),
+            (b"Send your first message", b"An old instruction"),
+            (b"/start/quickstart", b"/missing"),
+        ):
+            for actual, is_markdown in ((rendered, False), (markdown, True)):
+                with self.subTest(original=original, markdown=is_markdown), \
+                        self.assertRaises(SystemExit):
+                    hosted.check_page_content(
+                        page, actual.replace(original, replacement), markdown=is_markdown)
+        with self.assertRaises(SystemExit):
+            hosted.check_page_content(page, markdown.replace(b"# Relay", b"# Old title"),
+                                      markdown=True)
+        # A navbar link cannot mask a card whose own destination drifted.
+        with self.assertRaisesRegex(SystemExit, "frame links"):
+            hosted.check_page_content(
+                page, rendered.replace(b"/start/quickstart", b"/missing")
+                + b'<nav><a href="/start/quickstart">Quickstart</a></nav>')
+        # Short, standalone H1 copy is still checked in generated Markdown.
+        short_heading = markdown.replace(b"</h1>\n", b"</h1>\n\n")
+        with self.assertRaisesRegex(SystemExit, "frame H1"):
+            hosted.check_page_content(
+                page, short_heading.replace(b"Documentation", b"Wrong"), markdown=True)
+
+    def test_frame_rejects_unhandled_dynamic_components(self):
+        page, _, markdown = self.frame_fixture()
+        for mutation in (
+            markdown.replace(b'href="/start/quickstart"', b"href={dynamicRoute}"),
+            markdown.replace(b"return ", b"return choose() || "),
+            markdown.replace(b"{description}</span>", b"{title}</span>"),
+        ):
+            with self.subTest(mutation=mutation), self.assertRaises(SystemExit):
+                hosted.check_page_content(page, mutation, markdown=True)
+
+    def test_frame_full_page_check_requires_and_verifies_rendered_dom(self):
+        page, rendered, markdown = self.frame_fixture()
+
+        def fetch(path, cache_busted=False):
+            # The static shell is not proof of client-rendered cards.
+            return response(markdown if path.endswith(".md") else b"<h1>Documentation</h1>")
+
+        with self.assertRaisesRegex(SystemExit, "requires a rendered DOM"):
+            hosted.check_all_pages(fetch, [page], workers=1)
+        result = hosted.check_all_pages(fetch, [page], workers=1,
+                                       render_frame=lambda route: response(rendered))
+        self.assertIn("rendered", result["/"])
+        with self.assertRaises(SystemExit):
+            hosted.check_all_pages(fetch, [page], workers=1,
+                                   render_frame=lambda route: response(
+                                       rendered.replace(b"Send your first message", b"Old copy")))
+
+    def test_adjacent_rendered_images_preserve_separate_alt_text(self):
+        page = {"page": "images", "title": "Images",
+                "body": '<img alt="First meaningful screenshot." />\n'
+                        '<img alt="Second meaningful screenshot." />'}
+        rendered = (b'<h1>Images</h1><img alt="First meaningful screenshot." />'
+                    b'<img alt="Second meaningful screenshot." />')
+        hosted.check_page_content(page, rendered)
+        with self.assertRaises(SystemExit):
+            hosted.check_page_content(page, rendered.replace(b"Second meaningful", b"Stale"))
 
     def test_agent_prompt_allows_mintlify_wrapper_and_link_rendering_only(self):
         source = (
@@ -344,7 +441,7 @@ class HostedEnvironmentTests(unittest.TestCase):
         self.assertEqual(output.getvalue(), "")
 
     def test_require_edge_fresh_rejects_stale_edge(self):
-        self.assertFalse(hosted.argument_parser().parse_args(["https://docs.test"]).require_edge_fresh)
+        self.assertTrue(hosted.argument_parser().parse_args(["https://docs.test"]).require_edge_fresh)
         self.assertTrue(hosted.argument_parser().parse_args(
             ["https://docs.test", "--require-edge-fresh"]).require_edge_fresh)
         with self.assertRaisesRegex(SystemExit, "canonical body .* does not match current origin body"):

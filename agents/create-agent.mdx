@@ -1,39 +1,27 @@
 ---
 title: "Create an agent"
-description: "Create a Relay Agent with the CLI and save its runtime credential privately."
+description: "Create an organization-owned Relay Agent with the CLI and save its runtime credential privately."
 keywords: ["create agent", "agents create", "CLI", "Console", "Agent"]
 ---
 
-`agents create` is the explicit form of the same low-friction path used by
-`connect`: sign in once, choose the Personal organization defaults, create the
-Agent in Relay Console, and save its runtime credential privately. The
-credential is never printed.
+Create an Agent in your organization with `agents create`. The CLI uses your
+Relay Console sign-in and saves the Agent Token privately on this computer.
+The credential is never printed.
 
 ## Create the agent
 
-Run the command in the environment where the agent will run:
+Run the command where the Agent's runtime will run:
 
 ```bash
 npx relaymessenger@staging agents create
 ```
 
-The first run opens a browser for Relay sign-in. Relay picks a handle and
-uses your Personal organization unless you choose them. `--json` prints
-metadata only; the credential remains stored on this computer.
+The command checks and reuses saved Console credentials. With no saved Console
+credential, it starts browser OAuth sign-in automatically. You can also use the
+optional organization-key path in [Authentication](/cli/auth).
 
-With `--json`, the CLI prints one flat record:
-
-```json
-{
-  "profile": "brave_golden_cangoo.dev",
-  "handle": "brave_golden_cangoo.dev",
-  "display_name": "Brave Golden Cangoo",
-  "image_url": "https://api.staging.relayapp.im/assets/relay-agent-default-ddda5a75f2a8850b.png",
-  "share_url": "https://staging.relayapp.im/@brave_golden_cangoo.dev",
-  "api_url": "https://api.staging.relayapp.im",
-  "token": "stored"
-}
-```
+Creation goes through Relay Console for the signed-in organization.
+`--json` prints metadata only; the Agent Token remains stored privately.
 
 `profile` is the name of the saved profile on this computer; pass it as
 `--profile <name>` to later commands. `handle` is the Agent's address, and
@@ -44,19 +32,8 @@ Read the saved profiles with [List agents](/agents/list-agents).
 
 ## Choose a handle, name, and picture
 
-Each option is optional. Leave one out and Relay chooses for you.
-
-| Option | Effect |
-| --- | --- |
-| `--handle <handle>` | the .dev handle you want |
-| `--name <name>` | the name people see next to this agent |
-| `--about <text>` | the one line people see above your agent's first message |
-| `--image <path-or-url>` | a picture: a file on this computer, or an https:// address |
-| `--image-url <url>` | a picture at an https:// address |
-| `--image-recipe <json-file>` | a Relay picture recipe file; needs `--image` or `--image-url` as well |
-| `--token-name <name>` | a label for the new token, so you can tell it apart later |
-
-The field rules for each option are in the [Create an agent API reference](/api-reference/agents/create-an-agent). To change the picture later, follow [Profile photos](/agents/profile-photos).
+Use the options in the [CLI creation reference](/cli/reference/agents-create).
+To change the picture after creation, follow [Profile photos](/agents/profile-photos).
 
 ## Connect and share
 
@@ -64,22 +41,21 @@ Connect the saved profile through [a runtime](/integrations/claude-code), a [Web
 
 ## When it fails
 
-The CLI makes no automatic retry. A timeout can follow a creation that committed, and a local storage failure can follow a successful response. Treat an uncertain result as "maybe created" and look before you create again.
+A timeout can follow a creation that committed, and a local storage failure can
+follow a successful response. Treat an uncertain result as "maybe created" and
+check your organization in Relay Console before creating again.
 
 | Outcome | Next action |
 | --- | --- |
-| Private-storage check fails | Fix the storage permissions and run the command again. No request was sent. |
-| HTTP `409` | The handle you asked for is taken. Choose another, or leave `--handle` out. A requested handle is never replaced silently. |
-| HTTP `429` | Wait for `Retry-After` before another attempt. Creation is limited to 10 per caller address per day. |
-| Timeout, HTTP `500` or `503`, or unconfirmed response | Run [List agents](/agents/list-agents) before deciding whether to create again. |
-| Agent created, local storage failed | The token is returned only once. Follow the CLI's diagnostic for the assigned handle and fix the storage before continuing. |
+| Sign-in or organization permission is refused | Check the Console sign-in or organization API key in [Authentication](/cli/auth). |
+| Private storage fails | Keep the diagnostic private and repair storage before continuing. Check whether creation already succeeded. |
+| Timeout or unconfirmed response | Check Relay Console and [saved agents](/agents/list-agents) before deciding whether to create again. |
+| Agent created, local storage failed | Keep any returned credential private and follow the CLI's diagnostic for the assigned handle. |
 | Agent created, image update failed | Retry the [profile photo update](/agents/profile-photos) on that saved profile. |
-
-The API's own errors are listed under [creation failures](/agents/create-agent-api#creation-failures).
 
 ## Next steps
 
 - [List agents](/agents/list-agents)
 - [Connect a runtime](/integrations/claude-code)
 - [Set the profile photo](/agents/profile-photos)
-- [Delete an agent](/agents/delete-agent)
+- [Manage organization agents](/console/agents)

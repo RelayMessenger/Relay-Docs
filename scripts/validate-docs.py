@@ -490,10 +490,10 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # A person's reply accepts a message request; the request route takes deleted
 # only, Relay-Server PR 207, September 9, 2026.
 # Add comes back: POST /v1/contacts for people, is_contact on chat handles, request_state, chat.request.updated and error 2029 removed, Relay-Server PR 225, September 13, 2026.
-# Source authority: Relay-Server commit 8271117; CLI publication is gated separately.
+# Source authority: Relay-Server staging merge d4dc623; anonymous registration is removed.
 # The digest pins source bytes independently of the Server release commit.
 expected_openapi_sha256 = (
-    "8bdc20c1877a3afbd5da24132a343cf14bf531dd2edf1f4fa42dca7823ae096e"
+    "81d23529476ae77b3b7f7dfc931d2e0e421d3c91e20c59136e2deef9123f722e"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
@@ -649,7 +649,6 @@ if leaked_private_operations:
         f"private operation entered public OpenAPI: {leaked_private_operations}"
     )
 expected_operation_ids = {
-    "createAgent",
     "deleteAgent",
     "addParticipant",
     "blockHandle",

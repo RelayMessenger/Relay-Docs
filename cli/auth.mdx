@@ -4,7 +4,7 @@ description: "Sign in to Relay Console from the CLI, or import an existing Agent
 keywords: ["CLI", "authentication", "device login", "Agent Token"]
 ---
 
-Use `relay login` for normal CLI sign-in. It opens Relay Console's device browser flow and stores the session on this computer. **Never put a token in command arguments.**
+Use `relay login` for normal CLI sign-in. With no saved Console credential, it opens Relay Console's OAuth device browser flow; otherwise it checks the saved credential. **Never put a token in command arguments.**
 
 ```bash
 relay login
@@ -17,7 +17,20 @@ On a first sign-in, Relay asks for your Personal organization name and namespace
 relay login --organization-name "Acme" --namespace acme --website https://acme.example
 ```
 
-Credentials are stored in Relay's private local configuration. The CLI reports `token: "stored"` instead of printing a credential. `relay logout` removes the saved Agent Token profile; it does not delete the Agent.
+The staging CLI selects staging API and Console endpoints automatically. Credentials are stored privately in Relay's local configuration, and the CLI reports `token: "stored"` instead of printing a credential.
+
+For a Console-only sign-in, `relay whoami` reports the Console user and organization. With an organization API key, it reports the organization. `relay logout` clears the saved Console credential and any Agent Token in the selected profile.
+
+## Use an organization API key
+
+You can also sign in with an existing organization API key. This optional path supports `rel_org_` keys and the legacy `rly_org_` format.
+
+```bash
+printf '%s\n' "$RELAY_ORG_KEY" | relay login --with-token
+relay whoami
+```
+
+The CLI checks the key with Relay Console before saving it as an `organization_key` credential. Browser sign-in uses an OAuth session; Agent Tokens stay in their separate profiles. A rejected key leaves the saved credentials unchanged.
 
 ## Import an existing Agent Token
 
@@ -30,6 +43,8 @@ relay auth logout --profile existing
 ```
 
 The token is read from stdin and stored privately. On Windows PowerShell, use `Get-Content -Raw $TokenFile | relay auth login --with-token --profile existing`. The imported-token path can use `RELAY_AGENT_TOKEN`; normal `relay login` does not require that variable.
+
+`relay auth logout --profile existing` removes only that profile's Agent Token. Clearing local credentials leaves the Agent at Relay unchanged.
 
 ## Local runtime development
 

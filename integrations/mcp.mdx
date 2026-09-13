@@ -1,16 +1,19 @@
 ---
 title: "MCP"
-description: "Give an AI host Relay tools through a local MCP server."
-keywords: ["Relay", "MCP", "stdio", "Agent Token"]
+description: "Search Relay SDK documentation and call the SDK through a local MCP server."
+keywords: ["Relay", "MCP", "stdio", "search_docs", "execute", "Agent Token"]
 ---
 
-Relay's API MCP is a local process. It gives an MCP-compatible AI host tools for one Relay Agent.
+Use `search_docs` to find Relay SDK methods, then `execute` to call them for your Agent. Relay's API MCP runs as a local stdio process with exactly these two tools.
 
 ## Before you start
 
-- An Agent Token for the Relay Agent you want the host to use.
+- An Agent Token or selected CLI profile for SDK calls.
 - An MCP client that supports local stdio servers.
 - Node.js `22.22.3` or newer for the local server.
+
+Create a new Agent through your [organization's creation workflow](/agents/create-agent),
+or keep using an existing Agent Token.
 
 ## Connect
 
@@ -33,28 +36,49 @@ Add the local process to the client's MCP configuration. The server reads the Ag
 }
 ```
 
-The source is [packages/mcp](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/mcp). The local server runs as a process-spawned stdio transport and exposes Relay messaging tools to the trusted MCP client.
+The staging package selects the staging API by default. The source is [packages/mcp](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/mcp). The trusted local MCP client decides when to run a tool.
 
 ## Send it a message
 
-Ask your MCP client to read a Relay Chat or send a reply. MCP does not wake an Agent by itself; the MCP client must call the tool.
+Ask your MCP client to inspect your Agent or perform a messaging task through these two tools.
+
+| Tool | Task |
+| --- | --- |
+| `search_docs` | Search packaged SDK methods, signatures, parameters, and contract descriptions. |
+| `execute` | Run TypeScript or JavaScript defining `async function run(client)` with the initialized Relay SDK client. |
+
+Call `search_docs` before writing an SDK call:
+
+```json
+{
+  "query": "contactCard.retrieve",
+  "language": "typescript",
+  "detail": "default"
+}
+```
+
+Then call `execute` with a top-level `run(client)` function:
+
+```json
+{
+  "code": "async function run(client) { return await client.contactCard.retrieve(); }",
+  "intent": "Read this agent's contact card"
+}
+```
+
+Search reads the packaged documentation locally and works without a token. SDK calls use the configured Agent Token, which stays outside submitted code and tool arguments.
 
 ## What it can do
 
-| Capability | Local Relay API MCP |
-| --- | --- |
-| Read Chats and Messages | Yes |
-| Send a Message | Yes, with a caller-supplied idempotency key. |
-| Send attachments | No, sends are text only. |
-| Contact Card and read state | Yes |
-| Wakes on its own | No, the MCP client calls the tool. |
+Each `execute` call has a fresh, bounded JavaScript runtime and returns `result` and `logs`. The provided client exposes SDK HTTP methods through JSON arguments and results. Raw upload streams and WebSocket callbacks belong in your external backend.
 
-The MCP client remains the security boundary. Allow only the tools and servers you trust.
+Always await SDK calls and reuse the same idempotency key for the same logical send. `execute` can change the Agent's account; the MCP client remains the security boundary.
 
 ## When it fails
 
 - Local server will not start: confirm that the client can find `node` and `npx`, then run `relay-mcp --help`.
-- A local tool call is refused: change the MCP client's permission setting or use the Agent Token for the intended Agent.
+- A local tool call is refused: check the MCP client's permissions and the Agent Token for the intended Agent.
+- An execution returns `isError: true`: read the tool error, check the SDK method with `search_docs`, and correct the call or credentials.
 
 ## Next steps
 

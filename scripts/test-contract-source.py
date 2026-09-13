@@ -8,11 +8,10 @@ from pathlib import Path
 from origins import target
 
 ROOT = Path(__file__).resolve().parents[1]
-# Exact customization contract at the confirmed Server staging merge.
-# Update only after reading and synchronizing a newly agreed upstream contract.
-UPSTREAM_COMMIT = "8271117"
-UPSTREAM_STAGING_COMMIT = "8271117"
-UPSTREAM_SHA256 = "8bdc20c1877a3afbd5da24132a343cf14bf531dd2edf1f4fa42dca7823ae096e"
+# Independently read canonical contract at the Server staging removal merge.
+UPSTREAM_COMMIT = "d4dc62372194bf929801229740346cdacfe2d5c9"
+UPSTREAM_STAGING_COMMIT = "d4dc62372194bf929801229740346cdacfe2d5c9"
+UPSTREAM_SHA256 = "81d23529476ae77b3b7f7dfc931d2e0e421d3c91e20c59136e2deef9123f722e"
 
 
 class ContractSourceTests(unittest.TestCase):

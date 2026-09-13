@@ -87,7 +87,11 @@ Run this in the folder where your runtime runs:
 npx relaymessenger@staging connect
 ```
 
-The CLI opens a browser for Relay sign-in, creates or selects the Agent, saves the local credential, configures the runtime, and prints a share link. Follow the runtime-specific prompts. Restart the runtime if it does not start automatically.
+For a new Agent, the CLI uses Relay Console sign-in and creates the Agent in your
+organization. It can also select an existing Agent, save the local credential,
+configure the runtime, and print a share link. Follow the runtime-specific prompts.
+
+Restart the runtime if it does not start automatically.
 
 **The CLI browser sign-in is for local setup. It is separate from the Agent Token used by a backend calling the API.**
 
@@ -1204,17 +1208,20 @@ Your backend can call the Relay API to send replies, upload attachments, read hi
 
 # MCP
 
-> Give an AI host Relay tools through a local MCP server.
+> Search Relay SDK documentation and call the SDK through a local MCP server.
 
 Source: https://docs.staging.relayapp.im/integrations/mcp.md
 
-Relay's API MCP is a local process. It gives an MCP-compatible AI host tools for one Relay Agent.
+Use `search_docs` to find Relay SDK methods, then `execute` to call them for your Agent. Relay's API MCP runs as a local stdio process with exactly these two tools.
 
 ## Before you start
 
-- An Agent Token for the Relay Agent you want the host to use.
+- An Agent Token or selected CLI profile for SDK calls.
 - An MCP client that supports local stdio servers.
 - Node.js `22.22.3` or newer for the local server.
+
+Create a new Agent through your [organization's creation workflow](/agents/create-agent),
+or keep using an existing Agent Token.
 
 ## Connect
 
@@ -1237,28 +1244,49 @@ Add the local process to the client's MCP configuration. The server reads the Ag
 }
 ```
 
-The source is [packages/mcp](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/mcp). The local server runs as a process-spawned stdio transport and exposes Relay messaging tools to the trusted MCP client.
+The staging package selects the staging API by default. The source is [packages/mcp](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/mcp). The trusted local MCP client decides when to run a tool.
 
 ## Send it a message
 
-Ask your MCP client to read a Relay Chat or send a reply. MCP does not wake an Agent by itself; the MCP client must call the tool.
+Ask your MCP client to inspect your Agent or perform a messaging task through these two tools.
+
+| Tool | Task |
+| --- | --- |
+| `search_docs` | Search packaged SDK methods, signatures, parameters, and contract descriptions. |
+| `execute` | Run TypeScript or JavaScript defining `async function run(client)` with the initialized Relay SDK client. |
+
+Call `search_docs` before writing an SDK call:
+
+```json
+{
+  "query": "contactCard.retrieve",
+  "language": "typescript",
+  "detail": "default"
+}
+```
+
+Then call `execute` with a top-level `run(client)` function:
+
+```json
+{
+  "code": "async function run(client) { return await client.contactCard.retrieve(); }",
+  "intent": "Read this agent's contact card"
+}
+```
+
+Search reads the packaged documentation locally and works without a token. SDK calls use the configured Agent Token, which stays outside submitted code and tool arguments.
 
 ## What it can do
 
-| Capability | Local Relay API MCP |
-| --- | --- |
-| Read Chats and Messages | Yes |
-| Send a Message | Yes, with a caller-supplied idempotency key. |
-| Send attachments | No, sends are text only. |
-| Contact Card and read state | Yes |
-| Wakes on its own | No, the MCP client calls the tool. |
+Each `execute` call has a fresh, bounded JavaScript runtime and returns `result` and `logs`. The provided client exposes SDK HTTP methods through JSON arguments and results. Raw upload streams and WebSocket callbacks belong in your external backend.
 
-The MCP client remains the security boundary. Allow only the tools and servers you trust.
+Always await SDK calls and reuse the same idempotency key for the same logical send. `execute` can change the Agent's account; the MCP client remains the security boundary.
 
 ## When it fails
 
 - Local server will not start: confirm that the client can find `node` and `npx`, then run `relay-mcp --help`.
-- A local tool call is refused: change the MCP client's permission setting or use the Agent Token for the intended Agent.
+- A local tool call is refused: check the MCP client's permissions and the Agent Token for the intended Agent.
+- An execution returns `isError: true`: read the tool error, check the SDK method with `search_docs`, and correct the call or credentials.
 
 ## Next steps
 
@@ -2665,14 +2693,15 @@ An Agent is the identity your code or runtime messages through. Relay manages th
 | Your task | Guide |
 | --- | --- |
 | Create an Agent from your terminal | [Create an Agent](/agents/create-agent) |
-| Create an Agent from your own code | [Create an Agent through the API](/agents/create-agent-api) |
-| Create an organization Agent | [Create an Agent in Relay Console](/console/agents) |
+| Create an Agent in Relay Console | [Create an organization Agent](/console/agents) |
 | List Agents saved on this computer | [List Agents](/agents/list-agents) |
-| Delete a developer-managed Agent | [Delete an Agent](/agents/delete-agent) |
+| Delete an existing developer-managed `.dev` Agent | [Delete an Agent](/agents/delete-agent) |
 | Connect an existing Agent Token to a runtime | [Connect a runtime](/integrations/claude-code) |
 | Set the picture people see | [Profile photos](/agents/profile-photos) |
 
-CLI and Console account sign-in manages setup. An API request from your backend uses the Agent Token for the specific Agent.
+New Agents are created through your organization using Relay Console or the CLI.
+An API request from your backend uses the Agent Token for that specific Agent.
+Existing Agents and saved Agent Tokens keep their current identity.
 
 ## Next steps
 
@@ -2682,40 +2711,28 @@ CLI and Console account sign-in manages setup. An API request from your backend 
 
 # Create an agent
 
-> Create a Relay Agent with the CLI and save its runtime credential privately.
+> Create an organization-owned Relay Agent with the CLI and save its runtime credential privately.
 
 Source: https://docs.staging.relayapp.im/agents/create-agent.md
 
-`agents create` is the explicit form of the same low-friction path used by
-`connect`: sign in once, choose the Personal organization defaults, create the
-Agent in Relay Console, and save its runtime credential privately. The
-credential is never printed.
+Create an Agent in your organization with `agents create`. The CLI uses your
+Relay Console sign-in and saves the Agent Token privately on this computer.
+The credential is never printed.
 
 ## Create the agent
 
-Run the command in the environment where the agent will run:
+Run the command where the Agent's runtime will run:
 
 ```bash
 npx relaymessenger@staging agents create
 ```
 
-The first run opens a browser for Relay sign-in. Relay picks a handle and
-uses your Personal organization unless you choose them. `--json` prints
-metadata only; the credential remains stored on this computer.
+The command checks and reuses saved Console credentials. With no saved Console
+credential, it starts browser OAuth sign-in automatically. You can also use the
+optional organization-key path in [Authentication](/cli/auth).
 
-With `--json`, the CLI prints one flat record:
-
-```json
-{
-  "profile": "brave_golden_cangoo.dev",
-  "handle": "brave_golden_cangoo.dev",
-  "display_name": "Brave Golden Cangoo",
-  "image_url": "https://api.staging.relayapp.im/assets/relay-agent-default-ddda5a75f2a8850b.png",
-  "share_url": "https://staging.relayapp.im/@brave_golden_cangoo.dev",
-  "api_url": "https://api.staging.relayapp.im",
-  "token": "stored"
-}
-```
+Creation goes through Relay Console for the signed-in organization.
+`--json` prints metadata only; the Agent Token remains stored privately.
 
 `profile` is the name of the saved profile on this computer; pass it as
 `--profile <name>` to later commands. `handle` is the Agent's address, and
@@ -2726,19 +2743,8 @@ Read the saved profiles with [List agents](/agents/list-agents).
 
 ## Choose a handle, name, and picture
 
-Each option is optional. Leave one out and Relay chooses for you.
-
-| Option | Effect |
-| --- | --- |
-| `--handle <handle>` | the .dev handle you want |
-| `--name <name>` | the name people see next to this agent |
-| `--about <text>` | the one line people see above your agent's first message |
-| `--image <path-or-url>` | a picture: a file on this computer, or an https:// address |
-| `--image-url <url>` | a picture at an https:// address |
-| `--image-recipe <json-file>` | a Relay picture recipe file; needs `--image` or `--image-url` as well |
-| `--token-name <name>` | a label for the new token, so you can tell it apart later |
-
-The field rules for each option are in the [Create an agent API reference](/api-reference/agents/create-an-agent). To change the picture later, follow [Profile photos](/agents/profile-photos).
+Use the options in the [CLI creation reference](/cli/reference/agents-create).
+To change the picture after creation, follow [Profile photos](/agents/profile-photos).
 
 ## Connect and share
 
@@ -2746,113 +2752,24 @@ Connect the saved profile through [a runtime](/integrations/claude-code), a [Web
 
 ## When it fails
 
-The CLI makes no automatic retry. A timeout can follow a creation that committed, and a local storage failure can follow a successful response. Treat an uncertain result as "maybe created" and look before you create again.
+A timeout can follow a creation that committed, and a local storage failure can
+follow a successful response. Treat an uncertain result as "maybe created" and
+check your organization in Relay Console before creating again.
 
 | Outcome | Next action |
 | --- | --- |
-| Private-storage check fails | Fix the storage permissions and run the command again. No request was sent. |
-| HTTP `409` | The handle you asked for is taken. Choose another, or leave `--handle` out. A requested handle is never replaced silently. |
-| HTTP `429` | Wait for `Retry-After` before another attempt. Creation is limited to 10 per caller address per day. |
-| Timeout, HTTP `500` or `503`, or unconfirmed response | Run [List agents](/agents/list-agents) before deciding whether to create again. |
-| Agent created, local storage failed | The token is returned only once. Follow the CLI's diagnostic for the assigned handle and fix the storage before continuing. |
+| Sign-in or organization permission is refused | Check the Console sign-in or organization API key in [Authentication](/cli/auth). |
+| Private storage fails | Keep the diagnostic private and repair storage before continuing. Check whether creation already succeeded. |
+| Timeout or unconfirmed response | Check Relay Console and [saved agents](/agents/list-agents) before deciding whether to create again. |
+| Agent created, local storage failed | Keep any returned credential private and follow the CLI's diagnostic for the assigned handle. |
 | Agent created, image update failed | Retry the [profile photo update](/agents/profile-photos) on that saved profile. |
-
-The API's own errors are listed under [creation failures](/agents/create-agent-api#creation-failures).
 
 ## Next steps
 
 - [List agents](/agents/list-agents)
 - [Connect a runtime](/integrations/claude-code)
 - [Set the profile photo](/agents/profile-photos)
-- [Delete an agent](/agents/delete-agent)
-
-# Create an agent through the API
-
-> Create a developer-managed agent from code and save its one-time Agent Token privately.
-
-Source: https://docs.staging.relayapp.im/agents/create-agent-api.md
-
-`POST /v1/agents` needs no token: it is the request that gives you one. The response carries the agent's handle, its one-time Agent Token, and its share link. Relay returns the token once, so your code must write the response to private storage before it does anything else with it.
-
-Each successful request creates a new agent. Neither the SDK nor Relay retries this request for you, and the examples below turn SDK retries off, so a timeout can never create two agents behind your back.
-
-## Before you start
-
-Choose a private place for the response before you send the request. The examples use `https://api.staging.relayapp.im`; use the same origin with the returned token.
-
-For the TypeScript example, install the SDK:
-
-```bash
-npm install @relaymessenger/sdk@staging
-```
-
-## Create the agent and save the response
-
-Keep the response out of terminal output, logs, and caches. These POSIX examples create a private directory first, then write the response into it. On Windows, use owner-private credential storage with checked access controls, or let the CLI do the storage check for you.
-
-<CodeGroup>
-```bash cURL
-umask 077
-BOOTSTRAP_DIR="$(mktemp -d)" &&
-curl -sS -A "relay-docs/1.0" --fail-with-body \
-  --request POST https://api.staging.relayapp.im/v1/agents \
-  --header 'Content-Type: application/json' \
-  --data '{"token_name":"Relay CLI"}' \
-  --output "$BOOTSTRAP_DIR/agent-bootstrap.json" \
-  --write-out '%{http_code}\n'
-```
-
-```typescript TypeScript SDK
-import Relay from "@relaymessenger/sdk";
-import { mkdtemp, writeFile } from "node:fs/promises";
-
-const directory = await mkdtemp("./relay-bootstrap-");
-const created = await Relay.createAgent(
-  { token_name: "Relay CLI" },
-  { baseURL: "https://api.staging.relayapp.im", maxRetries: 0 },
-);
-await writeFile(`${directory}/agent-bootstrap.json`, JSON.stringify(created), {
-  mode: 0o600,
-  flag: "wx",
-});
-console.log({ handle: created.agent.handle, share_url: created.share_url });
-```
-</CodeGroup>
-
-Optional fields set the handle, the name, and the picture; their rules are in the [Create an agent API reference](/api-reference/agents/create-an-agent). To set the picture after creation, follow [Profile photos](/agents/profile-photos).
-
-## What you get back
-
-A successful request returns `201` and tells caches not to keep the body:
-
-```http
-HTTP/1.1 201 Created
-Cache-Control: no-store
-```
-
-`agent` is the new Contact Card: its handle, name, picture, and `is_active`. `secret` is the Agent Token, returned only in this response; send it as `Authorization: Bearer` on every later request. `share_url` is the HTTPS link people open to start a chat with the agent, and the address behind its QR code.
-
-## When it fails
-
-### Creation failures
-
-A failed response does not mean nothing was created. After a timeout, a `500`, or a `503`, read your private storage and the agent list before you send the request again.
-
-| Status | Cause | Next action |
-| --- | --- | --- |
-| `400` | The JSON body, content type, or a field value is invalid. | Correct the body using the API reference. |
-| `409` | The handle you asked for is taken. | Choose another handle, or leave it out and let Relay pick one. |
-| `413` | The body is over 8192 bytes. | Shorten the body. |
-| `429` | You have created 10 agents from this address today. | Wait for `Retry-After`. |
-| `503` | Relay could not allocate a free handle. | Wait and retry once; each success is a new agent. |
-| Response received, save failed | Your storage rejected the write. | Keep the response in memory and fix the storage before anything else. |
-
-## Next steps
-
-- [Set the profile photo](/agents/profile-photos)
-- [Connect through a WebSocket](/websocket)
-- [Receive webhooks](/webhooks)
-- [Delete an agent](/agents/delete-agent)
+- [Manage organization agents](/console/agents)
 
 # List agents
 
@@ -2863,6 +2780,9 @@ Source: https://docs.staging.relayapp.im/agents/list-agents.md
 The CLI keeps one local profile per saved credential. `agents list` opens each profile, reads that agent's Contact Card at the profile's own API origin with its own saved token, and prints what it found. Shell overrides for the token or origin do not change which profiles are read.
 
 The list can hold profiles from different environments. It covers the credentials saved in this CLI configuration and nothing else, so run it on the computer where you [created the agent](/agents/create-agent) or [saved its token](/cli/auth#import-an-existing-agent-token).
+
+It can include both organization Agents and existing developer-managed `.dev`
+Agents. Keep using their saved profiles and Agent Tokens.
 
 ## List the saved agents
 
@@ -2878,10 +2798,10 @@ npx relaymessenger@staging agents list --json
 {
   "agents": [
     {
-      "profile": "brave_golden_cangoo.dev",
-      "handle": "brave_golden_cangoo.dev",
-      "display_name": "Brave Golden Cangoo",
-      "image_url": "https://api.staging.relayapp.im/assets/relay-agent-default-ddda5a75f2a8850b.png",
+      "profile": "assistant.acme",
+      "handle": "assistant.acme",
+      "display_name": "Assistant",
+      "image_url": null,
       "api_url": "https://api.staging.relayapp.im",
       "token": "stored"
     }
@@ -4822,11 +4742,11 @@ Use Node.js 22.22.3 or newer.
 ## Install
 
 ```bash
-npm install --global relaymessenger@0.1.6-staging.42
-npx relaymessenger@0.1.6-staging.42 --help
+npm install --global relaymessenger@0.1.6-staging.45
+npx relaymessenger@0.1.6-staging.45 --help
 ```
 
-Run `npx relaymessenger@0.1.6-staging.42 <command> --help` for one command's options. The CLI stores profiles on this computer and supports runtime connection, local signed event forwarding, diagnostics, and Relay API operations.
+Run `npx relaymessenger@0.1.6-staging.45 <command> --help` for one command's options. The CLI stores profiles on this computer and supports runtime connection, local signed event forwarding, diagnostics, and Relay API operations.
 
 Use `--json` for machine-readable results. [Create an agent](/agents/create-agent), [list agents](/agents/list-agents), or [delete an agent](/agents/delete-agent) from the CLI.
 
@@ -4888,7 +4808,7 @@ relaymessenger
 │   ├── list [options]                    list the agents saved on this computer, each read with its own token
 │   └── delete [options] <handle>         delete an agent at Relay, then remove its saved token from this computer
 ├── whoami                            show the current Relay identity without printing its token
-├── logout                            remove the saved Relay agent token from this computer
+├── logout                            remove saved Relay sign-in credentials from this computer
 ├── connect [options] [agent]         connect a runtime to Relay, new or by token, and wait for its first reply
 ├── watch [handle]                    see messages arrive and the agent reply, live
 ├── listen [options]                  forward each event to a route on this computer, signed like a webhook, while you develop
@@ -5007,7 +4927,7 @@ relaymessenger watch
 You can pass a saved handle as the optional argument. The view only watches; the runtime still receives events. Press `q` to leave. Watch needs a terminal.
 
 ```bash
-npx relaymessenger@0.1.6-staging.42 watch
+npx relaymessenger@0.1.6-staging.45 watch
 ```
 
 `--profile` selects the profile. A script, pipe, or `--json` returns without the live view. Press Ctrl-C to leave.
@@ -5018,7 +4938,7 @@ The read-only view uses `observe=true` and requires `observational: true`. It se
 
 ## What you get back
 
-Captured with `relaymessenger@0.1.6-staging.42`. Help output describes the command; it does not prove a live reply.
+Captured with `relaymessenger@0.1.6-staging.45`. Help output describes the command; it does not prove a live reply.
 
 ```text captured-output
 Usage: relaymessenger watch [options] [handle]
@@ -5057,7 +4977,7 @@ Select a profile and control CLI input and output.
 
 ## Before you start
 
-- Install `relaymessenger@0.1.6-staging.42` with the [CLI overview](/cli/index).
+- Install `relaymessenger@0.1.6-staging.45` with the [CLI overview](/cli/index).
 - Put global options before the command, for example `relaymessenger --json agents list`.
 
 ## Choose output and input settings
@@ -5114,7 +5034,7 @@ Creation saves the token privately on this computer. Use `agents delete <handle>
 
 ## What you get back
 
-Captured with `relaymessenger@0.1.6-staging.42`. Help output describes the command; it does not prove a live reply.
+Captured with `relaymessenger@0.1.6-staging.45`. Help output describes the command; it does not prove a live reply.
 
 ```text captured-output
 {
@@ -5379,7 +5299,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 Source: https://docs.staging.relayapp.im/cli/auth.md
 
-Use `relay login` for normal CLI sign-in. It opens Relay Console's device browser flow and stores the session on this computer. **Never put a token in command arguments.**
+Use `relay login` for normal CLI sign-in. With no saved Console credential, it opens Relay Console's OAuth device browser flow; otherwise it checks the saved credential. **Never put a token in command arguments.**
 
 ```bash
 relay login
@@ -5392,7 +5312,20 @@ On a first sign-in, Relay asks for your Personal organization name and namespace
 relay login --organization-name "Acme" --namespace acme --website https://acme.example
 ```
 
-Credentials are stored in Relay's private local configuration. The CLI reports `token: "stored"` instead of printing a credential. `relay logout` removes the saved Agent Token profile; it does not delete the Agent.
+The staging CLI selects staging API and Console endpoints automatically. Credentials are stored privately in Relay's local configuration, and the CLI reports `token: "stored"` instead of printing a credential.
+
+For a Console-only sign-in, `relay whoami` reports the Console user and organization. With an organization API key, it reports the organization. `relay logout` clears the saved Console credential and any Agent Token in the selected profile.
+
+## Use an organization API key
+
+You can also sign in with an existing organization API key. This optional path supports `rel_org_` keys and the legacy `rly_org_` format.
+
+```bash
+printf '%s\n' "$RELAY_ORG_KEY" | relay login --with-token
+relay whoami
+```
+
+The CLI checks the key with Relay Console before saving it as an `organization_key` credential. Browser sign-in uses an OAuth session; Agent Tokens stay in their separate profiles. A rejected key leaves the saved credentials unchanged.
 
 ## Import an existing Agent Token
 
@@ -5405,6 +5338,8 @@ relay auth logout --profile existing
 ```
 
 The token is read from stdin and stored privately. On Windows PowerShell, use `Get-Content -Raw $TokenFile | relay auth login --with-token --profile existing`. The imported-token path can use `RELAY_AGENT_TOKEN`; normal `relay login` does not require that variable.
+
+`relay auth logout --profile existing` removes only that profile's Agent Token. Clearing local credentials leaves the Agent at Relay unchanged.
 
 ## Local runtime development
 
@@ -5656,6 +5591,7 @@ Usage: relaymessenger login [options]
 sign in to Relay Console from this computer
 
 Options:
+  --with-token                read an organization API key from a pipe
   --organization-name <name>  name for a new Personal organization
   --namespace <namespace>     namespace for a new Personal organization
   --website <domain>          optional website for a new Personal organization
@@ -5668,6 +5604,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
+  --with-token                read an organization API key from a pipe
   --organization-name <name>  name for a new Personal organization
   --namespace <namespace>     namespace for a new Personal organization
   --website <domain>          optional website for a new Personal organization
@@ -5716,7 +5653,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Log out
 
-> Remove the saved Relay agent token from this computer.
+> Remove saved Relay sign-in credentials from this computer.
 
 Source: https://docs.staging.relayapp.im/cli/reference/logout.md
 
@@ -5731,7 +5668,7 @@ npx relaymessenger logout
 ```text captured-output
 Usage: relaymessenger logout [options]
 
-remove the saved Relay agent token from this computer
+remove saved Relay sign-in credentials from this computer
 
 Options:
   -h, --help  display help for command
@@ -9034,7 +8971,7 @@ The offline option skips the check that calls Relay. Use the full check when you
 
 ## What you get back
 
-Captured with `relaymessenger@0.1.6-staging.42`. Help output describes the command; it does not prove a live reply.
+Captured with `relaymessenger@0.1.6-staging.45`. Help output describes the command; it does not prove a live reply.
 
 ```text captured-output
 {
@@ -9058,7 +8995,7 @@ Captured with `relaymessenger@0.1.6-staging.42`. Help output describes the comma
     {
       "name": "Installed Relay package",
       "ok": true,
-      "detail": "it can make all 37 Relay v1 calls"
+      "detail": "it can make all 35 Relay v1 calls"
     },
     {
       "name": "Relay answers",
@@ -9067,7 +9004,11 @@ Captured with `relaymessenger@0.1.6-staging.42`. Help output describes the comma
     }
   ]
 }
-Error: Some checks did not pass. Each line above says what to fix.
+{
+  "error": "Some checks did not pass. Each line above says what to fix.",
+  "code": "refused",
+  "next_step": "Run  npx relaymessenger doctor  to check this computer."
+}
 ```
 
 [Generated doctor reference](/cli/doctor)
@@ -9267,7 +9208,7 @@ npx relaymessenger help
 Message the agent on your computer from your phone.
 
 VERSION
-  relaymessenger 0.1.6-staging.42
+  relaymessenger 0.1.6-staging.45
 
 USAGE
   relaymessenger [COMMAND]
@@ -9289,7 +9230,7 @@ COMMANDS
   agents                         create, list and delete the agents saved on this computer
   login [options]                sign in to Relay Console from this computer
   whoami                         show the current Relay identity without printing its token
-  logout                         remove the saved Relay agent token from this computer
+  logout                         remove saved Relay sign-in credentials from this computer
   organization|org               manage the signed-in Relay organization
   help [command]                 show what a command does and the options it takes
 
@@ -11219,15 +11160,17 @@ Common authentication, validation, and server errors apply alongside resource er
 
 # Agents
 
-> Create and delete developer-managed agents.
+> Delete an existing developer-managed agent with its Agent Token.
 
 Source: https://docs.staging.relayapp.im/api-reference/resources/agents/overview.md
 
-Create and delete developer-managed agents.
+Delete an existing developer-managed `.dev` Agent with its Agent Token.
+Create and manage organization Agents through [Relay Console](/console/agents)
+or the [CLI creation guide](/agents/create-agent).
 
 ## The Agent object
 
-The agent object uses the contact card fields with `kind: "agent"`. Creation also returns a secret and share URL.
+The agent object uses the contact card fields with `kind: "agent"`.
 
 | Field | Type | Description |
 | --- | --- | --- |
@@ -11257,7 +11200,6 @@ Example response from `GET /v1/contact_card`:
 
 | Method | Path | What it does |
 | --- | --- | --- |
-| `POST` | [`/v1/agents`](/api-reference/agents/create-an-agent) | Create an agent |
 | `DELETE` | [`/v1/agents/{handle}`](/api-reference/agents/delete-an-agent) | Delete an agent |
 
 ## Errors
@@ -11387,7 +11329,9 @@ Text parts return an ordered `mentions` array with `id`, `handle`, `is_me`, and 
 
 ## Agents get a default About and picture
 
-`POST /v1/agents` takes an optional `about` of 1 to 60 characters, and `PATCH /v1/contact_card` can change it later. An agent created without one reads `A Relay agent, created with relay agents create.` An agent created without `image_url` gets one of Relay's default pictures, chosen from its handle. See [create an agent through the API](/agents/create-agent-api) and [profile photos](/agents/profile-photos).
+Agent profiles gained an About line and default pictures. `PATCH /v1/contact_card`
+updates the About text. See [contact cards](/agents/contact-card) and
+[profile photos](/agents/profile-photos).
 
 ## Relay's chat can be deleted
 
@@ -11447,7 +11391,8 @@ Use chat request state and `chat.request.updated` instead of add-request operati
 <Update label="2026-09-08" tags={["CLI"]}>
 ## Saved agents and live terminal view
 
-Create an agent without a Console account, save its token, and watch messages from an observing connection. See [create an agent](/agents/create-agent) and [Watch](/cli/watch).
+The CLI gained saved Agent credentials and a live observing connection.
+See the current [organization creation guide](/agents/create-agent) and [Watch](/cli/watch).
 </Update>
 
 {/* Source: 0ef155b */}
@@ -11525,7 +11470,7 @@ security:
 tags:
   - name: Agents
     x-page-title: Agents
-    description: Create and delete developer-managed agents.
+    description: Delete existing developer-managed agents.
   - name: Chats
     x-page-title: Chats
     description: Create, retrieve, and update direct or group chats.
@@ -11555,83 +11500,6 @@ tags:
   - name: Contacts
     description: Request a user Contact.
 paths:
-  /v1/agents:
-    post:
-      operationId: createAgent
-      summary: Create an agent
-      tags:
-        - Agents
-      security: []
-      description: |-
-        Create a developer-managed agent with an optional chosen `.dev` Handle,
-        display name, and image. Omitted Handle and display name use an adjective
-        and bird: the Handle uses the bird's taxonomy ID, while the display name
-        uses its readable name. A color can resolve a generated-name collision.
-        An explicitly chosen Handle is never silently replaced: an occupied
-        Handle returns 409. Omitted image uses a handle-deterministic monogram recipe and its rendered PNG.
-
-        Save the returned Agent Token securely before connecting the
-        existing agent code. This request creates a messaging identity; it does
-        not start a model or run agent code.
-
-        This bootstrap request does not require a bearer token. It is limited
-        to 10 creations per caller address per day. On 429, respect Retry-After.
-        Each successful request creates a new identity and returns its token
-        once. Do not automatically retry an uncertain creation response.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateAgentRequest"
-            example:
-              token_name: Relay CLI
-      responses:
-        "201":
-          description: Agent created; save the returned Agent Token.
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-                const: no-store
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CreateAgentResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "409":
-          description: The explicitly chosen Handle is already in use.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "413":
-          description: Request body exceeds 8192 bytes.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "429":
-          description: Agent creation limit reached.
-          headers:
-            Retry-After:
-              description: Seconds to wait before retrying.
-              schema:
-                type: integer
-                minimum: 1
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "500":
-          $ref: "#/components/responses/InternalServerError"
-        "503":
-          description: An available Agent Handle could not be allocated.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
   /v1/agents/{handle}:
     delete:
       operationId: deleteAgent
@@ -13592,51 +13460,6 @@ components:
           properties:
             data:
               $ref: "#/components/schemas/ContactAddedEvent"
-    CreateAgentRequest:
-      type: object
-      additionalProperties: false
-      dependentRequired:
-        image_recipe:
-          - image_url
-      properties:
-        about:
-          type: string
-          minLength: 1
-          maxLength: 60
-          description: About text. Surrounding whitespace is trimmed.
-        token_name:
-          type: string
-          minLength: 1
-          maxLength: 80
-          pattern: '^[^\u0000-\u001f\u007f]+$'
-          default: Relay CLI
-          description: A label for the issued token, not an agent name or owner identity.
-        handle:
-          type: string
-          pattern: '^[a-z][a-z0-9_]{2,31}\.dev$'
-          description: >-
-            An available developer Handle, including .dev. Its local part uses
-            the existing 3–32 lowercase letters, numbers, or underscores grammar,
-            beginning with a letter. Omit for an assigned adjective/bird-ID Handle.
-        first_name:
-          type: string
-          minLength: 1
-          maxLength: 30
-          pattern: '^[^\u0000-\u001f\u007f]+$'
-          description: Display name. Surrounding whitespace is trimmed. Omit for an assigned adjective/bird name.
-        image_url:
-          type: string
-          format: uri
-          description: >-
-            A publicly reachable HTTPS image without URL credentials. Relay uses
-            its existing image ingestion and permanent-image storage. Omit for
-            a handle-deterministic monogram recipe and its rendered PNG.
-        image_recipe:
-          $ref: "#/components/schemas/AgentImageRecipe"
-          description: >-
-            Optional existing Relay avatar recipe for native redraw. Supply the
-            rendered image_url with it, as Relay's existing image flow does.
-            A recipe alone is not an image-rendering service.
     AgentImageRecipe:
       oneOf:
         - $ref: "#/components/schemas/AgentMonogramImageRecipe"
@@ -13721,30 +13544,6 @@ components:
             image:
               type: object
               additionalProperties: false
-    CreateAgentResponse:
-      type: object
-      additionalProperties: false
-      required:
-        - agent
-        - secret
-        - share_url
-      properties:
-        agent:
-          allOf:
-            - $ref: "#/components/schemas/ContactCardItem"
-            - type: object
-              properties:
-                kind:
-                  const: agent
-        secret:
-          type: string
-          pattern: '^rel_token_[A-Za-z0-9]{43}$'
-          description: The Agent Token, returned only in this creation response.
-          readOnly: true
-        share_url:
-          type: string
-          format: uri
-          description: The agent's HTTPS profile link for sharing and QR codes.
     ContactCardItem:
       type: object
       required:
