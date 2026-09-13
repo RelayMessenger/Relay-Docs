@@ -286,7 +286,7 @@ class IntegrationDocsTests(unittest.TestCase):
                 f"Agent workflows belong to guides/agents, not {path.relative_to(ROOT)}",
             )
         # Inspect the owning guides, not a duplicated record on the CLI overview.
-        for page, is_list in (("agents/create-agent.mdx", False), ("agents/list-agents.mdx", True)):
+        for page, is_list in (("agents/list-agents.mdx", True),):
             records = []
             for block in re.findall(r"^```json\n(.*?)^```", read(page), re.M | re.S):
                 value = json.loads(block)

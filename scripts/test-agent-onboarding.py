@@ -234,8 +234,9 @@ class AgentOnboardingTests(unittest.TestCase):
     def test_cli_creation_uses_the_organization_front_door(self):
         create = self.page("agents/create-agent")
         self.assert_identifiers(create, "npx relaymessenger@staging agents create",
-                                "npx relaymessenger@staging login",
-                                "https://api.staging.relayapp.im", "--profile")
+                                "--profile", "share_url", "stored")
+        self.assertNotIn("npx relaymessenger@staging login", command_examples(create))
+        self.assert_concept(create, r"starts browser OAuth sign.in automatically")
         self.assert_links_to_pages(create, "cli/auth", "cli/reference/agents-create",
                                    CONSOLE_AGENT_PAGE, PHOTO_PAGE)
         self.assert_concept(create, r"(?:Relay )?Console|sign in")
@@ -258,27 +259,23 @@ class AgentOnboardingTests(unittest.TestCase):
         self.assertIn("existing developer-managed `.dev`", self.page("agents/lifecycle"))
 
     def test_cli_agent_json_is_flat_safe_and_consistent(self):
-        created = [item for item in self.json_examples(self.page("agents/create-agent"))
-                   if isinstance(item, dict) and "profile" in item]
-        self.assertEqual(len(created), 1)
-        record = created[0]
-        keys = {"profile", "handle", "display_name", "image_url", "share_url", "api_url", "token"}
-        self.assertEqual(set(record), keys)
-        self.assertEqual(record["token"], "stored")
-        self.assertEqual(record["api_url"], f"https://{origin('api.staging.relayapp.im')}")
-        self.assertTrue(record["share_url"].startswith("https://"))
-        self.assertTrue(urlsplit(record["share_url"]).path.endswith(f'/@{record["handle"]}'))
-        self.assertIn(urlsplit(record["share_url"]).hostname, {
-            origin("staging.relayapp.im"), origin("go.staging.relayapp.im"),
-        })
-
+        # Creation is described without a fabricated live response. Inspect
+        # the saved-profile example, where an image may already be cleared.
+        create = self.page("agents/create-agent")
+        self.assertIn("metadata only", create)
+        self.assertIn("stored privately", create)
+        keys = {"profile", "handle", "display_name", "image_url", "api_url", "token"}
         listing = self.page("agents/list-agents")
         self.assert_identifiers(listing, "agents list --json")
         examples = self.json_examples(listing)
         inventories = [item for item in examples if isinstance(item, dict) and "agents" in item]
         self.assertEqual(len(inventories), 1)
         self.assertEqual(set(inventories[0]), {"agents"})
-        self.assertEqual(inventories[0]["agents"], [{key: record[key] for key in keys - {"share_url"}}])
+        self.assertEqual(len(inventories[0]["agents"]), 1)
+        record = inventories[0]["agents"][0]
+        self.assertEqual(set(record), keys)
+        self.assertEqual(record["token"], "stored")
+        self.assertEqual(record["api_url"], f"https://{origin('api.staging.relayapp.im')}")
         failures = [item for item in examples if isinstance(item, dict) and "error" in item]
         self.assertEqual(len(failures), 1)
         self.assertEqual(set(failures[0]), {"profile", "api_url", "token", "error"})
