@@ -77,7 +77,13 @@ class CLIReferenceTests(unittest.TestCase):
                 self.assertEqual(re.search(r"^```bash\n(.*?)^```", text, re.M | re.S).group(1).strip(), "npx " + expected["command"])
                 self.assertLess(text.index("```bash"), text.index("## Usage"))
                 self.assertNotIn("## Output", text)
-                self.assertEqual(text.split("## Next steps\n\n")[1], "- [CLI](/cli/index)\n- [Global options](/cli/global-options)\n")
+                # Three links: the family's concept guide (a page that exists), then the two CLI pages.
+                steps = text.split("## Next steps\n\n")[1]
+                guide = re.match(r"- \[[^\]]+\]\((/[^)]+)\)\n", steps)
+                self.assertIsNotNone(guide, page)
+                target = guide.group(1).lstrip("/")
+                self.assertTrue((ROOT / (target + ".mdx")).exists() or (ROOT / target / "index.mdx").exists(), guide.group(1))
+                self.assertEqual(steps[guide.end():], "- [CLI](/cli/index)\n- [Global options](/cli/global-options)\n")
         for page in spec["dropped_generated_pages"]:
             self.assertFalse((ROOT / (page + ".mdx")).exists(), page)
 
