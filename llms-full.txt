@@ -79,13 +79,13 @@ Source: https://docs.staging.relayapp.im/start/quickstart.md
 
 Connect a runtime in three steps: install the CLI, connect the runtime, and send your agent a message from your phone.
 
-You do not need an Agent Token for this quickstart. Relay signs you in in your
-browser, creates the Personal organization and Agent for you, and saves the
+You do not need an Agent Token for this quickstart. Relay signs you in through a
+device browser flow, creates or uses your Personal organization and creates the Agent for you, and saves the
 runtime credential on this computer. You never copy or paste it.
 
 ## Install the CLI
 
-Install the command with npm, or skip this step and let `npx` fetch it in the next one. The version is pinned so that the steps below match what the command prints:
+Install the command with npm, or skip this step and let `npx` fetch it in the next one:
 
 ```bash npm
 npm install relaymessenger@staging --no-audit --no-fund
@@ -96,7 +96,7 @@ npm install relaymessenger@staging --no-audit --no-fund
 Run `connect` in the folder where the runtime runs:
 
 ```bash
-npx relaymessenger@staging connect
+npx relaymessenger connect
 ```
 
 On the first run, a browser window opens for Relay sign-in. Relay uses sensible
@@ -110,14 +110,14 @@ does not start it for you.
 Open the live view. The handle that `connect` printed is an optional argument. The terminal shows a QR code and a share link. This view only watches; it never starts or stops your agent.
 
 ```bash
-npx relaymessenger@staging watch
+npx relaymessenger watch
 ```
 
 Open the share link on your phone, or scan the QR code, and send `hello` in Relay. Keep your runtime running and read its reply in the same chat. Press `q` or `Ctrl-C` to stop viewing.
 
 ## When it fails
 
-If `connect` lists your runtime as not found, install it and run `connect` again. If the message arrives but no reply comes, restart the product and send again. Run `npx relaymessenger@staging doctor` to check every saved agent and this computer and read what to fix.
+If `connect` lists your runtime as not found, install it and run `connect` again. If the message arrives but no reply comes, restart the product and send again. Run `npx relaymessenger doctor` to check every saved agent and this computer and read what to fix.
 
 An Agent Token is only an advanced credential for an Agent that was created
 outside this CLI. In that case, import it once with `relay auth login
@@ -4137,7 +4137,7 @@ Choose the hosted remote MCP for a URL-based MCP client, or the local stdio MCP 
 
 ## Before you start
 
-- An Agent Token for the Relay API tools.
+- A signed-in Relay CLI session, or an existing Agent Token for the local server.
 - An MCP client that supports remote HTTP or local stdio servers.
 - Node.js `22.22.3` or newer for the local server.
 
@@ -4145,7 +4145,7 @@ Choose the hosted remote MCP for a URL-based MCP client, or the local stdio MCP 
 
 ### Hosted remote MCP
 
-The hosted endpoint is available at `https://api.staging.relayapp.im/mcp`. It is staging-only in the current implementation and authenticates with an Agent Token in the `Authorization: Bearer` header.
+The hosted endpoint is available at `https://api.staging.relayapp.im/mcp`. It authenticates with an Agent Token in the `Authorization: Bearer` header.
 
 Add it as a remote MCP server in a client that supports URL transports:
 
@@ -4206,7 +4206,7 @@ The MCP client remains the security boundary. Allow only the tools and servers y
 ## When it fails
 
 - Hosted connection fails: confirm the client supports Streamable HTTP and sends the `Authorization: Bearer <Agent Token>` header.
-- Local server will not start: confirm that the client can find `node` and `npx`, then run `relay-mcp --help`.
+- Local server will not start: confirm that the client can find `node` and `npx`, then run `npx @relaymessenger/mcp --help`.
 - A local tool call is refused: change the MCP client's permission setting or use the correct Agent Token profile.
 
 ## Next steps
@@ -4301,11 +4301,11 @@ The skill teaches the agent the Relay vocabulary, the API contract, the delivery
 
 Source: https://docs.staging.relayapp.im/console/index.md
 
-Sign in at [console.staging.relayapp.im](https://console.staging.relayapp.im) to create agents, watch what they do, and manage your organization. Sign-in is hosted: a signed-out visit goes there first and comes back with a session.
+Sign in at [console.staging.relayapp.im](https://console.staging.relayapp.im), or run `relay login` to start the same sign-in from your terminal. to create agents, watch what they do, and manage your organization. Sign-in is hosted: a signed-out visit goes there first and comes back with a session.
 
 ## Create your organization
 
-Your first sign-in creates a personal organization, and the first step of sign-up names it. Enter an organization name, then a namespace, which Relay fills in from the name and you can edit. A logo and a website are optional.
+Your first sign-in creates a Personal organization, and the first step of sign-up names it. Enter an organization name, then a namespace, which Relay fills in from the name and you can edit. A logo and a website are optional.
 
 An organization agent's handle ends with the namespace: the label `forecast` becomes `forecast.yourorg`. Use 2 to 63 lowercase letters, numbers, underscores or hyphens, starting with a letter or a number. `admin`, `dev`, `parked` and `relay` belong to Relay, and a namespace another organization holds is refused.
 
@@ -5631,76 +5631,48 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Authentication
 
-> Sign in to Relay Console without copying an Agent Token.
+> Sign in to Relay Console from the CLI, or import an existing Agent Token.
 
 Source: https://docs.staging.relayapp.im/cli/auth.md
 
-Use the top-level login for normal CLI work:
+Use `relay login` for normal CLI sign-in. It opens Relay Console's device browser flow and stores the session on this computer. **Never put a token in command arguments.**
 
 ```bash
 relay login
 relay whoami
-relay logout
 ```
 
-`relay login` opens a browser and signs this computer into Relay Console. On a
-new account it creates the Personal organization with a selectable namespace
-and saves the Console session privately. When you create an Agent, Relay saves
-the Agent's runtime credential locally too. Neither credential is printed.
-Use `relay auth status` when you need to inspect the older imported-token
-profile without printing its value, and use `--profile` to select a profile.
+On a first sign-in, Relay asks for your Personal organization name and namespace. The namespace is selectable, and Relay derives an initial value from the organization name. You can also pass `--organization-name`, `--namespace`, and the optional `--website` in a non-interactive run.
 
 ```bash
-relay auth status
-relay auth logout
+relay login --organization-name "Acme" --namespace acme --website https://acme.example
 ```
+
+Credentials are stored in Relay's private local configuration. The CLI reports `token: "stored"` instead of printing a credential. `relay logout` removes the saved Agent Token profile; it does not delete the Agent.
 
 ## Import an existing Agent Token
 
-This is only for an Agent created outside the normal CLI/Console path:
+Use the hidden compatibility command only when an Agent already exists and you already have its token.
 
-```powershell
-Get-Content -Raw $TokenFile | relay auth login --with-token
+```bash
+printf '%s\n' "$RELAY_AGENT_TOKEN" | relay auth login --with-token --profile existing
+relay auth status --profile existing
+relay auth logout --profile existing
 ```
 
-The token is read from the pipe and stored privately. Never use tokens as
-command arguments or commit them to a file.
+The token is read from stdin and stored privately. On Windows PowerShell, use `Get-Content -Raw $TokenFile | relay auth login --with-token --profile existing`. The imported-token path can use `RELAY_AGENT_TOKEN`; normal `relay login` does not require that variable.
 
-[Create an agent](/agents/create-agent) · [Delete an agent](/agents/delete-agent) · [Connect a runtime](/integrations/claude-code)
+## Local runtime development
 
-## What you get back
+For local runtime development, use the [runtime connection guide](/cli/connect). A Console-created Agent is saved with its runtime credential locally, then the selected integration is configured. A deployed Agent that is owned and run by Relay Console does not need a local runtime connection.
 
-The CLI help describes the command; it does not prove a live reply.
-
-```text captured-output
-Usage: relaymessenger auth [options] [command]
-
-save, check and remove the token this computer signs in with
-
-Commands:
-  login [options]  save a token for this computer, from a hidden prompt, a pipe, or RELAY_AGENT_TOKEN
-  status           show which token Relay would use, and where it comes from, without printing it
-  logout           remove the selected profile's stored token
-  help [command]   display help for command
-
-Options:
-  -h, --help       display help for command
-
-Docs: https://docs.relayapp.im
-Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
-```
-
-[Login reference](/cli/reference/auth-login) · [Status reference](/cli/reference/auth-status) · [Logout reference](/cli/reference/auth-logout) · [Auth reference](/cli/reference/auth)
-
-## When it fails
-
-Use the [exit-code table](/cli/reference/help#exit-codes) to distinguish input, missing resources, and authentication failures.
+[Create an agent](/agents/create-agent) · [Delete an agent](/agents/delete-agent) · [Claude Code integration](/integrations/claude-code) · [Organization commands](/cli/reference/organization-show)
 
 ## Next steps
 
-- [Watch the agent](/cli/watch)
-- [Set its identity](/agents/contact-card)
-- [Send a message](/messages/send)
+- [CLI overview](/cli)
+- [Console](/console)
+- [API overview](/api-reference/overview)
 
 # Save a token
 
@@ -11066,72 +11038,56 @@ Relay includes this code in `error.code`. The response also includes `error.stat
 
 # API overview
 
-> Use the Relay API to connect an agent backend to chats, messages, media, and events.
+> Use the Relay API with an Agent Token to connect an agent backend to chats, messages, media, and events.
 
 Source: https://docs.staging.relayapp.im/api-reference/overview.md
 
-Use the Relay API to connect an agent backend to chats, messages, media, and events.
+Use the Relay API from an agent backend with an Agent Token. CLI and Console sign-in are separate from API request authentication.
 
 ## Base URL
 
-The API base URL for this documentation environment is `https://api.staging.relayapp.im`. Set it once before running requests.
-
-```bash
-export RELAY_API_URL="https://api.staging.relayapp.im"
-```
-
-Use an Agent Token issued in the same environment.
+Use the API address for the Relay environment you are targeting. The staging address is `https://api.staging.relayapp.im`; examples below use it directly, so `RELAY_API_URL` is optional.
 
 ## Authentication
 
-Send `Authorization: Bearer $RELAY_AGENT_TOKEN` on authenticated HTTP requests. Keep the token in your backend environment.
-
-## Idempotency
-
-For a message send, supply `Idempotency-Key` or `message.idempotency_key`. If both are present, their values must match. Reuse the same key and body after an uncertain result; a changed body under the same sender and key returns HTTP `409`.
-
-## Rate limits
-
-HTTP `429` uses code [2008](/api-reference/errors#2008). When a retry delay is available, `Retry-After` and `error.retry_after` contain seconds to wait. The server does not emit limit, remaining, or reset quota headers.
-
-## Example
-
-Read the authenticated agent’s contact card. This request returned HTTP `200` on 2026-09-10.
+Send `Authorization: Bearer $RELAY_AGENT_TOKEN` on authenticated HTTP requests. Keep the token in your backend's secret store. Do not put it in a browser bundle or checked-in configuration.
 
 <CodeGroup>
 ```bash cURL
-curl -sS -A "relay-docs/1.0" "$RELAY_API_URL/v1/contact_card" \
+curl -sS https://api.staging.relayapp.im/v1/contact_card \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
 ```typescript TypeScript
-const response = await fetch(`${process.env.RELAY_API_URL}/v1/contact_card`, {
+const response = await fetch("https://api.staging.relayapp.im/v1/contact_card", {
   headers: { Authorization: `Bearer ${process.env.RELAY_AGENT_TOKEN}` },
 });
 console.log(await response.json());
 ```
 </CodeGroup>
 
+A successful request returns the authenticated Agent's Contact Card.
+
+## What you get back
+
+A successful request returns the authenticated Agent’s Contact Card.
+
 ```json
-{
-  "contact_cards": [
-    {
-      "handle": "relay_staging_fullsync",
-      "kind": "agent",
-      "first_name": "Staging Full Sync",
-      "last_name": null,
-      "image_url": null,
-      "is_active": true
-    }
-  ]
-}
+{"contact_cards": [{"kind": "agent"}]}
 ```
+
+## Idempotency
+
+For a message send, supply `Idempotency-Key` or `message.idempotency_key`. If both are present, their values must match. Reuse the same key and body after an uncertain result.
+
+## When it fails
+
+An invalid or missing Agent Token is rejected by the API.
 
 ## Next steps
 
 - [Chats](/api-reference/resources/chats/overview)
 - [Messages](/api-reference/resources/messages/overview)
-- [Contacts](/api-reference/resources/contacts/overview)
 - [Error codes](/api-reference/errors)
 
 # Chats
