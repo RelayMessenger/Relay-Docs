@@ -29,7 +29,7 @@ class CLIReferenceTests(unittest.TestCase):
         self.assertNotIn("--token-name", text)
         self.assertNotIn(".dev handle", text)
         guide = (ROOT / "agents/create-agent.mdx").read_text()
-        self.assertIn("pass only the local name", guide)
+        self.assertIn("pass one word", guide)
         self.assertIn("`--name` accepts 1 to 30 characters", guide)
         self.assertNotIn("npx relaymessenger@staging login", guide)
 
