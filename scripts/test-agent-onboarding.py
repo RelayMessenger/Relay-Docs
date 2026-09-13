@@ -363,13 +363,14 @@ class AgentOnboardingTests(unittest.TestCase):
 
     def test_custom_profile_uses_existing_recipe_and_rendered_image_pair(self):
         spec = (ROOT / "api-reference/openapi.yaml").read_text()
-        request = spec.split("    CreateAgentRequest:\n", 1)[1].split("    AgentImageRecipe:\n", 1)[0]
-        for field in ("handle:", "first_name:", "image_url:", "image_recipe:"):
+        request = spec.split("    UpdateContactCardRequest:\n", 1)[1].split("    UpdateWebhookSubscriptionRequest:\n", 1)[0]
+        for field in ("first_name:", "image_url:", "attachment_id:", "image_recipe:"):
             self.assertIn(field, request)
-        self.assertIn("dependentRequired:", request)
-        self.assertIn("image_recipe:\n          - image_url", request)
+        self.assertIn("dependentSchemas:", request)
+        self.assertIn("required: [attachment_id]", request)
+        self.assertIn("required: [image_url]", request)
         # Field rules belong to the generated operation, rendering to recipes.
-        self.assert_operation_link(self.page("agents/create-agent"), "createAgent")
+        self.assert_operation_link(self.page(PHOTO_PAGE), "updateContactCard")
         recipes = self.page(RECIPE_PAGE)
         self.assert_links_to_pages(self.page(PHOTO_PAGE), RECIPE_PAGE)
         self.assert_links_to_pages(recipes, PHOTO_PAGE)
