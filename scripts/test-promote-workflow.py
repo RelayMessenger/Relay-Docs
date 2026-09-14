@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "promote-to-production.yml"
 
 GUARD_STEP = "No staging origin or package reference may remain"
+INSTALL_CLI_STEP = "Install the production CLI"
 VALIDATE_STEP = "Validate in production mode"
 PUSH_STEP = "Push the derived tree to main"
 
@@ -52,6 +53,17 @@ class PromoteWorkflowTests(unittest.TestCase):
         self.assertLess(self.names.index(GUARD_STEP), self.names.index(VALIDATE_STEP))
         self.assertLess(self.names.index(VALIDATE_STEP), self.names.index(PUSH_STEP))
         self.assertEqual(self.names[-1], PUSH_STEP)
+
+    def test_validation_runs_against_the_production_cli(self):
+        # scripts/build-cli-reference.mjs regenerates the CLI pages from the
+        # installed CLI; on production that is the `latest` release from
+        # versions.json, never the staging prerelease package.json pins.
+        self.assertIn(INSTALL_CLI_STEP, self.names)
+        self.assertLess(self.names.index(GUARD_STEP), self.names.index(INSTALL_CLI_STEP))
+        self.assertLess(self.names.index(INSTALL_CLI_STEP), self.names.index(VALIDATE_STEP))
+        body = step_body(self.text, INSTALL_CLI_STEP)
+        self.assertIn("npm install --no-save", body)
+        self.assertIn("require('./versions.json').npm.relaymessenger.latest", body)
 
     def test_guard_still_rejects_staging_references(self):
         body = step_body(self.text, GUARD_STEP)
