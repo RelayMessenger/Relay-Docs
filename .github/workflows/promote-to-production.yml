@@ -66,11 +66,15 @@ jobs:
           test "$before" = "$after"
 
       - name: No staging origin or package reference may remain
+        # package.json and package-lock.json are build inputs pinned to the
+        # staging capture the reference was generated from, not reader-facing
+        # content; scripts/derive-production.py skips them for the same reason.
         run: |
           set -euo pipefail
           if grep -rIE 'staging\.relayapp\.im|relay-staging\.mintlify|(@relaymessenger/[a-z-]+|relay-claude-channel)@staging\b|[0-9]+\.[0-9]+\.[0-9]+-staging\.[0-9]+' \
                --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=scripts \
-               --exclude-dir=.github --exclude=versions.json . ; then
+               --exclude-dir=.github --exclude=versions.json \
+               --exclude=package.json --exclude=package-lock.json . ; then
             echo "::error::A staging reference survived the derivation."
             exit 1
           fi
