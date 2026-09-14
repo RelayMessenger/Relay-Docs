@@ -1,9 +1,18 @@
 #!/usr/bin/env python3
 """Offline regressions for the hosted validator's canonical cache gate."""
+from contextlib import redirect_stdout
 import hashlib
+import importlib.util
+from io import StringIO
+from pathlib import Path
 import unittest
 
 from hosted_cache import CANONICAL_PATHS, canonical_cache_pairs
+
+spec = importlib.util.spec_from_file_location(
+    "validate_hosted_llms", Path(__file__).with_name("validate-hosted-llms.py"))
+hosted = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(hosted)
 
 
 class HostedCacheTests(unittest.TestCase):
@@ -70,6 +79,37 @@ class HostedCacheTests(unittest.TestCase):
             return {"body": body, "sha256": hashlib.sha256(body).hexdigest()}
         with self.assertRaisesRegex(SystemExit, "canonical body"):
             list(canonical_cache_pairs(fetch))
+
+
+class HostedSourceOriginTests(unittest.TestCase):
+    """The origin body is the truth; Mintlify's edge cache is a warning, never a failure."""
+
+    def fetch_for(self, *, canonical, origin):
+        def fetch(path, cache_busted=False):
+            body = origin if cache_busted or path != "llms-full.txt" else canonical
+            return {"body": body, "sha256": hashlib.sha256(body).hexdigest(),
+                    "headers": {"age": "20179", "cache-control": "public, max-age=86400"}}
+        return fetch
+
+    def test_stale_edge_with_current_origin_passes_with_a_warning_line(self):
+        fetch = self.fetch_for(canonical=b"old", origin=b"current")
+        output = StringIO()
+        with redirect_stdout(output):
+            pairs = list(hosted.hosted_source_pairs(fetch, {"llms-full.txt": b"current"}))
+        self.assertEqual([path for path, _, _ in pairs], list(CANONICAL_PATHS))
+        self.assertEqual(output.getvalue(), "warning: /llms-full.txt: Mintlify edge cache is 20179 s "
+                         "behind origin (max-age 86400); origin matches checkout\n")
+
+    def test_stale_origin_fails_even_when_edge_agrees(self):
+        fetch = self.fetch_for(canonical=b"old", origin=b"old")
+        with self.assertRaisesRegex(SystemExit, "served body does not match expected checkout source bytes"):
+            list(hosted.hosted_source_pairs(fetch, {"llms-full.txt": b"current"}))
+
+    def test_edge_freshness_is_opt_in_only(self):
+        self.assertFalse(hosted.argument_parser().parse_args(["https://docs.test"]).require_edge_fresh)
+        fetch = self.fetch_for(canonical=b"old", origin=b"current")
+        with self.assertRaisesRegex(SystemExit, "canonical body .* does not match current origin body"):
+            list(hosted.hosted_source_pairs(fetch, {"llms-full.txt": b"current"}, require_edge_fresh=True))
 
 
 if __name__ == "__main__":

@@ -251,7 +251,16 @@ def source_body_matches(path, actual, expected):
 
 
 def hosted_source_pairs(fetch, expected, require_edge_fresh=False):
-    """Check published source bytes; keep non-source cache checks unchanged."""
+    """Check published source bytes against the cache-busted origin body.
+
+    The origin body is the truth: it must equal this checkout. The canonical
+    URL is served by Mintlify's own Cloudflare cache (docs.staging.relayapp.im
+    is a CNAME to cname.mintlify.builders, cache-control max-age=86400), which
+    this repository cannot purge. A stale cached copy is therefore a warning
+    line, never a failure, unless --require-edge-fresh asks for it. Two red
+    "Preview docs" runs on staging (3cba644, c5926f8) spent 50 minutes each
+    retrying against that cache on 2026-09-13/14.
+    """
     for path in CANONICAL_PATHS:
         if path not in expected:
             yield from canonical_cache_pairs(fetch, paths=[path])
@@ -273,8 +282,9 @@ def hosted_source_pairs(fetch, expected, require_edge_fresh=False):
             headers = canonical["headers"]
             max_age = re.search(r'(?:^|,)\s*max-age\s*=\s*"?(\d+)',
                                 headers.get("cache-control", ""), re.I)
-            print(f"/{path}: edge cache is {headers.get('age', 'unknown')} s behind origin "
-                  f"(max-age {max_age[1] if max_age else 'unknown'}); origin matches checkout")
+            print(f"warning: /{path}: Mintlify edge cache is {headers.get('age', 'unknown')} s "
+                  f"behind origin (max-age {max_age[1] if max_age else 'unknown'}); "
+                  "origin matches checkout")
         yield path, canonical, busted
 
 
@@ -748,8 +758,9 @@ def argument_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("base_url")
     parser.add_argument("--production", action="store_true", help="Select production checks; source bytes remain exact")
-    parser.add_argument("--require-edge-fresh", action="store_true", default=True,
-                        help="Require canonical source bytes to match origin (default; retained for compatibility)")
+    parser.add_argument("--require-edge-fresh", action="store_true", default=False,
+                        help="Also fail when Mintlify's edge cache lags the origin body (off by default: "
+                             "the cache is Mintlify's and cannot be purged from this repository)")
     parser.add_argument("--all-pages", action="store_true", help="Check every navigation-authored route and its Markdown")
     parser.add_argument("--workers", type=int, default=6, help="Concurrent page checks, 1–16 (default: 6)")
     parser.add_argument("--expected-sha")

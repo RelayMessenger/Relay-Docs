@@ -121,8 +121,8 @@ class HostedEnvironmentTests(unittest.TestCase):
         self.assertTrue(args.production)
         self.assertTrue(args.all_pages)
         self.assertEqual(args.workers, 3)
-        self.assertTrue(args.require_edge_fresh)
-        self.assertTrue(hosted.argument_parser().parse_args(
+        self.assertFalse(args.require_edge_fresh)
+        self.assertFalse(hosted.argument_parser().parse_args(
             ["https://docs.test"]).require_edge_fresh)
         with self.assertRaisesRegex(SystemExit, "between 1 and 16"):
             hosted.check_all_pages(lambda *a, **k: None, [], workers=17)
@@ -422,8 +422,8 @@ class HostedEnvironmentTests(unittest.TestCase):
         with redirect_stdout(output):
             receipt = self.run_origin_fixture(edge_stale=True)
         self.assertEqual(receipt["verdict"], "passed")
-        self.assertEqual(output.getvalue(), "/llms-full.txt: edge cache is 20179 s behind origin "
-                         "(max-age 86400); origin matches checkout\n")
+        self.assertEqual(output.getvalue(), "warning: /llms-full.txt: Mintlify edge cache is 20179 s "
+                         "behind origin (max-age 86400); origin matches checkout\n")
         pair = receipt["pages"]["/llms-full.txt"]
         self.assertNotEqual(pair["canonical"]["sha256"], pair["cache_busted"]["sha256"])
 
@@ -441,7 +441,7 @@ class HostedEnvironmentTests(unittest.TestCase):
         self.assertEqual(output.getvalue(), "")
 
     def test_require_edge_fresh_rejects_stale_edge(self):
-        self.assertTrue(hosted.argument_parser().parse_args(["https://docs.test"]).require_edge_fresh)
+        self.assertFalse(hosted.argument_parser().parse_args(["https://docs.test"]).require_edge_fresh)
         self.assertTrue(hosted.argument_parser().parse_args(
             ["https://docs.test", "--require-edge-fresh"]).require_edge_fresh)
         with self.assertRaisesRegex(SystemExit, "canonical body .* does not match current origin body"):
