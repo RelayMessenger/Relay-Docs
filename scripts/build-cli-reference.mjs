@@ -10,7 +10,26 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const check = process.argv.includes('--check');
 const require = createRequire(import.meta.url);
 const cli = process.env.CLI_REFERENCE_BIN || require.resolve('relaymessenger/dist/cli.js');
-const cliVersion = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).devDependencies.relaymessenger;
+// Staging pages are generated from the devDependency pin (the staging
+// prerelease). Production pages (`.docs-target` = production, written by
+// scripts/derive-production.py) are generated from the CLI the plain install
+// resolves to, versions.json npm.relaymessenger.latest, which the promotion
+// workflow installs with `npm install --no-save` first; the derived pages must
+// equal what that CLI prints, and the version pin the derivation removes from
+// the install lines stays removed (owner ruling 2026-09-07: plain name, never a
+// staging dist-tag or prerelease).
+const targetFile = path.join(root, '.docs-target');
+const production = existsSync(targetFile) && readFileSync(targetFile, 'utf8').trim() === 'production';
+const pinnedVersion = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).devDependencies.relaymessenger;
+const latestVersion = JSON.parse(readFileSync(path.join(root, 'versions.json'), 'utf8')).npm.relaymessenger.latest;
+const installedVersion = JSON.parse(readFileSync(require.resolve('relaymessenger/package.json'), 'utf8')).version;
+const expectedVersion = production ? latestVersion : pinnedVersion;
+if (installedVersion !== expectedVersion) {
+  throw new Error(`${production ? 'Production' : 'Staging'} CLI reference needs relaymessenger ${expectedVersion} installed, found ${installedVersion}`
+    + (production ? ` (run: npm install --no-save relaymessenger@${latestVersion})` : ''));
+}
+const installSpec = production ? 'relaymessenger' : `relaymessenger@${pinnedVersion}`;
+const sourceRef = production ? 'main' : 'staging';
 const programModule = await import(pathToFileURL(require.resolve('relaymessenger/dist/program.js')).href);
 const directory = path.join(root, 'cli/reference');
 const tick = '`';
@@ -466,11 +485,11 @@ Use Node.js 22.22.3 or newer.
 ## Install
 
 ${fence}bash
-npm install --global relaymessenger@${cliVersion}
-npx relaymessenger@${cliVersion} --help
+npm install --global ${installSpec}
+npx ${installSpec} --help
 ${fence}
 
-Run ${tick}npx relaymessenger@${cliVersion} <command> --help${tick} for one command's options. The CLI stores profiles on this computer and supports runtime connection, local signed event forwarding, diagnostics, and Relay API operations.
+Run ${tick}npx ${installSpec} <command> --help${tick} for one command's options. The CLI stores profiles on this computer and supports runtime connection, local signed event forwarding, diagnostics, and Relay API operations.
 
 Use ${tick}--json${tick} for machine-readable results. [Create an agent](/agents/create-agent), [list agents](/agents/list-agents), or [delete an agent](/agents/delete-agent) from the CLI.
 
@@ -482,7 +501,7 @@ ${fence}
 
 [Connect a runtime](/integrations/claude-code) · [Install Relay guidance](/integrations/skills)
 
-Source: [Relay-SDK CLI](https://github.com/RelayMessenger/Relay-SDK/tree/staging/packages/cli).
+Source: [Relay-SDK CLI](https://github.com/RelayMessenger/Relay-SDK/tree/${sourceRef}/packages/cli).
 
 ## When it fails
 
