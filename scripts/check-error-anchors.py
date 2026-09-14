@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Check code anchors and per-code error pages.
 
-Source snapshot: Relay-Server deba0b500870549e0af878d8117eb4e5545b9abd.
-server/src/errors.ts maps HTTP statuses (including 402 -> 2009); literal
+Source snapshot: Relay-Server 8ef4f40b.
+server/src/errors.ts maps HTTP statuses (there is no 402 mapping); literal
 ApiError constructors and code fields across server/src supply the other codes.
 app.ts composes /error/codes/${Math.floor(api.code / 1000)}xxx/${api.code}.
 agent-socket.ts, attachments.ts, and worker.ts also emit literal legacy URLs.
@@ -15,8 +15,8 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SERVER_CODES = {1004, 1005, 2001, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
-                2015, 2023, 2025, 2026, 2028, 2030, 3006}
+SERVER_CODES = {1004, 1005, 2001, 2003, 2004, 2005, 2006, 2007, 2008,
+                2015, 2023, 2025, 2026, 2028, 2029, 2030, 3006}
 
 
 def check(root=ROOT, server_repo=None):
@@ -51,7 +51,8 @@ def check(root=ROOT, server_repo=None):
                     continue
                 if '/error/codes/' in url:
                     route = '/error/codes/' + url.split('/error/codes/', 1)[1]
-                    assert route in redirects, f'Unresolved {path}: {route}'
+                    live_route = (root / (route.lstrip('/') + '.mdx')).is_file()
+                    assert live_route or route in redirects, f'Unresolved {path}: {route}'
                 else:
                     # webhooks.ts returns the event catalog help URL, not error.doc_url.
                     assert path == 'server/src/webhooks.ts' and url.endswith('/guides/webhooks/events'), f'New doc_url shape: {path}: {url}'

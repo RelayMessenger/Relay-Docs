@@ -38,12 +38,11 @@ class ContractSourceTests(unittest.TestCase):
         self.assertTrue((ROOT / f"{page}.mdx").is_file())
         for path in ("llms.txt", "llms-full.txt"):
             self.assertIn(page, (ROOT / path).read_text())
-        # Error 2029 and Contact.is_removable left with "Add comes back"
-        # (owner ruling 2026-09-13): every agent is removable, so the errors
-        # page must not list the code. The vendored contract loses it when the
-        # lead re-vendors after the Server PR merges; validate-docs pins bytes.
+        # Error 2029 left with "Add comes back" (owner ruling 2026-09-13:
+        # every agent is removable) and came back with a new meaning in
+        # Relay-Server PR 233 (console.ts, organization membership).
         page_text = (ROOT / f"{page}.mdx").read_text()
-        self.assertNotIn('<a id="2029">2029</a>', page_text)
+        self.assertIn('<a id="2029">2029</a> | 403 | You are not a member of this organization.', page_text)
         self.assertNotIn("This agent cannot be removed.", page_text)
 
 
