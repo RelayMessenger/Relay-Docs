@@ -23,9 +23,11 @@ class CLIReferenceTests(unittest.TestCase):
         expected = package["devDependencies"]["relaymessenger"]
         self.assertEqual(lock["packages"]["node_modules/relaymessenger"]["version"], expected)
 
-    def test_creation_reference_uses_organization_handle(self):
+    def test_creation_reference_uses_flat_handle(self):
         text = (ROOT / "cli/reference/agents-create.mdx").read_text()
-        self.assertIn("Relay adds your organization namespace", captured(text))
+        self.assertIn("one word, 3 to 32 lowercase letters, numbers or underscores", captured(text))
+        self.assertNotIn("namespace", text.lower())
+        self.assertNotIn("Personal organization", text)
         self.assertNotIn("--token-name", text)
         self.assertNotIn(".dev handle", text)
         guide = (ROOT / "agents/create-agent.mdx").read_text()
