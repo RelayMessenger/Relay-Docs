@@ -354,8 +354,9 @@ for path in mdx_paths:
             raise SystemExit(f"the landing page sections changed: {path}")
         # Owner ruling 2026-09-12 (PR 147): the introduction is a hero, the art band
         # behind a centred title and four illustrated cards, in frame mode. A body
-        # without the hero renders as unstyled prose (2026-09-13).
-        if 'mode: "frame"' not in text or "/images/hero/background.svg" not in text or "HeroCard" not in text:
+        # without the hero renders as unstyled prose (2026-09-13). The art is
+        # inlined from snippets/hero-art.jsx, not fetched as images (2026-09-14).
+        if 'mode: "frame"' not in text or 'HeroArt name="background"' not in text or "HeroCard" not in text or "/images/hero/" in text:
             raise SystemExit(f"the introduction lost its hero: {path}")
     elif not headings or headings[-1] not in {"Next steps", "Related", "See also"}:
         raise SystemExit(f"page must end with Next steps, Related, or See also: {path}")
