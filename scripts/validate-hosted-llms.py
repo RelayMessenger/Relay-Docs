@@ -15,16 +15,17 @@ from pathlib import Path
 import re
 import secrets
 import struct
+import subprocess
 import textwrap
 from urllib.parse import urlencode, urljoin, urlsplit, unquote
 from urllib.request import Request, urlopen
 import zlib
 
 import origins
-from hosted_cache import canonical_cache_pairs
+from hosted_cache import CANONICAL_PATHS, canonical_cache_pairs
 
 ROOT = Path(__file__).resolve().parents[1]
-AGENT_SOURCES = ("skill.md", "llms.txt", "llms-full.txt")
+AGENT_SOURCES = ("skill.md", "agent-prompt.md", "llms.txt", "llms-full.txt")
 USER_AGENT = "Relay-Docs-Hosted-Validator/3.0"
 ENDPOINT = re.compile(r"^(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS) /v1/")
 FENCE = re.compile(r"^[ \t]*(`{3,}|~{3,})([^\n]*)\n(.*?)^[ \t]*\1[ \t]*$", re.M | re.S)
@@ -218,6 +219,75 @@ def response_pair(canonical, busted):
             for name, response in (("canonical", canonical), ("cache_busted", busted))}
 
 
+def normalize_hosted_agent_prompt(body):
+    """Remove only Mintlify's generated wrapper from /agent-prompt.md.
+
+    Mintlify publishes this one Markdown file through its documentation
+    renderer. The renderer prepends a Documentation Index and turns bare
+    Markdown URLs into links. The authored prompt remains strict: after those
+    presentation-only changes, every word and URL must still match.
+    """
+    text = body.decode("utf-8")
+    text = re.sub(
+        r"\A> ## Documentation Index\n"
+        r"> Fetch the complete documentation index at: .+\n"
+        r"> Use this file to discover all available pages before exploring further\.\n\n",
+        "",
+        text,
+    )
+    text = re.sub(r"\A# Agent prompt\n\n", "", text)
+    text = re.sub(
+        r"\[([^\]\n]+)\]\(([^)\n]+)\)",
+        lambda match: match.group(1) if match.group(1) == match.group(2) else match.group(0),
+        text,
+    )
+    return "\n".join(line.rstrip() for line in text.strip().splitlines())
+
+
+def source_body_matches(path, actual, expected):
+    if path == "agent-prompt.md":
+        return normalize_hosted_agent_prompt(actual) == normalize_hosted_agent_prompt(expected)
+    return actual == expected
+
+
+def hosted_source_pairs(fetch, expected, require_edge_fresh=False):
+    """Check published source bytes against the cache-busted origin body.
+
+    The origin body is the truth: it must equal this checkout. The canonical
+    URL is served by Mintlify's own Cloudflare cache (docs.staging.relayapp.im
+    is a CNAME to cname.mintlify.builders, cache-control max-age=86400), which
+    this repository cannot purge. A stale cached copy is therefore a warning
+    line, never a failure, unless --require-edge-fresh asks for it. Two red
+    "Preview docs" runs on staging (3cba644, c5926f8) spent 50 minutes each
+    retrying against that cache on 2026-09-13/14.
+    """
+    for path in CANONICAL_PATHS:
+        if path not in expected:
+            yield from canonical_cache_pairs(fetch, paths=[path])
+            continue
+        canonical = fetch(path)
+        busted = fetch(path, cache_busted=True)
+        if not source_body_matches(path, busted["body"], expected[path]):
+            if path == "agent-prompt.md":
+                raise SystemExit(
+                    f"/{path} served content does not match expected checkout prompt"
+                )
+            raise SystemExit(f"/{path} served body does not match expected checkout source bytes")
+        if canonical["body"] != busted["body"]:
+            if require_edge_fresh:
+                raise SystemExit(
+                    f"/{path} canonical body {canonical['sha256']} does not match "
+                    f"current origin body {busted['sha256']}"
+                )
+            headers = canonical["headers"]
+            max_age = re.search(r'(?:^|,)\s*max-age\s*=\s*"?(\d+)',
+                                headers.get("cache-control", ""), re.I)
+            print(f"warning: /{path}: Mintlify edge cache is {headers.get('age', 'unknown')} s "
+                  f"behind origin (max-age {max_age[1] if max_age else 'unknown'}); "
+                  "origin matches checkout")
+        yield path, canonical, busted
+
+
 def check_brand(fetch, root_html, root, settings):
     source = settings["favicon"]
     expected = {source: (root / source).read_bytes()}
@@ -275,7 +345,9 @@ def read_page(root, page):
         value = json.loads(value)
     elif value.startswith("'") and value.endswith("'"):
         value = value[1:-1].replace("''", "'")
-    return {"page": page, "title": value, "body": match[2]}
+    mode = re.search(r"^mode:\s*[\"']?(\w+)", match[1], re.M)
+    return {"page": page, "title": value, "body": match[2],
+            "mode": mode[1] if mode else None}
 
 
 def check_discovery(root, config, index, complete):
@@ -341,6 +413,10 @@ class VisibleHTML(HTMLParser):
         if not self.hidden:
             if tag in self.BLOCKS:
                 self.parts.append("\n")
+            if tag == "img":
+                alt = dict(attrs).get("alt")
+                if alt:
+                    self.parts.extend(("\n", alt, "\n"))
             if tag == "h1":
                 self.in_title = True
                 self.titles.append("")
@@ -364,14 +440,114 @@ class VisibleHTML(HTMLParser):
 def prose(text):
     """Normalize presentation only. Keep words, case, numbers and punctuation."""
     text = re.sub(r"\{/[\*].*?[\*]/\}|<!--.*?-->", "", text, flags=re.S)
+    text = re.sub(
+        r"<img\b([^>]*)/?>",
+        lambda match: (
+            re.search(r'\balt\s*=\s*["\']([^"\']*)["\']', match[1], re.I) or
+            re.search(r"\balt\s*=\s*([^\s>]+)", match[1], re.I)
+        ).group(1) if (
+            re.search(r'\balt\s*=\s*["\']([^"\']*)["\']', match[1], re.I) or
+            re.search(r"\balt\s*=\s*([^\s>]+)", match[1], re.I)
+        ) else "",
+        text,
+        flags=re.I,
+    )
     text = re.sub(r"</?[A-Z][A-Za-z0-9.]*\b[^>]*>", "\n", text)
+    text = re.sub(r"</?h[1-6]\b[^>]*>", "\n", text)
     text = re.sub(r"</?(?:p|div|span|br|strong|em|a|code)\b[^>]*>", "", text)
     text = re.sub(r"!?\[([^]\n]*)\]\([^\n]*?\)", r"\1", text)
     text = re.sub(r"^\s*\|?[ :|\-]+\|\s*$", "", text, flags=re.M)
     text = re.sub(r"^\s*(?:#{1,6}\s+|>\s*|[-*+]\s+|\d+\.\s+)", "", text, flags=re.M)
     text = text.replace("**", "").replace("`", "").replace("|", " ")
-    text = re.sub(r"\\([`*_{}\[\]()#+.!|<>-])", r"\1", text)
+    text = re.sub(r"\\([`*_{}\[\]()#+.!|<>:-])", r"\1", text)
+    text = text.translate(str.maketrans({"’": "'", "‘": "'", "“": '"', "”": '"'}))
     return " ".join(html.unescape(text).split())
+
+
+def rendered_frame_source(body):
+    """Expand literal local JSX components; never ignore their reader content.
+
+    Frame pages own their H1 and may define small presentation components.
+    Mintlify reformats their JavaScript when generating Markdown. Compare the
+    rendered literals, not return-statement punctuation. Unsupported component
+    shapes fail closed rather than silently dropping a source requirement.
+    """
+    components = {}
+    declaration = re.compile(
+        r"^export const (\w+) = \(\{\s*([\w,\s]+)\}\) => \{\s*return\s*"
+        r"(.*?)^\};[ \t]*\n?", re.M | re.S)
+
+    def remember(match):
+        expression = match[3].strip().removesuffix(";").strip()
+        if expression.startswith("(") and expression.endswith(")"):
+            expression = expression[1:-1].strip()
+        if not expression.startswith("<") or not expression.endswith(">"):
+            raise SystemExit(f"unsupported frame component: {match[1]}")
+        components[match[1]] = (
+            {name.strip() for name in match[2].split(",") if name.strip()},
+            expression,
+        )
+        return ""
+
+    body = declaration.sub(remember, body)
+    if re.search(r"^export\s", body, re.M):
+        raise SystemExit("unsupported frame component declaration")
+    for name, (parameters, template) in components.items():
+        invocation = re.compile(r"<" + re.escape(name) + r"\b([^>]*?)/>", re.S)
+
+        def expand(match):
+            attributes = dict(re.findall(r'(\w+)="([^"]*)"', match[1]))
+            remainder = re.sub(r'\w+="[^"]*"', "", match[1]).strip()
+            if remainder or set(attributes) != parameters:
+                raise SystemExit(f"nonliteral or incomplete frame component: {name}")
+            values = {key: html.unescape(value) for key, value in attributes.items()}
+
+            def value(key):
+                if key not in values:
+                    raise SystemExit(f"unknown frame component property: {name}.{key}")
+                return values[key]
+
+            expanded = re.sub(
+                r"=\{`([^`]+)`\}",
+                lambda m: '="' + html.escape(re.sub(
+                    r"\$\{(\w+)\}", lambda p: value(p[1]), m[1]), quote=True) + '"',
+                template,
+            )
+            expanded = re.sub(r"=\{(\w+)\}",
+                              lambda m: '="' + html.escape(value(m[1]), quote=True) + '"',
+                              expanded)
+            return re.sub(r"\{(\w+)\}", lambda m: html.escape(value(m[1])), expanded)
+
+        body = invocation.sub(expand, body)
+        if re.search(r"<" + re.escape(name) + r"\b", body):
+            raise SystemExit(f"unsupported frame component invocation: {name}")
+    return body
+
+
+class FrameLinks(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.links = set()
+        self.href = None
+        self.parts = []
+
+    def handle_starttag(self, tag, attrs):
+        values = dict(attrs)
+        if tag == "a" and values.get("href"):
+            self.href = values["href"]
+            self.parts = []
+        if tag == "img" and self.href:
+            self.parts.append(values.get("alt", ""))
+
+    def handle_data(self, data):
+        if self.href:
+            self.parts.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "a" and self.href:
+            self.links.add((self.href, prose(" ".join(self.parts))))
+            self.href = None
+            self.parts = []
 
 
 def source_fragments(body):
@@ -390,6 +566,31 @@ def code_blocks(body):
 def check_page_content(page, body, markdown=False):
     text = body.decode("utf-8")
     title = prose(page["title"])
+    source = page["body"]
+    frame = page.get("mode") == "frame"
+    if frame:
+        source = rendered_frame_source(source)
+        source_html = VisibleHTML()
+        source_html.feed(source)
+        if len(source_html.titles) != 1:
+            raise SystemExit(f"/{page['page']} frame source must own exactly one H1")
+        frame_title = prose(source_html.titles[0])
+        if markdown:
+            text = rendered_frame_source(text)
+            rendered_html = VisibleHTML()
+            rendered_html.feed(text)
+            frame_titles = [prose(value) for value in rendered_html.titles]
+            frame_titles += [prose(value) for value in re.findall(
+                r"^#\s+(.+)$", FENCE.sub("", text), re.M)]
+            if frame_title not in frame_titles:
+                raise SystemExit(f"/{page['page']} has a missing or stale frame H1")
+        else:
+            title = frame_title
+        source_links, hosted_links = FrameLinks(), FrameLinks()
+        source_links.feed(source)
+        hosted_links.feed(text)
+        if source_links.links - hosted_links.links:
+            raise SystemExit(f"/{page['page']} has missing or stale frame links")
     if markdown:
         titles = [prose(value) for value in re.findall(r"^#\s+(.+)$", FENCE.sub("", text), re.M)]
         front = re.match(r"\A---\n(.*?)\n---", text, re.S)
@@ -409,7 +610,7 @@ def check_page_content(page, body, markdown=False):
         visible = prose("".join(parser.parts))
     if title not in titles:
         raise SystemExit(f"/{page['page']} has a missing or stale title: {page['title']}")
-    fragments = source_fragments(page["body"])
+    fragments = source_fragments(source)
     if not fragments:
         raise SystemExit(f"/{page['page']} has no distinctive source prose to verify")
     for fragment in fragments:
@@ -423,7 +624,22 @@ def authored_route(page):
     return page.removesuffix("/index")
 
 
-def check_all_pages(fetch, authored, workers=6):
+def frame_renderer(base_url):
+    def render(route):
+        url = urljoin(base_url.rstrip("/") + "/", route)
+        result = subprocess.run(
+            ["node", str(ROOT / "scripts/render-hosted-page.mjs"), url],
+            capture_output=True, text=True, timeout=90,
+        )
+        if result.returncode:
+            raise SystemExit(f"frame rendering failed for {url}: {result.stderr.strip()}")
+        rendered = json.loads(result.stdout)
+        rendered["body"] = rendered.pop("html").encode("utf-8")
+        return rendered
+    return render
+
+
+def check_all_pages(fetch, authored, workers=6, render_frame=None):
     if not 1 <= workers <= 16:
         raise SystemExit("--workers must be between 1 and 16")
 
@@ -432,8 +648,23 @@ def check_all_pages(fetch, authored, workers=6):
         markdown = page["page"] + ".md"
         receipt = {}
         for path, canonical, busted in canonical_cache_pairs(fetch, paths=[route, markdown]):
-            check_page_content(page, canonical["body"], markdown=path == markdown)
+            actual = canonical
+            rendered = None
+            if path == route and page.get("mode") == "frame":
+                if render_frame is None:
+                    raise SystemExit(f"/{page['page']} frame page requires a rendered DOM")
+                rendered = render_frame(route)
+                for header in ("x-served-version", "x-version"):
+                    if (canonical["headers"].get(header)
+                            and rendered["headers"].get(header) != canonical["headers"][header]):
+                        raise SystemExit(f"/{page['page']} rendered a different deployment")
+                actual = rendered
+            check_page_content(page, actual["body"], markdown=path == markdown)
             receipt["/" + path] = response_pair(canonical, busted)
+            if rendered is not None:
+                receipt["/" + path]["rendered"] = {
+                    key: value for key, value in rendered.items() if key != "body"
+                }
         return receipt
 
     pages = {}
@@ -494,23 +725,24 @@ def run(args, root=ROOT, fetch=None, get_json=github_json):
     fetch = fetch or make_fetch(args.base_url)
     expected = {name: (root / name).read_bytes() for name in AGENT_SOURCES}
     pages, bodies = {}, {}
-    for path, canonical, busted in canonical_cache_pairs(fetch, expected):
-        text = canonical["body"].decode("utf-8")
+    for path, canonical, busted in hosted_source_pairs(fetch, expected, args.require_edge_fresh):
+        text = busted["body"].decode("utf-8")
         for label, pattern in deleted_wording.items():
             if pattern.search(text):
                 raise SystemExit(f"/{path} contains deleted wording: {label}")
         pages["/" + path] = response_pair(canonical, busted)
-        bodies[path] = canonical["body"]
+        bodies[path] = busted["body"]
     versions = [pages[path]["canonical"]["headers"].get("x-served-version")
-                or pages[path]["canonical"]["headers"].get("x-version") for path in ("/", "/guides")]
+                or pages[path]["canonical"]["headers"].get("x-version") for path in ("/", "/start/quickstart")]
     if not versions[0] or versions[0] != versions[1]:
-        raise SystemExit("root and /guides are not served by the same Mintlify deployment")
+        raise SystemExit("root and /start/quickstart are not served by the same Mintlify deployment")
     authored, contract_ids = check_discovery(root, config, bodies["llms.txt"].decode(), bodies["llms-full.txt"].decode())
     install_count = check_sdk_installs(bodies["llms-full.txt"].decode(), settings["environment"])
     brand = check_brand(fetch, bodies[""], root, settings)
     if args.all_pages:
         check_authored_inventory(root, authored)
-        pages.update(check_all_pages(fetch, authored, args.workers))
+        pages.update(check_all_pages(fetch, authored, args.workers,
+                                     render_frame=frame_renderer(args.base_url)))
     deployment = check_deployment(args.expected_sha, settings["environment"], args.base_url, get_json) if args.expected_sha else None
     return {"schema_version": 2, "checked_at": datetime.now(timezone.utc).isoformat(),
             "base_url": args.base_url.rstrip("/"), "environment": settings["environment"],
@@ -518,6 +750,7 @@ def run(args, root=ROOT, fetch=None, get_json=github_json):
             "github_deployment": deployment, "brand": brand, "pages": pages,
             "authored_pages": len(authored), "contract_operation_ids": contract_ids,
             "sdk_install_commands": install_count, "all_pages": args.all_pages,
+            "require_edge_fresh": args.require_edge_fresh,
             "deleted_wording": list(deleted_wording), "verdict": "passed"}
 
 
@@ -525,6 +758,9 @@ def argument_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("base_url")
     parser.add_argument("--production", action="store_true", help="Select production checks; source bytes remain exact")
+    parser.add_argument("--require-edge-fresh", action="store_true", default=False,
+                        help="Also fail when Mintlify's edge cache lags the origin body (off by default: "
+                             "the cache is Mintlify's and cannot be purged from this repository)")
     parser.add_argument("--all-pages", action="store_true", help="Check every navigation-authored route and its Markdown")
     parser.add_argument("--workers", type=int, default=6, help="Concurrent page checks, 1–16 (default: 6)")
     parser.add_argument("--expected-sha")
@@ -540,7 +776,7 @@ def main(argv=None):
     if args.receipt:
         args.receipt.parent.mkdir(parents=True, exist_ok=True)
         args.receipt.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
-    print(f"validated {receipt['environment']} hosted docs: exact canonical/cache-busted and checkout bytes, "
+    print(f"validated {receipt['environment']} hosted docs: exact origin and checkout bytes, "
           f"navigation, contract IDs, and {receipt['brand']['colors']} favicon colors")
     if args.all_pages:
         print(f"validated HTML and Markdown for {receipt['authored_pages']} authored pages")

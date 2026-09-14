@@ -66,15 +66,39 @@ jobs:
           test "$before" = "$after"
 
       - name: No staging origin or package reference may remain
+        # package.json and package-lock.json are build inputs pinned to the
+        # staging capture the reference was generated from, not reader-facing
+        # content; scripts/derive-production.py skips them for the same reason.
         run: |
           set -euo pipefail
           if grep -rIE 'staging\.relayapp\.im|relay-staging\.mintlify|(@relaymessenger/[a-z-]+|relay-claude-channel)@staging\b|[0-9]+\.[0-9]+\.[0-9]+-staging\.[0-9]+' \
                --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=scripts \
-               --exclude-dir=.github --exclude=versions.json . ; then
+               --exclude-dir=.github --exclude=versions.json \
+               --exclude=package.json --exclude=package-lock.json . ; then
             echo "::error::A staging reference survived the derivation."
             exit 1
           fi
           test "$(cat .docs-target)" = production
+
+      - name: No unverified sample may reach production
+        # A page marks a request whose real response was not captured with
+        # "(unverified: <why> <date>)" (docs rebuild, 2026-09-10). Staging may
+        # carry the marker; production never does.
+        run: |
+          set -euo pipefail
+          if grep -rIl '(unverified' --include='*.mdx' --exclude-dir=node_modules --exclude-dir=.git . ; then
+            echo "::error::An (unverified) sample survived; capture it before promoting."
+            exit 1
+          fi
+
+      - name: Install the production CLI
+        # The CLI reference pages are regenerated and compared by the
+        # validation below. On production they must equal what the CLI a
+        # reader installs prints (versions.json npm.relaymessenger.latest),
+        # not the staging prerelease package.json pins for the staging capture
+        # (run 34823236903 failed on cli/reference/help.mdx and cli/index.mdx).
+        # --no-save leaves package.json and package-lock.json untouched.
+        run: npm install --no-save "relaymessenger@$(node -p "require('./versions.json').npm.relaymessenger.latest")"
 
       - name: Validate in production mode
         run: npm run validate

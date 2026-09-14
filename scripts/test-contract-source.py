@@ -8,11 +8,10 @@ from pathlib import Path
 from origins import target
 
 ROOT = Path(__file__).resolve().parents[1]
-# Exact customization contract at the confirmed Server staging merge.
-# Update only after reading and synchronizing a newly agreed upstream contract.
-UPSTREAM_COMMIT = "1a2245dd775f781b57e0d1f6f3146ebd384c90c3"
-UPSTREAM_STAGING_COMMIT = "1a2245dd775f781b57e0d1f6f3146ebd384c90c3"
-UPSTREAM_SHA256 = "5458497fe8db4ee7dfe6bef67f2803137575d3ea4d835748290a5c9f8d906791"
+# Independently read canonical contract at the Server staging removal merge.
+UPSTREAM_COMMIT = "d4dc62372194bf929801229740346cdacfe2d5c9"
+UPSTREAM_STAGING_COMMIT = "d4dc62372194bf929801229740346cdacfe2d5c9"
+UPSTREAM_SHA256 = "81d23529476ae77b3b7f7dfc931d2e0e421d3c91e20c59136e2deef9123f722e"
 
 
 class ContractSourceTests(unittest.TestCase):
@@ -33,22 +32,18 @@ class ContractSourceTests(unittest.TestCase):
         self.assertEqual((ROOT / "api-reference/openapi.staging.yaml").read_bytes(), expected)
 
     def test_error_is_integrated_in_navigation_and_generated_surfaces(self):
-        page = "error/codes/2xxx/2029"
+        page = "api-reference/errors"
         config = json.loads((ROOT / "docs.json").read_text())
         self.assertIn(page, json.dumps(config["navigation"]))
         self.assertTrue((ROOT / f"{page}.mdx").is_file())
-        for path in ("error/index.mdx", "llms.txt", "llms-full.txt"):
-            with self.subTest(path=path):
-                self.assertIn(page, (ROOT / path).read_text())
-        for path in ("api-reference/openapi.staging.yaml", "api-reference/openapi.mint.yaml"):
-            with self.subTest(path=path):
-                text = (ROOT / path).read_text()
-                self.assertIn("code: 2029", text)
-                self.assertIn("is_removable:", text)
+        for path in ("llms.txt", "llms-full.txt"):
+            self.assertIn(page, (ROOT / path).read_text())
+        # Error 2029 left with "Add comes back" (owner ruling 2026-09-13:
+        # every agent is removable) and came back with a new meaning in
+        # Relay-Server PR 233 (console.ts, organization membership).
         page_text = (ROOT / f"{page}.mdx").read_text()
-        self.assertIn("| `403` | `2029` |", page_text)
-        self.assertIn("`This agent is not removable.`", page_text)
-        self.assertIn("Group membership can change", page_text)
+        self.assertIn('<a id="2029">2029</a> | 403 | You are not a member of this organization.', page_text)
+        self.assertNotIn("This agent cannot be removed.", page_text)
 
 
 if __name__ == "__main__":

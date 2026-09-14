@@ -1,0 +1,58 @@
+---
+title: "Debugging"
+description: "Use trace IDs, event IDs, and resource IDs to debug a Relay agent backend."
+keywords: ["debugging", "trace_id", "event_id", "errors"]
+---
+
+Record Relay's identifiers for every failed request and every event, and keep credentials out of the same logs.
+
+## Read the IDs to record
+
+Run `npx relaymessenger --verbose` with the command you are debugging to print its request and `trace_id`. Store that ID with the HTTP status, the route, and the UTC time; it is the one value that lets Relay match your report to its own record.
+
+| ID | Use |
+| --- | --- |
+| `trace_id` | Correlate one failed API request or one event |
+| `event_id` | Deduplicate and trace one event |
+| Chat ID | Identify the chat |
+| Message ID | Identify one canonical send |
+| Attachment ID | Identify uploaded metadata |
+| WebSocket sequence | Diagnose one agent checkpoint |
+
+## Inspect an error response
+
+Every error body has the same shape: a numeric code for program logic, the HTTP status, a message for humans, a documentation URL, and the trace ID. This one came back from a chat list request sent without a bearer header:
+
+```json captured-output
+{
+  "error": {
+    "status": 401,
+    "code": 2004,
+    "message": "Bearer authentication is required.",
+    "doc_url": "https://docs.relayapp.im/error/codes/2xxx/2004"
+  },
+  "success": false,
+  "trace_id": "00a3d34781df4b5c90b611f825d27b9d"
+}
+```
+
+Branch on `code`, never on `message`; the text can change, the number cannot. Look the number up in [error codes](/api-reference/errors).
+
+## Keep secrets out of logs
+
+Never log Agent Tokens, webhook signing secrets, the `Authorization` header of a WebSocket upgrade, or attachment upload and download URLs. Log raw message content from people only when your privacy policy permits it. A signed URL in a log is a credential in a log.
+
+## Debug event delivery
+
+For webhooks, compare the `webhook-id` header with the `event_id` inside the envelope; they match on every attempt, including retries. For WebSocket, record the event ID, the sequence, and the last committed checkpoint so you can tell a replay from a new event.
+
+## When it fails
+
+If a request fails and you have no trace ID, the response never reached you: check DNS, TLS, and the API origin first. If the code is `3006`, Relay rejected the operation unexpectedly; keep the trace ID and check the chat's history before retrying the same send key. If an event seems lost, read [delivery and retries](/webhooks/delivery) before you assume Relay dropped it.
+
+## Next steps
+
+- [Look up error codes](/api-reference/errors)
+- [Handle SDK errors](/live/errors)
+- [Handle delivery and retries](/webhooks/delivery)
+- [Acknowledge WebSocket events](/websocket/acknowledgements)

@@ -1,0 +1,61 @@
+---
+title: "Build on the API"
+description: "Send and read Messages from your own backend with an Agent Token."
+keywords: ["Relay", "API", "SDK", "Agent Token", "send Message", "history"]
+---
+
+Use an Agent Token from your backend to resolve a Chat, send your first Message, and read the resulting history.
+
+## Before you start
+
+Set `RELAY_AGENT_TOKEN` and `RELAY_API_URL`, or follow [Authentication](/live/authentication). For TypeScript, install the [SDK](/live/sdks).
+
+## Send your first Message
+
+Send to a Contact Handle with `POST /v1/messages`. Relay reuses an existing Chat or creates one, then returns the `chat_id` and sent Message. Replace `TARGET_HANDLE` with the Handle you want to message.
+
+<CodeGroup>
+```bash cURL
+curl -sS -X POST "$RELAY_API_URL/v1/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: first-message-1" \
+  -d '{"to":["TARGET_HANDLE"],"message":{"parts":[{"type":"text","value":"Hello from my Relay agent."}]}}'
+```
+
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+  baseURL: process.env.RELAY_API_URL!,
+});
+
+const result = await relay.messages.create({
+  to: ["TARGET_HANDLE"],
+  message: {
+    parts: [{ type: "text", value: "Hello from my Relay agent." }],
+    idempotency_key: "first-message-1",
+  },
+});
+console.log(result.chat_id, result.message.id);
+```
+</CodeGroup>
+
+```json
+{"chat_id":"CHAT_ID","created_new_chat":true,"message":{"id":"MESSAGE_ID"}}
+```
+
+The API accepts the send with HTTP `202`. Save `chat_id`; use it for follow-up Messages. If the Contact has not accepted Messages from your Agent, Relay may deliver this as a message request.
+
+## Send a follow-up Message
+
+Use the returned Chat ID for follow-up Messages with a new idempotency key. Read the Chat with [`GET /v1/chats/{chatId}/messages`](/api-reference/messages/get-messages-from-a-chat), and use the complete send rules in [Sending Messages](/messages/send).
+
+Reuse the same key and body when retrying after a timeout. Do not reuse a key for a different Message.
+
+## Next steps
+
+- [Sending Messages](/messages/send)
+- [Receive events](/webhooks)
+- [API reference](/api-reference/overview)

@@ -1,0 +1,43 @@
+---
+title: "SDK retries"
+description: "Configure request timeouts and retry safe operations with the TypeScript SDK."
+keywords: ["SDK", "retry", "timeout", "maxRetries", "idempotency"]
+---
+
+Configure the SDK's timeout and retry count once on the client; it retries safe operations on its own and leaves unsafe ones to you.
+
+## Configure the client
+
+The client defaults to a 15-second request timeout and two retries. Set both when you construct it, and override either per request with the `timeout`, `maxRetries`, `signal`, and header options each method accepts:
+
+```typescript
+import Relay from "@relaymessenger/sdk";
+
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+  baseURL: "https://api.relayapp.im",
+  timeout: 15_000,
+  maxRetries: 2,
+});
+```
+
+## Retry safely
+
+The SDK retries network failures, timeouts, HTTP `408`, `429`, and `5xx`, but only for operations that are safe to repeat. A message send is retried only when it carries an idempotency key, because a repeated send without one would create a duplicate.
+
+| Operation | Retry eligibility |
+| --- | --- |
+| Reads and idempotent HTTP methods | Eligible |
+| Commands explicitly marked retryable by the SDK | Eligible |
+| Message sends with an idempotency key | Eligible |
+| Message POST without an idempotency key | Not automatically retried |
+
+## When it fails
+
+After the retries are spent, the SDK throws [`RelayAPIError`](/live/errors) with the last response's status, code, and `traceId`. For a send, retry yourself with the same idempotency key and body; read [idempotency](/live/idempotency) for key scope and the `409` conflict. A `429` carries `retryAfter`; wait that long before the next attempt.
+
+## Next steps
+
+- [Use idempotency keys](/live/idempotency)
+- [Handle SDK errors](/live/errors)
+- [Install the SDK](/live/sdks)

@@ -1,102 +1,70 @@
 ---
-title: "Run a Relay agent with Cloudflare Think"
-sidebarTitle: "Cloudflare Think"
-description: "Configure and run the Relay Think starter with signed Webhook ingress in a Cloudflare Worker."
-keywords: ["Relay Agent Starter", "Cloudflare Think", "Think messenger", "Workers", "Webhooks"]
+title: "Cloudflare Think"
+description: "Connect Cloudflare Think to receive Relay messages and send replies."
+keywords: ["Relay", "Cloudflare Think", "Workers", "webhooks", "local development"]
+icon: "/images/brands/cloudflare.svg"
 ---
 
-Run the Relay Think starter to receive signed Webhooks and answer Messages from a Cloudflare Worker.
+Use the local signed forwarder with `wrangler dev` on your laptop, then use a webhook subscription for the deployed Worker.
 
-## Install the starter
+## Before you start
 
-| Requirement | Value |
-| --- | --- |
-| Node.js | `22.22.3` or newer. |
-| Cloudflare | An account with Workers AI access. |
-| Relay | A production Agent Token and a public HTTPS Webhook destination. |
+- Node.js `22.22.3` or newer.
+- A Cloudflare account with Workers AI.
+- A staging agent, Agent Token, and webhook signing secret.
 
-Clone the source and install the starter:
+## Connect
+
+### On your laptop
+
+Clone the starter, install it, and start the local Worker:
 
 ```bash
 git clone --branch main https://github.com/RelayMessenger/Relay-SDK.git
 cd Relay-SDK/cookbook/cloudflare-think-agent
 npm ci
 cp .dev.vars.example .dev.vars
-```
-
-Source: [Cloudflare Think starter](https://github.com/RelayMessenger/Relay-SDK/tree/main/cookbook/cloudflare-think-agent).
-
-## Configure production
-
-[Register a Webhook subscription](/guides/webhooks/subscriptions) for your
-public HTTPS `/webhooks/relay` destination and retain its one-time signing
-secret. Set the secrets in `.dev.vars`, keeping that file out of source control:
-
-```dotenv
-RELAY_AGENT_TOKEN=replace-with-your-agent-token
-RELAY_WEBHOOK_SECRET=whsec_replace-with-your-webhook-secret
-```
-
-In `wrangler.jsonc`, set these non-secret values under `env.production.vars`:
-
-| Variable | Value |
-| --- | --- |
-| `RELAY_API_ORIGIN` | `https://api.relayapp.im` |
-| `RELAY_AGENT_HANDLE` | The Handle returned for your agent. |
-| `MODEL_ID` | `@cf/openai/gpt-oss-120b` |
-
-Start the Worker and route the registered HTTPS destination to it:
-
-```bash
 npm run dev
 ```
 
-## Check the setup
+Run the forwarder in a second terminal:
 
-Request `/healthz` at the local URL printed by the development server. Valid
-configuration returns:
-
-```json
-{"ok": true}
+```bash
+npx relaymessenger listen --forward-to http://localhost:8787/webhooks/relay
 ```
 
-| Result | Action |
+Set the printed local signing secret as `RELAY_WEBHOOK_SECRET` in the Worker. The Worker verifies the signed request, acknowledges it with `202`, and runs the Think turn after receipt.
+
+### Deployed
+
+Deploy the Worker and create a [webhook subscription](/webhooks/subscriptions) for its public `/webhooks/relay` route. Store the subscription signing secret and Agent Token in the deployed Worker secrets. The deployed path uses the same handler and signature verification as local forwarding.
+
+The source is [cookbook/cloudflare-think-agent](https://github.com/RelayMessenger/Relay-SDK/tree/main/cookbook/cloudflare-think-agent). Its non-secret staging settings use `https://api.relayapp.im` as the API origin, the agent Handle, and the Workers AI model ID.
+
+## Send it a message
+
+Open Relay on your phone and message the agent's Handle. The local Worker or deployed Worker receives the event, Think runs the model, and the reply returns in the same Chat.
+
+## What it can do
+
+| Relay feature | Cloudflare Think starter |
 | --- | --- |
-| `/healthz` returns `503` | Fill in the settings named in the response. |
-| Webhook returns `401` | Check the subscription's signing secret and preserve the original signed body. |
-| Signed Webhook returns `202` | The request was accepted; verify the model's reply separately. |
+| Receive a Message | Yes, through signed local forwarding or a webhook subscription. |
+| Reply in the Chat | Yes, one complete idempotent Message per model turn. |
+| Send attachments | Yes, through the Chat SDK adapter it wraps. |
+| Read Chat history | Yes, through the adapter's history walk. |
+| Mark the Chat read | Yes, on receipt. |
 
-Send the agent a direct Message and confirm that its answer arrives in the same
-Chat. The starter uses a `reply`
-Action for the completed response. Preserve its idempotency handling when
-customizing the reply.
+Think uses one durable root state per Relay Chat. Its current burst window is 600 ms, and a newer Message does not cancel a running turn.
 
-## Answer a second Message during a reply
+## When it fails
 
-Think builds the Chat SDK instance itself with
-`concurrency: { strategy: "burst", debounceMs: 600 }` and runs each reply with
-`waitForCompletion: true`, so the Chat stays locked for the whole turn. The
-starter cannot change that window.
-
-| Second Message arrives | Outcome |
-| --- | --- |
-| Within 600 ms of the first | One turn runs for the latest Message; Think's handlers never read the earlier ones. |
-| While the turn is running | It waits in the queue and gets its own reply when the turn ends. |
-| Any time | Marked read on receipt, because the starter sets `markReadOnReceipt: true`. |
-
-A newer Message never cancels a running turn. Think's handlers take only
-`(thread, message)` and never read `thread.signal`, so
-`abortActiveTurnOnReceipt` has no effect under Think and the starter leaves it
-off. The
-[starter README](https://github.com/RelayMessenger/Relay-SDK/blob/main/cookbook/cloudflare-think-agent/README.md)
-records why.
-
-<span id="current-source" />
-<span id="delivery-behavior" />
-<span id="related" />
+- Signature verification fails: the secret does not belong to this delivery path, or the request body changed.
+- No reply arrives: read the Worker logs to find whether the turn or model call failed.
+- A send result is uncertain: retry with the same idempotency key and content.
 
 ## Next steps
 
-- [Vercel Chat SDK](/integrations/chat-sdk)
-- [Webhook delivery and retries](/guides/webhooks/delivery)
-- [More examples](/examples)
+- [Verify webhook signatures](/webhooks/verify-signatures)
+- [Manage webhook subscriptions](/webhooks/subscriptions)
+- [Handle delivery retries](/webhooks/delivery)

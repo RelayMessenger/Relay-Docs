@@ -5,13 +5,44 @@ from pathlib import Path
 
 # Frame catalogs and a complete copyable agent instruction are reference, not
 # onboarding. All ordinary task guides keep five sections before related links.
-REFERENCE_PAGES = {"guides/websocket/protocol", "agent-reference/prompt"}
-START_PAGES = ["getting-started/quickstart", "getting-started/authentication", "getting-started/sdks"]
+REFERENCE_PAGES = {"websocket/protocol", "integrations/agent-prompt"}
+# Owner ruling 2026-09-12: Introduction is Mintlify's own hero page, a title
+# and four illustrated cards, and ends there. It carries no sections.
+LANDING_SECTIONS = []
+# Owner ruling 2026-09-12: Guides follows Linq's order. Introduction is the
+# landing page, followed by Getting started and the product task groups.
+OVERVIEW_PAGES = ["index"]
+START_PAGES = ["start/quickstart", "live/authentication", "live/sdks",
+               "start/build-on-the-api", "live/best-practices"]
+GUIDE_PREFIXES = ("agents/", "chats/", "messages/", "webhooks/", "events/", "websocket/", "live/")
+# The SDK page moved out of start/ unchanged; it is a reference page, not a
+# task guide, so the imperative-heading rule does not apply to it.
+CONCEPT_PAGES = {"live/sdks"}
+
+
+def is_task_guide(page):
+    return page.startswith(GUIDE_PREFIXES) and page not in CONCEPT_PAGES
 INTERNAL_PROSE = re.compile(
     r"Prepare hosted proof|only after this docs candidate is pushed|"
     r"Local Docs validation prepares|Published artifact source commit|"
     r"registry integrity hash|Reviewed CLI source `[0-9a-f]+`", re.I
 )
+
+
+BUILD_FIXED = {"Before you start", "What you get back", "When it fails", "Next steps"}
+TASK_VERBS = set("Add Allocate Apply Block Choose Clear Configure Connect Create Debug Delete Derive Download Edit Follow Handle Inspect Install Keep Leave List Mark Observe Open Preserve Read Receive Refresh Register Remove Rename Reply Resolve Retrieve Retry Review Run Save Select Send Set Share Start Stop Store Subscribe Supply Target Track Unblock Update Upload Use Validate Verify Watch".split())
+
+def validate_build_headings(page, body):
+    headings = re.findall(r"^## (.+)$", body, re.M)
+    if not headings or headings[-1] != "Next steps":
+        raise SystemExit(f"{page}: Next steps must be last")
+    for heading in headings:
+        if heading not in BUILD_FIXED and heading.split()[0] not in TASK_VERBS:
+            raise SystemExit(f"{page}: guide heading must name an imperative task: {heading}")
+    if "What you get back" in headings and "When it fails" not in headings:
+        raise SystemExit(f"{page}: response requires When it fails")
+    if "When it fails" in headings and headings[-2] != "When it fails":
+        raise SystemExit(f"{page}: When it fails must precede Next steps")
 
 
 def prose(text):
@@ -32,10 +63,16 @@ def authored_paths(value):
 
 
 def validate_structure(root: Path, config: dict):
-    groups = config["navigation"]["tabs"][0]["groups"]
+    guides = next((tab for tab in config["navigation"]["tabs"] if tab.get("tab") == "Guides"), None)
+    if guides is None:
+        raise SystemExit("Guides tab is required")
+    groups = guides["groups"]
+    overview = next((group for group in groups if group.get("group") == "Overview"), None)
+    if overview is None or overview.get("pages") != OVERVIEW_PAGES:
+        raise SystemExit("Introduction must stay the main page on its own")
     start = next((group for group in groups if group.get("group") == "Getting started"), None)
     if start is None or start.get("pages") != START_PAGES:
-        raise SystemExit("Getting started must stay focused on quickstart, authentication, and SDK installation")
+        raise SystemExit("Getting started must stay the quickstart, authentication, the API walkthrough, the SDKs and the checklist")
     pages = list(authored_paths(config["navigation"]))
     existing = {str(p.relative_to(root).with_suffix("")) for p in root.rglob("*.mdx") if "node_modules" not in p.parts}
     if len(pages) != len(set(pages)) or set(pages) != existing:
@@ -44,13 +81,17 @@ def validate_structure(root: Path, config: dict):
         text = (root / f"{page}.mdx").read_text()
         body = prose(text)
         sections = [h for h in re.findall(r"^## (.+)$", body, re.M) if h not in {"Next steps", "Related", "See also"}]
-        if page not in REFERENCE_PAGES and len(sections) > 5:
+        if page == "index" and re.findall(r"^## (.+)$", body, re.M) != LANDING_SECTIONS:
+            raise SystemExit("index: landing sections must match the approved order")
+        if is_task_guide(page):
+            validate_build_headings(page, body)
+        if not is_task_guide(page) and page not in REFERENCE_PAGES and page not in {"changelog", "index"} and len(sections) > 8:
             raise SystemExit(f"{page}: {len(sections)} top-level sections; split independent tasks rather than expanding this page")
-        if page != "agent-reference/prompt" and INTERNAL_PROSE.search(body):
+        if page != "integrations/agent-prompt" and INTERNAL_PROSE.search(body):
             raise SystemExit(f"{page}: internal publishing instructions do not belong in a reader task")
-        if page != "agent-reference/prompt" and "````text Relay agent prompt" in text:
+        if page != "integrations/agent-prompt" and "````text Relay agent prompt" in text:
             raise SystemExit(f"{page}: full machine instructions belong in the agent reference")
-        if page == "getting-started/quickstart":
+        if page == "start/quickstart":
             for detail in ("onFullSync", "through_sequence", "## Review with an agent", "## Delete", "image_recipe"):
                 if detail in text:
                     raise SystemExit(f"Quickstart absorbed a separate task: {detail}")

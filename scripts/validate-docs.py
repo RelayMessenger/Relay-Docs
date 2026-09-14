@@ -28,8 +28,8 @@ root = Path(__file__).resolve().parents[1]
 config = json.loads((root / "docs.json").read_text())
 
 agent_instructions = (root / "skill.md").read_text()
-# Relay Add replaced the setup greeting, so the agent's first Message follows
-# the user's Add and its contact.added event. Nothing may teach a greeting.
+# The first Message is the request (2026-09-09); contact.added still names the
+# direct Chat once the user writes first or accepts. Nothing may teach a scripted opener.
 if not re.search(r"contact\.added", agent_instructions):
     raise SystemExit("Agent instructions lost the contact.added first-Message path")
 
@@ -77,7 +77,7 @@ if config.get("navbar", {}).get("primary") != {
 if config.get("navbar", {}).get("links") != [
     {
         "label": "Copy agent prompt",
-        "href": "/agent-reference/prompt#relay-agent-prompt",
+        "href": "/integrations/agent-prompt#relay-agent-prompt",
         "icon": "copy",
     }
 ]:
@@ -95,11 +95,11 @@ redirects = {
     if isinstance(item, dict) and item.get("permanent") is True
 }
 for source, destination in {
-    "/ecosystem": "/integrations",
+    "/ecosystem": "/integrations/claude-code",
     "/ecosystem/agent-starter": "/integrations/cloudflare-think",
     "/ecosystem/chat-sdk": "/integrations/chat-sdk",
     "/ecosystem/claude-code": "/integrations/claude-code",
-    "/ecosystem/cli": "/integrations/cli",
+    "/ecosystem/cli": "/cli/index",
     "/ecosystem/codex": "/integrations/codex",
     "/ecosystem/cursor": "/integrations/cursor",
     "/ecosystem/hermes": "/integrations/hermes",
@@ -153,6 +153,11 @@ def h2_headings(text):
     return re.findall(r"^## (.+)$", prose, re.M)
 
 
+# Owner ruling 2026-09-12: Introduction is a hero (title and four cards) with
+# no sections under it. docs_structure.py pins the same shape.
+LANDING_SECTIONS = []
+
+
 def openapi_path_block(text, path):
     marker = f"  {path}:"
     start = text.index(marker)
@@ -197,28 +202,25 @@ if navigated != files:
 
 tabs = config["navigation"]["tabs"]
 actual_tabs = [tab["tab"] for tab in tabs]
-expected_tabs = ["Guides", "Error Codes", "API Reference"]
+# Owner ruling 2026-09-12: Linq-shaped Guides, then CLI, Webhook Events, Error
+# Codes, API Reference, and Changelog.
+expected_tabs = ["Guides", "CLI", "Webhook Events", "Error Codes", "API Reference", "Changelog"]
 if actual_tabs != expected_tabs:
     raise SystemExit(f"top tab order changed: {actual_tabs}")
+changelog_tab = next(tab for tab in tabs if tab["tab"] == "Changelog")
+if changelog_tab.get("pages") != ["changelog"] or "groups" in changelog_tab:
+    raise SystemExit("the changelog page must stand alone, with no group repeating the tab name")
 
 # Page boundaries and navigation coverage are checked independently of a
 # frozen list of heading strings. Editorial changes must not require growing
 # an existing catch-all page to satisfy a historical outline.
-from docs_structure import validate_structure
+from docs_structure import is_task_guide, validate_structure
 validate_structure(root, config)
 expected_guide_groups = [group["group"] for group in tabs[0]["groups"]]
 
-expected_error_groups = [
-    "Overview",
-    "1xxx request errors",
-    "2xxx errors",
-    "3xxx server errors",
-]
-actual_error_groups = [group["group"] for group in tabs[1]["groups"]]
-if actual_error_groups != expected_error_groups:
-    raise SystemExit(f"error group order changed: {actual_error_groups}")
 
-api_tab = tabs[2]
+
+api_tab = next(tab for tab in tabs if tab["tab"] == "API Reference")
 if api_tab.get("openapi") != "api-reference/openapi.mint.yaml":
     raise SystemExit("generated API groups must sit directly under API Reference")
 try:
@@ -236,41 +238,55 @@ if has_key(config.get("navigation", {}), "icon") or has_key(config.get("navigati
     raise SystemExit("decorative navigation icons returned")
 if config.get("contextual") != {"options": ["copy", "view"], "display": "header"}:
     raise SystemExit("header Copy page/Markdown actions changed")
-if "getting-started/quickstart" not in navigated:
+if "start/quickstart" not in navigated:
     raise SystemExit("Quickstart must remain a sidebar guide")
 if (root / "current-status.mdx").exists():
     raise SystemExit("Current status belongs in the evidence site, not public docs")
 
 required_paths = [
-    root / "guides/contact-cards.mdx",
-    root / "guides/chats/share-contact-card.mdx",
-    root / "guides/chats/typing-indicators.mdx",
-    root / "guides/messaging/delivery-receipts.mdx",
-    root / "guides/contacts/add-requests.mdx",
-    root / "guides/webhooks/events.mdx",
-    root / "guides/websocket/index.mdx",
-    root / "guides/websocket/protocol.mdx",
-    root / "guides/websocket/full-sync.mdx",
-    root / "error/index.mdx",
+    root / "agents/contact-card.mdx",
+    root / "chats/share-contact-card.mdx",
+    root / "chats/typing.mdx",
+    root / "messages/receipts.mdx",
+    root / "agents/message-requests.mdx",
+    root / "events/index.mdx",
+    root / "websocket/index.mdx",
+    root / "websocket/protocol.mdx",
+    root / "websocket/full-sync.mdx",
+    root / "api-reference/errors.mdx",
 ]
 for path in required_paths:
     if not path.exists():
         raise SystemExit(f"required atomic guide missing: {path.relative_to(root)}")
-for path in [
-    root / "guides/messaging/index.mdx", root / "guides/chats/index.mdx",
-    root / "integrations/index.mdx", root / "api-reference/overview.mdx",
+# Owner ruling 2026-09-11: a group's first page is labelled Overview in the
+# sidebar, so the eyebrow and the H1 never say the same word. The title then
+# has to say what the page is, and is pinned here with its label.
+for path, label, title in [
+    (root / "console/index.mdx", "Overview", "Relay Console"),
+    (root / "agents/lifecycle.mdx", "Overview", "What an agent is"),
+    (root / "agents/message-requests.mdx", "Overview", "How message requests work"),
+    (root / "messages/index.mdx", "Overview", "Send and receive messages"),
+    (root / "chats/index.mdx", "Overview", "Direct and group chats"),
+    (root / "webhooks/index.mdx", "Overview", "Receive webhook events"),
+    (root / "api-reference/overview.mdx", "Overview", None),
+    (root / "changelog.mdx", "Changelog", "Product updates"),
 ]:
-    if 'sidebarTitle: "Overview"' not in path.read_text():
-        raise SystemExit(f"overview sidebar label drifted: {path.relative_to(root)}")
+    page_text = path.read_text()
+    if f'sidebarTitle: "{label}"' not in page_text:
+        raise SystemExit(f"section sidebar label drifted: {path.relative_to(root)}")
+    if title is not None and f'title: "{title}"' not in page_text:
+        raise SystemExit(f"section title drifted back to its group name: {path.relative_to(root)}")
 
 for stale in [
-    root / "guides/chats/install-agents.mdx",
+    root / "chats/install-agents.mdx",
     root / "guides/socket-mode.mdx",
     root / "guides/socket-mode-protocol.mdx",
-    root / "guides/webhooks/choose-transport.mdx",
-    root / "guides/platform/errors.mdx",
-    root / "guides/contacts/default-agents.mdx",
-    root / "guides/contacts/agent-greetings.mdx",
+    root / "build/events/choose-transport.mdx",
+    root / "build/identity/default-agents.mdx",
+    root / "build/identity/agent-greetings.mdx",
+    root / "build/identity/add-requests.mdx",
+    root / "api-reference/resources/contacts/requests/overview.mdx",
+    root / "error/codes/2xxx/2027.mdx",
     root / "ecosystem",
     root / "error/codes/2xxx/2014.mdx",
 ]:
@@ -285,9 +301,8 @@ if "--topology-only" in sys.argv:
     raise SystemExit(0)
 
 ecosystem_paths = [
-    root / "integrations/index.mdx",
     root / "integrations/chat-sdk.mdx",
-    root / "integrations/cli.mdx",
+    root / "cli/index.mdx",
     root / "integrations/mcp.mdx",
     root / "integrations/openclaw.mdx",
     root / "integrations/claude-code.mdx",
@@ -296,7 +311,7 @@ ecosystem_paths = [
     root / "integrations/skills.mdx",
     root / "integrations/codex.mdx",
     root / "integrations/cursor.mdx",
-    root / "examples/index.mdx",
+    root / "live/examples.mdx",
 ]
 ecosystem_text = "\n".join(path.read_text() for path in ecosystem_paths)
 # Integration installation and safety boundaries have dedicated regression
@@ -318,8 +333,31 @@ for path in mdx_paths:
         raise SystemExit(f"missing {sorted(missing)} in {path}")
     if "—" in text:
         raise SystemExit(f"em dash in {path}")
+    if text[end + 5:].strip() == "This page is being written.":
+        continue
+    if path.name == "changelog.mdx":
+        updates = re.findall(r'<Update label="(\d{4}-\d{2}-\d{2})" tags=\{(\[[^\n]+\])\}>([\s\S]*?)</Update>', text)
+        if not updates or len(updates) != text.count("<Update "):
+            raise SystemExit("Changelog entries need dated labels and tags")
+        dates = [date for date, tags, body in updates]
+        if dates != sorted(dates, reverse=True):
+            raise SystemExit("Changelog entries must be newest first")
+        for date, tags, body in updates:
+            if not re.search(r'\]\(/[^)]+\)', body):
+                raise SystemExit("Every changelog entry must link an affected page")
+            if re.search(r"removed|replace|moved|instead of", body, re.I) and "Breaking change" not in tags:
+                raise SystemExit("Removed paths or flags need a Breaking change tag")
+        continue
     headings = h2_headings(text)
-    if not headings or headings[-1] not in {"Next steps", "Related", "See also"}:
+    if path == root / "index.mdx":
+        if headings != LANDING_SECTIONS:
+            raise SystemExit(f"the landing page sections changed: {path}")
+        # Owner ruling 2026-09-12 (PR 147): the introduction is a hero, the art band
+        # behind a centred title and four illustrated cards, in frame mode. A body
+        # without the hero renders as unstyled prose (2026-09-13).
+        if 'mode: "frame"' not in text or "/images/hero/background.svg" not in text or "HeroCard" not in text:
+            raise SystemExit(f"the introduction lost its hero: {path}")
+    elif not headings or headings[-1] not in {"Next steps", "Related", "See also"}:
         raise SystemExit(f"page must end with Next steps, Related, or See also: {path}")
 
     for block in re.findall(
@@ -327,10 +365,13 @@ for path in mdx_paths:
         text,
     ):
         if "TypeScript SDK" in block and "cURL" in block:
-            if block.index("TypeScript SDK") > block.index("cURL"):
-                raise SystemExit(
-                    f"TypeScript SDK must appear before cURL: {path.relative_to(root)}"
-                )
+            # start/build-on-the-api is the main page's API walkthrough moved out
+            # verbatim (2026-09-11), so it keeps the main page's cURL-first order.
+            if is_task_guide(path.relative_to(root).with_suffix("").as_posix()) or path in {root / "index.mdx", root / "start/build-on-the-api.mdx"}:
+                if block.index("cURL") > block.index("TypeScript SDK"):
+                    raise SystemExit(f"cURL must appear before TypeScript SDK: {path.relative_to(root)}")
+            elif block.index("TypeScript SDK") > block.index("cURL"):
+                raise SystemExit(f"TypeScript SDK must appear before cURL: {path.relative_to(root)}")
 
 private_contact_field = "is_" + "default"
 private_contact_phrase = "default " + "agent"
@@ -339,7 +380,7 @@ public_contract_paths = [
     root / "docs.json",
     root / "README.md",
     root / "INFORMATION-ARCHITECTURE.md",
-    root / "skill.md",
+    root / "skill.md", root / "agent-prompt.md",
     root / ".mintlify/skills/relay/SKILL.md",
     root / "agent-prompt.js",
     root / "api-reference/openapi.yaml",
@@ -415,7 +456,7 @@ def contract_shape(path):
 
 contract_shapes = {contract_shape(path) for path in contract_paths}
 path_mention = re.compile(r"/v1(?:/[A-Za-z0-9_\-{}$<>:]+)+")
-for path in [*mdx_paths, root / "skill.md"]:
+for path in [*mdx_paths, root / "skill.md", root / "agent-prompt.md"]:
     for number, line in enumerate(path.read_text().splitlines(), 1):
         for mention in path_mention.findall(line):
             if contract_shape(mention) in contract_shapes:
@@ -429,74 +470,11 @@ for path in [*mdx_paths, root / "skill.md"]:
 
 from docs_behavior import validate_behavior
 validate_behavior(root)
-webhook_events_text = (root / "guides/webhooks/events.mdx").read_text()
+webhook_events_text = (root / "events/index.mdx").read_text()
 
-expected_error_codes = {
-    1004, 1005, 2001, 2003, 2004, 2005, 2006,
-    2007, 2008, 2009, 2015, 2023, 2025, 2026,
-    2027, 2028, 2029, 3006,
-}
-error_paths = sorted((root / "error/codes").rglob("*.mdx"))
-actual_error_codes = {int(path.stem) for path in error_paths}
-if actual_error_codes != expected_error_codes:
-    raise SystemExit(
-        f"error code pages drifted: {sorted(actual_error_codes ^ expected_error_codes)}"
-    )
-expected_error_statuses = {
-    1004: ("`400`",),
-    # errors.ts:12-17 makes 1005 the default for every status that is not
-    # 401, 402, 404, 429 or 5xx, so it ships as 400 and as 409.
-    1005: ("`400`", "`409`"),
-    2001: ("`404`",),
-    2003: ("`403`",),
-    2004: ("`401`",),
-    2005: ("`500`",),
-    2006: ("`413`, `415`, or `422`",),
-    2007: ("`404`",),
-    2008: ("`429`",),
-    # contact-add.ts:465 raises 402/2009 for a Handle that cannot send Adds.
-    2009: ("`402`",),
-    2015: ("`409`",),
-    2023: ("`409`",),
-    2025: ("`404`",),
-    # chat-contacts.ts:51 is 403; contact-add.ts:359 is 409.
-    2026: ("`403`", "`409`"),
-    2027: ("`403`",),
-    2028: ("`403`",),
-    2029: ("`403`",),
-    # app.ts:225 is the 500 catch-all; images.ts:466 and :507,
-    # attachments.ts:153 and developer-agents.ts:140 are 503.
-    3006: ("`500`", "`503`"),
-}
-error_overview_text = (root / "error/index.mdx").read_text()
-for path in error_paths:
-    error_text = path.read_text()
-    code = int(path.stem)
-    sidebar_match = re.search(r'^sidebarTitle: "([^"]+)"$', error_text, re.M)
-    if (
-        not sidebar_match
-        or not sidebar_match.group(1).startswith(path.stem)
-        or sidebar_match.group(1).startswith(f"Error {path.stem}")
-        or len(sidebar_match.group(1)) > 28
-    ):
-        raise SystemExit(
-            f"error sidebar title is not concise: {path.relative_to(root)}"
-        )
-    for status in expected_error_statuses[code]:
-        if f'| {status} | `{code}` |' not in error_text:
-            raise SystemExit(
-                f"error status/code row drifted in {path.relative_to(root)}: "
-                f"no row for {status}"
-            )
-    if "## Troubleshooting" not in error_text or "**Retry:**" not in error_text:
-        raise SystemExit(f"error recovery guidance missing in {path.relative_to(root)}")
-    if "```json" in error_text:
-        raise SystemExit(f"shared error envelope duplicated in {path.relative_to(root)}")
-    if f'description: "Resolve Relay error {code}."' in error_text:
-        raise SystemExit(f"generic error description returned in {path.relative_to(root)}")
-    expected_link = f"/error/codes/{code // 1000}xxx/{code}"
-    if expected_link not in error_overview_text:
-        raise SystemExit(f"error overview link missing: {expected_link}")
+# One code table replaces the former per-code page hierarchy.
+import runpy
+runpy.run_path(str(root / "scripts/check-error-anchors.py"))["check"](root)
 
 openapi_text = (root / "api-reference/openapi.yaml").read_text()
 mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
@@ -507,10 +485,15 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Error 2029 and Contact.is_removable, Relay-Server PR 185, September 7, 2026.
 # Documented 403/409/422/404/413/415 responses, request caps, nullable
 # BlockedHandleEntry.reason, UpdateChatRequest minProperties, Relay-Server PR 194, September 8, 2026.
-# Source authority: Relay-Server staging commit 1a2245dd775f781b57e0d1f6f3146ebd384c90c3; CLI publication is gated separately.
+# Message requests replace add requests: request_state, chat.request.updated,
+# error 2030, contact_requests removed, Relay-Server PR 205, September 9, 2026.
+# A person's reply accepts a message request; the request route takes deleted
+# only, Relay-Server PR 207, September 9, 2026.
+# Add comes back: POST /v1/contacts for people, is_contact on chat handles, request_state, chat.request.updated and error 2029 removed, Relay-Server PR 225, September 13, 2026.
+# Source authority: Relay-Server staging merge d4dc623; anonymous registration is removed.
 # The digest pins source bytes independently of the Server release commit.
 expected_openapi_sha256 = (
-    "5458497fe8db4ee7dfe6bef67f2803137575d3ea4d835748290a5c9f8d906791"
+    "81d23529476ae77b3b7f7dfc931d2e0e421d3c91e20c59136e2deef9123f722e"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
@@ -589,8 +572,28 @@ if not delivery_status:
 delivery_values = re.findall(r"^        - (.+)$", delivery_status.group(1), re.M)
 if delivery_values != ["sent", "delivered", "read"]:
     raise SystemExit(f"DeliveryStatus drifted: {delivery_values}")
-if re.search(r"^\s+deprecated:\s*true\s*$", openapi_text, re.M):
-    raise SystemExit("deprecated compatibility surface returned to OpenAPI")
+# PR 214 keeps exactly these response mirrors deprecated; all other legacy
+# compatibility surfaces remain forbidden.
+allowed_deprecated = {
+    (schema, field)
+    for schema in ("TextPartResponse", "schemas-TextPartResponse")
+    for field in ("mention", "mention_range")
+}
+actual_deprecated = set()
+schema = field = None
+for line in openapi_text.splitlines():
+    match = re.fullmatch(r"    ([\w-]+):", line)
+    if match:
+        schema, field = match[1], None
+    match = re.fullmatch(r"        ([\w-]+):", line)
+    if match:
+        field = match[1]
+    if re.fullmatch(r"\s+deprecated:\s*true\s*", line):
+        if line != "          deprecated: true" or (schema, field) not in allowed_deprecated:
+            raise SystemExit("deprecated compatibility surface returned to OpenAPI")
+        actual_deprecated.add((schema, field))
+if actual_deprecated != allowed_deprecated:
+    raise SystemExit("deprecated mention response mirrors missing from OpenAPI")
 chat_handle = re.search(
     r"^    ChatHandle:\n(.*?)(?=^    [A-Za-z0-9_-]+:\n)",
     openapi_text,
@@ -610,44 +613,18 @@ for path in openapi_paths:
 for required_path in [
     "/v1/chats/{chatId}/share_contact_card",
     "/v1/chats/{chatId}/typing",
-    "/v1/contact_requests",
     "/v1/websocket",
 ]:
     if required_path not in openapi_paths:
         raise SystemExit(f"canonical OpenAPI path missing: {required_path}")
 if "/v1/websocket-connections" in openapi_paths:
     raise SystemExit("stale WebSocket connection-credential endpoint returned")
-contact_request_operation = openapi_path_block(
-    openapi_text,
-    "/v1/contact_requests",
-)
-contact_request_methods = re.findall(
-    r"^    (get|post|put|patch|delete):$",
-    contact_request_operation,
-    re.M,
-)
-if contact_request_methods != ["post"]:
-    raise SystemExit(
-        "public contact_requests must expose only the agent POST: "
-        f"{contact_request_methods}"
-    )
+if "/v1/contact_requests" in openapi_paths:
+    raise SystemExit("retired contact_requests endpoint returned to public OpenAPI")
 for spec_name, spec_text in [
     ("canonical", openapi_text),
     ("Mintlify", mint_openapi_text),
 ]:
-    add_request_parameters = re.findall(
-        r"^        - name: ([^\n]+)$",
-        openapi_operation_block(
-            spec_text,
-            "/v1/contact_requests",
-            "post",
-        ),
-        re.M,
-    )
-    if "Idempotency-Key" in add_request_parameters:
-        raise SystemExit(
-            f"{spec_name} Add request retained Idempotency-Key"
-        )
     for send_path in [
         "/v1/chats",
         "/v1/messages",
@@ -672,17 +649,14 @@ if leaked_private_operations:
         f"private operation entered public OpenAPI: {leaked_private_operations}"
     )
 expected_operation_ids = {
-    "createAgent",
     "deleteAgent",
     "addParticipant",
     "blockHandle",
     "connectAgentWebSocket",
-    "createContactRequest",
     "createChat",
     "createWebhookSubscription",
     "deleteAttachment",
     "deleteWebhookSubscription",
-    "editMessage",
     "getAttachment",
     "getChat",
     "getContactCard",
@@ -707,7 +681,6 @@ expected_operation_ids = {
     "startTyping",
     "stopTyping",
     "unblockHandle",
-    "unsendMessage",
     "updateChat",
     "updateContactCard",
     "updateWebhookSubscription",
@@ -810,13 +783,42 @@ if disconnect_reasons != [
 ]:
     raise SystemExit(f"WebSocket disconnect reasons drifted: {disconnect_reasons}")
 
-handwritten_paths = [*mdx_paths, root / "skill.md", root / "README.md"]
-handwritten_text = "\n".join(path.read_text() for path in handwritten_paths)
+handwritten_paths = [*mdx_paths, root / "skill.md", root / "agent-prompt.md", root / "README.md"]
+# A migration guide quotes the other product on purpose: its routes, and the
+# "Not in Relay" list of features Relay does not have, are that product's
+# vocabulary, not ours. Everything a migration guide says about Relay is
+# scanned for drift exactly like every other page.
+FOREIGN_ROUTES = (
+    "/v3/messages",                     # Linq
+    "/v3/chats/{chatId}/voicememo",     # Linq
+    "/v3/webhook-subscriptions",        # Linq
+)
+
+
+def relay_vocabulary(text):
+    text = re.sub(r"^## Not in Relay\n.*?(?=^## |\Z)", "", text, flags=re.M | re.S)
+    for foreign in FOREIGN_ROUTES:
+        text = text.replace(foreign, "")
+    return text
+
+
+def product_prose(path):
+    # Verbatim payload text is user content, not product vocabulary.
+    text = re.sub(r"^```json captured-output\n.*?^```\s*$", "", path.read_text(), flags=re.M | re.S)
+    if not path.match("resources/migrate-from-*.mdx"):
+        return text
+    # Owner decision 2026-09-11: a migration guide names the product the reader
+    # is leaving. There the name is the subject of the page, not residue from an
+    # early draft, so it is not scanned. The ban holds on every other page.
+    return re.sub(source_company_pattern, "", relay_vocabulary(text), flags=re.I)
+
+
+handwritten_text = "\n".join(product_prose(path) for path in handwritten_paths)
 all_contract_text = handwritten_text + "\n" + openapi_text
 if target() == "production" and STAGING_INSTRUCTION_REFERENCE.search(handwritten_text):
     raise SystemExit("staging installation or credential guidance returned to production")
 generated_paths = [root / "llms.txt", root / "llms-full.txt"]
-generated_text = "\n".join(path.read_text() for path in generated_paths)
+generated_text = relay_vocabulary("\n".join(path.read_text() for path in generated_paths))
 llms_index_text = (root / "llms.txt").read_text()
 for marker in [
     "/v1/websocket",
@@ -857,15 +859,16 @@ if (root / "skill.md").read_bytes() != (
 ).read_bytes():
     raise SystemExit("published Relay skill drifted from skill.md")
 skill_text = (root / "skill.md").read_text()
-agent_prompt_page = (root / "agent-reference/prompt.mdx").read_text()
+agent_prompt_text = (root / "agent-prompt.md").read_text()
+agent_prompt_page = (root / "integrations/agent-prompt.mdx").read_text()
 prompt_match = re.search(
-    r"^## Relay agent prompt\n.*?^````text Relay agent prompt\n"
+    r"^### Relay agent prompt\n.*?^````text Relay agent prompt\n"
     r"(.*?)\n````$",
     agent_prompt_page,
     re.M | re.S,
 )
-if not prompt_match or prompt_match.group(1) + "\n" != skill_text:
-    raise SystemExit("visible Relay agent prompt drifted from skill.md")
+if not prompt_match or prompt_match.group(1) + "\n" != agent_prompt_text:
+    raise SystemExit("visible Relay agent prompt drifted from agent-prompt.md")
 agent_prompt_script = (root / "agent-prompt.js").read_text()
 prompt_assignment = re.search(
     r"const RELAY_AGENT_PROMPT = (.+);$",
@@ -874,11 +877,11 @@ prompt_assignment = re.search(
 )
 if (
     not prompt_assignment
-    or json.loads(prompt_assignment.group(1)) != skill_text
+    or json.loads(prompt_assignment.group(1)) != agent_prompt_text
 ):
-    raise SystemExit("agent-prompt.js payload drifted from skill.md")
+    raise SystemExit("agent-prompt.js payload drifted from agent-prompt.md")
 if (
-    'const FALLBACK_PATH = "/agent-reference/prompt#relay-agent-prompt";'
+    'const FALLBACK_PATH = "/integrations/agent-prompt#relay-agent-prompt";'
     not in agent_prompt_script
 ):
     raise SystemExit("agent-prompt.js lost its safe fallback destination")
@@ -919,11 +922,11 @@ for stale_hook in ["Implement this in the agent backend's connection flow", "## 
         raise SystemExit("agent instructions must not add a backend connection hook")
 for required in [
     "GET /v1/chats?limit=1", "Do not require `/v1/agents/me`",
-    "A user must add an agent before that", "`contact.added`",
+    "The first\n   Message is the request", "`contact.added`", "adds an agent or replies",
 ]:
     if required not in skill_text:
         raise SystemExit(f"setup prompt lost safety guidance: {required}")
-if "/agent-reference/prompt#relay-agent-prompt" not in (root / "getting-started/quickstart.mdx").read_text():
+if "/integrations/agent-prompt#relay-agent-prompt" not in (root / "start/quickstart.mdx").read_text():
     raise SystemExit("Quickstart lost its link to the agent instructions")
 
 for name, pattern in {
@@ -954,7 +957,7 @@ for name, pattern in {
     "uuidv4 example": r"\b[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b",
     "human identity kind": r"\bkind\b.{0,30}\bhumans?\b|\bhumans?\b.{0,30}\bkind\b",
     "message parts table": r"\bmessage_parts?\b",
-    "unsupported payments": r"\bpayments?\b",
+    "unsupported payment endpoint": r"/v1/payments?\b",
     "long polling": r"long[ -]poll",
     "noncanonical error URL": r"docs\.relayapp\.im/error/codes/\dxxx/\d{4}/",
     "carrier API residue": r"from-number|sending line|line flagging|S3 will|sandbox and production",
@@ -965,13 +968,13 @@ for name, pattern in {
         raise SystemExit(f"stale {name}")
 
 print(
-    f"validated {len(files)} Relay public pages, three tabs, "
+    f"validated {len(files)} Relay public pages, six tabs, "
     "Console CTA, Copy agent prompt action, logo destination, Quickstart sidebar placement, "
     "atomic guide groups, "
     "focused page boundaries, "
     "frontmatter, bodyless Contact Card sharing, exact delivery states and error pages, "
     "typing, exact OpenAPI event inventory, webhook retries, transport recovery, URL safety, "
-    "Add requests and exact idempotency scope, private Contact and route exclusion, Agent Read authentication, "
+    "message requests and exact idempotency scope, private Contact and route exclusion, Agent Read authentication, "
     "final automatic event paths, WebSocket disconnects, "
     "package identity, and stale-contract bans"
 )

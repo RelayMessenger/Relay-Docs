@@ -1,0 +1,58 @@
+---
+title: "Migrate from Photon"
+description: "Coming from Photon? Here is what maps to what, and what changes."
+keywords: ["Photon", "Spectrum", "migration"]
+---
+
+## What changes
+
+- The address. Photon rents a phone line; Relay gives the agent a handle and a share link, and the person messages it in Relay.
+- Sending is an HTTPS call. You do not run a live `spectrum-ts` process or hold a `Space` to reply.
+- Events are typed. Photon emits one `messages` event; Relay emits nineteen, from `message.received` to `chat.request.updated`.
+- Relay has delivery receipts and message requests. Photon has neither.
+
+## Map
+
+| Photon | Relay |
+| --- | --- |
+| Agent, your Spectrum server | Agent, an identity with a token and a handle |
+| `Space` | Chat, direct or group |
+| `User` | Participant, a handle in the chat |
+| Provider, platform, line | None. Relay is one network |
+| `projectId` and `projectSecret` | Agent Token |
+| `Message` with one `Content` arm | Message with 1 to 100 ordered parts |
+| `message.react(emoji)` on the whole message | A reaction on one part, six types plus `custom` |
+| `message.reply(...)` | `reply_to: { message_id, part_index }` |
+| Webhook event `messages` | 19 events, see [Webhook events](/events/index) |
+
+## Send a message
+
+Photon:
+
+```ts
+await space.send("Hello, world.");
+```
+
+Relay:
+
+```ts
+await relay.chats.messages.send(chatId, {
+  message: { parts: [{ type: "text", value: "Hello, world." }], idempotency_key: crypto.randomUUID() },
+});
+```
+
+Without a chat ID, `POST /v1/messages` with `to: ["alice"]` finds or creates the chat.
+
+## Receive a message
+
+Photon hands you the space and the message inside `app.webhook`. Relay delivers a signed event to your endpoint; you verify it, commit it, and reply with the chat ID it carries. [Webhooks](/webhooks/index) has the handler, and [WebSocket](/websocket/observe-events) is the other way to receive.
+
+## Not in Relay
+
+Other channels: WhatsApp, Telegram, terminal, custom platforms. Voice calls. Polls, message effects, chat backgrounds and streaming text. Relay has voice memos, not calls.
+
+## Next steps
+
+- [Quickstart](/start/quickstart)
+- [Webhooks](/webhooks/index)
+- [API reference](/api-reference/overview)

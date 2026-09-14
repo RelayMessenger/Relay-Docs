@@ -5,15 +5,18 @@ import sys
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
-source = (root / "skill.md").read_text()
+source = (root / "agent-prompt.md").read_text()
+# The published Mintlify skill stays the full skill.md; only the copy action
+# and the visible prompt carry the short agent-prompt.md.
+skill_source = (root / "skill.md").read_text()
 target = root / "agent-prompt.js"
 mintlify_skill_target = root / ".mintlify/skills/relay/SKILL.md"
-agent_page_target = root / "agent-reference/prompt.mdx"
+agent_page_target = root / "integrations/agent-prompt.mdx"
 
 
 def render_agent_page(page: str) -> str:
     pattern = re.compile(
-        r"(^## Relay agent prompt\n.*?^````text Relay agent prompt\n)"
+        r"(^### Relay agent prompt\n.*?^````text Relay agent prompt\n)"
         r".*?"
         r"(^````$)",
         re.M | re.S,
@@ -29,7 +32,7 @@ def render_agent_page(page: str) -> str:
 
 output = f"""(() => {{
   const RELAY_AGENT_PROMPT = {json.dumps(source, ensure_ascii=False)};
-  const FALLBACK_PATH = "/agent-reference/prompt#relay-agent-prompt";
+  const FALLBACK_PATH = "/integrations/agent-prompt#relay-agent-prompt";
   const COPIED_MS = 1600;
 
   function isPromptLink(link) {{
@@ -141,7 +144,7 @@ if "--check" in sys.argv:
         raise SystemExit("agent-prompt.js is stale; run npm run build:agent-prompt")
     if (
         not mintlify_skill_target.is_file()
-        or mintlify_skill_target.read_text() != source
+        or mintlify_skill_target.read_text() != skill_source
     ):
         raise SystemExit(
             ".mintlify/skills/relay/SKILL.md is stale; "
@@ -154,14 +157,14 @@ if "--check" in sys.argv:
             "run npm run build:agent-prompt"
         )
     print(
-        "Copy action, visible prompt, and Mintlify skill are synchronized "
-        "with skill.md"
+        "Copy action and visible prompt are synchronized with agent-prompt.md; "
+        "Mintlify skill with skill.md"
     )
 else:
     target.write_text(output)
-    mintlify_skill_target.write_text(source)
+    mintlify_skill_target.write_text(skill_source)
     agent_page_target.write_text(render_agent_page(agent_page_target.read_text()))
     print(
-        "Built agent-prompt.js, visible prompt, and Mintlify skill "
-        "from skill.md"
+        "Built agent-prompt.js and visible prompt from agent-prompt.md, "
+        "Mintlify skill from skill.md"
     )

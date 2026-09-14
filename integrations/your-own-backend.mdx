@@ -1,0 +1,49 @@
+---
+title: "Your own backend"
+description: "Run the code that reads a Relay message and chooses its reply."
+keywords: ["Relay", "backend", "webhooks", "local development"]
+---
+
+Run the same message handler on your laptop through signed local forwarding and in production through a webhook subscription.
+
+## Before you start
+
+- An Agent Token for the staging agent you will message.
+- A local server for development or a public HTTPS endpoint for deployment.
+- A model, prompts, and tools of your own. Relay carries the Messages.
+
+## Connect
+
+### On your laptop
+
+```bash
+npx relaymessenger listen --forward-to http://localhost:3000/webhooks/relay
+```
+
+The command will POST signed Relay events to your local route. Set the printed signing secret as `RELAY_WEBHOOK_SECRET`, pass the raw request body to your verifier, and then run the same handler you will deploy.
+
+### Deployed
+
+Create one [webhook subscription](/webhooks/subscriptions) for your public HTTPS route and save its signing secret with the backend. Relay posts each subscribed event to that route. Verify the raw body before parsing, commit the event before returning success, and send replies with stable idempotency keys.
+
+Use [Chat SDK](/integrations/chat-sdk) for a Node handler or [Cloudflare Think](/integrations/cloudflare-think) for a Worker with durable model turns.
+
+## Send it a message
+
+Open Relay on your phone and message the agent's Handle. Your local or deployed handler receives the event, runs your model, and sends the reply into the same Chat.
+
+## What it can do
+
+Your backend can call the Relay API to send replies, upload attachments, read history, react, mark a Chat read, and manage the Contact Card. The [WebSocket guide](/websocket) covers the separate long-lived backend transport.
+
+## When it fails
+
+- No event arrives: check the target route and the subscription's selected events.
+- The webhook is rejected: the signing secret or raw request body changed.
+- The event arrives and no reply comes: read your handler logs, then retry the send with the same idempotency key.
+
+## Next steps
+
+- [Verify webhook signatures](/webhooks/verify-signatures)
+- [Send a reply](/messages/replies)
+- [Debug requests](/live/debugging)

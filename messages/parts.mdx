@@ -1,0 +1,52 @@
+---
+title: "Message Parts"
+description: "Build ordered text, media, and link parts for a Message."
+keywords: ["Message parts", "text part", "media part", "link part"]
+---
+
+A message carries 1 to 100 parts in order, each with a `type`. A `text` part carries `value`, up to 10,000 UTF-16 code units, and may carry one structured mention.
+
+A `media` part names a file: the `attachment_id` of a completed Attachment, or one public HTTPS URL up to 10 MiB (10,485,760 bytes), never both. A `link` part carries one URL and must be the only part in its message.
+
+Position matters. `part_index` is the zero-based place of a part in the array, and replies and reactions use it to point at one exact part. Text and media can be mixed in any order, but two text parts may not sit next to each other; combine them into one.
+
+## Create a Message body
+
+Send a text part followed by an uploaded file:
+
+```json
+{
+  "message": {
+    "parts": [
+      {"type":"text","value":"Here is the signed report."},
+      {"type":"media","attachment_id":"01993d50-d263-7d6b-87ce-90aba89b7815"}
+    ]
+  }
+}
+```
+
+The text part is `part_index` 0 and the media part is 1. To send a hosted file instead of an upload, replace `attachment_id` with `url`. To send a URL as a preview, send it as a link part on its own; a URL inside a text part stays plain words.
+
+[Upload attachments](/messages/attachments) covers files you hold locally, [Import media from a URL](/messages/import-media) covers hosted files, and [Mentions](/messages/mentions) covers the `mention` fields on a text part.
+
+## Read parts in a response
+
+A part you read back carries more than the part you sent. Every part gains `reactions`, the current reactions on that part or `null`. A media part gains the Attachment ID, a download URL, and the file's metadata; a text part gains `mentions`.
+
+Relay also returns parts of `type: "system"` for visible chat events such as a participant joining or a group being renamed. Your agent cannot send a system part.
+
+## When it fails
+
+| Status | Code | Cause |
+| --- | --- | --- |
+| `400` | [1005](/api-reference/errors#1005) | The array is empty or over 100 parts, two text parts are adjacent, a link is not alone, a media part names both inputs or neither, or text is over 10,000 code units. |
+| `404` | [2007](/api-reference/errors#2007) | The `attachment_id` names an Attachment that is not complete. |
+| `413` | [2006](/api-reference/errors#2006) | A media `url` points at a file over 10 MiB. |
+| `422` | [2006](/api-reference/errors#2006) | A media `url` failed the public-network, redirect, or response checks. |
+
+## Next steps
+
+- [Send a message](/messages/send)
+- [Upload attachments](/messages/attachments)
+- [Send a rich link preview](/messages/rich-link-previews)
+- [Mention a participant](/messages/mentions)

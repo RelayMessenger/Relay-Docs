@@ -1,95 +1,74 @@
 ---
-title: "Connect Hermes to Relay"
-sidebarTitle: "Hermes"
-description: "Install the Relay plugin and configure a Hermes gateway to receive and answer Messages."
-keywords: ["Hermes", "relay-hermes", "Hermes Agent", "WebSocket", "always-on"]
+title: "Hermes"
+description: "Connect Hermes to Relay and check its messaging setup."
+keywords: ["Relay", "Hermes", "connect"]
+icon: "/images/brands/hermes.png"
 ---
 
-Add Relay as a messaging platform in your always-on Hermes gateway.
+## Before you start
 
-## Install the plugin
+- [Hermes Agent](https://github.com/NousResearch/hermes-agent#installation) on Python 3.11 through 3.13, run once.
+- Node.js 22.22.3 or newer.
+- An existing Agent Token needs zero saved webhook subscriptions.
 
-Use Python `3.11` through `3.13` with the `relay-hermes@1.0.0rc2` source
-package. Install the Git-hosted plugin:
+## Connect
+
+Run this in the folder where you work to connect hermes to Relay.
+
+```bash
+npx relaymessenger connect hermes
+```
+
+Choose one agent when Relay asks. The first detected agent is the default. If saved agents exist, choose `New agent` or a saved handle. Press Enter at `Continue? (Y/n)` to accept the plan.
+
+Approve the change, start the gateway with `hermes gateway run`, then message the handle.
+
+### Install the plugin yourself
+
+To keep the CLI away, install the [Git-hosted plugin](https://github.com/RelayMessenger/Relay-Hermes) with Hermes's own command in the active profile:
 
 ```bash
 hermes plugins install RelayMessenger/Relay-Hermes --enable
 ```
 
-The plugin registers the Hermes platform ID `relayapp`.
+Then set the token, the API address, and an absolute `RELAY_STATE_DIR` in the active profile, plus the optional `RELAY_ALLOWED_CONTACTS`.
 
-Source: [Relay-Hermes](https://github.com/RelayMessenger/Relay-Hermes).
-
-## Configure production
-
-Use a production Agent Token with zero saved Webhook subscriptions. Save the
-following settings through the selected Hermes profile's secret/configuration
-workflow:
-
-| Setting | Value |
-| --- | --- |
-| `RELAY_AGENT_TOKEN` | The production Agent Token from your secret store. |
-| `RELAY_BASE_URL` | `https://api.relayapp.im`. |
-| `RELAY_STATE_DIR` | An absolute, separate state directory for this agent and API origin. |
-| `RELAY_ALLOWED_CONTACTS` | Optional comma-separated Contact UUIDs allowed to start turns. |
-
-**Keep each agent's state directory paired with its token and API origin.**
-Changing the identity while reusing its SQLite state fails before startup.
-Hermes resolves these settings within the active profile.
-
-For optional CLI configuration, follow [native setup](/integrations/native-setup).
-
-## Start the gateway
-
-With the selected profile's environment active, run:
+### Do it by hand
 
 ```bash
-hermes gateway run
+hermes plugins install RelayMessenger/Relay-Hermes --enable
 ```
 
-For an always-on host, use Hermes's service commands:
+## Send it a message
 
-```bash
-hermes gateway install
-hermes gateway start
-```
+Open Relay on your phone and message the handle. Hermes wakes up on its own and answers in the same chat. Keep the gateway running; it catches up later.
 
-Follow the [native messaging success checks](/integrations/native-setup#verify-messaging).
+## What it can do
 
-| Condition | Behavior or action |
+From the connection code for `hermes` and the plugin's adapter.
+
+| Relay feature | Hermes |
 | --- | --- |
-| Saved Webhook subscription | The WebSocket upgrade is refused. Choose the intended [delivery path](/guides/websocket). |
-| Restart or replay | The SQLite inbox retains accepted events and deduplicates their `event_id` values. |
-| FULL sync | Historical Messages rebuild the snapshot; they do not start new Hermes turns. |
-| Message begins with `/` | Relay slash commands are withheld from Hermes. Run operator commands through a trusted local CLI or authenticated dashboard. |
+| Connect | The Relay-Hermes plugin, with its config in `~/.hermes/.env`. |
+| Start | `hermes gateway run`; connect offers to start it for you. |
+| Wakes when a message arrives | Yes, over the WebSocket. |
+| Reply in the chat | Yes, text with a stable idempotency key; it quotes the message only when answering one that did not start the turn. |
+| Send attachments | Yes. Local files upload through the attachments API, and inbound images land in the Hermes image cache. |
+| Read chat history | No. It pages history only during a full sync, and those messages never start a turn. |
+| Reactions, edits, typing | No. |
 
-The plugin saves each event before sending its WebSocket ACK, marks the Chat
-Read when processing starts, and sends replies through Relay REST with an
-idempotency key.
+A message that begins with `/` is not a Hermes command: Relay slash commands are withheld, and operator commands run only through a trusted local CLI.
 
-## Answer a second Message during a reply
+## When it fails
 
-Hermes decides this with its own `display.busy_input_mode` setting in
-`~/.hermes/config.yaml`. The plugin adds no setting of its own. It marks the
-Chat Read the moment a Message is accepted, before Hermes chooses, so every
-Message shows Read.
+- Startup fails naming the state folder: it belongs to another token; give this agent its own `RELAY_STATE_DIR`.
+- `No reply yet. Run: relay watch @<handle>` The gateway is not running, or the sender is not in `RELAY_ALLOWED_CONTACTS`.
 
-| `display.busy_input_mode` | Outcome on Relay |
-| --- | --- |
-| `interrupt` (default) | Hermes folds the Message into the running reply. It shows Read, and one reply answers both, without a quote. |
-| `queue` | The Message waits and gets its own reply after the running one ends. |
-| `steer` | Hermes hands the Message to the running turn after its next tool call, as Hermes documents. It shows Read, and one reply answers both. |
-
-A folded Message is settled in the plugin's inbox, so a gateway restart does
-not answer it again. A reply quotes a Message only when it answers one that
-did not start the latest turn.
-
-<span id="delivery-behavior" />
-<span id="optional-cli-setup" />
-<span id="see-also" />
+Use the [CLI guide](/cli/index) for prompt, token, and restart errors.
 
 ## Next steps
 
-- [Native setup](/integrations/native-setup)
-- [WebSocket acknowledgements](/guides/websocket/acknowledgements)
-- [Delivery receipts](/guides/messaging/delivery-receipts)
+- [Send messages](/messages/send)
+- [Read message history](/chats/history)
+- [Handle retries](/live/retries)
+- [Runtimes](/integrations/index)

@@ -3,7 +3,8 @@
 import argparse
 import hashlib
 import importlib.util
-from io import BytesIO
+from contextlib import redirect_stdout
+from io import BytesIO, StringIO
 import json
 from pathlib import Path
 import tempfile
@@ -61,12 +62,12 @@ class HostedEnvironmentTests(unittest.TestCase):
         index.append('- [Generated operation](https://docs.test/api-reference/things/list.md)')
         package = "@relaymessenger/sdk" + ("@staging" if environment == "staging" else "")
         complete.append(f'```bash\nnpm install {package}\n```\n\n{contract}')
-        for name, text in (("skill.md", "Canonical instruction bytes.\n"),
+        for name, text in (("skill.md", "Canonical instruction bytes.\n"), ("agent-prompt.md", "Canonical instruction bytes.\n"),
                            ("llms.txt", "\n".join(index)), ("llms-full.txt", "\n".join(complete))):
             (root / name).write_text(text)
             self.bodies[name] = text.encode()
         self.bodies[""] += b'<link rel="icon" sizes="192x192" href="/generated.png?v=1">'
-        self.bodies["guides"] = self.bodies[""]
+        self.bodies["start/quickstart"] = self.bodies[""]
         favicon = self.config["favicon"].lstrip("/")
         (root / favicon).write_bytes(b"exact-source-icon")
         self.bodies[favicon] = b"exact-source-icon"
@@ -82,7 +83,7 @@ class HostedEnvironmentTests(unittest.TestCase):
 
     def args(self, **overrides):
         values = dict(base_url="https://docs.test", production=False, all_pages=False,
-                      workers=2, expected_sha=None, receipt=None)
+                      workers=2, expected_sha=None, receipt=None, require_edge_fresh=False)
         values.update(overrides)
         return argparse.Namespace(**values)
 
@@ -120,6 +121,9 @@ class HostedEnvironmentTests(unittest.TestCase):
         self.assertTrue(args.production)
         self.assertTrue(args.all_pages)
         self.assertEqual(args.workers, 3)
+        self.assertFalse(args.require_edge_fresh)
+        self.assertFalse(hosted.argument_parser().parse_args(
+            ["https://docs.test"]).require_edge_fresh)
         with self.assertRaisesRegex(SystemExit, "between 1 and 16"):
             hosted.check_all_pages(lambda *a, **k: None, [], workers=17)
 
@@ -190,6 +194,161 @@ class HostedEnvironmentTests(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "source content"):
             hosted.check_page_content(page, b'<h1>Payload</h1><script>Preserve this distinctive current payload exactly.</script>')
 
+    def frame_fixture(self):
+        definition = '''export const Card = ({ title, description, href }) => {
+  return (
+    <a href={href}><h3>{title}</h3><span>{description}</span></a>
+  );
+};
+'''
+        body = definition + '''
+<h1>Documentation</h1>
+<p>Connect the agent you build to the current messenger.</p>
+<Card title="Quickstart" description="Send your first message with the current API." href="/start/quickstart" />
+'''
+        page = {"page": "index", "title": "Relay", "mode": "frame", "body": body}
+        rendered = b'''<h1>Documentation</h1>
+<p>Connect the agent you build to the current messenger.</p>
+<a href="/start/quickstart"><h3>Quickstart</h3><span>Send your first message with the current API.</span></a>'''
+        markdown = ("# Relay\n\n" + body.replace("return (\n", "return ").replace(
+            "\n  );", ";")).encode()
+        return page, rendered, markdown
+
+    def test_frame_uses_source_h1_and_rendered_component_literals(self):
+        page, rendered, markdown = self.frame_fixture()
+        hosted.check_page_content(page, rendered)
+        hosted.check_page_content(page, markdown, markdown=True)
+        self.fixture()
+        (self.root / "index.mdx").write_text(
+            '---\ntitle: "Relay"\nmode: "frame"\n---\n' + page["body"])
+        self.assertEqual(hosted.read_page(self.root, "index")["mode"], "frame")
+
+    def test_frame_does_not_waive_missing_heading_copy_cards_or_links(self):
+        page, rendered, markdown = self.frame_fixture()
+        for original, replacement in (
+            (b"Documentation", b"Old heading"),
+            (b"Connect the agent you build", b"Old introductory copy"),
+            (b"Quickstart", b"Old card"),
+            (b"Send your first message", b"An old instruction"),
+            (b"/start/quickstart", b"/missing"),
+        ):
+            for actual, is_markdown in ((rendered, False), (markdown, True)):
+                with self.subTest(original=original, markdown=is_markdown), \
+                        self.assertRaises(SystemExit):
+                    hosted.check_page_content(
+                        page, actual.replace(original, replacement), markdown=is_markdown)
+        with self.assertRaises(SystemExit):
+            hosted.check_page_content(page, markdown.replace(b"# Relay", b"# Old title"),
+                                      markdown=True)
+        # A navbar link cannot mask a card whose own destination drifted.
+        with self.assertRaisesRegex(SystemExit, "frame links"):
+            hosted.check_page_content(
+                page, rendered.replace(b"/start/quickstart", b"/missing")
+                + b'<nav><a href="/start/quickstart">Quickstart</a></nav>')
+        # Short, standalone H1 copy is still checked in generated Markdown.
+        short_heading = markdown.replace(b"</h1>\n", b"</h1>\n\n")
+        with self.assertRaisesRegex(SystemExit, "frame H1"):
+            hosted.check_page_content(
+                page, short_heading.replace(b"Documentation", b"Wrong"), markdown=True)
+
+    def test_frame_rejects_unhandled_dynamic_components(self):
+        page, _, markdown = self.frame_fixture()
+        for mutation in (
+            markdown.replace(b'href="/start/quickstart"', b"href={dynamicRoute}"),
+            markdown.replace(b"return ", b"return choose() || "),
+            markdown.replace(b"{description}</span>", b"{title}</span>"),
+        ):
+            with self.subTest(mutation=mutation), self.assertRaises(SystemExit):
+                hosted.check_page_content(page, mutation, markdown=True)
+
+    def test_frame_full_page_check_requires_and_verifies_rendered_dom(self):
+        page, rendered, markdown = self.frame_fixture()
+
+        def fetch(path, cache_busted=False):
+            # The static shell is not proof of client-rendered cards.
+            return response(markdown if path.endswith(".md") else b"<h1>Documentation</h1>")
+
+        with self.assertRaisesRegex(SystemExit, "requires a rendered DOM"):
+            hosted.check_all_pages(fetch, [page], workers=1)
+        result = hosted.check_all_pages(fetch, [page], workers=1,
+                                       render_frame=lambda route: response(rendered))
+        self.assertIn("rendered", result["/"])
+        with self.assertRaises(SystemExit):
+            hosted.check_all_pages(fetch, [page], workers=1,
+                                   render_frame=lambda route: response(
+                                       rendered.replace(b"Send your first message", b"Old copy")))
+
+    def test_adjacent_rendered_images_preserve_separate_alt_text(self):
+        page = {"page": "images", "title": "Images",
+                "body": '<img alt="First meaningful screenshot." />\n'
+                        '<img alt="Second meaningful screenshot." />'}
+        rendered = (b'<h1>Images</h1><img alt="First meaningful screenshot." />'
+                    b'<img alt="Second meaningful screenshot." />')
+        hosted.check_page_content(page, rendered)
+        with self.assertRaises(SystemExit):
+            hosted.check_page_content(page, rendered.replace(b"Second meaningful", b"Stale"))
+
+    def test_agent_prompt_allows_mintlify_wrapper_and_link_rendering_only(self):
+        source = (
+            b"Connect this project to Relay. Read https://docs.staging.relayapp.im/llms.txt "
+            b"and follow its Agent onboarding section before you run anything. Open "
+            b"https://docs.staging.relayapp.im/llms-full.txt when a step needs a page's full text. "
+            b"Use only the endpoints, commands, and files those documents name; if a step cannot "
+            b"be verified there, stop and say so.\n"
+        )
+        hosted_body = (
+            b"> ## Documentation Index\n"
+            b"> Fetch the complete documentation index at: https://docs.staging.relayapp.im/llms.txt\n"
+            b"> Use this file to discover all available pages before exploring further.\n\n"
+            b"# Agent prompt\n\n"
+            b"Connect this project to Relay. Read "
+            b"[https://docs.staging.relayapp.im/llms.txt](https://docs.staging.relayapp.im/llms.txt) "
+            b"and follow its Agent onboarding section before you run anything. Open "
+            b"[https://docs.staging.relayapp.im/llms-full.txt](https://docs.staging.relayapp.im/llms-full.txt) "
+            b"when a step needs a page's full text. Use only the endpoints, commands, and files those "
+            b"documents name; if a step cannot be verified there, stop and say so.\n"
+        )
+        self.assertTrue(hosted.source_body_matches("agent-prompt.md", hosted_body, source))
+        self.assertFalse(
+            hosted.source_body_matches(
+                "agent-prompt.md",
+                hosted_body.replace(b"stop and say so", b"continue anyway"),
+                source,
+            )
+        )
+
+    def test_rendered_image_alt_text_counts_as_page_content(self):
+        page = {
+            "page": "illustrated",
+            "title": "Illustrated",
+            "body": (
+                '<img src="/illustration.svg" '
+                'alt="A distinctive current illustration for this page." />\n'
+            ),
+        }
+        hosted.check_page_content(
+            page,
+            b'<main><h1>Illustrated</h1><img alt="A distinctive current illustration for this page."></main>',
+        )
+        with self.assertRaisesRegex(SystemExit, "source content"):
+            hosted.check_page_content(
+                page,
+                b'<main><h1>Illustrated</h1><img alt="An old illustration."></main>',
+            )
+
+    def test_rendered_typographic_quotes_are_presentation_only(self):
+        page = {
+            "page": "quotes",
+            "title": "Quotes",
+            "body": "The agent's current reply is durable and visible.",
+        }
+        hosted.check_page_content(
+            page,
+            "The agent’s current reply is durable and visible.".join(
+                ("<main><h1>Quotes</h1>", "</main>")
+            ).encode(),
+        )
+
     def test_full_route_checks_have_bounded_concurrency(self):
         active = 0
         maximum = 0
@@ -231,6 +390,62 @@ class HostedEnvironmentTests(unittest.TestCase):
                     if url.endswith("/status") else [candidate])
             with self.assertRaises(SystemExit):
                 hosted.check_deployment(sha, environment, "https://other.test", get_json)
+
+    def run_origin_fixture(self, edge_stale=False, origin_stale=False, strict=False):
+        self.fixture()
+        class HTTPResponse(BytesIO):
+            status = 200
+            headers = {"X-Version": "same-deployment", "Age": "20179",
+                       "Cache-Control": "public, max-age=86400"}
+
+        def opener(request, timeout):
+            url = urlsplit(request.full_url)
+            path = url.path.lstrip("/")
+            if path == "generated.png":
+                path = "/generated.png?v=1"
+            body = self.bodies[path]
+            if path == "llms-full.txt":
+                busted = "relay_cache_probe" in parse_qs(url.query)
+                if (origin_stale and busted) or (edge_stale and not busted):
+                    body = b"stale source bytes"
+            result = HTTPResponse(body)
+            result.url = request.full_url
+            return result
+
+        with patch.object(hosted.origins, "target", return_value="staging"), \
+                patch.object(hosted, "png_color_counts", return_value={"opaque": 100, "black": 100, "blue": 0}):
+            return hosted.run(self.args(require_edge_fresh=strict), self.root,
+                              hosted.make_fetch("https://docs.test", opener))
+
+    def test_origin_matches_stale_edge_passes_with_lag(self):
+        output = StringIO()
+        with redirect_stdout(output):
+            receipt = self.run_origin_fixture(edge_stale=True)
+        self.assertEqual(receipt["verdict"], "passed")
+        self.assertEqual(output.getvalue(), "warning: /llms-full.txt: Mintlify edge cache is 20179 s "
+                         "behind origin (max-age 86400); origin matches checkout\n")
+        pair = receipt["pages"]["/llms-full.txt"]
+        self.assertNotEqual(pair["canonical"]["sha256"], pair["cache_busted"]["sha256"])
+
+    def test_origin_mismatch_fails_with_existing_message(self):
+        for edge_stale in (False, True):
+            with self.subTest(edge_stale=edge_stale), self.assertRaisesRegex(
+                    SystemExit, r"^/llms-full.txt served body does not match expected checkout source bytes$"):
+                self.run_origin_fixture(edge_stale=edge_stale, origin_stale=True)
+
+    def test_matching_origin_and_edge_pass_silently(self):
+        output = StringIO()
+        with redirect_stdout(output):
+            receipt = self.run_origin_fixture()
+        self.assertEqual(receipt["verdict"], "passed")
+        self.assertEqual(output.getvalue(), "")
+
+    def test_require_edge_fresh_rejects_stale_edge(self):
+        self.assertFalse(hosted.argument_parser().parse_args(["https://docs.test"]).require_edge_fresh)
+        self.assertTrue(hosted.argument_parser().parse_args(
+            ["https://docs.test", "--require-edge-fresh"]).require_edge_fresh)
+        with self.assertRaisesRegex(SystemExit, "canonical body .* does not match current origin body"):
+            self.run_origin_fixture(edge_stale=True, strict=True)
 
     def test_http_errors_and_empty_bodies_fail_and_query_is_cache_busted(self):
         calls = []

@@ -42,7 +42,7 @@ def frontmatter(path: Path) -> tuple[str, str, str]:
 def navigation_entries(config: dict) -> list[tuple[str, str, str]]:
     entries = []
     for tab in config["navigation"]["tabs"]:
-        for groups, page in walk_pages(tab["groups"]):
+        for groups, page in walk_pages(tab["groups"] if "groups" in tab else tab["pages"]):
             entries.append((tab["tab"], " / ".join(groups), page))
     return entries
 

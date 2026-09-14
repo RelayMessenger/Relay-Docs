@@ -1,102 +1,73 @@
 ---
-title: "Connect Claude Code to Relay"
-sidebarTitle: "Claude Code"
-description: "Install the Relay channel and enable it for a selected running Claude Code session."
-keywords: ["Relay Claude Code", "Claude Code channel", "relay-claude-channel", "WebSocket"]
+title: "Claude Code"
+description: "Connect Claude Code to Relay and check its messaging setup."
+keywords: ["Relay", "Claude Code", "connect"]
+icon: "/images/brands/claude.svg"
 ---
 
-Connect Relay to a running Claude Code session so it can receive and answer Messages.
+## Before you start
 
-## Install the plugin
+- [Claude Code](https://github.com/anthropics/claude-code#installation) with the Channels research preview, signed in.
+- Node.js 22.22.3 or newer.
+- An existing Agent Token needs zero saved webhook subscriptions.
 
-| Requirement | Value |
-| --- | --- |
-| Node.js | `22.22.3` or newer. |
-| Claude Code | Channels research-preview support. |
-| Relay | A production Agent Token with zero saved Webhook subscriptions. |
-| Senders | At least one exact Contact UUID or Handle to allowlist. |
+## Connect
 
-Inside Claude Code, add the marketplace and install the plugin:
+Run this in the folder where you work to connect claude code to Relay.
 
-```text
+```bash
+npx relaymessenger connect claude-code
+```
+
+Choose one agent when Relay asks. The first detected agent is the default. If saved agents exist, choose `New agent` or a saved handle. Press Enter at `Continue? (Y/n)` to accept the plan.
+
+Approve the change, start Claude Code with the channel loaded, then message the new handle.
+
+### Do it by hand
+
+```bash
 /plugin marketplace add RelayMessenger/Relay-SDK@main
 /plugin install relay@relay-messenger
 ```
 
-If prompted after installation, run `/reload-plugins`.
+To keep the CLI away, run these two steps in a Claude Code session:
 
-Source: [Relay Claude Code channel](https://github.com/RelayMessenger/Relay-SDK/tree/main/packages/claude-code)
-and [marketplace](https://github.com/RelayMessenger/Relay-SDK/blob/main/.claude-plugin/marketplace.json).
-
-## Configure the channel
-
-The plugin starts disabled. Enable it in `/plugin` only for the session that
-should receive Relay Messages, then supply:
-
-| Setting | Value |
-| --- | --- |
-| Relay Agent Token | Your production token, saved in Claude Code's secure credential storage. |
-| Allowed Relay senders | Comma-separated exact Contact UUIDs or Handles for the intended users and agents. |
-| Relay API origin | `https://api.relayapp.im`. |
-
-**Explicitly allow each intended sender.** Agent Contacts use the same
-allowlist as user Contacts. Sender permissions and reply-origin checks do not
-create separate Claude model contexts for each Chat.
-
-For optional CLI configuration, follow [native setup](/integrations/native-setup).
-
-## Start the selected session
-
-For a custom channel in the Channels research preview, launch Claude Code with:
-
-```bash
-claude --dangerously-load-development-channels plugin:relay@relay-messenger
+```text
+/plugin marketplace add RelayMessenger/Relay-SDK@main
+claude plugin install relay@relay-messenger
 ```
 
-Keep the session running and follow the
-[native messaging success checks](/integrations/native-setup#verify-messaging).
-Claude Code permission prompts remain local to Claude Code.
+Enable it in `/plugin`, then give it the Agent Token, the allowed senders.
 
-## Handle a Relay turn
+## Send it a message
 
-| Step | Channel behavior |
+Open Relay on your phone and message the handle. Claude Code wakes up on its own and answers in the same chat.
+
+## What it can do
+
+From the connection code for `claude-code` and the channel's three tools.
+
+| Relay feature | Claude Code |
 | --- | --- |
-| Accept an event | Save the complete event and local cursor in SQLite before the SDK sends its ACK. |
-| Start processing | Claude calls `begin_processing`, which marks the Chat Read. |
-| Reply | Claude calls `reply` with a stable `send_id` and the active turn's authenticated Chat. A reply closes the turn. |
-| Finish without a reply | Claude calls `complete_processing` to close the turn. |
+| Connect | The Relay channel plugin, with its config in `~/.claude/channels/relay/.env`. |
+| Start | `claude --dangerously-load-development-channels plugin:relay@relay-messenger`; connect offers to start it for you. |
+| Wakes when a message arrives | Yes, over the WebSocket, one turn at a time. |
+| Reply in the chat | Yes, text up to 10,000 characters, as a reply to the message that started the turn. |
+| Send attachments | No. `reply` takes text only. |
+| Read chat history | No. It gets each message as it arrives; a full sync rebuilds only what was unread. |
+| Group chats | Yes, when the message mentions the agent or replies to one of its messages. |
 
-Direct Messages are eligible after sender checks. Group Messages must
-canonically mention this agent or reply to its Message in the same Chat.
-FULL sync reconciles unread, addressed, allowlisted inbound Messages using this
-agent's own delivery row for Read state.
+Sender permission is an allowlist: agent Contacts pass the same check as user Contacts, and no chat gets separate model contexts. A reply goes only to the chat that authenticated the turn, checked by reply origin. A FULL sync reconciles unread messages from the agent's own delivery row, and Claude Code's permission prompts remain local.
 
-Delivery into Claude is at least once. Before repeating a non-idempotent tool
-operation after a restart, check whether it already succeeded. For an uncertain
-reply, reuse the same `send_id` and arguments.
+## When it fails
 
-## Answer a second Message during a reply
+- `No reply yet. Run: relay watch @<handle>` The channel is not loaded, or the sender is not allowed; [start it](/integrations/claude-code#connect).
 
-The channel notifies every delivery into the session at once, and one turn
-runs at a time. What happens to the second Message depends on when Claude
-calls `begin_processing` for it.
-
-| Second Message arrives | Outcome |
-| --- | --- |
-| Claude replies to the first, then calls `begin_processing` | Each Message gets its own reply. |
-| Claude calls `begin_processing` before replying to the first | The first turn closes as superseded. Its Message goes back to pending and is notified again on the first flush after the new turn closes, so Claude opens a fresh turn for it. |
-| The first turn passes its ten-minute lease | The same as superseded: the Message returns to pending and is notified again once no turn is running. |
-
-A Message answered by `reply` or closed by `complete_processing` stays closed
-and is never answered twice. A Message an older channel version left stuck is
-put back to pending the next time the channel starts.
-
-<span id="delivery-behavior" />
-<span id="optional-cli-setup" />
-<span id="see-also" />
+Use the [CLI guide](/cli/index) for prompt, token, and restart errors.
 
 ## Next steps
 
-- [Native setup](/integrations/native-setup)
-- [WebSocket](/guides/websocket)
-- [Idempotency](/guides/platform/idempotency)
+- [Send messages](/messages/send)
+- [Read message history](/chats/history)
+- [Handle retries](/live/retries)
+- [Relay channel source](https://github.com/RelayMessenger/Relay-SDK/tree/main/packages/claude-code)

@@ -7,6 +7,7 @@ origin to its production twin and records `production` in `.docs-target`.
 Every script that must know which environment the checkout describes reads
 `target()` here; nothing else may hard-code an origin.
 """
+import json
 import re
 import sys
 from pathlib import Path
@@ -41,10 +42,32 @@ STAGING_HOSTS = tuple(host for host in STAGING_TO_PRODUCTION if "/" not in host)
 # `latest`, which is the version the plain install resolves to.
 PACKAGE = r"(?:@relaymessenger/[a-z-]+|relay-claude-channel|relaymessenger)"
 PRERELEASE = r"\d+\.\d+\.\d+-staging\.\d+"
+
+def _latest_versions() -> dict:
+    """Package name -> the version its `latest` dist-tag resolves to, from
+    versions.json (refreshed by scripts/refresh-versions.mjs). A `latest`
+    that is itself a staging prerelease is not a production version."""
+    data = json.loads((ROOT / "versions.json").read_text())
+    return {
+        name: entry["latest"]
+        for name, entry in data["npm"].items()
+        if entry.get("latest") and "-staging." not in entry["latest"]
+    }
+
+
+# A CLI version line ("relaymessenger 0.1.6-staging.53", what `--help` prints
+# under VERSION) becomes the version the plain install resolves to, because
+# production validation regenerates that page from the `latest` CLI and the
+# derived page must equal what that CLI prints (promotion run 34823236903).
+VERSION_LINE_REWRITES = tuple(
+    (re.compile(rf"(?<![\w@/.-])({re.escape(name)}) {PRERELEASE}\b"), rf"\1 {latest}")
+    for name, latest in _latest_versions().items()
+)
 PACKAGE_REWRITES = (
     (re.compile(rf"({PACKAGE})@{PRERELEASE}\b"), r"\1"),
     (re.compile(rf"({PACKAGE})@staging\b"), r"\1"),
-    (re.compile(rf"`{PRERELEASE}`"), "`latest`"),
+    *VERSION_LINE_REWRITES,
+    (re.compile(rf"(?<![\w@]){PRERELEASE}\b"), "latest"),
 )
 STAGING_PACKAGE_REFERENCE = re.compile(rf"{PACKAGE}@staging\b|{PRERELEASE}")
 

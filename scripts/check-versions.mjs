@@ -29,9 +29,17 @@ const published = (relative) => !relative.startsWith("scripts/")
 const SCAN_DIRECTORIES = [
   "agent-reference",
   "integrations",
+  "cli",
   "examples",
-  "getting-started",
-  "guides",
+  "start",
+  "agents",
+  "chats",
+  "messages",
+  "webhooks",
+  "events",
+  "websocket",
+  "live",
+  "resources",
   "error",
   "api-reference",
   ".agents",
@@ -41,7 +49,7 @@ const SCAN_DIRECTORIES = [
 const SCAN_FILES = [
   "index.mdx",
   "README.md",
-  "skill.md",
+  "skill.md", "agent-prompt.md",
   "AGENTS.md",
   "INFORMATION-ARCHITECTURE.md",
   "agent-prompt.js",
@@ -79,6 +87,19 @@ const versions = JSON.parse(await readFile(path.join(root, "versions.json"), "ut
 const expected = new Map();
 for (const [name, entry] of Object.entries(versions.npm)) {
   expected.set(name, new Set([entry.latest, entry.staging]));
+}
+// CLI examples are captured from the exact devDependency used by the help generator.
+// Permit that immutable capture version on staging; production still rejects prereleases.
+const packageConfig = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
+const lock = JSON.parse(await readFile(path.join(root, 'package-lock.json'), 'utf8'));
+const capturedCLI = packageConfig.devDependencies?.relaymessenger;
+if (typeof capturedCLI !== "string" || lock.packages?.['node_modules/relaymessenger']?.version !== capturedCLI) {
+  throw new Error(`CLI capture requires ${capturedCLI ?? "a pinned relaymessenger version"} in package.json and package-lock.json`);
+}
+if (capturedCLI && lock.packages?.['node_modules/relaymessenger']?.version === capturedCLI) {
+  expected.get('relaymessenger').add(capturedCLI);
+  // Earlier Start and Connect captures retain their actual binary provenance.
+  expected.get('relaymessenger').add('0.1.6-staging.5');
 }
 for (const [name, version] of Object.entries(versions.pypi)) {
   expected.set(name, new Set([version]));

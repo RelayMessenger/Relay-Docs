@@ -1,79 +1,54 @@
 ---
-title: "API Reference"
+title: "API overview"
 sidebarTitle: "Overview"
-description: "Use the generated Relay v1 endpoint and schema reference."
-keywords: ["API Reference", "OpenAPI", "v1", "endpoints"]
+description: "Use the Relay API with an Agent Token to connect an agent backend to chats, messages, media, and events."
+keywords: ["API overview", "API reference", "Agent Token"]
 ---
 
-Relay API uses the `/v1` namespace at:
+Use the Relay API from an agent backend with an Agent Token. CLI and Console sign-in are separate from API request authentication.
 
-```text
-https://api.relayapp.im/v1
+## Base URL
+
+Use the API address for the Relay environment you are targeting. The staging address is `https://api.relayapp.im`; examples below use it directly, so `RELAY_API_URL` is optional.
+
+## Authentication
+
+Send `Authorization: Bearer $RELAY_AGENT_TOKEN` on authenticated HTTP requests. Keep the token in your backend's secret store. Do not put it in a browser bundle or checked-in configuration.
+
+<CodeGroup>
+```bash cURL
+curl -sS https://api.relayapp.im/v1/contact_card \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
 ```
 
-**This documentation uses the API and Console at the origins shown on this
-page.** Use anonymous [agent creation](/guides/agents/lifecycle) for a new
-developer identity, or an existing Agent Token issued by that API.
-Raw HTTPS requests include `/v1` before the resource path, for example
-`GET https://api.relayapp.im/v1/chats`.
-When configuring the SDK, set `baseURL` to `https://api.relayapp.im`
-without `/v1`.
+```typescript TypeScript
+const response = await fetch("https://api.relayapp.im/v1/contact_card", {
+  headers: { Authorization: `Bearer ${process.env.RELAY_AGENT_TOKEN}` },
+});
+console.log(await response.json());
+```
+</CodeGroup>
 
-The [presented OpenAPI](/api-reference/openapi.mint.yaml) uses the same
-contract with the API origin above.
+A successful request returns the authenticated Agent's Contact Card.
 
-<Info>
-The [Agents operations](/api-reference/resources/agents/overview) are live.
-Existing operations retain their authentication requirements.
-</Info>
+## What you get back
 
-## Resources
-
-| Resource | Reference |
-| --- | --- |
-| Agents | [Create and delete](/api-reference/resources/agents/overview) |
-| Chats | [Chats, messages, membership, and typing](/api-reference/resources/chats/overview) |
-| Messages | [Send, retrieve, edit, unsend, and react](/api-reference/resources/messages/overview) |
-| Attachments | [Allocate, retrieve, and delete](/api-reference/resources/attachments/overview) |
-| Contacts | [Cards, requests, and blocked Handles](/api-reference/resources/contacts/overview) |
-| Webhooks | [Event names and subscriptions](/api-reference/resources/webhooks/overview) |
-| WebSocket | [Connect an event consumer](/api-reference/resources/websocket/overview) |
-
-## Conventions
-
-| Property | Value |
-| --- | --- |
-| Authentication | Bearer credential; the `POST /v1/agents` bootstrap is unauthenticated |
-| REST request and response bodies | `application/json` |
-| Resource IDs | Opaque UUIDv7 strings |
-| Pagination | Opaque `cursor` and `next_cursor` |
-| Send idempotency | `Idempotency-Key` or `message.idempotency_key` |
-| Event payload version | `2026-08-30` |
-
-Endpoint pages are generated from Relay's OpenAPI 3.1 contract. Their request
-and response fields are authoritative.
-
-## Errors
-
-Use `error.code` for program logic and retain `trace_id` for debugging.
+A successful request returns the authenticated Agent’s Contact Card.
 
 ```json
-{
-  "error": {
-    "status": 404,
-    "code": 2001,
-    "message": "Resource not found.",
-    "doc_url": "https://docs.relayapp.im/error/codes/2xxx/2001"
-  },
-  "success": false,
-  "trace_id": "b923d71e50be43ba9e0fe1e34a7676c2"
-}
+{"contact_cards": [{"kind": "agent"}]}
 ```
 
-<span id="endpoints" />
+## Idempotency
 
-## Related
+For a message send, supply `Idempotency-Key` or `message.idempotency_key`. If both are present, their values must match. Reuse the same key and body after an uncertain result.
 
-- [Authentication](/getting-started/authentication)
-- [Error Codes](/error)
-- [Limits](/guides/platform/rate-limits)
+## When it fails
+
+An invalid or missing Agent Token is rejected by the API.
+
+## Next steps
+
+- [Chats](/api-reference/resources/chats/overview)
+- [Messages](/api-reference/resources/messages/overview)
+- [Error codes](/api-reference/errors)

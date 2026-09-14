@@ -18,7 +18,8 @@ Each authored page owns one reader task or one reference subject.
 | Webhook event reference | Look up one event's data | Receiver implementation |
 | WebSocket | Connect, acknowledge, recover, observe, or inspect frames | CLI terminal controls |
 | Integrations | Install and connect one supported runtime or tool | Maintainer publication and package-provenance reports |
-| Platform | Check reliability, limits, retries, and errors | Repeated first-run setup |
+| Console | Sign in, create, and manage organization Agents | API transport and reliability |
+| Reliability | Check limits, retries, idempotency, errors, and debugging | Console setup and agent management |
 | Examples | Choose a runnable maintained example | Another copy of each integration guide |
 | Agent instructions | Supply a complete machine-readable setup task | Human onboarding prose |
 | API Reference | Inspect canonical operations and schemas | Narrative setup walkthroughs |
@@ -61,7 +62,7 @@ Do not use formatting to disguise independent tasks inside one page.
 ## Machine-readable surfaces
 
 `skill.md` is the source for the navbar copy action, the Mintlify skill copy,
-and the full code block on `agent-reference/prompt.mdx`. The short AI coding
+and the full code block on `integrations/agent-prompt.mdx`. The short AI coding
 agents page links there instead of embedding the full instruction file.
 
 `llms.txt` is a setup entry point and a compact page index. Endpoint entries

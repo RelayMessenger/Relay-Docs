@@ -1,71 +1,87 @@
 ---
-title: "Connect Relay API tools over MCP"
-sidebarTitle: "MCP"
-description: "Configure a trusted local MCP client to call Relay messaging operations with an Agent Token."
-keywords: ["Relay MCP", "@relaymessenger/mcp", "MCP v2", "stdio", "local tools"]
+title: "MCP"
+description: "Search Relay SDK documentation and call the SDK through a local MCP server."
+keywords: ["Relay", "MCP", "stdio", "search_docs", "execute", "Agent Token"]
 ---
 
-Give a trusted local MCP client Relay messaging tools using a saved Agent Token.
+Use `search_docs` to find Relay SDK methods, then `execute` to call them for your Agent. Relay's API MCP runs as a local stdio process with exactly these two tools.
 
-## Install
+## Before you start
 
-Use Node.js `22.22.3` or newer:
+- An Agent Token or selected CLI profile for SDK calls.
+- An MCP client that supports local stdio servers.
+- Node.js `22.22.3` or newer for the local server.
+
+Create a new Agent through your [organization's creation workflow](/agents/create-agent),
+or keep using an existing Agent Token.
+
+## Connect
+
+Install the Relay API MCP server, or let the client run it with `npx`:
 
 ```bash
 npm install --global @relaymessenger/mcp
-relay-mcp --version
 ```
 
-[Import an Agent Token](/integrations/cli/authentication) into a profile before
-configuring the client below, then use that profile name in `RELAY_PROFILE`.
-
-Source: [Relay MCP](https://github.com/RelayMessenger/Relay-SDK/tree/main/packages/mcp).
-
-## Configure a local client
-
-Add this process-spawned stdio server to your MCP client's configuration:
+Add the local process to the client's MCP configuration. The server reads the Agent Token from the selected CLI profile or `RELAY_AGENT_TOKEN`.
 
 ```json
 {
   "mcpServers": {
     "relay": {
-      "command": "relay-mcp",
-      "env": {
-        "RELAY_PROFILE": "production"
-      }
+      "command": "npx",
+      "args": ["-y", "@relaymessenger/mcp"]
     }
   }
 }
 ```
 
-The client must be able to find `relay-mcp` on its command path and read the
-same CLI profile file. If you selected `RELAY_CONFIG_PATH`, pass that absolute
-path to the MCP process too.
+The package selects the staging API by default. The source is [packages/mcp](https://github.com/RelayMessenger/Relay-SDK/tree/main/packages/mcp). The trusted local MCP client decides when to run a tool.
 
-| Credential setting | Effect |
+## Send it a message
+
+Ask your MCP client to inspect your Agent or perform a messaging task through these two tools.
+
+| Tool | Task |
 | --- | --- |
-| Saved CLI profile | Supplies the profile's Agent Token and API origin. |
-| `RELAY_AGENT_TOKEN` | Overrides the saved token when present in the process environment. |
-| `RELAY_API_URL` | Overrides the API origin; keep it matched to the selected token. |
+| `search_docs` | Search packaged SDK methods, signatures, parameters, and contract descriptions. |
+| `execute` | Run TypeScript or JavaScript defining `async function run(client)` with the initialized Relay SDK client. |
 
-**Configure this server only in a trusted local client.** It exposes messaging
-operations over stdio; the MCP host controls access to those tools.
+Call `search_docs` before writing an SDK call:
 
-## Confirm the connection
+```json
+{
+  "query": "contactCard.retrieve",
+  "language": "typescript",
+  "detail": "default"
+}
+```
 
-Start the server through your MCP client and call `relay_list_chats` to check
-read access. For send operations, supply the caller-selected idempotency key
-required by the tool and reuse it with the same request after an uncertain send.
+Then call `execute` with a top-level `run(client)` function:
 
-For documentation search instead of API calls, see
-[docs MCP and API MCP](/integrations/skills#connect-documentation-search).
+```json
+{
+  "code": "async function run(client) { return await client.contactCard.retrieve(); }",
+  "intent": "Read this agent's contact card"
+}
+```
 
-<span id="choose-the-mcp-surface" />
-<span id="related" />
-<span id="published-package" />
+Search reads the packaged documentation locally and works without a token. SDK calls use the configured Agent Token, which stays outside submitted code and tool arguments.
+
+## What it can do
+
+Each `execute` call has a fresh, bounded JavaScript runtime and returns `result` and `logs`. The provided client exposes SDK HTTP methods through JSON arguments and results. Raw upload streams and WebSocket callbacks belong in your external backend.
+
+Always await SDK calls and reuse the same idempotency key for the same logical send. `execute` can change the Agent's account; the MCP client remains the security boundary.
+
+## When it fails
+
+- Local server will not start: confirm that the client can find `node` and `npx`, then run `relay-mcp --help`.
+- A local tool call is refused: check the MCP client's permissions and the Agent Token for the intended Agent.
+- An execution returns `isError: true`: read the tool error, check the SDK method with `search_docs`, and correct the call or credentials.
 
 ## Next steps
 
-- [CLI authentication](/integrations/cli/authentication)
-- [Sending Messages](/guides/messaging/sending-messages)
-- [Idempotency](/guides/platform/idempotency)
+- [Save an Agent Token with the CLI](/cli/auth)
+- [Read the API reference](/api-reference/overview)
+- [Install Relay guidance](/integrations/skills)

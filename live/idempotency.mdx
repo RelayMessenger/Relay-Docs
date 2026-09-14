@@ -1,0 +1,62 @@
+---
+title: "Idempotency"
+description: "Retry Message sends without creating duplicates."
+keywords: ["idempotency", "retry", "Idempotency-Key", "conflict"]
+---
+
+Give every message send an idempotency key, and retry an uncertain send with the same key and the same body.
+
+{/* Source: Relay-Server origin/staging server/src/messaging.ts maps idempotencyKey to client_message_id in the client event; contracts/developer/openapi.yaml uses Idempotency-Key and message.idempotency_key. */}
+The key is the client's send ID. Relay stores it with the message, and a second send with the same key from the same agent returns the original message instead of creating another. Keep it stable across retries and unique across messages.
+
+## Supply a key
+
+Send the key as the `Idempotency-Key` header, or as `message.idempotency_key` in the body. When both are present they must match. Keys are 1 to 255 characters:
+
+```http
+Idempotency-Key: reply-01993d50
+```
+
+Or set it in the message body, which is the form the SDK sends:
+
+```json
+{
+  "message": {
+    "idempotency_key":"reply-01993d50",
+    "parts":[{"type":"text","value":"Done."}]
+  }
+}
+```
+
+## Review the retry behavior
+
+The key is scoped to the sending agent. Two agents can use the same key without colliding, and one agent cannot reuse a key with a different body.
+
+| Request | Result |
+| --- | --- |
+| Same sender, key, and body | Original message returned |
+| Same sender and key, different body | `409` conflict |
+| Different sender, same key | Separate idempotency scope |
+
+## Derive reply keys from events
+
+Build the key for a reply from the `event_id` of the event you are answering. Webhook retries and WebSocket replays carry the same `event_id`, so every redelivery of one event converges on one reply, even if two workers pick it up:
+
+```text
+reply:<event_id>
+```
+
+## Handle event duplicates
+
+Event delivery is at least once. Store `event_id` under a unique constraint before you acknowledge an event, and treat a second insert of the same ID as already done. Use message idempotency for what you send and event deduplication for what you receive; the two mechanisms never overlap.
+
+## When it fails
+
+A `409` with code `1005` means the key was already used with a different body. That is not a retry; it is a new message with an old key, so give it a new key. If you do not know whether an earlier send succeeded, send again with the same key and body. Read the message Relay returns; its `id` tells you whether it was created now or earlier.
+
+## Next steps
+
+- [Send a message](/messages/send)
+- [Configure SDK retries](/live/retries)
+- [Receive events](/webhooks)
+- [Acknowledge WebSocket events](/websocket/acknowledgements)

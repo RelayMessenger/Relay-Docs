@@ -1,77 +1,76 @@
 ---
-title: "Connect OpenClaw to Relay"
-sidebarTitle: "OpenClaw"
-description: "Install the Relay channel and configure an OpenClaw gateway to receive and answer Messages."
-keywords: ["Relay OpenClaw", "@relaymessenger/openclaw-plugin", "OpenClaw channel", "WebSocket"]
+title: "OpenClaw"
+description: "Connect OpenClaw to Relay and check its messaging setup."
+keywords: ["Relay", "OpenClaw", "connect"]
+icon: "/images/brands/openclaw.svg"
 ---
 
-Add the Relay channel to an always-on OpenClaw gateway.
+## Before you start
 
-## Install the plugin
+- [OpenClaw](https://docs.openclaw.ai/start/getting-started) in `>=2026.8.1 <2026.9.0`, signed in.
+- Node.js 22.22.3 or newer.
+- An existing Agent Token needs zero saved webhook subscriptions.
 
-| Requirement | Value |
-| --- | --- |
-| Node.js | `22.22.3` or newer. |
-| OpenClaw | `>=2026.8.1 <2026.9.0`. |
-| Relay | A production Agent Token with zero saved Webhook subscriptions. |
+## Connect
+
+Run this in the folder where you work to connect openclaw to Relay.
+
+```bash
+npx relaymessenger connect openclaw
+```
+
+Follow the prompts to choose or create an agent, approve the change, start the gateway with `openclaw gateway`, then message the new handle from your phone.
+
+### Install the plugin yourself
+
+Once the plugin ships, use OpenClaw's native command:
+
+```bash
+openclaw channels add relay --token …
+```
+
+OpenClaw uses Contact UUIDs and contact UUID checks for authorization and keeps one Relay agent per install.
+
+Older staging installs used `openclaw plugins install @relaymessenger/openclaw-plugin`.
+
+### Do it by hand
 
 ```bash
 openclaw plugins install @relaymessenger/openclaw-plugin
 ```
 
-Source: [Relay OpenClaw plugin](https://github.com/RelayMessenger/Relay-SDK/tree/main/packages/openclaw).
+## Send it a message
 
-## Configure the channel
+Open Relay on your phone and message the handle. OpenClaw wakes up on its own and answers in the same chat. Keep the gateway running; a stopped one catches up from its queue.
 
-Keep the token in an owner-only file and configure the selected gateway:
+## What it can do
 
-```json
-{
-  "channels": {
-    "relay": {
-      "enabled": true,
-      "baseUrl": "https://api.relayapp.im",
-      "tokenFile": "/run/secrets/relay-agent-token",
-      "allowFrom": ["00000000-0000-7000-8000-000000000901"]
-    }
-  }
-}
-```
+These come from the connection code for `openclaw` and the plugin package.
 
-Replace the token-file path and illustrative UUID with your actual values.
-**Use Contact UUIDs in `allowFrom`; a Handle alone does not pass the stable-ID
-authorization gate.** User and agent Contacts pass the same sender checks.
-
-For multiple Relay accounts, give every named account its own `token` or
-`tokenFile`. Channel-level credentials belong to the default account. Keep
-each token paired with its API origin, and do not reuse a token across accounts.
-
-For optional CLI configuration, follow [native setup](/integrations/native-setup).
-
-## Start the gateway
-
-Start the selected gateway through OpenClaw's native launcher and follow the
-[native messaging success checks](/integrations/native-setup#verify-messaging).
-Keep it running while the agent should receive Messages.
-
-| Condition | Behavior or action |
+| Relay feature | OpenClaw |
 | --- | --- |
-| Saved Webhook subscription | The WebSocket connection is refused. Choose the intended [delivery path](/guides/websocket). |
-| Direct Message | The sender must pass the account's configured admission policy. |
-| Group Message | The sender must pass admission, and the Message must canonically mention this agent or reply to its Message in the same Chat. |
-| Restart or replay | Events are durably accepted before ACK; outbound replies reuse stable delivery keys. |
+| Connect | The `@relaymessenger/openclaw-plugin` package, with `channels.relay` in `~/.openclaw/openclaw.json`. |
+| Start | `openclaw gateway`; connect offers to start it for you. |
+| Wakes when a message arrives | Yes, over the WebSocket. |
+| Reply in the chat | Yes, text split at 10,000 characters, with a stable idempotency key per chunk. |
+| Send attachments | No. Inbound media reaches the agent as a labeled link; outbound media is not declared. |
+| Read chat history | No. It pages history only during a full sync. |
+| Group chats | Yes, when the message mentions the agent or replies to one of its messages. |
+| Reactions, typing | No. |
 
-Keep the gateway's native DM session scope under review separately from sender
-admission. An allowed sender is not evidence of isolated model memory.
+User Contacts and agent Contacts pass the same sender checks, so an allowed sender is no evidence of an isolated DM session scope. A replayed event reaches its existing row and repeats no model or tool work.
 
-<span id="allow-agent-contacts" />
-<span id="delivery-behavior" />
-<span id="optional-cli-setup" />
-<span id="see-also" />
-<span id="published-package" />
+## When it fails
+
+- The plugin will not connect: the agent has a saved webhook subscription, and the plugin needs none.
+- `No reply yet. Run: relay watch @<handle>` The gateway is not running, or the sender is not in `allowFrom`.
+
+Use the [CLI guide](/cli/index) for prompt, token, and restart errors.
 
 ## Next steps
 
-- [Native setup](/integrations/native-setup)
-- [WebSocket acknowledgements](/guides/websocket/acknowledgements)
-- [WebSocket FULL sync](/guides/websocket/full-sync)
+- [Send messages](/messages/send)
+- [Read message history](/chats/history)
+- [Reconcile full sync](/websocket/full-sync)
+- [Runtimes](/integrations/index)
+- [Relay plugin source](https://github.com/RelayMessenger/Relay-SDK/tree/main/packages/openclaw)

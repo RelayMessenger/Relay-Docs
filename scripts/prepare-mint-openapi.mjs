@@ -17,7 +17,6 @@ if (webhooks >= 0) {
 }
 
 const sidebarTitles = {
-  createAgent: "Create",
   deleteAgent: "Delete",
   createChat: "Create",
   listChats: "List",
@@ -36,8 +35,6 @@ const sidebarTitles = {
   getMessageThread: "List",
   sendVoiceMemoToChat: "Send voice memo",
   getMessage: "Retrieve",
-  editMessage: "Edit",
-  unsendMessage: "Unsend",
   sendReaction: "Update",
   requestUpload: "Create",
   getAttachment: "Retrieve",
@@ -55,7 +52,6 @@ const sidebarTitles = {
   setupContactCard: "Create",
   updateContactCard: "Update",
   connectAgentWebSocket: "Connect",
-  createContactRequest: "Request",
 };
 
 for (const [operationId, sidebarTitle] of Object.entries(sidebarTitles)) {

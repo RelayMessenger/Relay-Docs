@@ -1,0 +1,158 @@
+---
+title: "Examples"
+description: "Choose a runnable Relay recipe or an agent integration with published source."
+keywords: ["Relay examples", "Relay Cookbook", "agents", "Webhooks", "WebSocket", "Cloudflare Think"]
+---
+
+Choose a runnable recipe to build on, or connect an agent runtime you already use.
+
+## Choose a recipe
+
+Each recipe is a small Node project with its own README, install command, environment variables, and runtime requirements. Use Node.js `22.22.3` or newer. The SQLite-backed webhook receiver and WebSocket agent support Linux and macOS; on macOS they need a system C compiler for their native file-opening helper. Use a separate private state directory for each agent and API origin. The WebSocket recipes require zero saved webhook subscriptions; the webhook receiver requires its subscription's signing secret.
+
+| Recipe | Job |
+| --- | --- |
+| [Send a message](https://github.com/RelayMessenger/Relay-SDK/tree/main/cookbook/send-a-message) | Send one text message with a stable idempotency key. |
+| [Send an image](https://github.com/RelayMessenger/Relay-SDK/tree/main/cookbook/send-an-image) | Upload an image and send its attachment identity. |
+| [Send a voice memo](https://github.com/RelayMessenger/Relay-SDK/tree/main/cookbook/send-a-voice-memo) | Upload audio and send it as a voice memo. |
+| [Webhook receiver](https://github.com/RelayMessenger/Relay-SDK/tree/main/cookbook/webhook-receiver) | Receive signed events in a Node process with a SQLite inbox. |
+| [WebSocket agent](https://github.com/RelayMessenger/Relay-SDK/tree/main/cookbook/websocket-agent) | Receive acknowledged events in a long-running Node process. |
+| [Cloudflare Think agent](https://github.com/RelayMessenger/Relay-SDK/tree/main/cookbook/cloudflare-think-agent) | Answer messages from a Worker with signed webhook ingress. |
+| [Trip planner agent](https://github.com/RelayMessenger/Relay-SDK/tree/main/cookbook/trip-planner-agent) | Run a model-backed agent that responds to direct messages and group mentions. |
+
+## Run a text recipe
+
+Load a production Agent Token through your secret store, then set `RELAY_CHAT_ID` to an existing chat and `RELAY_IDEMPOTENCY_KEY` to a stable key for this one message. The recipe sends the text and prints the message Relay stored. After an uncertain send, run it again with the same key and body; Relay returns the original message instead of a duplicate:
+
+```bash
+git clone --branch main https://github.com/RelayMessenger/Relay-SDK.git
+cd Relay-SDK/cookbook/send-a-message
+npm install
+export RELAY_API_URL="https://api.relayapp.im"
+npm start -- \
+  --chat-id "$RELAY_CHAT_ID" \
+  --text 'Hello from Relay' \
+  --idempotency-key "$RELAY_IDEMPOTENCY_KEY"
+```
+
+## Choose an agent runtime
+
+If you already run one of these, connect it instead of writing a backend. Each setup page carries the install command and the credential steps; each source link is the adapter itself.
+
+| Runtime | Setup | Source |
+| --- | --- | --- |
+| Claude Code session | [Connect Claude Code](/integrations/claude-code) | [Relay channel](https://github.com/RelayMessenger/Relay-SDK/tree/main/packages/claude-code) |
+| Hermes gateway | [Connect Hermes](/integrations/hermes) | [Relay-Hermes](https://github.com/RelayMessenger/Relay-Hermes) |
+| OpenClaw gateway | [Connect OpenClaw](/integrations/openclaw) | [Relay plugin](https://github.com/RelayMessenger/Relay-SDK/tree/main/packages/openclaw) |
+
+## Inspect an agent before connecting
+
+Read the agent's contact card to confirm the token belongs to the agent you expect. The card carries the handle people message, the display name they see, and whether the agent is active. Every reply on this page is what the staging agent answered:
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" https://api.relayapp.im/v1/contact_card \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+const relay = new Relay({ apiKey: process.env.RELAY_AGENT_TOKEN!, baseURL: "https://api.relayapp.im" });
+console.log(await relay.contactCard.retrieve());
+```
+</CodeGroup>
+
+```json captured-output
+{
+  "contact_cards": [
+    {
+      "handle": "example_agent",
+      "kind": "agent",
+      "first_name": "Example Agent",
+      "last_name": null,
+      "image_url": null,
+      "is_active": true
+    }
+  ]
+}
+```
+
+## Choose events before subscribing
+
+List the event names the API accepts in `subscribed_events` before you create a subscription. The list is the contract; a name outside it is rejected with code `1005`. Each name links to its payload page in the [event catalog](/events), and the reply carries the same catalog URL in `doc_url`:
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" https://api.relayapp.im/v1/webhook-events \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+const relay = new Relay({ apiKey: process.env.RELAY_AGENT_TOKEN!, baseURL: "https://api.relayapp.im" });
+console.log(await relay.webhookEvents.list());
+```
+</CodeGroup>
+
+```json captured-output
+{
+  "events": [
+    "message.sent",
+    "message.received",
+    "message.read",
+    "message.delivered",
+    "message.failed",
+    "reaction.added",
+    "reaction.removed",
+    "participant.added",
+    "participant.removed",
+    "chat.created",
+    "chat.group_name_updated",
+    "chat.group_icon_updated",
+    "chat.typing_indicator.started",
+    "chat.typing_indicator.stopped",
+    "contact.added",
+    "contact.removed",
+    "chat.request.updated"
+  ],
+  "doc_url": "https://docs.relayapp.im/guides/webhooks/events"
+}
+```
+
+## Inspect blocks before sending
+
+Read the handles this agent has blocked before you send to a chat. A blocked handle never receives the agent's messages, so a backend that manages blocks should read this list at startup. An empty array means nothing is blocked:
+
+<CodeGroup>
+```bash cURL
+curl -sS -A "relay-docs/1.0" https://api.relayapp.im/v1/blocked_handles \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+const relay = new Relay({ apiKey: process.env.RELAY_AGENT_TOKEN!, baseURL: "https://api.relayapp.im" });
+console.log(await relay.blockedHandles.list());
+```
+</CodeGroup>
+
+```json captured-output
+{
+  "blocked_handles": []
+}
+```
+
+## What you get back
+
+Each read above answers `200` with the JSON shown under it. None of them changes anything: reading the contact card, the event names, or the block list is safe to run at every startup.
+
+## When it fails
+
+A `401` means the Agent Token is missing or was issued for the other API origin; check `RELAY_API_URL` first. If a recipe's `npm install` fails on macOS with a compiler error, install the Xcode command line tools and run it again. If the send recipe answers `409` with code `1005`, the key was already used with a different body; choose a new key for a new message.
+
+## Next steps
+
+- [Use the CLI](/cli/index)
+- [Send a message](/messages/send)
+- [Receive events](/webhooks)
+- [Connect with WebSocket](/websocket)
