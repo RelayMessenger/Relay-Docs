@@ -1,7 +1,7 @@
 ---
 title: "Sending messages"
 description: "Send a Message to a new or existing Chat."
-keywords: ["send Message", "Message parts", "idempotency", "Chat"]
+keywords: ["send Message", "Message parts", "idempotency", "Chat", "Markdown", "bold", "italic", "formatting"]
 ---
 
 When you hold the chat ID, call `POST /v1/chats/{chatId}/messages` ([reference](/api-reference/messages/send-a-message-to-an-existing-chat)); the SDK method is `relay.chats.messages.send`. When you hold only the recipient handles, [resolve or create the chat](#resolve-or-create-a-chat) instead. Authenticate requests as described in [Authentication](/live/authentication).
@@ -21,6 +21,42 @@ Send the body with an `Idempotency-Key` header:
 ```
 
 The response is the stored message. Keep its `id` if you will reply to it or react to one part. Text and media parts can be mixed in any order, but two text parts may not sit next to each other. [Message parts](/messages/parts) has the rules for each part type.
+
+### Markdown
+
+Send Markdown source inside a text part's `value`. The API stores and returns the source unchanged.
+
+<Note>
+**Current iOS builds display newly received API text parts literally.** The syntax below is supported by Relay's existing renderer for legacy Markdown messages, not by the current API-to-iOS receive path.
+</Note>
+
+| Format | Source |
+| --- | --- |
+| Bold | `**bold**` |
+| Italic | `*italic*` |
+| Strikethrough | `~~strikethrough~~` |
+| Inline code | `` `code` `` |
+| Link | `[Relay](https://relayapp.im)` |
+| Underline | `<u>underlined</u>` |
+
+Underline uses Relay's `<u>…</u>` extension. The Markdown renderer also combines inline styles, such as `<u>underlined **and bold**</u>`, and preserves spaces and line breaks.
+
+This message body carries the source for all six formats:
+
+```json
+{
+  "message": {
+    "parts": [
+      {
+        "type": "text",
+        "value": "**Bold** *Italic* ~~Strikethrough~~ `code` [Relay](https://relayapp.im) <u>Underlined</u>"
+      }
+    ]
+  }
+}
+```
+
+The [Chat SDK adapter](/integrations/chat-sdk#what-it-can-do) converts a `{ markdown: "…" }` input to plain text before sending.
 
 ## Send silently
 
