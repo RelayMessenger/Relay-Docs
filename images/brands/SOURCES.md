@@ -20,6 +20,7 @@ the 256 px resize of `hermes.png`; each such edit is named in the notes below.
 | `openclaw.svg` | OpenClaw | https://openclaw.ai/favicon.svg (byte-identical to https://docs.openclaw.ai/assets/openclaw.svg) | https://github.com/openclaw/openclaw, MIT | 2026-09-11 |
 | `opencode.svg` | opencode | https://opencode.ai/favicon.svg | https://github.com/anomalyco/opencode, MIT | 2026-09-11 |
 | `photon.svg` | Photon | https://mintcdn.com/photon-6d78d87b/-Sx6UdxO4BG0ZSxk/logo/light.svg (the nav logo on https://docs.photon.codes) | https://photon.codes, no published brand page | 2026-09-11 |
+| `pi.svg` | Pi | https://pi.dev/logo-auto.svg | https://pi.dev, official Pi site | 2026-09-15 |
 | `telegram.svg` | Telegram | https://telegram.org/img/t_logo.svg | https://telegram.org/press | 2026-09-11 |
 | `vercel.svg` | Vercel | https://github.com/simple-icons/simple-icons/blob/develop/icons/vercel.svg | CC0 1.0, https://github.com/simple-icons/simple-icons#license | before 2026-09-11 |
 | `vscode.svg` | Visual Studio Code | https://code.visualstudio.com/assets/branding/visual-studio-code-icons.zip, `vscode.svg` | https://code.visualstudio.com/brand, trademark of Microsoft | 2026-09-11 |
@@ -62,6 +63,8 @@ the 256 px resize of `hermes.png`; each such edit is named in the notes below.
   for the mark). Cloudflare's official orange logomark needs the company's written
   permission (https://www.cloudflare.com/trademark/) and ships no direct asset
   URL, so the CC0 mark is used. Path unchanged.
+- `pi.svg` is the official Pi logo served by `https://pi.dev/logo-auto.svg`. It is used unchanged. Retrieved 2026-09-15.
+
 - `hermes.png` is the Hermes Agent character illustration, the "Nous girl",
   from the hermes-agent repository (https://github.com/NousResearch/hermes-agent),
   file `apps/desktop/public/intro-nous-girl.png`, raw URL
