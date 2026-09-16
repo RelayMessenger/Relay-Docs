@@ -78,7 +78,7 @@ class RegressionTests(unittest.TestCase):
 
     def test_production_share_and_docs_examples_are_rejected(self):
         for host in ("go", "docs"):
-            self.assertTrue(example_errors(f"```text\nhttps://{host}.relayapp.im/@agent.dev\n```\n"))
+            self.assertTrue(example_errors(f"```text\nhttps://{host}.relayapp.im/@agent\n```\n"))
 
     def test_production_websocket_is_rejected(self):
         self.assertTrue(example_errors("```text\nwss://api.relayapp.im/v1/websocket\n```\n"))
