@@ -82,12 +82,15 @@ if config.get("navbar", {}).get("links") != [
     }
 ]:
     raise SystemExit("Copy agent prompt must be the only secondary navbar action")
+# Owner ruling 2026-09-16: the logo leads to the base of the documentation,
+# not the landing page (Stripe's and Vercel's docs do the same). A relative
+# href so staging and production each reach their own docs root.
 if config.get("logo") != {
     "light": "/logo/light.png",
     "dark": "/logo/dark.png",
-    "href": "https://relayapp.im",
+    "href": "/",
 }:
-    raise SystemExit("Relay logo must link to https://relayapp.im")
+    raise SystemExit("Relay logo must link to the docs root (href \"/\")")
 
 redirects = {
     item.get("source"): item.get("destination")
