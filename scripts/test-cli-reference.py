@@ -25,7 +25,7 @@ class CLIReferenceTests(unittest.TestCase):
 
     def test_creation_reference_uses_flat_handle(self):
         text = (ROOT / "cli/reference/agents-create.mdx").read_text()
-        self.assertIn("one word, 3 to 32 lowercase letters, numbers or underscores", captured(text))
+        self.assertRegex(captured(text), r"--handle <handle>\s+the agent's handle")
         self.assertNotIn("namespace", text.lower())
         self.assertNotIn("Personal organization", text)
         self.assertNotIn("--token-name", text)
