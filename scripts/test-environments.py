@@ -142,7 +142,9 @@ class EnvironmentTests(unittest.TestCase):
                     path.write_text(original)
             page = production / "integrations/claude-code.mdx"
             original = page.read_text()
-            page.write_text(original.replace("Relay-SDK@main", "Relay-SDK@staging"))
+            source = "https://github.com/RelayMessenger/Relay-SDK/blob/main/packages/cli/src/claude-bridge.ts"
+            self.assertIn(source, original)
+            page.write_text(original.replace(source, source.replace("/blob/main/", "/blob/staging/")))
             self.run_command(production, ["python3", "scripts/validate-docs.py"], success=False)
             page.write_text(original)
             # Valid registry prereleases still cannot become production claims.

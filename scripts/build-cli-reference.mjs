@@ -302,7 +302,9 @@ const CLI_GROUPS = [
 
 const pages = new Map();
 function collect(commandPath) {
-  const command = commandPath[0] === 'help' ? program._helpCommand : commandAt(commandPath);
+  const command = commandPath[0] === 'help'
+    ? program.commands.find((candidate) => candidate.name() === 'help') || program._helpCommand
+    : commandAt(commandPath);
   if (commandPath[0] !== 'help' && command.commands.length) {
     for (const child of supportedChildren(command)) collect([...commandPath, child.name()]);
     return;
@@ -329,7 +331,7 @@ function collect(commandPath) {
   pages.set(slug, content);
 }
 collect([]);
-collect(['help']);
+if (!pages.has('help')) collect(['help']);
 
 function commandTree() {
   const topicNames = [];

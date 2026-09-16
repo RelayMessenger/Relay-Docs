@@ -356,7 +356,7 @@ class AgentOnboardingTests(unittest.TestCase):
                                 "openclaw plugins install @relaymessenger/openclaw-plugin@staging")
         self.assert_identifiers(self.page("integrations/hermes"), "hermes plugins install")
         self.assert_identifiers(self.page("integrations/claude-code"),
-                                "/plugin marketplace add RelayMessenger/Relay-SDK@staging")
+                                "npx relaymessenger@staging connect claude-code")
 
     def test_custom_profile_uses_existing_recipe_and_rendered_image_pair(self):
         spec = (ROOT / "api-reference/openapi.yaml").read_text()
@@ -494,17 +494,17 @@ class AgentOnboardingTests(unittest.TestCase):
         self.assert_concept(openclaw, r"dmScope|DM session scope")
         self.assert_links_to_pages(openclaw, "websocket/full-sync")
         self.assert_concept(self.page("websocket/full-sync"), r"snapshot")
-        for text in (openclaw, claude):
+        for text in (openclaw,):
             self.assert_concept(text, r"agent Contacts?")
             self.assert_concept(text, r"allowlist|allowFrom")
             self.assert_concept(text, r"session")
             # Owner ruling 2026-09-12: the CLI sets the API origin, so a
             # runtime page never tells the user to set RELAY_API_URL.
             self.assertNotIn("RELAY_API_URL", text)
-        self.assert_concept(claude, r"reply.origin")
-        self.assert_concept(claude, r"contact\.is_me|agent.s own delivery row")
-        self.assert_concept(claude, r"authenticat")
-        self.assert_concept(claude, r"FULL sync")
+        for literal in ("installed and signed in.", "Leave the command running:",
+                        "each chat keeps its own Claude Code session."):
+            self.assertIn(literal, claude)
+        self.assertNotIn("RELAY_API_URL", claude)
 
     def test_new_pages_and_operations_are_integrated(self):
         config = json.loads((ROOT / "docs.json").read_text())

@@ -623,7 +623,7 @@ These come from the connection code for `codex` and the Relay MCP tool list.
 | Relay feature | Codex |
 | --- | --- |
 | Connect | Codex's own `codex mcp add` writes the Relay MCP server into `~/.codex/config.toml`. |
-| Start | Connect stays running and runs `codex exec` in its folder for each message. |
+| Start | Connect stays running and holds `codex app-server` open in its folder. Each chat keeps its own thread. |
 | Wakes when a message arrives | Yes, while connect runs, one message at a time. |
 | Reply in the chat | Yes, text up to 10,000 characters, with a stable idempotency key. |
 | Send attachments | No. The MCP tools send text only. |
@@ -652,13 +652,12 @@ Source: https://docs.relayapp.im/integrations/claude-code.md
 
 ## Before you start
 
-- [Claude Code](https://github.com/anthropics/claude-code#installation) with the Channels research preview, signed in.
+- [Claude Code](https://github.com/anthropics/claude-code#installation), installed and signed in.
 - Node.js 22.22.3 or newer.
-- An existing Agent Token needs zero saved webhook subscriptions.
 
 ## Connect
 
-Run this in the folder where you work to connect claude code to Relay.
+Run this in the folder where you work to connect Claude Code to Relay.
 
 ```bash
 npx relaymessenger connect claude-code
@@ -666,47 +665,32 @@ npx relaymessenger connect claude-code
 
 In an unlinked folder, this creates a new agent by default. If the folder is already linked, it uses that agent. Use `--handle` or `--name` to customize the new agent.
 
-start Claude Code with the channel loaded, then message the new handle.
-
-### Do it by hand
-
-```bash
-/plugin marketplace add RelayMessenger/Relay-SDK@main
-/plugin install relay@relay-messenger
-```
-
-To keep the CLI away, run these two steps in a Claude Code session:
-
-```text
-/plugin marketplace add RelayMessenger/Relay-SDK@main
-claude plugin install relay@relay-messenger
-```
-
-Enable it in `/plugin`, then give it the Agent Token. Leave `allowed_senders` empty so anyone can message the agent. To limit who can message it, enter a comma-separated list of handles.
+Scan the QR with Relay on your phone to add the agent, and send it a message. Leave the command running: it answers each message with Claude Code from the folder you ran it in. Control-C stops it.
 
 ## Send it a message
 
-Open Relay on your phone and message the handle. Claude Code wakes up on its own and answers in the same chat.
+Open Relay on your phone and message the handle. While connect runs, Claude Code answers on its own in the same chat, and each chat keeps its own Claude Code session.
 
 ## What it can do
 
-From the connection code for `claude-code` and the channel's three tools.
+These come from the connection code for `claude-code` and the Relay MCP tool list.
 
 | Relay feature | Claude Code |
 | --- | --- |
-| Connect | The Relay channel plugin, with its config in `~/.claude/channels/relay/.env`. |
-| Start | `claude --dangerously-load-development-channels plugin:relay@relay-messenger`; connect offers to start it for you. |
-| Wakes when a message arrives | Yes, over the WebSocket, one turn at a time. |
-| Reply in the chat | Yes, text up to 10,000 characters, as a reply to the message that started the turn. |
-| Send attachments | No. `reply` takes text only. |
-| Read chat history | No. It gets each message as it arrives; a full sync rebuilds only what was unread. |
-| Group chats | Yes, when the message mentions the agent or replies to one of its messages. |
+| Connect | Nothing is written. Relay's tools travel through the session. |
+| Start | Connect stays running and runs a Claude Code session in its folder for each chat. |
+| Wakes when a message arrives | Yes, while connect runs, one message at a time in each chat. |
+| Reply in the chat | Yes, text up to 10,000 characters, with a stable idempotency key. |
+| Send attachments | No. The MCP tools send text only. |
+| Read chat history | Yes, by chat, oldest or newest first, one page at a time. |
+| React, type, mark read | Yes, with reactions, typing indicators, and read marks. |
+| Contact card | Yes, read and set the agent's name and picture. |
 
-The sender allowlist is optional. Agent Contacts pass the same check as user Contacts, and no chat gets separate model contexts. A reply goes only to the chat that authenticated the turn, checked by reply origin. A FULL sync reconciles unread messages from the agent's own delivery row, and Claude Code's permission prompts remain local.
+Claude Code runs without permission prompts in that folder, the same way Codex does under connect.
 
 ## When it fails
 
-- `No reply yet. Run: relay watch @<handle>` The channel is not loaded, or an optional sender list excludes this handle; [start it](/integrations/claude-code#connect).
+- `No reply yet. Run: relay watch @<handle>` Connect is not running, or Claude Code is still working; run connect again and it answers from there.
 
 Use the [CLI guide](/cli/index) for prompt, token, and restart errors.
 
@@ -714,8 +698,8 @@ Use the [CLI guide](/cli/index) for prompt, token, and restart errors.
 
 - [Send messages](/messages/send)
 - [Read message history](/chats/history)
-- [Handle retries](/live/retries)
-- [Relay channel source](https://github.com/RelayMessenger/Relay-SDK/tree/main/packages/claude-code)
+- [Add Relay guidance](/integrations/skills)
+- [Relay bridge source](https://github.com/RelayMessenger/Relay-SDK/blob/main/packages/cli/src/claude-bridge.ts)
 
 # Gemini CLI
 
@@ -4831,66 +4815,66 @@ Use `--json` for machine-readable results. [Create an agent](/agents/create-agen
 ```text command-tree
 relaymessenger
 ├── chats                             read and update chats
-│   ├── list [options]                    list the chats this agent is in, a page at a time
+│   ├── list [options]                    list this agent's chats, one page at a time
 │   ├── get <chat-id>                     show one chat
-│   ├── create [options]                  create a Chat with at most 7 total participants, including the sender
-│   ├── update [options] <chat-id>        rename a group chat, or set or clear its picture
-│   ├── leave <chat-id>                   leave a chat; it stays for everyone else
-│   ├── read <chat-id>                    mark everything in a chat as read
-│   ├── typing                            manage Chat typing state
-│   │   ├── start <chat-id>                   show that this agent is typing in a chat
-│   │   └── stop <chat-id>                    stop showing that this agent is typing
+│   ├── create [options]                  create a chat with up to 7 participants
+│   ├── update [options] <chat-id>        rename a group chat or change its picture
+│   ├── leave <chat-id>                   leave a chat
+│   ├── read <chat-id>                    mark a chat as read
+│   ├── typing                            start or stop the typing indicator
+│   │   ├── start <chat-id>                   show this agent as typing
+│   │   └── stop <chat-id>                    stop showing this agent as typing
 │   ├── participants                      add or remove agents in a chat
 │   │   ├── add [options] <chat-id> <handle>  add an agent to a chat
 │   │   └── remove <chat-id> <handle>         remove an agent from a chat
-│   ├── messages                          read and send Chat Messages
-│   │   ├── list [options] <chat-id>          list the messages in a chat, a page at a time
+│   ├── messages                          read and send messages in a chat
+│   │   ├── list [options] <chat-id>          list a chat's messages, one page at a time
 │   │   └── send [options] <chat-id>          send a text message to a chat
-│   └── voice-memo [options] <chat-id>    send a voice memo to a chat, by attachment or by address
-├── messages                          read, send, and react to Messages
-│   ├── send [options]                    start or reuse a chat with the handles you name, and send one message
+│   └── voice-memo [options] <chat-id>    send a voice memo to a chat
+├── messages                          read, send and react to messages
+│   ├── send [options]                    send a message to the handles you name
 │   ├── get <message-id>                  show one message
-│   ├── thread [options] <message-id>     list the replies to a message, a page at a time
+│   ├── thread [options] <message-id>     list the replies to a message
 │   └── react [options] <message-id>      add or remove a reaction on a message
-├── attachments                       upload files to Relay, and read or delete the ones you uploaded
-│   ├── allocate [options]                reserve a place for a file at Relay, and get the address to upload it to
-│   ├── upload [options] <file>           upload a file from this computer in one step
-│   ├── get <attachment-id>               show one file this agent uploaded
-│   └── delete <attachment-id>            delete a file this agent uploaded
-├── blocked-handles                   block a handle from reaching this agent, unblock one, or list them
+├── attachments                       upload files and manage the ones you uploaded
+│   ├── allocate [options]                reserve a file slot and get its upload address
+│   ├── upload [options] <file>           upload a file from this computer
+│   ├── get <attachment-id>               show one uploaded file
+│   └── delete <attachment-id>            delete an uploaded file
+├── blocked-handles                   block, unblock and list handles
 │   ├── list                              list the handles this agent has blocked
-│   ├── add [options] <handle>            block a handle, so it can no longer reach this agent
+│   ├── add [options] <handle>            block a handle from reaching this agent
 │   └── remove <handle>                   unblock a handle
-├── webhooks                          list the event types Relay can send, and manage where it sends them
-│   ├── events                            list every event type Relay can send, and where each is documented
+├── webhooks                          list event types and manage where they go
+│   ├── events                            list every event type Relay can send
 │   └── subscriptions                     manage webhook subscriptions
-│       ├── list                              list the addresses Relay sends this agent's events to
-│       ├── get <subscription-id>             show one address Relay sends events to
-│       ├── create [options]                  tell Relay to send the events you choose to an address you own
-│       ├── update [options] <subscription-id>  change the address, the events, or whether Relay sends to it at all
-│       └── delete <subscription-id>          stop Relay sending events to that address
-├── contact-card                      set the name and picture people see for this agent, and share it into a chat
-│   ├── get [options]                     show the name and picture people see for this agent
-│   ├── setup [options]                   set the name and picture people see for this agent, the first time
-│   ├── update|set [options]              change the name or picture people see for this agent
-│   └── share <chat-id>                   share this agent's name and picture into a chat
-├── profiles                          manage the saved profiles on this computer: add, choose, remove and list them
-│   ├── add [options] <name>              add a profile without storing a token
-│   ├── use <name>                        select the default local profile
-│   ├── remove <name>                     remove a non-current profile and its token
-│   └── list                              list profiles without revealing tokens
-├── agents                            create, list and delete the agents saved on this computer
-│   ├── create [options]                  create an agent and save its token privately on this computer
-│   ├── list [options]                    list the agents saved on this computer, each read with its own token
-│   └── delete [options] <handle>         delete an agent at Relay, then remove its saved token from this computer
-├── whoami                            show the current Relay identity without printing its token
-├── logout                            remove saved Relay sign-in credentials from this computer
-├── connect [options] [agent]         connect a runtime to Relay, new or by token, and wait for its first reply
-├── watch [handle]                    see messages arrive and the agent reply, live
-├── listen [options]                  forward each event to a route on this computer, signed like a webhook, while you develop
-├── doctor [options]                  check every saved agent and this computer, and say what to fix
-├── login [options]                   sign in to Relay Console from this computer
-├── organization|org                  manage the signed-in Relay organization
+│       ├── list                              list where Relay sends this agent's events
+│       ├── get <subscription-id>             show one webhook subscription
+│       ├── create [options]                  send chosen events to an address you own
+│       ├── update [options] <subscription-id>  change a subscription's address, events or state
+│       └── delete <subscription-id>          stop sending events to that address
+├── contact-card                      set the name and picture people see
+│   ├── get [options]                     show this agent's name and picture
+│   ├── setup [options]                   set this agent's name and picture the first time
+│   ├── update|set [options]              change this agent's name or picture
+│   └── share <chat-id>                   share this agent's card into a chat
+├── profiles                          add, use, remove and list saved profiles
+│   ├── add [options] <name>              add a profile without a token
+│   ├── use <name>                        select the current profile
+│   ├── remove <name>                     remove a profile that is not current
+│   └── list                              list profiles without their tokens
+├── agents                            create, list and delete saved agents
+│   ├── create [options]                  create an agent and save its token privately
+│   ├── list [options]                    list the agents saved on this computer
+│   └── delete [options] <handle>         delete an agent and remove its saved token
+├── whoami                            show who is signed in, without the token
+├── logout                            remove the saved sign-in
+├── connect [options] [agent]         connect a coding agent and wait for a reply
+├── watch [handle]                    see messages arrive and replies go out, live
+├── listen [options]                  forward each event to a route on this computer
+├── doctor [options]                  check this computer and every saved agent
+├── login [options]                   sign in to Relay Console
+├── organization|org                  manage the signed-in organization
 │   ├── show                              show the signed-in organization
 │   └── update [options]                  change the organization name or website
 └── help [command]                     show what a command does and the options it takes
@@ -5019,13 +5003,13 @@ Captured with `relaymessenger`. Help output describes the command; it does not p
 ```text captured-output
 Usage: relaymessenger watch [options] [handle]
 
-see messages arrive and the agent reply, live
+see messages arrive and replies go out, live
 
 Arguments:
-  handle      the agent to watch; leave it out for the profile Relay would use
+  handle      the agent to watch
 
 Options:
-  -h, --help  display help for command
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -5061,14 +5045,14 @@ Select a profile and control CLI input and output.
 The root help uses `VERSION`, `USAGE`, `TOPICS`, and `COMMANDS`. It has no root `Options` section. These global options are registered by the same published CLI and apply before a command:
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 Use `--profile <name>` to select a saved profile. `--no-input` and `--non-interactive` fail with exit 2 when a command needs an answer. `--verbose` writes request details to stderr.
@@ -5132,7 +5116,7 @@ Captured with `relaymessenger`. Help output describes the command; it does not p
 
 # Create an agent
 
-> Create an agent and save its token privately on this computer.
+> Create an agent and save its token privately.
 
 Source: https://docs.relayapp.im/cli/reference/agents-create.md
 
@@ -5147,17 +5131,17 @@ npx relaymessenger agents create
 ```text captured-output
 Usage: relaymessenger agents create [options]
 
-create an agent and save its token privately on this computer
+create an agent and save its token privately
 
 Options:
-  --handle <handle>           the agent's handle: one word, 3 to 32 lowercase letters, numbers or underscores
-  --name <name>               the name people see next to this agent
-  --about <text>              the one line people see above your agent's first message
-  --image <path-or-url>       a picture: a file on this computer, or an https:// address
-  --image-url <url>           a picture at an https:// address (same as --image with a URL)
-  --image-recipe <json-file>  a Relay picture recipe file; needs --image or --image-url as well
-  --json                      print the result as JSON
-  -h, --help                  display help for command
+  --handle <handle>           the agent's handle
+  --name <name>               the display name
+  --about <text>              the line above the first message
+  --image <path-or-url>       a picture file or https:// address
+  --image-url <url>           a picture at an https:// address
+  --image-recipe <json-file>  a Relay picture recipe accompanying the picture
+  --json                      JSON output
+  -h, --help                  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -5166,27 +5150,27 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  --handle <handle>           the agent's handle: one word, 3 to 32 lowercase letters, numbers or underscores
-  --name <name>               the name people see next to this agent
-  --about <text>              the one line people see above your agent's first message
-  --image <path-or-url>       a picture: a file on this computer, or an https:// address
-  --image-url <url>           a picture at an https:// address (same as --image with a URL)
-  --image-recipe <json-file>  a Relay picture recipe file; needs --image or --image-url as well
-  --json                      print the result as JSON
-  -h, --help                  display help for command
+  --handle <handle>           the agent's handle
+  --name <name>               the display name
+  --about <text>              the line above the first message
+  --image <path-or-url>       a picture file or https:// address
+  --image-url <url>           a picture at an https:// address
+  --image-recipe <json-file>  a Relay picture recipe accompanying the picture
+  --json                      JSON output
+  -h, --help                  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -5218,7 +5202,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # List agents
 
-> List the agents saved on this computer, each read with its own token.
+> List the agents saved on this computer.
 
 Source: https://docs.relayapp.im/cli/reference/agents-list.md
 
@@ -5233,11 +5217,11 @@ npx relaymessenger agents list
 ```text captured-output
 Usage: relaymessenger agents list [options]
 
-list the agents saved on this computer, each read with its own token
+list the agents saved on this computer
 
 Options:
-  --json      print the result as JSON
-  -h, --help  display help for command
+  --json      JSON output
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -5246,21 +5230,21 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  --json      print the result as JSON
-  -h, --help  display help for command
+  --json      JSON output
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -5292,7 +5276,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Delete an agent
 
-> Delete an agent at Relay, then remove its saved token from this computer.
+> Delete an agent and remove its saved token.
 
 Source: https://docs.relayapp.im/cli/reference/agents-delete.md
 
@@ -5307,14 +5291,14 @@ npx relaymessenger agents delete
 ```text captured-output
 Usage: relaymessenger agents delete [options] <handle>
 
-delete an agent at Relay, then remove its saved token from this computer
+delete an agent and remove its saved token
 
 Arguments:
   handle      agent handle
 
 Options:
-  --json      print the result as JSON
-  -h, --help  display help for command
+  --json      JSON output
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -5323,21 +5307,21 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  --json      print the result as JSON
-  -h, --help  display help for command
+  --json      JSON output
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -5425,7 +5409,7 @@ For local runtime development, use the [runtime connection guide](/cli/connect).
 
 # Save a token
 
-> Save a token for this computer, from a hidden prompt, a pipe, or RELAY_AGENT_TOKEN.
+> Save a token for this computer.
 
 Source: https://docs.relayapp.im/cli/reference/auth-login.md
 
@@ -5440,11 +5424,11 @@ npx relaymessenger auth login
 ```text captured-output
 Usage: relaymessenger auth login [options]
 
-save a token for this computer, from a hidden prompt, a pipe, or RELAY_AGENT_TOKEN
+save a token for this computer
 
 Options:
-  --with-token  read the token from a pipe instead of asking for it
-  -h, --help    display help for command
+  --with-token  an existing token from a pipe
+  -h, --help    help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -5453,21 +5437,21 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  --with-token  read the token from a pipe instead of asking for it
-  -h, --help    display help for command
+  --with-token  an existing token from a pipe
+  -h, --help    help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -5499,7 +5483,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Check the token
 
-> Show which token Relay would use, and where it comes from, without printing it.
+> Show the token source without revealing the token.
 
 Source: https://docs.relayapp.im/cli/reference/auth-status.md
 
@@ -5514,10 +5498,10 @@ npx relaymessenger auth status
 ```text captured-output
 Usage: relaymessenger auth status [options]
 
-show which token Relay would use, and where it comes from, without printing it
+show the token source without revealing the token
 
 Options:
-  -h, --help  display help for command
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -5526,20 +5510,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help  display help for command
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -5589,7 +5573,7 @@ Usage: relaymessenger auth logout [options]
 remove the selected profile's stored token
 
 Options:
-  -h, --help  display help for command
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -5598,20 +5582,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help  display help for command
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -5643,7 +5627,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Sign in to Relay Console
 
-> Sign in to Relay Console from this computer.
+> Sign in to Relay Console.
 
 Source: https://docs.relayapp.im/cli/reference/login.md
 
@@ -5658,12 +5642,12 @@ npx relaymessenger login
 ```text captured-output
 Usage: relaymessenger login [options]
 
-sign in to Relay Console from this computer
+sign in to Relay Console
 
 Options:
-  --with-token        read an organization API key from a pipe
-  --website <domain>  set the organization website after sign-in
-  -h, --help          display help for command
+  --with-token        an existing token from a pipe
+  --website <domain>  organization website; empty value clears it
+  -h, --help          help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -5672,22 +5656,22 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  --with-token        read an organization API key from a pipe
-  --website <domain>  set the organization website after sign-in
-  -h, --help          display help for command
+  --with-token        an existing token from a pipe
+  --website <domain>  organization website; empty value clears it
+  -h, --help          help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -5719,7 +5703,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Log out
 
-> Remove saved Relay sign-in credentials from this computer.
+> Remove the saved sign-in.
 
 Source: https://docs.relayapp.im/cli/reference/logout.md
 
@@ -5734,10 +5718,10 @@ npx relaymessenger logout
 ```text captured-output
 Usage: relaymessenger logout [options]
 
-remove saved Relay sign-in credentials from this computer
+remove the saved sign-in
 
 Options:
-  -h, --help  display help for command
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -5746,20 +5730,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help  display help for command
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -5791,7 +5775,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Show the identity
 
-> Show the current Relay identity without printing its token.
+> Show who is signed in, without the token.
 
 Source: https://docs.relayapp.im/cli/reference/whoami.md
 
@@ -5806,10 +5790,10 @@ npx relaymessenger whoami
 ```text captured-output
 Usage: relaymessenger whoami [options]
 
-show the current Relay identity without printing its token
+show who is signed in, without the token
 
 Options:
-  -h, --help  display help for command
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -5818,20 +5802,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help  display help for command
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -5863,7 +5847,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Add a profile
 
-> Add a profile without storing a token.
+> Add a profile without a token.
 
 Source: https://docs.relayapp.im/cli/reference/profiles-add.md
 
@@ -5878,13 +5862,13 @@ npx relaymessenger profiles add
 ```text captured-output
 Usage: relaymessenger profiles add [options] <name>
 
-add a profile without storing a token
+add a profile without a token
 
 Arguments:
   name        profile name
 
 Options:
-  -h, --help  display help for command
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -5893,20 +5877,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help  display help for command
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -5938,7 +5922,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Choose the default profile
 
-> Select the default local profile.
+> Select the current profile.
 
 Source: https://docs.relayapp.im/cli/reference/profiles-use.md
 
@@ -5953,13 +5937,13 @@ npx relaymessenger profiles use
 ```text captured-output
 Usage: relaymessenger profiles use [options] <name>
 
-select the default local profile
+select the current profile
 
 Arguments:
   name        profile name
 
 Options:
-  -h, --help  display help for command
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -5968,20 +5952,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help  display help for command
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -6013,7 +5997,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Remove a profile
 
-> Remove a non-current profile and its token.
+> Remove a profile that is not current.
 
 Source: https://docs.relayapp.im/cli/reference/profiles-remove.md
 
@@ -6028,13 +6012,13 @@ npx relaymessenger profiles remove
 ```text captured-output
 Usage: relaymessenger profiles remove [options] <name>
 
-remove a non-current profile and its token
+remove a profile that is not current
 
 Arguments:
   name        profile name
 
 Options:
-  -h, --help  display help for command
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -6043,20 +6027,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help  display help for command
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -6088,7 +6072,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # List profiles
 
-> List profiles without revealing tokens.
+> List profiles without their tokens.
 
 Source: https://docs.relayapp.im/cli/reference/profiles-list.md
 
@@ -6103,10 +6087,10 @@ npx relaymessenger profiles list
 ```text captured-output
 Usage: relaymessenger profiles list [options]
 
-list profiles without revealing tokens
+list profiles without their tokens
 
 Options:
-  -h, --help  display help for command
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -6115,20 +6099,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help  display help for command
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -6160,7 +6144,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # List chats
 
-> List the chats this agent is in, a page at a time.
+> List this agent's chats, one page at a time.
 
 Source: https://docs.relayapp.im/cli/reference/chats-list.md
 
@@ -6175,12 +6159,12 @@ npx relaymessenger chats list
 ```text captured-output
 Usage: relaymessenger chats list [options]
 
-list the chats this agent is in, a page at a time
+list this agent's chats, one page at a time
 
 Options:
-  --cursor <cursor>  continue from the cursor returned by the previous page
+  --cursor <cursor>  the cursor from the previous page
   --limit <number>   page size
-  -h, --help         display help for command
+  -h, --help         help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -6189,22 +6173,22 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  --cursor <cursor>  continue from the cursor returned by the previous page
+  --cursor <cursor>  the cursor from the previous page
   --limit <number>   page size
-  -h, --help         display help for command
+  -h, --help         help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -6257,7 +6241,7 @@ Arguments:
   chat-id     the chat ID
 
 Options:
-  -h, --help  display help for command
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -6266,20 +6250,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help  display help for command
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -6311,7 +6295,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Create a chat
 
-> Create a Chat with at most 7 total participants, including the sender.
+> Create a chat with up to 7 participants.
 
 Source: https://docs.relayapp.im/cli/reference/chats-create.md
 
@@ -6326,14 +6310,14 @@ npx relaymessenger chats create
 ```text captured-output
 Usage: relaymessenger chats create [options]
 
-create a Chat with at most 7 total participants, including the sender
+create a chat with up to 7 participants
 
 Options:
-  --from <handle>          sender Handle
-  --to <handles...>        at most 6 recipient Handles; repeat --to or use a comma-separated list
+  --from <handle>          sender handle
+  --to <handles...>        up to six recipients, repeated or comma-separated
   --text <text>            the text to send
-  --idempotency-key <key>  reuse this key to avoid sending the same request twice
-  -h, --help               display help for command
+  --idempotency-key <key>  duplicate-send prevention key
+  -h, --help               help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -6342,24 +6326,24 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  --from <handle>          sender Handle
-  --to <handles...>        at most 6 recipient Handles; repeat --to or use a comma-separated list
+  --from <handle>          sender handle
+  --to <handles...>        up to six recipients, repeated or comma-separated
   --text <text>            the text to send
-  --idempotency-key <key>  reuse this key to avoid sending the same request twice
-  -h, --help               display help for command
+  --idempotency-key <key>  duplicate-send prevention key
+  -h, --help               help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -6391,7 +6375,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Rename a group
 
-> Rename a group chat, or set or clear its picture.
+> Rename a group chat or change its picture.
 
 Source: https://docs.relayapp.im/cli/reference/chats-update.md
 
@@ -6406,7 +6390,7 @@ npx relaymessenger chats update
 ```text captured-output
 Usage: relaymessenger chats update [options] <chat-id>
 
-rename a group chat, or set or clear its picture
+rename a group chat or change its picture
 
 Arguments:
   chat-id                                    the chat ID
@@ -6414,8 +6398,8 @@ Arguments:
 Options:
   --display-name <name>                      the name people see for this chat
   --group-icon <attachment-id-or-https-url>  the picture for this chat
-  --clear-group-icon                         remove the picture from this chat
-  -h, --help                                 display help for command
+  --clear-group-icon                         no chat picture
+  -h, --help                                 help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -6426,21 +6410,21 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ```text captured-output
   --display-name <name>                      the name people see for this chat
   --group-icon <attachment-id-or-https-url>  the picture for this chat
-  --clear-group-icon                         remove the picture from this chat
-  -h, --help                                 display help for command
+  --clear-group-icon                         no chat picture
+  -h, --help                                 help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -6472,7 +6456,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Leave a chat
 
-> Leave a chat; it stays for everyone else.
+> Leave a chat.
 
 Source: https://docs.relayapp.im/cli/reference/chats-leave.md
 
@@ -6487,13 +6471,13 @@ npx relaymessenger chats leave
 ```text captured-output
 Usage: relaymessenger chats leave [options] <chat-id>
 
-leave a chat; it stays for everyone else
+leave a chat
 
 Arguments:
   chat-id     the chat ID
 
 Options:
-  -h, --help  display help for command
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -6502,20 +6486,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help  display help for command
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -6547,7 +6531,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Mark a chat as read
 
-> Mark everything in a chat as read.
+> Mark a chat as read.
 
 Source: https://docs.relayapp.im/cli/reference/chats-read.md
 
@@ -6562,13 +6546,13 @@ npx relaymessenger chats read
 ```text captured-output
 Usage: relaymessenger chats read [options] <chat-id>
 
-mark everything in a chat as read
+mark a chat as read
 
 Arguments:
   chat-id     the chat ID
 
 Options:
-  -h, --help  display help for command
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -6577,20 +6561,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help  display help for command
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -6622,7 +6606,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Send a voice memo
 
-> Send a voice memo to a chat, by attachment or by address.
+> Send a voice memo to a chat.
 
 Source: https://docs.relayapp.im/cli/reference/chats-voice-memo.md
 
@@ -6637,15 +6621,15 @@ npx relaymessenger chats voice-memo
 ```text captured-output
 Usage: relaymessenger chats voice-memo [options] <chat-id>
 
-send a voice memo to a chat, by attachment or by address
+send a voice memo to a chat
 
 Arguments:
   chat-id               the chat ID
 
 Options:
-  --attachment-id <id>  the completed attachment to send
+  --attachment-id <id>  the completed attachment
   --url <url>           the address of the audio to send
-  -h, --help            display help for command
+  -h, --help            help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -6654,22 +6638,22 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  --attachment-id <id>  the completed attachment to send
+  --attachment-id <id>  the completed attachment
   --url <url>           the address of the audio to send
-  -h, --help            display help for command
+  -h, --help            help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -6701,7 +6685,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # List messages
 
-> List the messages in a chat, a page at a time.
+> List a chat's messages, one page at a time.
 
 Source: https://docs.relayapp.im/cli/reference/chats-messages-list.md
 
@@ -6716,16 +6700,16 @@ npx relaymessenger chats messages list
 ```text captured-output
 Usage: relaymessenger chats messages list [options] <chat-id>
 
-list the messages in a chat, a page at a time
+list a chat's messages, one page at a time
 
 Arguments:
   chat-id            the chat ID
 
 Options:
-  --cursor <cursor>  continue from the cursor returned by the previous page
+  --cursor <cursor>  the cursor from the previous page
   --limit <number>   page size
-  --order <order>    asc (default, oldest first) or desc (newest first)
-  -h, --help         display help for command
+  --order <order>    asc (oldest first) or desc (newest first)
+  -h, --help         help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -6734,23 +6718,23 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  --cursor <cursor>  continue from the cursor returned by the previous page
+  --cursor <cursor>  the cursor from the previous page
   --limit <number>   page size
-  --order <order>    asc (default, oldest first) or desc (newest first)
-  -h, --help         display help for command
+  --order <order>    asc (oldest first) or desc (newest first)
+  -h, --help         help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -6804,9 +6788,9 @@ Arguments:
 
 Options:
   --text <text>            the text to send
-  --idempotency-key <key>  reuse this key to avoid sending the same request twice
-  --silent                 deliver without a banner or sound
-  -h, --help               display help for command
+  --idempotency-key <key>  duplicate-send prevention key
+  --silent                 delivery without a banner or sound
+  -h, --help               help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -6816,22 +6800,22 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 ```text captured-output
   --text <text>            the text to send
-  --idempotency-key <key>  reuse this key to avoid sending the same request twice
-  --silent                 deliver without a banner or sound
-  -h, --help               display help for command
+  --idempotency-key <key>  duplicate-send prevention key
+  --silent                 delivery without a banner or sound
+  -h, --help               help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -6882,12 +6866,12 @@ add an agent to a chat
 
 Arguments:
   chat-id            the chat ID
-  handle             participant Handle
+  handle             participant handle
 
 Options:
-  --hide-history     the new agent sees only messages sent after it joins (this is what Relay does by default)
-  --no-hide-history  the new agent can also read the messages sent before it joined
-  -h, --help         display help for command
+  --hide-history     new messages only for the added agent
+  --no-hide-history  old messages visible to the added agent
+  -h, --help         help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -6896,22 +6880,22 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  --hide-history     the new agent sees only messages sent after it joins (this is what Relay does by default)
-  --no-hide-history  the new agent can also read the messages sent before it joined
-  -h, --help         display help for command
+  --hide-history     new messages only for the added agent
+  --no-hide-history  old messages visible to the added agent
+  -h, --help         help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -6962,10 +6946,10 @@ remove an agent from a chat
 
 Arguments:
   chat-id     the chat ID
-  handle      participant Handle
+  handle      participant handle
 
 Options:
-  -h, --help  display help for command
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -6974,20 +6958,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help  display help for command
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -7019,7 +7003,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Start typing
 
-> Show that this agent is typing in a chat.
+> Show this agent as typing.
 
 Source: https://docs.relayapp.im/cli/reference/chats-typing-start.md
 
@@ -7034,13 +7018,13 @@ npx relaymessenger chats typing start
 ```text captured-output
 Usage: relaymessenger chats typing start [options] <chat-id>
 
-show that this agent is typing in a chat
+show this agent as typing
 
 Arguments:
   chat-id     the chat ID
 
 Options:
-  -h, --help  display help for command
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -7049,20 +7033,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help  display help for command
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -7094,7 +7078,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Stop typing
 
-> Stop showing that this agent is typing.
+> Stop showing this agent as typing.
 
 Source: https://docs.relayapp.im/cli/reference/chats-typing-stop.md
 
@@ -7109,13 +7093,13 @@ npx relaymessenger chats typing stop
 ```text captured-output
 Usage: relaymessenger chats typing stop [options] <chat-id>
 
-stop showing that this agent is typing
+stop showing this agent as typing
 
 Arguments:
   chat-id     the chat ID
 
 Options:
-  -h, --help  display help for command
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -7124,20 +7108,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help  display help for command
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -7187,7 +7171,7 @@ Usage: relaymessenger organization show [options]
 show the signed-in organization
 
 Options:
-  -h, --help  display help for command
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -7196,20 +7180,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help  display help for command
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -7259,9 +7243,9 @@ Usage: relaymessenger organization update [options]
 change the organization name or website
 
 Options:
-  --name <name>       organization display name
-  --website <domain>  organization website; use an empty value to clear it
-  -h, --help          display help for command
+  --name <name>       the display name
+  --website <domain>  organization website; empty value clears it
+  -h, --help          help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -7270,22 +7254,22 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  --name <name>       organization display name
-  --website <domain>  organization website; use an empty value to clear it
-  -h, --help          display help for command
+  --name <name>       the display name
+  --website <domain>  organization website; empty value clears it
+  -h, --help          help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -7317,7 +7301,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Send to handles
 
-> Start or reuse a chat with the handles you name, and send one message.
+> Send a message to the handles you name.
 
 Source: https://docs.relayapp.im/cli/reference/messages-send.md
 
@@ -7332,14 +7316,14 @@ npx relaymessenger messages send
 ```text captured-output
 Usage: relaymessenger messages send [options]
 
-start or reuse a chat with the handles you name, and send one message
+send a message to the handles you name
 
 Options:
-  --to <handles...>        at most 6 recipient Handles; repeat --to or use a comma-separated list
+  --to <handles...>        up to six recipients, repeated or comma-separated
   --text <text>            the text to send
-  --idempotency-key <key>  reuse this key to avoid sending the same request twice
-  --silent                 deliver without a banner or sound
-  -h, --help               display help for command
+  --idempotency-key <key>  duplicate-send prevention key
+  --silent                 delivery without a banner or sound
+  -h, --help               help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -7348,24 +7332,24 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  --to <handles...>        at most 6 recipient Handles; repeat --to or use a comma-separated list
+  --to <handles...>        up to six recipients, repeated or comma-separated
   --text <text>            the text to send
-  --idempotency-key <key>  reuse this key to avoid sending the same request twice
-  --silent                 deliver without a banner or sound
-  -h, --help               display help for command
+  --idempotency-key <key>  duplicate-send prevention key
+  --silent                 delivery without a banner or sound
+  -h, --help               help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -7418,7 +7402,7 @@ Arguments:
   message-id  the message ID
 
 Options:
-  -h, --help  display help for command
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -7427,20 +7411,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help  display help for command
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -7472,7 +7456,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # List replies
 
-> List the replies to a message, a page at a time.
+> List the replies to a message.
 
 Source: https://docs.relayapp.im/cli/reference/messages-thread.md
 
@@ -7487,16 +7471,16 @@ npx relaymessenger messages thread
 ```text captured-output
 Usage: relaymessenger messages thread [options] <message-id>
 
-list the replies to a message, a page at a time
+list the replies to a message
 
 Arguments:
   message-id         the message ID
 
 Options:
-  --cursor <cursor>  continue from the cursor returned by the previous page
+  --cursor <cursor>  the cursor from the previous page
   --limit <number>   page size
-  --order <order>    asc or desc
-  -h, --help         display help for command
+  --order <order>    asc (oldest first) or desc (newest first)
+  -h, --help         help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -7505,23 +7489,23 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  --cursor <cursor>  continue from the cursor returned by the previous page
+  --cursor <cursor>  the cursor from the previous page
   --limit <number>   page size
-  --order <order>    asc or desc
-  -h, --help         display help for command
+  --order <order>    asc (oldest first) or desc (newest first)
+  -h, --help         help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -7576,9 +7560,9 @@ Arguments:
 Options:
   --operation <operation>  add or remove
   --type <type>            the reaction type to use
-  --custom-emoji <emoji>   the emoji to use for a custom reaction
-  --part-index <number>    which part of the message to react to, counting from 0
-  -h, --help               display help for command
+  --custom-emoji <emoji>   the custom reaction emoji
+  --part-index <number>    the message part index, counting from zero
+  -h, --help               help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -7589,22 +7573,22 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ```text captured-output
   --operation <operation>  add or remove
   --type <type>            the reaction type to use
-  --custom-emoji <emoji>   the emoji to use for a custom reaction
-  --part-index <number>    which part of the message to react to, counting from 0
-  -h, --help               display help for command
+  --custom-emoji <emoji>   the custom reaction emoji
+  --part-index <number>    the message part index, counting from zero
+  -h, --help               help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -7636,7 +7620,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Reserve an upload
 
-> Reserve a place for a file at Relay, and get the address to upload it to.
+> Reserve a file slot and get its upload address.
 
 Source: https://docs.relayapp.im/cli/reference/attachments-allocate.md
 
@@ -7651,13 +7635,13 @@ npx relaymessenger attachments allocate
 ```text captured-output
 Usage: relaymessenger attachments allocate [options]
 
-reserve a place for a file at Relay, and get the address to upload it to
+reserve a file slot and get its upload address
 
 Options:
   --filename <name>      the name of the uploaded file
-  --content-type <type>  the MIME type of the file
+  --content-type <type>  file MIME type
   --size <bytes>         file size
-  -h, --help             display help for command
+  -h, --help             help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -7667,22 +7651,22 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 ```text captured-output
   --filename <name>      the name of the uploaded file
-  --content-type <type>  the MIME type of the file
+  --content-type <type>  file MIME type
   --size <bytes>         file size
-  -h, --help             display help for command
+  -h, --help             help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -7714,7 +7698,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Upload a file
 
-> Upload a file from this computer in one step.
+> Upload a file from this computer.
 
 Source: https://docs.relayapp.im/cli/reference/attachments-upload.md
 
@@ -7729,14 +7713,14 @@ npx relaymessenger attachments upload
 ```text captured-output
 Usage: relaymessenger attachments upload [options] <file>
 
-upload a file from this computer in one step
+upload a file from this computer
 
 Arguments:
   file                   the file to upload
 
 Options:
-  --content-type <type>  the MIME type of the file
-  -h, --help             display help for command
+  --content-type <type>  file MIME type
+  -h, --help             help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -7745,21 +7729,21 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  --content-type <type>  the MIME type of the file
-  -h, --help             display help for command
+  --content-type <type>  file MIME type
+  -h, --help             help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -7791,7 +7775,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Show an attachment
 
-> Show one file this agent uploaded.
+> Show one uploaded file.
 
 Source: https://docs.relayapp.im/cli/reference/attachments-get.md
 
@@ -7806,13 +7790,13 @@ npx relaymessenger attachments get
 ```text captured-output
 Usage: relaymessenger attachments get [options] <attachment-id>
 
-show one file this agent uploaded
+show one uploaded file
 
 Arguments:
   attachment-id  the attachment ID
 
 Options:
-  -h, --help     display help for command
+  -h, --help     help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -7821,20 +7805,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help     display help for command
+  -h, --help     help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -7866,7 +7850,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Delete an attachment
 
-> Delete a file this agent uploaded.
+> Delete an uploaded file.
 
 Source: https://docs.relayapp.im/cli/reference/attachments-delete.md
 
@@ -7881,13 +7865,13 @@ npx relaymessenger attachments delete
 ```text captured-output
 Usage: relaymessenger attachments delete [options] <attachment-id>
 
-delete a file this agent uploaded
+delete an uploaded file
 
 Arguments:
   attachment-id  the attachment ID
 
 Options:
-  -h, --help     display help for command
+  -h, --help     help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -7896,20 +7880,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help     display help for command
+  -h, --help     help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -7959,7 +7943,7 @@ Usage: relaymessenger blocked-handles list [options]
 list the handles this agent has blocked
 
 Options:
-  -h, --help  display help for command
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -7968,20 +7952,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help  display help for command
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -8013,7 +7997,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Block a handle
 
-> Block a handle, so it can no longer reach this agent.
+> Block a handle from reaching this agent.
 
 Source: https://docs.relayapp.im/cli/reference/blocked-handles-add.md
 
@@ -8028,14 +8012,14 @@ npx relaymessenger blocked-handles add
 ```text captured-output
 Usage: relaymessenger blocked-handles add [options] <handle>
 
-block a handle, so it can no longer reach this agent
+block a handle from reaching this agent
 
 Arguments:
-  handle             Handle
+  handle             handle
 
 Options:
-  --reason <reason>  a note explaining why this handle is blocked
-  -h, --help         display help for command
+  --reason <reason>  the reason for blocking this handle
+  -h, --help         help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -8044,21 +8028,21 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  --reason <reason>  a note explaining why this handle is blocked
-  -h, --help         display help for command
+  --reason <reason>  the reason for blocking this handle
+  -h, --help         help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -8108,10 +8092,10 @@ Usage: relaymessenger blocked-handles remove [options] <handle>
 unblock a handle
 
 Arguments:
-  handle      Handle
+  handle      handle
 
 Options:
-  -h, --help  display help for command
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -8120,20 +8104,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help  display help for command
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -8165,7 +8149,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # List event types
 
-> List every event type Relay can send, and where each is documented.
+> List every event type Relay can send.
 
 Source: https://docs.relayapp.im/cli/reference/webhooks-events.md
 
@@ -8180,10 +8164,10 @@ npx relaymessenger webhooks events
 ```text captured-output
 Usage: relaymessenger webhooks events [options]
 
-list every event type Relay can send, and where each is documented
+list every event type Relay can send
 
 Options:
-  -h, --help  display help for command
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -8192,20 +8176,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help  display help for command
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -8237,7 +8221,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Forward events locally
 
-> Forward each event to a route on this computer, signed like a webhook, while you develop.
+> Forward each event to a route on this computer.
 
 Source: https://docs.relayapp.im/cli/reference/listen.md
 
@@ -8252,11 +8236,11 @@ npx relaymessenger listen
 ```text captured-output
 Usage: relaymessenger listen [options]
 
-forward each event to a route on this computer, signed like a webhook, while you develop
+forward each event to a route on this computer
 
 Options:
-  --forward-to <url>  the route on this computer to POST each event to, for example http://localhost:3000/relay-events
-  -h, --help          display help for command
+  --forward-to <url>  local address for signed event copies
+  -h, --help          help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -8265,21 +8249,21 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  --forward-to <url>  the route on this computer to POST each event to, for example http://localhost:3000/relay-events
-  -h, --help          display help for command
+  --forward-to <url>  local address for signed event copies
+  -h, --help          help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -8311,7 +8295,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # List subscriptions
 
-> List the addresses Relay sends this agent's events to.
+> List where Relay sends this agent's events.
 
 Source: https://docs.relayapp.im/cli/reference/webhooks-subscriptions-list.md
 
@@ -8326,10 +8310,10 @@ npx relaymessenger webhooks subscriptions list
 ```text captured-output
 Usage: relaymessenger webhooks subscriptions list [options]
 
-list the addresses Relay sends this agent's events to
+list where Relay sends this agent's events
 
 Options:
-  -h, --help  display help for command
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -8338,20 +8322,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help  display help for command
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -8383,7 +8367,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Show a subscription
 
-> Show one address Relay sends events to.
+> Show one webhook subscription.
 
 Source: https://docs.relayapp.im/cli/reference/webhooks-subscriptions-get.md
 
@@ -8398,13 +8382,13 @@ npx relaymessenger webhooks subscriptions get
 ```text captured-output
 Usage: relaymessenger webhooks subscriptions get [options] <subscription-id>
 
-show one address Relay sends events to
+show one webhook subscription
 
 Arguments:
   subscription-id  the webhook subscription ID
 
 Options:
-  -h, --help       display help for command
+  -h, --help       help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -8413,20 +8397,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help       display help for command
+  -h, --help       help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -8458,7 +8442,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Create a subscription
 
-> Tell Relay to send the events you choose to an address you own.
+> Send chosen events to an address you own.
 
 Source: https://docs.relayapp.im/cli/reference/webhooks-subscriptions-create.md
 
@@ -8473,12 +8457,12 @@ npx relaymessenger webhooks subscriptions create
 ```text captured-output
 Usage: relaymessenger webhooks subscriptions create [options]
 
-tell Relay to send the events you choose to an address you own
+send chosen events to an address you own
 
 Options:
   --target-url <url>   the address that receives webhook events
   --event <events...>  the event types this subscription receives
-  -h, --help           display help for command
+  -h, --help           help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -8489,20 +8473,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ```text captured-output
   --target-url <url>   the address that receives webhook events
   --event <events...>  the event types this subscription receives
-  -h, --help           display help for command
+  -h, --help           help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -8534,7 +8518,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Update a subscription
 
-> Change the address, the events, or whether Relay sends to it at all.
+> Change a subscription's address, events or state.
 
 Source: https://docs.relayapp.im/cli/reference/webhooks-subscriptions-update.md
 
@@ -8549,7 +8533,7 @@ npx relaymessenger webhooks subscriptions update
 ```text captured-output
 Usage: relaymessenger webhooks subscriptions update [options] <subscription-id>
 
-change the address, the events, or whether Relay sends to it at all
+change a subscription's address, events or state
 
 Arguments:
   subscription-id      the webhook subscription ID
@@ -8557,9 +8541,9 @@ Arguments:
 Options:
   --target-url <url>   the address that receives webhook events
   --event <events...>  the event types this subscription receives
-  --active             enable delivery to this subscription
-  --inactive           disable delivery to this subscription
-  -h, --help           display help for command
+  --active             delivery enabled
+  --inactive           delivery disabled
+  -h, --help           help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -8570,22 +8554,22 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ```text captured-output
   --target-url <url>   the address that receives webhook events
   --event <events...>  the event types this subscription receives
-  --active             enable delivery to this subscription
-  --inactive           disable delivery to this subscription
-  -h, --help           display help for command
+  --active             delivery enabled
+  --inactive           delivery disabled
+  -h, --help           help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -8617,7 +8601,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Delete a subscription
 
-> Stop Relay sending events to that address.
+> Stop sending events to that address.
 
 Source: https://docs.relayapp.im/cli/reference/webhooks-subscriptions-delete.md
 
@@ -8632,13 +8616,13 @@ npx relaymessenger webhooks subscriptions delete
 ```text captured-output
 Usage: relaymessenger webhooks subscriptions delete [options] <subscription-id>
 
-stop Relay sending events to that address
+stop sending events to that address
 
 Arguments:
   subscription-id  the webhook subscription ID
 
 Options:
-  -h, --help       display help for command
+  -h, --help       help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -8647,20 +8631,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help       display help for command
+  -h, --help       help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -8692,7 +8676,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Show the contact card
 
-> Show the name and picture people see for this agent.
+> Show this agent's name and picture.
 
 Source: https://docs.relayapp.im/cli/reference/contact-card-get.md
 
@@ -8707,11 +8691,11 @@ npx relaymessenger contact-card get
 ```text captured-output
 Usage: relaymessenger contact-card get [options]
 
-show the name and picture people see for this agent
+show this agent's name and picture
 
 Options:
   --handle <handle>  the agent's handle
-  -h, --help         display help for command
+  -h, --help         help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -8721,20 +8705,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 ```text captured-output
   --handle <handle>  the agent's handle
-  -h, --help         display help for command
+  -h, --help         help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -8766,7 +8750,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Set up the contact card
 
-> Set the name and picture people see for this agent, the first time.
+> Set this agent's name and picture the first time.
 
 Source: https://docs.relayapp.im/cli/reference/contact-card-setup.md
 
@@ -8781,14 +8765,14 @@ npx relaymessenger contact-card setup
 ```text captured-output
 Usage: relaymessenger contact-card setup [options]
 
-set the name and picture people see for this agent, the first time
+set this agent's name and picture the first time
 
 Options:
   --handle <handle>   the agent's handle
-  --name <name>       the name people see next to this agent
+  --name <name>       the display name
   --last-name <name>  an optional second name
   --image-url <url>   a picture at an https:// address
-  -h, --help          display help for command
+  -h, --help          help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -8798,23 +8782,23 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 ```text captured-output
   --handle <handle>   the agent's handle
-  --name <name>       the name people see next to this agent
+  --name <name>       the display name
   --last-name <name>  an optional second name
   --image-url <url>   a picture at an https:// address
-  -h, --help          display help for command
+  -h, --help          help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -8846,7 +8830,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Update the contact card
 
-> Change the name or picture people see for this agent.
+> Change this agent's name or picture.
 
 Source: https://docs.relayapp.im/cli/reference/contact-card-update.md
 
@@ -8861,20 +8845,20 @@ npx relaymessenger contact-card update
 ```text captured-output
 Usage: relaymessenger contact-card update|set [options]
 
-change the name or picture people see for this agent
+change this agent's name or picture
 
 Options:
   --handle <handle>           the agent's handle
-  --name <name>               the name people see next to this agent
-  --about <text>              the one line people see above your agent's first message
+  --name <name>               the display name
+  --about <text>              the line above the first message
   --last-name <name>          an optional second name
-  --clear-last-name           remove the second name
-  --image <path-or-url>       a picture: a file on this computer, or an https:// address
+  --clear-last-name           no second name
+  --image <path-or-url>       a picture file or https:// address
   --image-url <url>           a picture at an https:// address
-  --attachment-id <id>        finish setting a picture you already uploaded
-  --image-recipe <json-file>  a Relay picture recipe file to go with the picture
-  --clear-image-url           remove the picture
-  -h, --help                  display help for command
+  --attachment-id <id>        the completed attachment
+  --image-recipe <json-file>  a Relay picture recipe accompanying the picture
+  --clear-image-url           no picture
+  -h, --help                  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -8884,29 +8868,29 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 ```text captured-output
   --handle <handle>           the agent's handle
-  --name <name>               the name people see next to this agent
-  --about <text>              the one line people see above your agent's first message
+  --name <name>               the display name
+  --about <text>              the line above the first message
   --last-name <name>          an optional second name
-  --clear-last-name           remove the second name
-  --image <path-or-url>       a picture: a file on this computer, or an https:// address
+  --clear-last-name           no second name
+  --image <path-or-url>       a picture file or https:// address
   --image-url <url>           a picture at an https:// address
-  --attachment-id <id>        finish setting a picture you already uploaded
-  --image-recipe <json-file>  a Relay picture recipe file to go with the picture
-  --clear-image-url           remove the picture
-  -h, --help                  display help for command
+  --attachment-id <id>        the completed attachment
+  --image-recipe <json-file>  a Relay picture recipe accompanying the picture
+  --clear-image-url           no picture
+  -h, --help                  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -8938,7 +8922,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Share the contact card
 
-> Share this agent's name and picture into a chat.
+> Share this agent's card into a chat.
 
 Source: https://docs.relayapp.im/cli/reference/contact-card-share.md
 
@@ -8953,13 +8937,13 @@ npx relaymessenger contact-card share
 ```text captured-output
 Usage: relaymessenger contact-card share [options] <chat-id>
 
-share this agent's name and picture into a chat
+share this agent's card into a chat
 
 Arguments:
   chat-id     the chat ID
 
 Options:
-  -h, --help  display help for command
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -8968,20 +8952,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help  display help for command
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -9052,6 +9036,11 @@ Captured with `relaymessenger`. Help output describes the command; it does not p
       "detail": "no config file yet, which is fine when the token comes from RELAY_AGENT_TOKEN"
     },
     {
+      "name": "Sign-in",
+      "ok": false,
+      "detail": "Not signed in. Run npx relaymessenger login"
+    },
+    {
       "name": "Token",
       "ok": false,
       "detail": "Profile default has no saved token. Run npx relaymessenger auth login --with-token to save one."
@@ -9089,7 +9078,7 @@ Use the [exit-code table](/cli/reference/help#exit-codes) to distinguish input, 
 
 # Print the docs
 
-> Print Relay's documentation for agents, or the address to read it at.
+> Read Relay documentation or show its address.
 
 Source: https://docs.relayapp.im/cli/reference/docs.md
 
@@ -9104,14 +9093,14 @@ npx relaymessenger docs
 ```text captured-output
 Usage: relaymessenger docs [options] [section]
 
-print Relay's documentation for agents, or the address to read it at
+read Relay documentation or show its address
 
 Arguments:
-  section     print one section of the documentation, by the name docs --list shows
+  section     documentation section
 
 Options:
-  --list      print the section names, one per line
-  -h, --help  display help for command
+  --list      section names, one per line
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -9120,21 +9109,21 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  --list      print the section names, one per line
-  -h, --help  display help for command
+  --list      section names, one per line
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -9166,7 +9155,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Print the config path
 
-> Print where Relay keeps its config file on this computer.
+> Show where Relay keeps its config file.
 
 Source: https://docs.relayapp.im/cli/reference/config-path.md
 
@@ -9181,10 +9170,10 @@ npx relaymessenger config-path
 ```text captured-output
 Usage: relaymessenger config-path [options]
 
-print where Relay keeps its config file on this computer
+show where Relay keeps its config file
 
 Options:
-  -h, --help  display help for command
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -9193,20 +9182,20 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help  display help for command
+  -h, --help  help
 ```
 
 ### Global options
 
 ```text captured-output
-  -V, --version                  print the version
-  --json                         print the result as JSON, errors included
-  --no-input, --non-interactive  never ask a question; fail with exit 2 where one is required
-  --agent <auto|yes|no>          override runtime detection (default auto)
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
   -q, --quiet                    errors only
-  --verbose                      print each request it makes to stderr, as METHOD path status ms
-  --profile <name>               which saved profile on this computer to use
-  --install-skills               install the Relay skill for the runtimes on this computer
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
 ```
 
 ## Exit codes
@@ -9238,7 +9227,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Help
 
-> Show what a command does and the options it takes.
+> Show what a command does.
 
 Source: https://docs.relayapp.im/cli/reference/help.md
 
@@ -9251,52 +9240,15 @@ npx relaymessenger help
 ## Usage
 
 ```text captured-output
-  ⠀⠀⠀⠀⠀⠀⠀⠀⣀⣠⣴⣶⣾⣿⣿⣿⣿⣿⣷⣶⣦⣤⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀
-  ⠀⠀⠀⠀⠀⢀⣴⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣤⡀⠀⠀⠀⠀⠀
-  ⠀⠀⠀⢀⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⡄⠀⠀⠀
-  ⠀⠀⣠⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣦⠀⠀
-  ⠀⢠⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⠀
-  ⠀⣿⣿⣿⣿⣿⣿⣿⣿⡿⠟⠛⠛⠛⠿⣿⣿⣿⣿⣿⣿⠿⠛⠛⠛⠿⣿⣿⣿⣿⣿⡇
-  ⢸⣿⣿⣿⣿⣿⣿⣿⠋⠀⠀⣀⣀⣀⠀⠈⠻⣿⣿⠋⠀⠀⣀⣀⣀⠀⠀⠹⣿⣿⣿⣿
-  ⢸⣿⣿⣿⣿⣿⣿⡇⠀⢠⣾⣿⣿⣿⣷⠀⠀⢻⡇⠀⢀⣾⣿⣿⣿⣷⠀⠀⢹⣿⣿⣿
-  ⠸⣿⣿⣿⣿⣿⣿⣧⣤⣼⣿⣿⣿⣿⣿⣦⣤⣾⣧⣤⣼⣿⣿⣿⣿⣿⣦⣤⣼⣿⣿⡏
-  ⠀⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠃
-  ⠀⠘⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠇⠀
-  ⠀⠀⠘⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠋⠀⠀
-  ⠀⠀⠀⠀⠙⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⠁⠀⠀⠀
-  ⠀⠀⠀⠀⠀⣸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⠋⠀⠀⠀⠀⠀
-  ⠀⠀⠀⠀⢠⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠛⠁⠀⠀⠀⠀⠀⠀⠀
-  ⠀⠀⠀⠀⣾⣿⣿⣿⣿⣿⠿⠛⠛⠛⠻⠿⠟⠛⠛⠋⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-  ⠀⠀⠀⠀⠻⠿⠟⠛⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+Usage: relaymessenger help [options] [command]
 
-Message the agent on your computer from your phone.
+show what a command does
 
-VERSION
-  relaymessenger 0.1.7
+Arguments:
+  command     command to show help for
 
-USAGE
-  relaymessenger [COMMAND]
-
-TOPICS
-  chats                          read and update chats
-  messages                       read, send, and react to Messages
-  attachments                    upload files to Relay, and read or delete the ones you uploaded
-  blocked-handles                block a handle from reaching this agent, unblock one, or list them
-  webhooks                       list the event types Relay can send, and manage where it sends them
-  contact-card                   set the name and picture people see for this agent, and share it into a chat
-  profiles                       manage the saved profiles on this computer: add, choose, remove and list them
-
-COMMANDS
-  connect [options] [agent]      connect a runtime to Relay, new or by token, and wait for its first reply
-  watch [handle]                 see messages arrive and the agent reply, live
-  listen [options]               forward each event to a route on this computer, signed like a webhook, while you develop
-  doctor [options]               check every saved agent and this computer, and say what to fix
-  agents                         create, list and delete the agents saved on this computer
-  login [options]                sign in to Relay Console from this computer
-  whoami                         show the current Relay identity without printing its token
-  logout                         remove saved Relay sign-in credentials from this computer
-  organization|org               manage the signed-in Relay organization
-  help [command]                 show what a command does and the options it takes
+Options:
+  -h, --help  help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
