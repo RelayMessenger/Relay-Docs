@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from api_navigation import validate_api_navigation, page_paths
 from origins import origin, production_text, source_ref, target, STAGING_INSTRUCTION_REFERENCE
+from docs_analytics import validate as validate_analytics
 
 
 def spec(text: str) -> str:
@@ -26,6 +27,7 @@ source_company_pattern = "|".join(
 
 root = Path(__file__).resolve().parents[1]
 config = json.loads((root / "docs.json").read_text())
+validate_analytics(root, target())
 
 agent_instructions = (root / "skill.md").read_text()
 # The first Message is the request (2026-09-09); contact.added still names the

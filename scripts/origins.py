@@ -15,6 +15,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TARGET_FILE = ROOT / ".docs-target"
 
+# Public browser tokens, read from Infisical /shared. Keep this separate from
+# the hostname table so origin validators never mistake a token for a hostname.
+POSTHOG_PROJECTS = json.loads((ROOT / "scripts/posthog-projects.json").read_text())
+POSTHOG_TOKEN_REWRITE = (
+    POSTHOG_PROJECTS["staging"]["token"],
+    POSTHOG_PROJECTS["production"]["token"],
+)
+
 # Staging value -> production value. Order matters only for readability; no
 # key is a substring of another key's replacement, so replacement is stable.
 STAGING_TO_PRODUCTION = {
@@ -157,6 +165,7 @@ def target() -> str:
 
 
 def production_text(text: str) -> str:
+    text = text.replace(*POSTHOG_TOKEN_REWRITE)
     for staging_value, production_value in STAGING_TO_PRODUCTION.items():
         text = text.replace(staging_value, production_value)
     for pattern, replacement in PACKAGE_REWRITES:

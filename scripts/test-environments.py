@@ -124,6 +124,8 @@ class EnvironmentTests(unittest.TestCase):
             self.assertEqual(before, self.digest(staging))
             for tree in (staging, production):
                 for command in (
+                    ["python3", "scripts/test-posthog.py"],
+                    ["node", "--test", "scripts/test-posthog.mjs"],
                     ["python3", "scripts/validate-docs.py"],
                     ["python3", "scripts/validate-staging-origins.py"],
                     ["node", "scripts/check-versions.mjs"],
@@ -164,6 +166,7 @@ class EnvironmentTests(unittest.TestCase):
         # Projection and generated prompts without a network-dependent bundle.
         # Full Redocly/Mintlify rebuild is also exercised by npm run validate.
         for command in (
+            ["python3", "scripts/docs_analytics.py"],
             ["python3", "scripts/build-staging-openapi.py"],
             ["python3", "scripts/build-agent-prompt.py"],
             ["python3", "scripts/build-llms.py"],
