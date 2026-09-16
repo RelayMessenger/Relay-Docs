@@ -38,6 +38,8 @@
       $host: new URL(CONFIG.origin).host,
       $pathname: pathname,
       app: "relay-docs",
+      analytics_source: "relay_docs",
+      docs_analytics_schema_version: 1,
       environment,
     };
     for (const key of safeProperties) {
