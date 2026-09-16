@@ -43,7 +43,7 @@ SOURCES = {
     SKILLS: "skills/relay",
     "integrations/chat-sdk.mdx": "packages/chat-sdk-adapter",
     "integrations/openclaw.mdx": "packages/openclaw",
-    "integrations/claude-code.mdx": "packages/claude-code",
+    "integrations/claude-code.mdx": "packages/cli/src/claude-bridge.ts",
     "integrations/cloudflare-think.mdx": "cookbook/cloudflare-think-agent",
     "integrations/codex.mdx": "plugins/relay",
     "integrations/cursor.mdx": "plugins/relay",
@@ -199,7 +199,8 @@ class IntegrationDocsTests(unittest.TestCase):
     def test_sources_remain_in_maintained_repositories(self):
         for page, directory in SOURCES.items():
             with self.subTest(page=page):
-                source = f"https://github.com/RelayMessenger/Relay-SDK/tree/{source_ref()}/{directory}"
+                kind = "blob" if directory.endswith(".ts") else "tree"
+                source = f"https://github.com/RelayMessenger/Relay-SDK/{kind}/{source_ref()}/{directory}"
                 self.assertTrue(any(link == source or link.startswith(source + "/")
                                     for link in links(read(page))))
         self.assertIn("https://github.com/RelayMessenger/Relay-Hermes", links(read("integrations/hermes.mdx")))
@@ -228,7 +229,7 @@ class IntegrationDocsTests(unittest.TestCase):
             MCP: "npm install --global @relaymessenger/mcp@staging",
             "integrations/openclaw.mdx": "openclaw plugins install @relaymessenger/openclaw-plugin@staging",
             "integrations/hermes.mdx": "hermes plugins install RelayMessenger/Relay-Hermes --enable",
-            "integrations/claude-code.mdx": "/plugin install relay@relay-messenger",
+            "integrations/claude-code.mdx": "npx relaymessenger@staging connect claude-code",
             "integrations/codex.mdx": "codex plugin add relay@relay-plugin-marketplace",
         }
         for page, command in installs.items():
@@ -237,9 +238,9 @@ class IntegrationDocsTests(unittest.TestCase):
             expected(f"npx relaymessenger@{relay_cli_version} --help"),
             commands(read(CLI)),
         )
-        self.assertIn(
-            expected("/plugin marketplace add RelayMessenger/Relay-SDK@staging"),
+        self.assertEqual(
             commands(read("integrations/claude-code.mdx")),
+            [expected("npx relaymessenger@staging connect claude-code")],
         )
         self.assertTrue(any(
             line.startswith("codex plugin marketplace add ") for line in commands(read("integrations/codex.mdx"))
@@ -270,7 +271,7 @@ class IntegrationDocsTests(unittest.TestCase):
         self.assertIn(">=2026.8.1 <2026.9.0", read("integrations/openclaw.mdx"))
         for version in ("3.11", "3.13"):
             self.assertIn(version, read("integrations/hermes.mdx"))
-        self.assertConcept(read("integrations/claude-code.mdx"), r"channels.*research.preview", "Keep channel availability prerequisite")
+        self.assertIn("installed and signed in.", read("integrations/claude-code.mdx"))
         self.assertLink(MCP, "/cli/auth")
         self.assertNotIn("RELAY_API_URL", read(MCP))
         self.assertConcept(read(MCP), r"local.*stdio.*mcp", "MCP must document its local stdio transport")
@@ -345,15 +346,15 @@ class IntegrationDocsTests(unittest.TestCase):
         openclaw = read("integrations/openclaw.mdx")
         claude = read("integrations/claude-code.mdx")
         hermes = read("integrations/hermes.mdx")
-        for text in (openclaw, claude, hermes):
+        for text in (openclaw, hermes):
             self.assertConcept(text, r"zero saved webhook subscriptions", "Native channels use the WebSocket path")
         # 2026-09-12: the "token and API origin" pairing sentence left with the
         # RELAY_API_URL ruling; the CLI pairs them, the page does not.
         for pattern in (r"allowfrom", r"contact uuids", r"stable.id", r"session scope"):
             self.assertConcept(openclaw, pattern, "Keep account-specific admission and session boundaries")
-        self.assertConcept(claude, r"allowlist", "Claude requires explicit sender permission")
-        self.assertConcept(claude, r"permission prompts remain local", "Relay cannot grant Claude tool permissions")
-        self.assertConcept(claude, r"separate.*model contexts", "Sender admission is not context isolation")
+        self.assertIn("Leave the command running: it answers each message with Claude Code from the folder you ran it in. Control-C stops it.", claude)
+        self.assertIn("Claude Code runs without permission prompts in that folder", claude)
+        self.assertIn("each chat keeps its own Claude Code session.", claude)
         for marker in ("RELAY_ALLOWED_CONTACTS", "RELAY_STATE_DIR"):
             self.assertIn(marker, hermes)
         self.assertConcept(hermes, r"active profile", "Hermes credentials resolve per profile")
