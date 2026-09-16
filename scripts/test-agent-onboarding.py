@@ -146,7 +146,7 @@ class AgentOnboardingTests(unittest.TestCase):
         self.assertIn("operationId: deleteAgent", delete)
         self.assertIn("- BearerAuth: []", delete)
         self.assertIn('"409":', delete)
-        self.assertIn("`.dev`", delete)
+        self.assertIn("Delete the developer-managed agent (one with no organization) authenticated by the supplied Agent Token.", " ".join(delete.split()))
         self.assertIn("Organization-managed", delete)
         self.assertNotIn("x-mint:", source)
 
@@ -256,7 +256,7 @@ class AgentOnboardingTests(unittest.TestCase):
                 self.assertNotIn("Relay.createAgent", text)
                 self.assertNotRegex(text, r"(?:POST|--request\s+POST|-X\s+POST)\s+(?:https?://[^\s/]+)?/v1/agents(?:[`\s\"']|$)")
                 self.assertNotRegex(text, r"(?i)anonymous creation|create an agent without a Console account")
-        self.assertIn("existing developer-managed `.dev`", self.page("agents/lifecycle"))
+        self.assertIn("existing developer-managed Agent (one with no organization)", self.page("agents/lifecycle"))
 
     def test_cli_agent_json_is_flat_safe_and_consistent(self):
         # Creation is described without a fabricated live response. Inspect
