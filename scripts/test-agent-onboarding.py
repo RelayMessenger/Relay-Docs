@@ -146,7 +146,7 @@ class AgentOnboardingTests(unittest.TestCase):
         self.assertIn("operationId: deleteAgent", delete)
         self.assertIn("- BearerAuth: []", delete)
         self.assertIn('"409":', delete)
-        self.assertIn("`.dev`", delete)
+        self.assertIn("Delete the developer-managed agent (one with no organization) authenticated by the supplied Agent Token.", " ".join(delete.split()))
         self.assertIn("Organization-managed", delete)
         self.assertNotIn("x-mint:", source)
 
