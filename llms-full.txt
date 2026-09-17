@@ -1585,7 +1585,7 @@ Limits: 100 parts per message, 40 public URL media parts, 10,000 UTF-16 code uni
 
 # Message Parts
 
-> Build ordered text, media, and link parts for a Message.
+> Build ordered text, media, link, and buttons parts for a Message.
 
 Source: https://docs.staging.relayapp.im/messages/parts.md
 
@@ -1616,6 +1616,37 @@ The text part is `part_index` 0 and the media part is 1. To send a hosted file i
 
 For Markdown source in `value`, see [Markdown syntax and current rendering behavior](/messages/send#markdown).
 
+## Send buttons under a Message
+
+A `buttons` part draws 1 to 5 buttons in a vertical stack under the Message. Only an agent can send one, a Message carries at most one, and the question belongs in a `text` part beside it. Each item has a `label` and exactly one of `id` or `url`. An `id` button comes back to you when tapped. A `url` button opens the page in the user's browser and sends nothing. An optional `image_url` draws a small picture before the label; leave it out and the button has no picture.
+
+```json
+{
+  "message": {
+    "parts": [
+      {"type":"text","value":"Your report is ready. Approve it, or read it first."},
+      {"type":"buttons","items":[
+        {"id":"approve","label":"Approve","image_url":"https://cdn.example.com/check.png"},
+        {"url":"https://reports.example.com/q3","label":"Open report"}
+      ]}
+    ]
+  }
+}
+```
+
+## Receive a button tap
+
+A tap on an `id` button arrives as an ordinary `message.received` event. Its one part is a `button_reply` carrying the tapped `id` and `label`, and `reply_to` names the buttons Message and its `part_index`. Match on `id`, never on the label. The buttons stay on the user's screen until someone taps one, however many Messages pass in between, so a tap can arrive long after the send.
+
+```json
+{
+  "parts": [{"type":"button_reply","id":"approve","label":"Approve"}],
+  "reply_to": {"message_id":"01993d50-b4ce-71e6-8e65-35d325d95ddb","part_index":1}
+}
+```
+
+A `button_reply` is the whole Message: it cannot travel with other parts, and it must reply to a `buttons` part with an `id` that part carries. A tap on a `url` button never reaches you.
+
 ## Read parts in a response
 
 A part you read back carries more than the part you sent. Every part gains `reactions`, the current reactions on that part or `null`. A media part gains the Attachment ID, a download URL, and the file's metadata; a text part gains `mentions`.
@@ -1626,10 +1657,11 @@ Relay also returns parts of `type: "system"` for visible chat events such as a p
 
 | Status | Code | Cause |
 | --- | --- | --- |
-| `400` | [1005](/api-reference/errors#1005) | The array is empty or over 100 parts, two text parts are adjacent, a link is not alone, a media part names both inputs or neither, or text is over 10,000 code units. |
+| `400` | [1005](/api-reference/errors#1005) | The array is empty or over 100 parts, two text parts are adjacent, a link is not alone, a media part names both inputs or neither, text is over 10,000 code units, a buttons part has no items or more than 5, an item names both `id` and `url` or neither, two items share an `id`, or a `button_reply` is not alone or has no `reply_to`. |
+| `403` | [2003](/api-reference/errors#2003) | A user sent a buttons part. Only an agent can. |
 | `404` | [2007](/api-reference/errors#2007) | The `attachment_id` names an Attachment that is not complete. |
 | `413` | [2006](/api-reference/errors#2006) | A media `url` points at a file over 10 MiB. |
-| `422` | [2006](/api-reference/errors#2006) | A media `url` failed the public-network, redirect, or response checks. |
+| `422` | [2006](/api-reference/errors#2006) | A media `url` failed the public-network, redirect, or response checks, or a `button_reply` points at a part that is not a buttons part or names an `id` it does not carry. |
 
 ## Next steps
 
