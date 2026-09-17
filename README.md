@@ -29,6 +29,12 @@ nonfunctional tokens for both environments and blocked sandbox egress, even
 with request interception. Interception alone does not prevent analytics sends.
 Inspect production with GET-only asset/provider requests, not executable browser
 checks. Real staging captures require explicit ingestion-proof authorization.
+Both committed browser proofs replace configured tokens in memory and reject
+other PostHog keys before execution. After verifying runner-level outbound deny,
+set `POSTHOG_TEST_NETWORK_DENIED=1` and `POSTHOG_TEST_SDK_PATH` to a separately
+GET-downloaded SDK asset. The flag records confirmation, not a firewall.
+Exact-source proof permits only the explicit token substitution; live token
+pairing and deployed asset checks remain separate GET-only checks.
 
 The final pageview filter always applies Docs source/environment tags and
 strips queries, referrers, page content, playground inputs, arbitrary properties,

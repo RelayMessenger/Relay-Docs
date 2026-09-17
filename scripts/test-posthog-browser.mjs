@@ -1,22 +1,20 @@
 // Run in Daytona: npm run check:posthog-browser
-// Uses the real proxied SDK, but intercepts every browser request. No synthetic
-// events, flags, recordings, or playground data reach any analytics project.
+// Use a GET-downloaded real SDK with nonfunctional tokens and runner-level
+// outbound deny. Interception alone does not prevent unload/keepalive sends.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import puppeteer from "puppeteer";
+import { createProofFixture, loadOfflineProofSdk } from "./posthog-proof-safety.mjs";
 
 const root = resolve(process.argv[2] || new URL("..", import.meta.url).pathname);
 const source = readFileSync(resolve(root, "posthog.js"), "utf8");
 const target = readFileSync(resolve(root, ".docs-target"), "utf8").trim();
-const token = JSON.parse(readFileSync(resolve(root, "scripts/posthog-projects.json")))[target].token;
+const projects = JSON.parse(readFileSync(resolve(root, "scripts/posthog-projects.json")));
+const fixture = createProofFixture({ source, projects, target });
 const origin = target === "production" ? "https://docs.relayapp.im" : "https://docs.staging.relayapp.im";
-const response = await fetch("https://t.relayapp.im/static/array.js", { headers: { Origin: origin } });
-assert.ok(response.ok, `SDK download failed: ${response.status}`);
-assert.ok(["*", origin].includes(response.headers.get("access-control-allow-origin")),
-  "proxied SDK must permit the docs origin");
-const sdk = await response.text();
+const sdk = loadOfflineProofSdk().toString("utf8");
 // Attach an observer before the SDK emits its initial pageview. This does not
 // change collection options or the before_send filter.
 const observer = `
@@ -39,6 +37,7 @@ const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox"] 
 let diagnosticPage;
 const requests = [];
 const errors = [];
+const handlerErrors = [];
 try {
   const page = await browser.newPage();
   diagnosticPage = page;
@@ -53,22 +52,23 @@ try {
   page.on("pageerror", error => errors.push(error.message));
   await page.setRequestInterception(true);
   page.on("request", async request => {
+    try {
     const url = new URL(request.url());
     if (request.isNavigationRequest()) {
-      await request.respond({
+      await fixture.respond(request, {
         status: 200, contentType: "text/html",
         body: '<!doctype html><title>Private page title</title><input id="token"><textarea id="message"></textarea><button>Send private content</button>',
       });
     } else if (url.href === "https://t.relayapp.im/static/array.js") {
       requests.push({ url: url.href, method: request.method() });
-      await request.respond({
+      await fixture.respond(request, {
         status: 200, contentType: "text/javascript",
-        headers: { "access-control-allow-origin": response.headers.get("access-control-allow-origin") },
-        body: sdk + observer,
+        headers: { "access-control-allow-origin": "*" },
+        body: sdk + "\n" + observer,
       });
     } else if (url.origin === "https://t.relayapp.im") {
       requests.push({ url: url.href, method: request.method() });
-      await request.respond({
+      await fixture.respond(request, {
         status: 200, contentType: "application/json",
         headers: { "access-control-allow-origin": "*" },
         body: JSON.stringify({ status: 1, featureFlags: {}, sessionRecording: false }),
@@ -76,9 +76,13 @@ try {
     } else {
       await request.abort();
     }
+    } catch (error) {
+      handlerErrors.push(error.message);
+      if (!request.isInterceptResolutionHandled()) await request.abort();
+    }
   });
   await page.goto(`${origin}/messages/send?token=credential-sentinel#message-sentinel`);
-  await page.addScriptTag({ content: source });
+  await page.addScriptTag({ content: fixture.source });
   await page.waitForFunction(() => window.__events?.length === 1);
   const sharedIdentity = await page.evaluate(() => {
     const client = window.posthog.relayDocs;
@@ -97,7 +101,7 @@ try {
     version: undefined, persistence: "localStorage+cookie", cross_subdomain_cookie: true,
     cookieWinsOnConflict: true, persistence_name: "",
   });
-  await page.addScriptTag({ content: source });
+  await page.addScriptTag({ content: fixture.source });
   await page.type("#token", "credential-sentinel");
   await page.type("#message", "message-sentinel");
   await page.click("button");
@@ -122,7 +126,7 @@ try {
   ]);
   for (const event of events) {
     assert.equal(event.event, "$pageview");
-    assert.equal(event.properties.token, token);
+    assert.equal(event.properties.token, fixture.token);
     assert.equal(event.properties.app, "relay-docs");
     assert.equal(event.properties.analytics_source, "relay_docs");
     assert.equal(event.properties.environment, target);
@@ -145,11 +149,13 @@ try {
   await delay(300);
   assert.equal(await page.evaluate(() => window.__events.length), 3, "opt-out suppresses pageviews");
   assert.deepEqual(errors, []);
-  console.log(`${target}: SDK ${events[0].properties.$lib_version} emitted 3 filtered pageviews (initial, SPA, back); one init; opt-out honored; no content, replay or extra events; all browser network intercepted`);
+  assert.deepEqual(handlerErrors, []);
+  console.log(`${target}: SDK ${events[0].properties.$lib_version} emitted 3 filtered pageviews; one init; opt-out honored; nonfunctional fixture token; sandbox outbound-deny confirmation required`);
 } catch (error) {
   console.error({
     errors,
-    requests: requests.map(request => ({ ...request, url: request.url.replace(token, "[public-token]") })),
+    handlerErrors,
+    requests: requests.map(request => ({ ...request, url: request.url.replace(fixture.token, "[fixture-token]") })),
     state: await diagnosticPage?.evaluate(() => ({
       initialized: window.__relayDocsPostHog,
       sdk: typeof window.posthog,
