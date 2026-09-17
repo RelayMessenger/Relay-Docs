@@ -11,11 +11,13 @@ const origin = target === "production" ? "https://docs.relayapp.im" : "https://d
 function client({ url = origin, dnt, existing = false, load = true } = {}) {
   const calls = [];
   const scripts = [];
+  const cookieWrites = [];
   const sdk = { init: (...args) => calls.push(args) };
   const window = { location: new URL(url), ...(existing ? { posthog: sdk } : {}) };
   const context = {
     window, URL, navigator: { doNotTrack: dnt },
     document: {
+      set cookie(value) { cookieWrites.push(value); },
       createElement: () => ({}),
       head: { appendChild: (script) => scripts.push(script) },
     },
@@ -26,7 +28,7 @@ function client({ url = origin, dnt, existing = false, load = true } = {}) {
     window.posthog = sdk;
     scripts[0].onload();
   }
-  return { calls, scripts, window, run };
+  return { calls, scripts, cookieWrites, window, run };
 }
 
 test("loads one proxied SDK and initializes a named, environment-specific client", () => {
@@ -45,6 +47,15 @@ test("reuses a loaded SDK without replacing its primary client", () => {
   assert.equal(scripts.length, 0);
   assert.equal(calls.length, 1);
   assert.equal(calls[0][2], "relayDocs");
+});
+
+test("removes only the obsolete host-only Docs project cookie before initialization", () => {
+  const { cookieWrites } = client();
+  assert.deepEqual(cookieWrites, [
+    `ph_${projects[target].token}_posthog=; Max-Age=0; Path=/; SameSite=Lax; Secure`,
+  ]);
+  assert.ok(!cookieWrites[0].toLowerCase().includes("domain="),
+    "the shared parent-domain cookie and auth session cookies must remain untouched");
 });
 
 test("an SDK load failure allows a later retry without initializing", () => {
@@ -74,15 +85,19 @@ test("DNT avoids loading the SDK", () => {
   assert.equal(result.calls.length, 0);
 });
 
-test("privacy options cannot enable replay, autocapture, flags, surveys, or profiles", () => {
+test("privacy options keep collection narrow while sharing project browser identity", () => {
   const config = client().calls[0][1];
   assert.equal(config.api_host, "https://t.relayapp.im");
   assert.equal(config.ui_host, "https://us.posthog.com");
   assert.equal(config.capture_pageview, "history_change");
-  assert.equal(config.person_profiles, "never");
+  assert.equal(config.person_profiles, "identified_only");
+  assert.equal(config.persistence, "localStorage+cookie");
+  assert.equal(config.cross_subdomain_cookie, true);
+  assert.equal(config.cookieWinsOnConflict, true);
+  assert.equal(config.persistence_name, undefined, "named instance must use the project-default cookie");
   for (const key of [
     "autocapture", "capture_pageleave", "capture_dead_clicks", "rageclick",
-    "capture_heatmaps", "capture_performance", "capture_exceptions", "cross_subdomain_cookie",
+    "capture_heatmaps", "capture_performance", "capture_exceptions",
   ]) assert.equal(config[key], false, key);
   for (const key of [
     "disable_session_recording", "disable_surveys", "advanced_disable_flags", "respect_dnt",
@@ -120,6 +135,7 @@ test("pageviews strip sensitive data including URL parameters and nested propert
       $pathname: "/private", $host: "attacker.invalid", $title: "message-content",
       utm_campaign: "private", message: "message-content", attachment: { url: "private" },
       authorization: "Bearer secret", $elements: ["private"], environment: "wrong",
+      analytics_source: "relay_console", app: "relay-console", docs_analytics_schema_version: 99,
     },
   });
   assert.equal(event.event, "$pageview");
@@ -127,6 +143,8 @@ test("pageviews strip sensitive data including URL parameters and nested propert
   assert.equal(event.properties.$pathname, "/messages/send");
   assert.equal(event.properties.environment, target);
   assert.equal(event.properties.app, "relay-docs");
+  assert.equal(event.properties.analytics_source, "relay_docs");
+  assert.equal(event.properties.docs_analytics_schema_version, 1);
   assert.equal(event.properties.token, projects[target].token);
   assert.equal(event.properties.distinct_id, "anonymous-id");
   assert.equal(event.properties.$session_id, "session-id");
