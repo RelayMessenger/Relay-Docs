@@ -21,9 +21,14 @@ parent-domain cookie stay intact; the SDK alone chooses the identity.
 
 The [official persistence contract](https://posthog.com/docs/libraries/js/persistence)
 requires SDK `1.418.0` or later for sibling-tab synchronization and reset.
-The proxied SDK is exercised by `npm run check:posthog-browser`. Docs uses
-`person_profiles: "identified_only"` to retain an identity already established
+Docs uses `person_profiles: "identified_only"` to retain an identity already established
 by Auth/Console, without creating profiles for anonymous readers.
+
+Mock browser checks, including `npm run check:posthog-browser`, require
+nonfunctional tokens for both environments and blocked sandbox egress, even
+with request interception. Interception alone does not prevent analytics sends.
+Inspect production with GET-only asset/provider requests, not executable browser
+checks. Real staging captures require explicit ingestion-proof authorization.
 
 The final pageview filter always applies Docs source/environment tags and
 strips queries, referrers, page content, playground inputs, arbitrary properties,

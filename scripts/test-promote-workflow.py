@@ -8,6 +8,10 @@ validation. GitHub Actions may not open pull requests in this org, so a
 `pr create` step is a promotion that a person has to finish by hand.
 """
 import re
+import py_compile
+import subprocess
+import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -86,6 +90,63 @@ class PromoteWorkflowTests(unittest.TestCase):
         self.assertRegex(body, r'-m "Production docs are staging \$short derived \(promotion \$RUN_URL\)"')
         self.assertIn("https://docs.relayapp.im", body)
         self.assertIn("Source staging commit: $source_sha", body)
+
+    def test_python_imports_do_not_write_promotion_bytecode(self):
+        job = self.text.split("  promote:\n", 1)[1]
+        self.assertRegex(job.split("    steps:\n", 1)[0],
+                         r'PYTHONDONTWRITEBYTECODE: "1"')
+
+    def cache_fixture(self):
+        directory = tempfile.TemporaryDirectory(prefix="docs-promotion-cache-")
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name)
+        subprocess.run(["git", "init", "-q", str(root)], check=True)
+        (root / ".gitignore").write_text((ROOT / ".gitignore").read_text())
+        (root / "scripts").mkdir()
+        helper = root / "scripts" / "helper.py"
+        helper.write_text("VALUE = 1\n")
+        # Explicit compilation also simulates unexpected caches despite the
+        # workflow's PYTHONDONTWRITEBYTECODE setting.
+        generated = Path(py_compile.compile(str(helper), doraise=True))
+        (root / "scripts" / "legacy.pyc").write_bytes(b"cache")
+        (root / "scripts" / "legacy.pyo").write_bytes(b"cache")
+        (root / "page.mdx").write_text("# Reader content\n")
+        subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+        return root, generated
+
+    def cache_guard(self):
+        body = step_body(self.text, PUSH_STEP)
+        match = re.search(
+            r"^          if git ls-files.*?^          fi\n",
+            body, flags=re.MULTILINE | re.DOTALL,
+        )
+        self.assertIsNotNone(match)
+        self.assertLess(body.index("git add -A"), match.start())
+        self.assertLess(match.end(), body.index("derived_tree=$(git write-tree)"))
+        return textwrap.dedent(match.group())
+
+    def test_git_add_ignores_generated_caches_but_keeps_source_and_content(self):
+        root, generated = self.cache_fixture()
+        self.assertTrue(generated.exists())
+        staged = subprocess.check_output(
+            ["git", "ls-files"], cwd=root, text=True
+        ).splitlines()
+        self.assertEqual(staged, [".gitignore", "page.mdx", "scripts/helper.py"])
+        result = subprocess.run(
+            ["bash", "-e", "-o", "pipefail", "-c", self.cache_guard()],
+            cwd=root, capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_final_index_guard_rejects_forced_or_previously_tracked_caches(self):
+        root, generated = self.cache_fixture()
+        subprocess.run(["git", "add", "-f", str(generated)], cwd=root, check=True)
+        result = subprocess.run(
+            ["bash", "-e", "-o", "pipefail", "-c", self.cache_guard()],
+            cwd=root, capture_output=True, text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Generated Python cache files cannot reach production", result.stdout)
 
 
 if __name__ == "__main__":

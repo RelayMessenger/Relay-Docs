@@ -36,6 +36,9 @@ jobs:
   promote:
     name: Derive production content and push main
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    env:
+      # Python imports during derivation/validation are not published content.
+      PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -115,6 +118,11 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch -q origin main
           git add -A
+          # Inspect the final index too: ignore rules do not hide tracked files.
+          if git ls-files | grep -E '(^|/)__pycache__/|\.py[co]$'; then
+            echo "::error::Generated Python cache files cannot reach production."
+            exit 1
+          fi
           derived_tree=$(git write-tree)
           if [ "$derived_tree" = "$(git rev-parse origin/main^{tree})" ]; then
             {
