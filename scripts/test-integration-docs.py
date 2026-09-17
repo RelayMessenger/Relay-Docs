@@ -358,9 +358,8 @@ class IntegrationDocsTests(unittest.TestCase):
         for marker in ("RELAY_ALLOWED_CONTACTS", "RELAY_STATE_DIR"):
             self.assertIn(marker, hermes)
         self.assertConcept(hermes, r"active profile", "Hermes credentials resolve per profile")
-        self.assertConcept(hermes, r"every other slash command is ignored", "Remote chat cannot run operator slash commands")
+        self.assertConcept(hermes, r"slash commands work the way they do on telegram", "Slash commands pass to Hermes like Telegram")
         self.assertConcept(hermes, r"/approve session", "Approval answers reach Hermes from the chat")
-        self.assertConcept(hermes, r"operator commands.*trusted local", "Keep the trusted operator path")
 
     def test_api_mcp_and_docs_search_have_one_explanation(self):
         self.assertIn("stdio", read(MCP))
