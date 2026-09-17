@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from api_navigation import validate_api_navigation, page_paths
 from origins import origin, production_text, source_ref, target, STAGING_INSTRUCTION_REFERENCE
+from docs_analytics import validate as validate_analytics
 
 
 def spec(text: str) -> str:
@@ -26,6 +27,7 @@ source_company_pattern = "|".join(
 
 root = Path(__file__).resolve().parents[1]
 config = json.loads((root / "docs.json").read_text())
+validate_analytics(root, target())
 
 agent_instructions = (root / "skill.md").read_text()
 # The first Message is the request (2026-09-09); contact.added still names the
@@ -494,10 +496,10 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # A person's reply accepts a message request; the request route takes deleted
 # only, Relay-Server PR 207, September 9, 2026.
 # Add comes back: POST /v1/contacts for people, is_contact on chat handles, request_state, chat.request.updated and error 2029 removed, Relay-Server PR 225, September 13, 2026.
-# Source authority: Relay-Server staging merge d4dc623; anonymous registration is removed.
+# Source authority: Relay-Server staging merge 35023fe; developer agent handles are flat.
 # The digest pins source bytes independently of the Server release commit.
 expected_openapi_sha256 = (
-    "81d23529476ae77b3b7f7dfc931d2e0e421d3c91e20c59136e2deef9123f722e"
+    "42e8039ee94377aa047f70593102bed980d00c3597f6850a0628cbd0fdf6bc81"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()

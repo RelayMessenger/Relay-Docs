@@ -24,7 +24,7 @@ from origins import ROOT, TARGET_FILE, production_text
 # fails the test instead of silently leaving the table's own list shorter.
 EXPECTED_REWRITES = {
     "docs.staging.relayapp.im": "docs.relayapp.im",
-    "staging.relayapp.im/@example.dev": "go.relayapp.im/@example.dev",
+    "staging.relayapp.im/@example": "go.relayapp.im/@example",
     "api.staging.relayapp.im": "api.relayapp.im",
     "cdn.staging.relayapp.im": "cdn.relayapp.im",
     "console.staging.relayapp.im": "console.relayapp.im",
@@ -74,6 +74,7 @@ SKIP_FILES = {
     "package-lock.json",
 }
 GENERATORS = (
+    ["python3", "scripts/docs_analytics.py"],
     ["python3", "scripts/build-staging-openapi.py"],
     ["scripts/build-mint-openapi.sh"],
     ["python3", "scripts/build-agent-prompt.py"],
