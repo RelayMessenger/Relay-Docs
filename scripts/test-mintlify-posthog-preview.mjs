@@ -2,9 +2,11 @@
 // node scripts/test-mintlify-posthog-preview.mjs http://127.0.0.1:3000 /path/to/proof.json
 //
 // The browser sees the candidate's canonical origin so the production host
-// guard stays intact. Every document/asset response comes unchanged from the
-// actual Mintlify preview. This test never injects posthog.js or calls init/
-// capture. All analytics requests are intercepted before navigation.
+// guard stays intact. Documents/assets come from the actual Mintlify preview;
+// only configured project tokens are substituted with nonfunctional fixtures.
+// Every browser response is guarded against other keys before execution.
+// This test never injects posthog.js or calls init/capture. Runner-level
+// outbound deny is required: interception alone does not prevent egress.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -12,6 +14,7 @@ import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { gunzipSync } from "node:zlib";
 import puppeteer from "puppeteer";
+import { createProofFixture, loadOfflineProofSdk } from "./posthog-proof-safety.mjs";
 
 const root = resolve(new URL("..", import.meta.url).pathname);
 const preview = new URL(process.argv[2] || "http://127.0.0.1:3000");
@@ -20,16 +23,19 @@ const proofPath = process.argv[3];
 const source = readFileSync(resolve(root, "posthog.js"), "utf8");
 const sha256 = value => createHash("sha256").update(value).digest("hex");
 const target = readFileSync(resolve(root, ".docs-target"), "utf8").trim();
-const project = JSON.parse(readFileSync(resolve(root, "scripts/posthog-projects.json")))[target];
+const projects = JSON.parse(readFileSync(resolve(root, "scripts/posthog-projects.json")));
+const project = projects[target];
+const fixture = createProofFixture({ source, projects, target });
 const canonical = target === "production" ? "https://docs.relayapp.im" : "https://docs.staging.relayapp.im";
 const pagePath = "/start/quickstart";
 const sourceTitle = readFileSync(resolve(root, "start/quickstart.mdx"), "utf8").match(/^title: "(.+)"$/m)[1];
 const sdkUrl = "https://t.relayapp.im/static/array.js";
-const sdkResponse = await fetch(sdkUrl, { headers: { Origin: canonical } });
-assert.ok(sdkResponse.ok, `SDK asset unavailable: ${sdkResponse.status}`);
-const sdk = Buffer.from(await sdkResponse.arrayBuffer());
-const sdkCors = sdkResponse.headers.get("access-control-allow-origin");
-assert.ok(["*", canonical].includes(sdkCors), "SDK must permit the docs origin");
+const sdk = loadOfflineProofSdk();
+// Inspect the first actual preview document before even launching Chromium.
+// Served JS and every subsequent HTML/flight response are guarded below too.
+const preflight = await fetch(new URL(pagePath, preview));
+assert.ok(preflight.ok, `Preview preflight failed: ${preflight.status}`);
+fixture.forBrowser(Buffer.from(await preflight.arrayBuffer()), "preview preflight HTML");
 
 const proxyResponses = [];
 const interceptedAnalytics = [];
@@ -38,7 +44,10 @@ const pageErrors = [];
 const handlerErrors = [];
 const postBodies = [];
 let sdkRequests = 0;
-let proof = { target, projectId: project.projectId, candidateSha256: sha256(source), preview: preview.origin };
+let proof = { target, configuredProjectId: project.projectId,
+  candidateSha256: sha256(source), executableFixtureSha256: sha256(fixture.source),
+  tokenSubstitutionOnly: true, nonfunctionalFixtureToken: fixture.token,
+  outboundDenyOperatorConfirmed: true, preview: preview.origin };
 const browser = await puppeteer.launch({
   headless: true, pipe: true, timeout: 60_000,
   args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--renderer-process-limit=2"],
@@ -72,19 +81,19 @@ try {
       if (url.href === sdkUrl) {
         sdkRequests++;
         // Exact SDK asset bytes, without test observers or configuration edits.
-        await request.respond({
+        await fixture.respond(request, {
           status: 200, contentType: "text/javascript",
-          headers: { "access-control-allow-origin": sdkCors }, body: sdk,
+          headers: { "access-control-allow-origin": "*" }, body: sdk,
         });
       } else if (url.origin === "https://t.relayapp.im") {
         interceptedAnalytics.push({ method: request.method(), path: url.pathname });
-        await request.respond({
+        await fixture.respond(request, {
           status: 200, contentType: "application/json",
           headers: { "access-control-allow-origin": "*" }, body: '{"status":1}',
         });
       } else if ([canonical, preview.origin, "http://localhost:3000"].includes(url.origin)
           && ["GET", "HEAD"].includes(request.method())) {
-        // Transport only. Do not edit, synthesize, or inject page/script bodies.
+        // Only explicit token substitution; preserve every other source byte.
         const response = await fetch(new URL(url.pathname + url.search, preview), {
           headers: { Accept: request.headers().accept || "*/*" }, redirect: "manual",
         });
@@ -96,9 +105,11 @@ try {
         }
         proxyResponses.push({
           path: url.pathname, status: response.status, bytes: body.length,
-          sha256: sha256(body), isCandidateScript: body.toString("utf8").trim() === source.trim(),
+          originalSha256: sha256(body),
+          executableSha256: sha256(fixture.forBrowser(body, "preview response")),
+          isCandidateScript: body.toString("utf8").trim() === source.trim(),
         });
-        await request.respond({ status: response.status, headers, body });
+        await fixture.respond(request, { status: response.status, headers, body });
       } else {
         // Includes Mintlify/vendor analytics and unexpected same-origin POSTs.
         blockedExternal.add(url.origin + url.pathname);
@@ -136,7 +147,7 @@ try {
   assert.equal(events.length, 1, "Exactly one initial pageview must be emitted");
   const event = events[0];
   assert.equal(event.event, "$pageview");
-  assert.equal(event.properties.token, project.token);
+  assert.equal(event.properties.token, fixture.token);
   assert.equal(event.properties.environment, target);
   assert.equal(event.properties.$current_url, canonical + pagePath);
   assert.equal(event.properties.$pathname, pagePath);
@@ -148,10 +159,10 @@ try {
   const inlineScripts = await page.$$eval("script:not([src])", scripts => scripts.map(script => ({
     id: script.id, text: script.textContent,
   })));
-  const matchingInline = inlineScripts.filter(script => script.text.trim() === source.trim());
+  const matchingInline = inlineScripts.filter(script => script.text.trim() === fixture.source.trim());
   const matchingFetches = proxyResponses.filter(response => response.isCandidateScript);
   assert.equal(matchingInline.length + matchingFetches.length, 1,
-    "Mintlify must deliver the exact candidate posthog.js once, inline or as an automatic asset fetch");
+    "Mintlify must deliver the candidate once with only explicit fixture-token substitution");
   assert.deepEqual(handlerErrors, []);
   assert.deepEqual(pageErrors, []);
   proof = {
@@ -162,9 +173,9 @@ try {
     previewResponses: proxyResponses,
     sdkSha256: sha256(sdk), sdkVersion: event.properties.$lib_version,
     sdkRequests, eventCount: events.length,
-    event: { ...event, properties: { ...event.properties, token: "[verified against candidate public token]" } },
+    event,
     interceptedAnalytics, blockedExternal: [...blockedExternal],
-    noApplicationScriptInjection: true, allAnalyticsInterceptedBeforeNavigation: true,
+    noApplicationScriptInjection: true, requestInterceptionConfigured: true,
   };
   if (proofPath) {
     await page.screenshot({ path: proofPath.replace(/\.json$/, "-desktop.png"), fullPage: false });
@@ -172,10 +183,12 @@ try {
     await page.screenshot({ path: proofPath.replace(/\.json$/, "-mobile.png"), fullPage: false });
   }
   console.log(JSON.stringify({
-    passed: true, target, projectId: project.projectId, candidateSha256: proof.candidateSha256,
+    passed: true, target, configuredProjectId: project.projectId, candidateSha256: proof.candidateSha256,
+    executableFixtureSha256: proof.executableFixtureSha256, tokenSubstitutionOnly: true,
+    nonfunctionalFixtureToken: fixture.token,
     sourceDelivery: proof.sourceDelivery, scriptIds: proof.scriptIds,
     scriptFetches: proof.scriptFetches, eventCount: events.length,
-    allAnalyticsInterceptedBeforeNavigation: true,
+    requestInterceptionConfigured: true, outboundDenyOperatorConfirmed: true,
   }, null, 2));
 } catch (error) {
   proof = { ...proof, passed: false, error: error.message, proxyResponses, pageErrors, handlerErrors,
