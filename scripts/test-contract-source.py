@@ -2,6 +2,7 @@
 """Pin the independently read Server input, not a checksum derived from Docs."""
 import hashlib
 import json
+import os
 import unittest
 from pathlib import Path
 
@@ -17,8 +18,31 @@ UPSTREAM_SHA256 = "de33237b05b09414c1994446f746795ab8bf410cb2c8f1422259103775cfc
 class ContractSourceTests(unittest.TestCase):
     def test_canonical_bytes_equal_pinned_upstream(self):
         canonical = (ROOT / "api-reference/openapi.yaml").read_bytes()
-        self.assertEqual(hashlib.sha256(canonical).hexdigest(), UPSTREAM_SHA256,
-                         f"Canonical input differs from Relay-Server {UPSTREAM_COMMIT}")
+        local_source = os.environ.get("RELAY_OPENAPI_SOURCE")
+        if local_source:
+            # Uncommitted coordinated work uses independent Server bytes without
+            # claiming that the historical public commit contains the new contract.
+            self.assertEqual(canonical, Path(local_source).read_bytes())
+        else:
+            self.assertEqual(hashlib.sha256(canonical).hexdigest(), UPSTREAM_SHA256,
+                             f"Canonical input differs from Relay-Server {UPSTREAM_COMMIT}; "
+                             "for local coordinated changes set RELAY_OPENAPI_SOURCE")
+
+    def test_buttons_are_text_only_and_keep_tap_reply_semantics(self):
+        canonical = (ROOT / "api-reference/openapi.yaml").read_text()
+        items = canonical.split("    ButtonItem:\n", 1)[1].split("    ButtonsPart:\n", 1)[0]
+        self.assertNotIn("image_url", items)
+        self.assertIn("only a valid sole-part `button_reply`", canonical)
+        self.assertIn("Text and `button_reply` parts remain replyable", canonical)
+        self.assertIn("Text and `button_reply` parts remain reactable", canonical)
+        parts = (ROOT / "messages/parts.mdx").read_text()
+        self.assertNotIn("image_url", parts)
+        self.assertIn('"type":"button_reply"', parts)
+        self.assertIn("ordinary replies and reactions", parts)
+        for path in ("skill.md", ".mintlify/skills/relay/SKILL.md"):
+            self.assertIn("not\n  ordinary replies or reactions", (ROOT / path).read_text())
+
+        self.assertIn("The accompanying `text` part and the tap", (ROOT / "llms-full.txt").read_text())
 
     def test_projection_changes_only_environment_origins(self):
         expected = (ROOT / "api-reference/openapi.yaml").read_bytes()

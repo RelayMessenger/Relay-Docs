@@ -1618,7 +1618,9 @@ For Markdown source in `value`, see [Markdown syntax and current rendering behav
 
 ## Send buttons under a Message
 
-A `buttons` part draws 1 to 5 buttons in a vertical stack under the Message. Only an agent can send one, a Message carries at most one, and the question belongs in a `text` part beside it. Each item has a `label` and exactly one of `id` or `url`. An `id` button comes back to you when tapped. A `url` button opens the page in the user's browser and sends nothing. An optional `image_url` draws a small picture before the label; leave it out and the button has no picture.
+A `buttons` part draws 1 to 5 buttons in a vertical stack under the Message. Only an agent can send one, a Message carries at most one, and the question belongs in a `text` part beside it.
+
+Each item has a text `label` and exactly one of `id` or `url`. An `id` button comes back to you when tapped. A `url` button opens the page in the user's browser and sends nothing.
 
 ```json
 {
@@ -1626,13 +1628,15 @@ A `buttons` part draws 1 to 5 buttons in a vertical stack under the Message. Onl
     "parts": [
       {"type":"text","value":"Your report is ready. Approve it, or read it first."},
       {"type":"buttons","items":[
-        {"id":"approve","label":"Approve","image_url":"https://cdn.example.com/check.png"},
+        {"id":"approve","label":"Approve"},
         {"url":"https://reports.example.com/q3","label":"Open report"}
       ]}
     ]
   }
 }
 ```
+
+The accompanying `text` part and the tap's `button_reply` bubble support ordinary replies and reactions. The `buttons` part accepts the tap through `button_reply`.
 
 ## Receive a button tap
 
@@ -1899,7 +1903,9 @@ Source: https://docs.staging.relayapp.im/messages/replies.md
 
 A reply is a new message quoting one part of an earlier one.
 
-Set `reply_to` on the message you send, naming the earlier message and the zero-based index of its part. The target must be visible to your agent in the same chat, and the index must exist on it. It may be any text, media, link, or voice memo part, but not a system part.
+Set `reply_to` on the message you send, naming the earlier message and the zero-based index of its part. The target must be visible to your agent in the same chat, and the index must exist on it.
+
+Ordinary replies can target text, media (including voice memos), link, and `button_reply` parts. A button tap uses `button_reply` to target the originating `buttons` part.
 
 The reply is stored as its own message; the target is unchanged. Every reply to the same message forms a thread. `GET /v1/messages/{messageId}/thread` ([reference](/api-reference/messages/get-all-messages-in-a-thread)) lists it; the SDK method is `relay.messages.listMessagesThread`.
 
@@ -1967,6 +1973,7 @@ Ask for the thread with `order=asc` to read replies oldest first and `limit` up 
 | Status | Code | Cause | Next action |
 | --- | --- | --- | --- |
 | `400` | [1005](/api-reference/errors#1005) | `reply_to` is invalid: the index does not exist on the target, or it points at a system part. | Read the target and count its parts. |
+| `422` | [2006](/api-reference/errors#2006) | An ordinary reply targets a buttons part. | Reply to the accompanying text or the tap reply bubble. |
 | `404` | [2001](/api-reference/errors#2001) | The target message is not visible in this chat. | Check the message ID and the chat. |
 | `409` | [1005](/api-reference/errors#1005) | The chat is unavailable. | Read the chat before retrying. |
 
@@ -1984,7 +1991,9 @@ Source: https://docs.staging.relayapp.im/messages/reactions.md
 
 A reaction is one Contact's mark on one message part.
 
-Each Contact holds one reaction slot per part. Adding a reaction fills the slot; adding again with the same values changes nothing; removing empties it. Leave `part_index` out to react to the whole message, which is part 0.
+Each Contact holds one reaction slot per part. Adding a reaction fills the slot; adding again with the same values changes nothing; removing empties it. Leave `part_index` out to target part 0.
+
+Text, media, link, and `button_reply` parts accept reactions.
 
 | `type` | Use |
 | --- | --- |
@@ -2016,7 +2025,7 @@ To change a reaction, add the new one; it replaces whatever was in your agent's 
 | `400` | [1005](/api-reference/errors#1005) | `operation` or `type` is missing, or `custom` has no `custom_emoji`. | Correct the body. |
 | `403` | | Your agent is not an active member of the chat. | Check membership. |
 | `404` | [2001](/api-reference/errors#2001) | No visible message has that ID. | Check the message ID. |
-| `422` | [2006](/api-reference/errors#2006) | `part_index` does not exist on this message. | Read the message and count its parts. |
+| `422` | [2006](/api-reference/errors#2006) | `part_index` does not exist on this message or targets a buttons part. | Read the message and count its parts. |
 
 ## Next steps
 
@@ -12509,7 +12518,7 @@ paths:
     post:
       operationId: sendReaction
       summary: Add or remove a reaction to a message
-      description: Add or remove a reaction on one Message part.
+      description: Add or remove a reaction on one Message part. Targeting a `buttons` part returns 422. Text and `button_reply` parts remain reactable.
       tags:
         - Messages
       security:
@@ -13861,6 +13870,133 @@ components:
             - string
             - "null"
           description: Cursor for fetching the next page of results (null if no more results)
+    ButtonItem:
+      type: object
+      description: |
+        One button in a `buttons` part. Exactly one of `id` or `url`: an `id`
+        button comes back as a `button_reply` carrying that id when tapped; a
+        `url` button opens the page in the browser and sends nothing.
+      required:
+        - label
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Callback identifier, unique within the part. Not with `url`.
+        url:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: The page a link button opens. Not with `id`.
+        label:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: The button's visible text
+    ButtonItemResponse:
+      type: object
+      description: One button as read back
+      required:
+        - label
+      properties:
+        id:
+          type: string
+        url:
+          type: string
+        label:
+          type: string
+    ButtonsPart:
+      type: object
+      description: |
+        A vertical stack of 1 to 5 buttons drawn under the message. Only an
+        agent can send one, and a message carries at most one. Send a `text`
+        part beside it that asks the question. Reactions and normal replies to
+        this part return 422; only a valid sole-part `button_reply` may reply to it.
+      required:
+        - type
+        - items
+      properties:
+        type:
+          type: string
+          enum:
+            - buttons
+        items:
+          type: array
+          minItems: 1
+          maxItems: 5
+          items:
+            $ref: "#/components/schemas/ButtonItem"
+    ButtonsPartResponse:
+      type: object
+      description: A buttons part as read back
+      required:
+        - type
+        - items
+        - reactions
+      properties:
+        type:
+          type: string
+          enum:
+            - buttons
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ButtonItemResponse"
+        reactions:
+          type:
+            - array
+            - "null"
+          description: Reactions on this message part
+          items:
+            $ref: "#/components/schemas/Reaction"
+    ButtonReplyPart:
+      type: object
+      description: |
+        A tap on a `buttons` item. It must be the only part in its message, and
+        `reply_to` must name the message and part index of the `buttons` part.
+        `id` must be one of that part's `id` buttons.
+      required:
+        - type
+        - id
+        - label
+      properties:
+        type:
+          type: string
+          enum:
+            - button_reply
+        id:
+          type: string
+          minLength: 1
+          maxLength: 100
+        label:
+          type: string
+          minLength: 1
+          maxLength: 80
+    ButtonReplyPartResponse:
+      type: object
+      description: A button tap as read back
+      required:
+        - type
+        - id
+        - label
+        - reactions
+      properties:
+        type:
+          type: string
+          enum:
+            - button_reply
+        id:
+          type: string
+        label:
+          type: string
+        reactions:
+          type:
+            - array
+            - "null"
+          description: Reactions on this message part
+          items:
+            $ref: "#/components/schemas/Reaction"
     LinkPart:
       type: object
       required:
@@ -14063,6 +14199,8 @@ components:
               - $ref: "#/components/schemas/TextPartResponse"
               - $ref: "#/components/schemas/MediaPartResponse"
               - $ref: "#/components/schemas/LinkPartResponse"
+              - $ref: "#/components/schemas/ButtonsPartResponse"
+              - $ref: "#/components/schemas/ButtonReplyPartResponse"
               - $ref: "#/components/schemas/SystemPartResponse"
         reply_to:
           oneOf:
@@ -14249,12 +14387,16 @@ components:
               - $ref: "#/components/schemas/schemas-TextPartResponse"
               - $ref: "#/components/schemas/schemas-MediaPartResponse"
               - $ref: "#/components/schemas/schemas-LinkPartResponse"
+              - $ref: "#/components/schemas/ButtonsPartResponse"
+              - $ref: "#/components/schemas/ButtonReplyPartResponse"
             discriminator:
               propertyName: type
               mapping:
                 text: "#/components/schemas/schemas-TextPartResponse"
                 media: "#/components/schemas/schemas-MediaPartResponse"
                 link: "#/components/schemas/schemas-LinkPartResponse"
+                buttons: "#/components/schemas/ButtonsPartResponse"
+                button_reply: "#/components/schemas/ButtonReplyPartResponse"
         sent_at:
           type:
             - string
@@ -14307,10 +14449,14 @@ components:
           text: "#/components/schemas/TextPart"
           media: "#/components/schemas/MediaPart"
           link: "#/components/schemas/LinkPart"
+          buttons: "#/components/schemas/ButtonsPart"
+          button_reply: "#/components/schemas/ButtonReplyPart"
       oneOf:
         - $ref: "#/components/schemas/TextPart"
         - $ref: "#/components/schemas/MediaPart"
         - $ref: "#/components/schemas/LinkPart"
+        - $ref: "#/components/schemas/ButtonsPart"
+        - $ref: "#/components/schemas/ButtonReplyPart"
     MessageReadWebhook:
       description: Complete webhook payload for message.read events (2026-08-30 format)
       allOf:
@@ -14566,6 +14712,8 @@ components:
             The specific message part to reply to (0-based index).
             Defaults to 0 (first part) if not provided.
             Use this when replying to a specific part of a multipart message.
+            Targeting a `buttons` part returns 422 unless the message contains
+            only a valid `button_reply`. Text and `button_reply` parts remain replyable.
           minimum: 0
     RequestUploadRequest:
       type: object
@@ -14850,6 +14998,8 @@ components:
               - $ref: "#/components/schemas/TextPartResponse"
               - $ref: "#/components/schemas/MediaPartResponse"
               - $ref: "#/components/schemas/LinkPartResponse"
+              - $ref: "#/components/schemas/ButtonsPartResponse"
+              - $ref: "#/components/schemas/ButtonReplyPartResponse"
         created_at:
           type: string
           format: date-time

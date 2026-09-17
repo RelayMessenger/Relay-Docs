@@ -161,6 +161,10 @@ generation, or tests completed, say so and leave the connection pending.
 - A Message belongs to one Chat and contains ordered parts.
 - Parts are `text`, `media`, or `link` on sends.
 - Replies and reactions target zero-based `part_index`.
+- Button items have a text `label` and exactly one of `id` or `url`; never send
+  button image fields. A `buttons` part accepts only a `button_reply` tap, not
+  ordinary replies or reactions. Text and `button_reply` bubbles still accept
+  ordinary replies and reactions.
 - Group membership controls which history a Contact can read.
 
 ## Webhook events

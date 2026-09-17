@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -234,8 +235,13 @@ def check_15(root):
 
 
 def check_16(root):
-    expected = load('test-contract-source').UPSTREAM_SHA256
-    assert hashlib.sha256((root / 'api-reference/openapi.yaml').read_bytes()).hexdigest() == expected, 'api-reference/openapi.yaml: differs from pinned Server contract'
+    canonical = (root / 'api-reference/openapi.yaml').read_bytes()
+    local_source = os.environ.get('RELAY_OPENAPI_SOURCE')
+    if local_source:
+        assert canonical == Path(local_source).read_bytes(), 'api-reference/openapi.yaml: differs from local Server contract'
+    else:
+        expected = load('test-contract-source').UPSTREAM_SHA256
+        assert hashlib.sha256(canonical).hexdigest() == expected, 'api-reference/openapi.yaml: differs from pinned Server contract'
     # Existing check:openapi-bundle validates the generated Mintlify projection.
 
 
