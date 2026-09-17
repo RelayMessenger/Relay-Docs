@@ -58,6 +58,12 @@
   }
 
   function initialize() {
+    // The previous Docs deployment wrote this project cookie on this host.
+    // Remove only that obsolete host-only cookie (no Domain attribute), which
+    // would otherwise shadow the shared Relay cookie during SDK initialization.
+    // The SDK still owns identity: keep localStorage and the parent-domain
+    // cookie intact; never copy, invent, or identify a user here.
+    document.cookie = `ph_${CONFIG.token}_posthog=; Max-Age=0; Path=/; SameSite=Lax; Secure`;
     window.posthog.init(CONFIG.token, {
       api_host: "https://t.relayapp.im",
       ui_host: "https://us.posthog.com",

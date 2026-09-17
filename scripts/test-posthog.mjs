@@ -11,11 +11,13 @@ const origin = target === "production" ? "https://docs.relayapp.im" : "https://d
 function client({ url = origin, dnt, existing = false, load = true } = {}) {
   const calls = [];
   const scripts = [];
+  const cookieWrites = [];
   const sdk = { init: (...args) => calls.push(args) };
   const window = { location: new URL(url), ...(existing ? { posthog: sdk } : {}) };
   const context = {
     window, URL, navigator: { doNotTrack: dnt },
     document: {
+      set cookie(value) { cookieWrites.push(value); },
       createElement: () => ({}),
       head: { appendChild: (script) => scripts.push(script) },
     },
@@ -26,7 +28,7 @@ function client({ url = origin, dnt, existing = false, load = true } = {}) {
     window.posthog = sdk;
     scripts[0].onload();
   }
-  return { calls, scripts, window, run };
+  return { calls, scripts, cookieWrites, window, run };
 }
 
 test("loads one proxied SDK and initializes a named, environment-specific client", () => {
@@ -45,6 +47,15 @@ test("reuses a loaded SDK without replacing its primary client", () => {
   assert.equal(scripts.length, 0);
   assert.equal(calls.length, 1);
   assert.equal(calls[0][2], "relayDocs");
+});
+
+test("removes only the obsolete host-only Docs project cookie before initialization", () => {
+  const { cookieWrites } = client();
+  assert.deepEqual(cookieWrites, [
+    `ph_${projects[target].token}_posthog=; Max-Age=0; Path=/; SameSite=Lax; Secure`,
+  ]);
+  assert.ok(!cookieWrites[0].toLowerCase().includes("domain="),
+    "the shared parent-domain cookie and auth session cookies must remain untouched");
 });
 
 test("an SDK load failure allows a later retry without initializing", () => {

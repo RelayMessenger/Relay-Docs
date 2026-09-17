@@ -14,6 +14,11 @@ name with `localStorage+cookie`, `cross_subdomain_cookie: true`, and explicit
 that cookie. Separate project tokens isolate production from staging;
 Admin remains isolated staff analytics.
 
+The former Docs-only cookie is expired at the current host before SDK setup,
+without a `Domain` attribute. This prevents that obsolete cookie from
+shadowing an already identified shared cookie. LocalStorage and the
+parent-domain cookie stay intact; the SDK alone chooses the identity.
+
 The [official persistence contract](https://posthog.com/docs/libraries/js/persistence)
 requires SDK `1.418.0` or later for sibling-tab synchronization and reset.
 The proxied SDK is exercised by `npm run check:posthog-browser`. Docs uses
