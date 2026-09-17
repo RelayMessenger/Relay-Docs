@@ -206,8 +206,9 @@ Use a direct public HTTPS webhook destination. Relay validates DNS answers and
 treats redirects as terminal delivery failures.
 
 WebSocket ACKs are cumulative. Relay replays pending events after a reconnect.
-Complete FULL sync when the checkpoint is older than retention. Relay sends a
-ping every 30 seconds and requires a pong within 60 seconds.
+Complete FULL sync when the checkpoint is older than retention. Send
+`{"type":"ping"}` every 30 seconds; Relay answers `pong` and closes a
+connection that is silent for 60 seconds.
 
 Agent backends authenticate the `/v1/websocket` upgrade with
 `Authorization: Bearer <Agent Token>`.
