@@ -80,6 +80,23 @@ try {
   await page.goto(`${origin}/messages/send?token=credential-sentinel#message-sentinel`);
   await page.addScriptTag({ content: source });
   await page.waitForFunction(() => window.__events?.length === 1);
+  const sharedIdentity = await page.evaluate(() => {
+    const client = window.posthog.relayDocs;
+    return {
+      version: window.__events[0].properties.$lib_version,
+      persistence: client.config.persistence,
+      cross_subdomain_cookie: client.config.cross_subdomain_cookie,
+      cookieWinsOnConflict: client.config.cookieWinsOnConflict,
+      persistence_name: client.config.persistence_name,
+    };
+  });
+  const [major, minor] = sharedIdentity.version.split(".").map(Number);
+  assert.ok(major > 1 || (major === 1 && minor >= 418),
+    `SDK ${sharedIdentity.version} does not support the shared-cookie contract`);
+  assert.deepEqual({ ...sharedIdentity, version: undefined }, {
+    version: undefined, persistence: "localStorage+cookie", cross_subdomain_cookie: true,
+    cookieWinsOnConflict: true, persistence_name: "",
+  });
   await page.addScriptTag({ content: source });
   await page.type("#token", "credential-sentinel");
   await page.type("#message", "message-sentinel");
@@ -107,6 +124,7 @@ try {
     assert.equal(event.event, "$pageview");
     assert.equal(event.properties.token, token);
     assert.equal(event.properties.app, "relay-docs");
+    assert.equal(event.properties.analytics_source, "relay_docs");
     assert.equal(event.properties.environment, target);
     assert.ok(event.properties.distinct_id);
     assert.ok(event.properties.$session_id);
