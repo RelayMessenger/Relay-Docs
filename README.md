@@ -2,6 +2,29 @@
 
 Public developer documentation for Relay.
 
+## Analytics ownership
+
+`posthog.js` owns privacy-filtered Docs pageviews. Auth and Console own
+verified-user identification and logout/reset. Docs never reads an auth
+session, copies an ID through a link, or emits its own identify event.
+
+Website, Docs, Auth, and Console share the SDK's project-default persistence
+name with `localStorage+cookie`, `cross_subdomain_cookie: true`, and explicit
+`cookieWinsOnConflict: true`. The named `relayDocs` client does not rename
+that cookie. Separate project tokens isolate production from staging;
+Admin remains isolated staff analytics.
+
+The [official persistence contract](https://posthog.com/docs/libraries/js/persistence)
+requires SDK `1.418.0` or later for sibling-tab synchronization and reset.
+The proxied SDK is exercised by `npm run check:posthog-browser`. Docs uses
+`person_profiles: "identified_only"` to retain an identity already established
+by Auth/Console, without creating profiles for anonymous readers.
+
+The final pageview filter always applies Docs source/environment tags and
+strips queries, referrers, page content, playground inputs, arbitrary properties,
+and nested person updates. No extra PostHog products or replay are enabled.
+Production still uses the existing derived-tree workflow, not a plain merge.
+
 The site has three top-level tabs:
 
 ```text

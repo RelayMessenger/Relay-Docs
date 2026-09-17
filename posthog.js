@@ -73,8 +73,13 @@
       disable_session_recording: true,
       disable_surveys: true,
       advanced_disable_flags: true,
-      person_profiles: "never",
-      cross_subdomain_cookie: false,
+      // Share only this project's first-party Relay browser identity.
+      // Auth/Console own identify/reset; the SDK synchronizes open tabs.
+      // Keep persistence_name unset, including for this named SDK instance.
+      persistence: "localStorage+cookie",
+      cross_subdomain_cookie: true,
+      cookieWinsOnConflict: true,
+      person_profiles: "identified_only",
       respect_dnt: true,
       before_send: pageviewOnly,
     }, "relayDocs");
