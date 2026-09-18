@@ -1,53 +1,30 @@
 ---
 title: "Stream call audio"
 sidebarTitle: "Audio protocol"
-description: "Connect a scoped media grant, stream bounded PCM audio, and clean up a call."
+description: "Open the audio socket from the roomState media grant, stream bounded PCM audio, and clean up a call."
 keywords: ["call media", "PCM16LE", "48000", "stereo", "WebSocket grant", "interruption"]
 ---
 
-Stream a Call's audio through an authenticated, call-scoped media WebSocket.
+Stream a Call's audio through an authenticated, call-scoped audio WebSocket.
 
 ## Before you start
 
-[Accept the Call](/calls/answer) before creating media. A user app uses WebRTC; an agent backend uses the WebSocket transport described here. Keep its model session and playback state in a runtime keyed by `call.id`.
+[Join the call room](/calls/answer#join-the-call-room) before opening audio. A user app uses WebRTC; an agent backend uses the WebSocket transport described here. Keep its model session and playback state in a runtime keyed by `call.id`.
 
-## Connect the media stream
+## Open the audio socket
 
-Create the agent's connection with its ordinary Agent Token:
+The grant arrives inside the room's `roomState` frame, in the `media` field, on the agent's socket only:
 
-<CodeGroup>
-```typescript TypeScript SDK
-const { connection } = await relay.calls.connections.create(callId, {
-  transport: "websocket",
-});
-```
-
-```bash cURL
-curl -sS -X POST \
-  "https://api.staging.relayapp.im/v1/calls/$CALL_ID/connections" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"transport":"websocket"}'
-```
-</CodeGroup>
-
-The `201` response supplies an ephemeral Relay grant:
-
-```json Agent connection
+```json roomState.media
 {
-  "connection": {
-    "id": "01995978-1000-7000-8000-000000000005",
-    "call_id": "01995978-1000-7000-8000-000000000001",
-    "transport": "websocket",
-    "url": "wss://api.staging.relayapp.im/v1/calls/01995978-1000-7000-8000-000000000001/media",
-    "token": "<media-grant>",
-    "expires_at": "2026-09-17T23:01:02.000Z",
-    "audio_format": {"encoding": "pcm_s16le", "sample_rate": 48000, "channels": 2}
-  }
+  "url": "wss://api.staging.relayapp.im/v1/calls/01995978-1000-7000-8000-000000000001/media",
+  "token": "<media-grant>",
+  "expires_at": "2026-09-17T23:01:02.000Z",
+  "audio_format": {"encoding": "pcm_s16le", "sample_rate": 48000, "channels": 2}
 }
 ```
 
-Open the returned URL with `Authorization: Bearer <media-grant>`. The grant is scoped to one Call, Contact, and connection, expires after 60 seconds, and is consumed by a successful upgrade. Relay checks current call permission and the connection's Agent Token before upgrading.
+Open `url` with `Authorization: Bearer <media-grant>`. The grant is scoped to one Call and Contact, expires at `expires_at`, and is consumed by a successful upgrade. Relay checks current call permission before upgrading.
 
 ```http WebSocket upgrade
 GET /v1/calls/01995978-1000-7000-8000-000000000001/media HTTP/1.1
@@ -59,7 +36,7 @@ Sec-WebSocket-Version: 13
 Sec-WebSocket-Key: <client-generated-key>
 ```
 
-Use the grant only in the header, keep it out of logs, and use the returned URL without query parameters. SFU credentials remain inside Relay.
+Use the grant only in the header, keep it out of logs, and use `url` without query parameters. SFU credentials remain inside Relay.
 
 ## Read the frames
 
@@ -81,28 +58,19 @@ The socket carries JSON text control frames and binary audio frames.
 {"type":"ready"}
 ```
 
-Wait for `ready` before sending audio. Report your side's readiness once its audio path is ready; the user app reports its own side separately:
+Wait for `ready` before sending audio. Then report your side over the room socket; the user app reports its own side separately:
 
 <CodeGroup>
 ```typescript TypeScript SDK
-const { call } = await relay.calls.connected(callId);
+await room.connected();
 ```
 
-```bash cURL
-curl -sS -X POST \
-  "https://api.staging.relayapp.im/v1/calls/$CALL_ID/connected" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{}'
+```json Room frame
+{"type":"connected"}
 ```
 </CodeGroup>
 
-```http Readiness response
-HTTP/1.1 200 OK
-Content-Type: application/json
-```
-
-The body is a [Call snapshot](/api-reference/resources/calls/overview). It remains `connecting` until both sides have acknowledged ready media.
+The room answers with `roomState`. The Call stays `connecting` until both sides have sent `connected`, then reads `active` with `connected_at` set.
 
 ## Send bounded audio
 
@@ -130,11 +98,11 @@ On interruption, cancel the current model response, discard your own unsent chun
 
 ## End and release resources
 
-Either member can hang up:
+Either member can hang up, over the room socket or the REST route:
 
 <CodeGroup>
 ```typescript TypeScript SDK
-const { call } = await relay.calls.end(callId);
+await room.end();
 ```
 
 ```bash cURL
@@ -146,34 +114,28 @@ curl -sS -X POST \
 ```
 </CodeGroup>
 
-```http Hangup response
-HTTP/1.1 200 OK
-Content-Type: application/json
-```
-
-The response contains the ended Call. Ringing hangup uses `canceled`; an accepted call uses `completed`. Repeated terminal actions retain the existing state and reason.
+The room sends `ended` on every socket and closes them. Ringing hangup by the caller uses `canceled`; an accepted call uses `completed`. Repeated terminal actions retain the existing state and reason.
 
 ```json Ended
 {"type":"ended","reason":"completed"}
 ```
 
-On `ended`, `call.ended`, socket close, or a setup failure, cancel model work, stop playback and timers, clear local buffers, and close both connections. Relay closes its media resources when the call ends. Blocks, contact removal, and Agent Token revocation also end affected calls.
+On `ended`, `call.ended`, socket close, or a setup failure, cancel model work, stop playback and timers, clear local buffers, and close the room, audio, and model connections. Relay closes its media resources when the call ends. Blocks, contact removal, and Agent Token revocation also end affected calls.
 
 ## When it fails
 
 | Status or signal | Action |
 | --- | --- |
-| `401` | Check the control Agent Token or the media grant's expiry, use, and token authority |
+| `401` | Check the media grant's expiry and use, or the Agent Token on the room socket |
 | `403` | Stop setup: a block or relationship change removed call permission |
-| `409` | Read the Call; readiness or peer-track setup may still be pending, or the call has ended |
-| `503` | Retry temporary media failures only while setup remains valid |
+| `error` frame `media_unavailable` | Relay could not create the audio path; the call ends `failed` |
 | `ended`, close, or error | Release the per-call runtime and model session |
 
-For WebRTC, [subscribe](/api-reference/calls/receive-the-other-sides-audio) returns `409` until the other audio track is ready. Retry during setup, then submit the answer through [renegotiate](/api-reference/calls/finish-audio-negotiation). Keep recovery bounded by the Call's [setup leases](/calls#lifecycle), rather than permanent polling.
+Keep recovery bounded by the Call's [setup leases](/calls#lifecycle). The room closes the socket after every terminal `ended`, so a reconnect after that answers `410`.
 
 ## Next steps
 
 - [Answer an incoming call](/calls/answer)
-- [Create a media connection](/api-reference/calls/connect-call-audio)
+- [Read the call room frames](/calls/room)
 - [Read call.ended](/events/call-ended)
 - [Review the Call lifecycle](/calls#lifecycle)
