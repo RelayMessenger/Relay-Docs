@@ -36,6 +36,9 @@ SKILLS = "integrations/skills.mdx"
 MCP = "integrations/mcp.mdx"
 OBSERVER_REFERENCE = "websocket/observe-events.mdx"
 FENCE = re.compile(r"^(`{3,})[^\n]*\n(.*?)^\1[ \t]*$", re.M | re.S)
+SHELL_FENCE = re.compile(
+    r"^(`{3,})(?:bash|sh|shell|zsh)\b[^\n]*\n(.*?)^\1[ \t]*$", re.M | re.S
+)
 FINISH = {"Next steps", "See also", "Related"}
 SOURCES = {
     CLI: "packages/cli",
@@ -81,10 +84,10 @@ def normalized(text):
 
 
 def commands(text):
-    """Join shell continuations without mistaking Markdown prose for commands."""
+    """Join shell continuations in shell fences only; text and other fences are not commands."""
     return [
         line.strip()
-        for _, block in FENCE.findall(re.sub(
+        for _, block in SHELL_FENCE.findall(re.sub(
             r"^```text captured-output\n.*?^```[ \t]*$", "", text, flags=re.M | re.S
         ))
         for line in re.sub(r"\\\s*\n\s*", " ", block).splitlines()
