@@ -26,6 +26,29 @@ The grant arrives inside the room's `roomState` frame, in the `media` field, on 
 
 Open `url` with `Authorization: Bearer <media-grant>`. The grant is scoped to one Call and Contact, expires at `expires_at`, and is consumed by a successful upgrade. Relay checks current call permission before upgrading.
 
+<CodeGroup>
+```typescript TypeScript SDK
+import WebSocket from "ws";
+
+let audio: WebSocket | undefined;
+const room = relay.calls.room(callId);
+room.on("roomState", (state) => {
+  if (!state.media || audio) return;
+  audio = new WebSocket(state.media.url, {
+    headers: { Authorization: `Bearer ${state.media.token}` },
+  });
+});
+```
+
+```bash cURL
+curl -sS -i --no-buffer "$MEDIA_URL" \
+  -H "Authorization: Bearer $MEDIA_GRANT" \
+  -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
+  -H 'Sec-WebSocket-Version: 13' \
+  -H "Sec-WebSocket-Key: $(openssl rand -base64 16)"
+```
+</CodeGroup>
+
 ```http WebSocket upgrade
 GET /v1/calls/01995978-1000-7000-8000-000000000001/media HTTP/1.1
 Host: api.staging.relayapp.im
@@ -103,6 +126,7 @@ Either member can hang up, over the room socket or the REST route:
 <CodeGroup>
 ```typescript TypeScript SDK
 await room.end();
+// Without a room socket: await relay.calls.end(callId);
 ```
 
 ```bash cURL
