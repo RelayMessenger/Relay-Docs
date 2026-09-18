@@ -500,7 +500,7 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server commit 74b7603f; Calls API and call.created/updated/ended, September 17, 2026.
 # The digest pins source bytes independently of the Server release commit.
 expected_openapi_sha256 = (
-    "6a0abd34db9d26e89170dd5cae6c7e0683af2cd076ec86f562367297330ec13e"
+    "23760079b90dd85624f18ab2351db3d13a7e7fcd683318eb7ffb540b3d9ea02f"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
