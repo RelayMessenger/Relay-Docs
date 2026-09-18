@@ -83,7 +83,8 @@ class CLIReferenceTests(unittest.TestCase):
             if "sidebarTitle" in expected:
                 self.assertIn('sidebarTitle: ' + json.dumps(expected["sidebarTitle"]), text)
             if "command" in expected:
-                self.assertEqual(re.search(r"^```bash\n(.*?)^```", text, re.M | re.S).group(1).strip(), "npx " + expected["command"])
+                self.assertEqual(re.search(r"^```bash\n(.*?)^```", text, re.M | re.S).group(1).strip(),
+                                 "npx " + expected["command"].replace("relaymessenger", "relaymessenger@staging", 1))
                 self.assertLess(text.index("```bash"), text.index("## Usage"))
                 self.assertNotIn("## Output", text)
                 # Three links: the family's concept guide (a page that exists), then the two CLI pages.

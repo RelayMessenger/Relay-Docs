@@ -152,8 +152,8 @@ class AgentOnboardingTests(unittest.TestCase):
 
     def test_cli_front_door_routes_to_owning_tasks(self):
         cli = self.page("cli/index")
-        # build-cli-reference.mjs captures the exact installed devDependency.
-        # A moving registry tag must not relabel that immutable help capture.
+        # build-cli-reference.mjs captures the exact installed devDependency;
+        # the command lines themselves carry the channel tag (owner ruling 2026-09-18).
         package = json.loads((ROOT / "package.json").read_text())
         lock = json.loads((ROOT / "package-lock.json").read_text())
         captured_cli = package["devDependencies"]["relaymessenger"]
@@ -165,13 +165,13 @@ class AgentOnboardingTests(unittest.TestCase):
                              "Refresh the installed CLI and recapture its help after publishing")
         self.assert_identifiers(
             cli,
-            f"npx relaymessenger@{captured_cli} --help",
+            "npx relaymessenger@staging --help",
             "--json",
         )
         self.assert_links_to_pages(
             cli, *CLI_TASKS, "agents/create-agent",
             "agents/list-agents", "agents/delete-agent",
-            "integrations/claude-code", "integrations/skills",
+            "integrations/index", "integrations/skills",
         )
         # Both released CLI channels have these operations. Do not require a
         # dated availability announcement or a particular tutorial order.
@@ -227,7 +227,7 @@ class AgentOnboardingTests(unittest.TestCase):
         router = self.page("agents/lifecycle")
         self.assertLess(len(router.splitlines()), 50)
         self.assert_links_to_pages(router, *AGENT_PAGES[1:], CONSOLE_AGENT_PAGE,
-                                   PHOTO_PAGE, "integrations/claude-code")
+                                   PHOTO_PAGE, "integrations/index")
         self.assertFalse(code_blocks(router, "bash"))
         self.assertFalse(code_blocks(router, "typescript"))
 
@@ -306,7 +306,7 @@ class AgentOnboardingTests(unittest.TestCase):
         self.assert_concept(auth, r"browser|signs this computer in")
         self.assert_concept(auth, r"(?:never|not).{0,35}command arguments")
         self.assert_links_to_pages(auth, "agents/create-agent", "agents/delete-agent",
-                                   "integrations/claude-code")
+                                   "integrations/index")
 
     def test_start_keeps_organization_creation_separate_from_existing_tokens(self):
         skill = self.page("skill")
@@ -319,7 +319,7 @@ class AgentOnboardingTests(unittest.TestCase):
         self.assertNotIn("POST /v1/agents", start)
         self.assertNotIn("Neither path requires a Console account", start)
         self.assert_links_to_pages(skill, "agents/create-agent", "cli/auth",
-                                   "integrations/claude-code", PHOTO_PAGE, "agents/delete-agent",
+                                   "integrations/index", PHOTO_PAGE, "agents/delete-agent",
                                    "integrations/skills")
 
     def test_full_prompt_has_one_generated_owner_and_no_greeting(self):
@@ -432,7 +432,7 @@ class AgentOnboardingTests(unittest.TestCase):
         self.assert_concept(observer, r"runtime.{0,40}consumer|consumer.{0,40}runtime")
         self.assertTrue(any(re.match(r"\s*npx relaymessenger\S* watch\b", line)
                             for line in command_examples(observer).splitlines()))
-        self.assert_links_to_pages(observer, "integrations/claude-code", OBSERVER_PAGE)
+        self.assert_links_to_pages(observer, "integrations/index", OBSERVER_PAGE)
 
     def test_optional_skill_installation_preserves_consent_and_secret_isolation(self):
         skills = self.page("integrations/skills")
