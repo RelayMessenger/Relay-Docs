@@ -498,9 +498,10 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Add comes back: POST /v1/contacts for people, is_contact on chat handles, request_state, chat.request.updated and error 2029 removed, Relay-Server PR 225, September 13, 2026.
 # Client heartbeat and send rate limits, Relay-Server, September 16, 2026.
 # Source authority: Relay-Server commit 74b7603f; Calls API and call.created/updated/ended, September 17, 2026.
+# Source authority: Relay-Server commit 4f5e617b; call room socket GET /v1/calls/{callId}/room replaces the four REST media routes, September 18, 2026.
 # The digest pins source bytes independently of the Server release commit.
 expected_openapi_sha256 = (
-    "1d790da998a8dfc26cffc098def76d85b8275af7a343148df8e78c486cd02849"
+    "ac8f0008d9644ab518e4c84edeaad9cc99783f030ecfac451709bce58b65ccb8"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
@@ -697,11 +698,8 @@ expected_operation_ids = {
     "acceptCall",
     "declineCall",
     "endCall",
-    "markCallConnected",
-    "createCallConnection",
-    "subscribeCallAudio",
-    "renegotiateCallAudio",
     "connectCallAudioWebSocket",
+    "connectCallRoom",
 }
 if len(operation_ids) != len(expected_operation_ids) or set(operation_ids) != expected_operation_ids:
     raise SystemExit(

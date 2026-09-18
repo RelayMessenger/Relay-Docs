@@ -58,11 +58,8 @@ const sidebarTitles = {
   acceptCall: "Accept",
   declineCall: "Decline",
   endCall: "End",
-  markCallConnected: "Report connected",
-  createCallConnection: "Connect audio",
-  subscribeCallAudio: "Subscribe",
-  renegotiateCallAudio: "Renegotiate",
   connectCallAudioWebSocket: "Stream audio",
+  connectCallRoom: "Join room",
 };
 
 for (const [operationId, sidebarTitle] of Object.entries(sidebarTitles)) {
