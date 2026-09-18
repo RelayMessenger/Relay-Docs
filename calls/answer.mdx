@@ -1,11 +1,11 @@
 ---
 title: "Answer an incoming call"
 sidebarTitle: "Answer a call"
-description: "Verify a call invitation, acknowledge it durably, and accept it in a per-call worker."
-keywords: ["call.created", "accept call", "signed webhook", "per-call runtime"]
+description: "Receive call.created, join the call room, get your audio ready, then accept."
+keywords: ["call.created", "accept call", "call room", "roomState", "per-call runtime"]
 ---
 
-Answer an incoming Call by committing its signed event, then accepting it in a separate worker.
+Answer an incoming Call in three moves: commit the signed `call.created` event, join the call room and prepare your audio, then accept.
 
 ## Before you start
 
@@ -62,23 +62,49 @@ The receiver verifies `webhook-id`, `webhook-timestamp`, and `webhook-signature`
 HTTP/1.1 204 No Content
 ```
 
-## Accept in a per-call worker
+## Join the call room
 
-Read the committed `call.created` event, confirm it targets your agent, and serialize work by `call.id`. Run the following request in that worker:
+Read the committed `call.created` event, confirm it targets your agent, and serialize work by `call.id`. In that worker, open the [call room socket](/calls/room) with your Agent Token. The room answers `join` with a `roomState` frame, and the agent's copy carries `media`: the URL and grant for the [audio socket](/calls/media).
 
 <CodeGroup>
 ```typescript TypeScript SDK
-const { call } = await relay.calls.accept(callId);
+const room = relay.calls.room(call.id);
+
+room.on("roomState", async (state) => {
+  if (state.media && !audioStarted) {
+    await openAudioSocket(state.media);
+    audioStarted = true;
+    await room.accept();
+  }
+  if (state.call.status === "connecting" && audioReady) {
+    await room.connected();
+  }
+  if (state.call.status === "active") {
+    startModelTurn();
+  }
+});
+room.on("ended", ({ reason }) => releaseRuntime(reason));
 ```
 
 ```bash cURL
-curl -sS -X POST \
-  "https://api.staging.relayapp.im/v1/calls/$CALL_ID/accept" \
+curl -sS -i --no-buffer \
+  "https://api.staging.relayapp.im/v1/calls/$CALL_ID/room" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{}'
+  -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
+  -H 'Sec-WebSocket-Version: 13' \
+  -H "Sec-WebSocket-Key: $(openssl rand -base64 16)"
 ```
 </CodeGroup>
+
+The SDK sends `join` for you. Over a raw socket, send it as the first text frame and read `roomState` before anything else:
+
+```json Join
+{"type":"join"}
+```
+
+## Prepare, then accept
+
+Accept only after your audio path exists, so the caller hears you within a moment of the pick-up. The sequence is fixed by the room's [ordering guarantees](/calls/room#ordering-guarantees):
 
 ```mermaid
 sequenceDiagram
@@ -90,21 +116,29 @@ sequenceDiagram
   Receiver->>Inbox: verify and commit event_id
   Receiver-->>Relay: 204
   Inbox->>Runtime: work keyed by call.id
+  Runtime->>Relay: join (room socket)
+  Relay-->>Runtime: roomState with media
+  Runtime->>Relay: open audio socket, start your model
   Runtime->>Relay: accept
-  Relay-->>Runtime: connecting snapshot
-  Runtime->>Relay: create media connection
+  Relay-->>Runtime: roomState status connecting
+  Runtime->>Relay: connected
+  Relay-->>Runtime: roomState status active
 ```
 
-1. Stop if accept returns an `ended` snapshot. A queued invitation may already have expired.
-2. [Connect media](/calls/media), then report readiness after the audio path is ready.
-3. Keep model state, playback buffers, and cancellation local to this call. On `call.ended` or a socket close, cancel generation, clear queued output, close model and media connections, and stop timers.
+1. Wait for `roomState` and read `media`. Open the audio socket and start your model session in parallel.
+2. Send `accept`. The room moves the Call to `connecting` and pushes `roomState` to both sides.
+3. When your audio socket has reported `ready`, send `connected`. When the user's side has reported the same, the room pushes `roomState` with `status: "active"`; both sides are live.
+4. On `ended`, `call.ended`, or a socket close, cancel generation, clear queued output, close the model and audio connections, and stop timers.
+
+`accept`, `decline`, and `end` also remain REST routes ([accept](/api-reference/calls/accept-a-call), [decline](/api-reference/calls/decline-a-call), [end](/api-reference/calls/end-a-call)) for a backend that cannot hold a socket.
 
 ## What you get back
 
-A successful accept returns `200` with the current Call. A newly accepted call is `connecting`, not yet `active`:
+Every `roomState` carries the current Call. After `accept` it reads `connecting`, not yet `active`:
 
-```json Accepted Call
+```json roomState after accept
 {
+  "type": "roomState",
   "call": {
     "id": "01995978-1000-7000-8000-000000000001",
     "chat_id": "01995978-1000-7000-8000-000000000002",
@@ -119,22 +153,33 @@ A successful accept returns `200` with the current Call. A newly accepted call i
     "connected_at": null,
     "ended_at": null,
     "end_reason": null
+  },
+  "participants": [
+    {"contact_id": "01995978-1000-7000-8000-000000000003", "kind": "user", "attached": true, "track": "microphone", "muted": false, "connected": false},
+    {"contact_id": "01995978-1000-7000-8000-000000000004", "kind": "agent", "attached": true, "track": null, "muted": false, "connected": false}
+  ],
+  "media": {
+    "url": "wss://api.staging.relayapp.im/v1/calls/01995978-1000-7000-8000-000000000001/media",
+    "token": "<media-grant>",
+    "expires_at": "2026-09-17T23:01:02.000Z",
+    "audio_format": {"encoding": "pcm_s16le", "sample_rate": 48000, "channels": 2}
   }
 }
 ```
 
 ## When it fails
 
-- `401`: verify the Agent Token for API requests, or the subscription signing secret for webhook verification.
-- `403`: the agent is not the recipient or call permission changed. Stop setup.
-- `409`: read the current Call before retrying a state-dependent operation.
-- `503`: retain durable work and retry transient failures within the setup lease.
+- `401` on the upgrade: verify the Agent Token; for webhook verification, the subscription signing secret.
+- `404` on the upgrade: the Call is unknown or your agent is not a participant. Stop setup.
+- `410` on the upgrade: the Call already ended. A queued invitation may have expired.
+- `error` frame with `not_allowed`: the action is not valid for your role or the Call's status; read the latest `roomState`.
+- `ended` with `no_answer` or `failed`: the ringing lease (60 seconds) or the connecting lease (30 seconds) ran out.
 
 Use `event_id` for inbox deduplication and `revision` for snapshot ordering. Never start a second runtime for a replayed event or revive an ended call.
 
 ## Next steps
 
-- [Connect audio and release resources](/calls/media)
+- [Read the call room frames](/calls/room)
+- [Stream call audio](/calls/media)
 - [Verify webhook signatures](/webhooks/verify-signatures)
 - [Read call.ended](/events/call-ended)
-- [Accept API reference](/api-reference/calls/accept-a-call)
