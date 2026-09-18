@@ -1,0 +1,173 @@
+---
+title: "Buttons"
+description: "One to five tappable buttons under a Message. A tap sends the label back as text; a link button opens a page in the app."
+keywords: ["buttons", "interactive components", "tap", "one_time", "url button"]
+---
+
+A `buttons` part draws a vertical stack of one to five buttons under the text part beside it. Each item has a `label` of 1 to 80 characters and, for a link button, a `url`. Only an agent can send one, and a Message carries at most one.
+
+## Send buttons
+
+Put the `buttons` part beside a `text` part that asks the question. The text is what previews, notifications, and text-only readers see; the buttons are what the app draws.
+
+<Tabs>
+  <Tab title="Request">
+    ```json
+    {
+      "message": {
+        "parts": [
+          {"type":"text","value":"Which planet has the most moons?"},
+          {"type":"buttons","items":[
+            {"label":"Jupiter"},
+            {"label":"Saturn"},
+            {"label":"Neptune"},
+            {"label":"Mars"}
+          ]}
+        ]
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="What the person sees">
+    <Frame caption="Two to five choices under the question.">
+      <img src="/images/interactive-components/buttons-choices.png" alt="A Relay chat showing the question Which planet has the most moons? with four buttons: Jupiter, Saturn, Neptune, Mars" />
+    </Frame>
+  </Tab>
+</Tabs>
+
+## Receive a tap
+
+A tap is the person's next Message: one `text` part whose value is the label, with `reply_to` naming the buttons Message and its `part_index`. Your agent reads it like any other text. The buttons leave the screen once tapped, and the tap stays as the person's own bubble.
+
+<Tabs>
+  <Tab title="What you receive">
+    ```json
+    {
+      "event_type": "message.received",
+      "data": {
+        "parts": [{"type":"text","value":"Jupiter"}],
+        "reply_to": {"message_id":"01a0b5d5-2f9c-7502-9c18-b7c46c11f8af","part_index":1}
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="What the person sees">
+    <Frame caption="After the tap: the buttons are gone and the label is the person's message.">
+      <img src="/images/interactive-components/buttons-after-tap.png" alt="The same chat after tapping Jupiter: the buttons are gone, Jupiter shows as the person's blue bubble, and the agent replies" />
+    </Frame>
+  </Tab>
+</Tabs>
+
+The server accepts a reply to a `buttons` part only when it is one `text` part equal to one of that part's plain labels, sent by the user. A tap on a `url` button never reaches you.
+
+## Send a link button
+
+A `url` button opens the page in a browser inside the app and sends nothing. Use one when there is one thing to do next: connect an account, sign in, open a page, pay. It never leaves the screen, so the person can open it again.
+
+<Tabs>
+  <Tab title="Request">
+    ```json
+    {
+      "message": {
+        "parts": [
+          {"type":"text","value":"Connect your Google account to continue."},
+          {"type":"buttons","items":[
+            {"label":"Connect Google","url":"https://accounts.example.com/oauth/authorize"}
+          ]}
+        ]
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="What the person sees">
+    <Frame caption="A single link button, marked with an arrow.">
+      <img src="/images/interactive-components/buttons-link.png" alt="A Relay chat showing Connect your Google account to continue with one button, Connect Google, marked with an arrow" />
+    </Frame>
+  </Tab>
+</Tabs>
+
+## Keep buttons on screen
+
+Buttons disappear once tapped, the way a quick reply does. Send `"one_time": false` to keep them on screen to be tapped again, for controls such as Next or Another one. Absent means true.
+
+<Tabs>
+  <Tab title="Request">
+    ```json
+    {
+      "message": {
+        "parts": [
+          {"type":"text","value":"Why did the developer go broke? He used up all his cache."},
+          {"type":"buttons","one_time":false,"items":[
+            {"label":"Another one"},
+            {"label":"That is enough"}
+          ]}
+        ]
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="What the person sees">
+    <Frame caption="After a tap, the buttons stay and the next joke lands under them.">
+      <img src="/images/interactive-components/buttons-one-time-false.png" alt="A Relay chat where the Another one and That is enough buttons stay on screen after a tap, followed by the agent's next joke" />
+    </Frame>
+  </Tab>
+</Tabs>
+
+## Mix choices and a link
+
+A group can hold plain buttons and link buttons together. A tap on a plain button hides the whole group, link included; a tap on the link opens the page and hides nothing.
+
+<Tabs>
+  <Tab title="Request">
+    ```json
+    {
+      "message": {
+        "parts": [
+          {"type":"text","value":"Your Q3 report is ready."},
+          {"type":"buttons","items":[
+            {"label":"Approve"},
+            {"label":"Open report","url":"https://reports.example.com/q3"}
+          ]}
+        ]
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="What the person sees">
+    <Frame caption="Approve sends the label; Open report opens the page.">
+      <img src="/images/interactive-components/buttons-choices-and-link.png" alt="A Relay chat showing Your Q3 report is ready with two buttons, Approve and Open report, the second marked with an arrow" />
+    </Frame>
+  </Tab>
+</Tabs>
+
+## Choose when to send buttons
+
+Every Relay runtime gives its agent this text, so a person gets buttons under the same conditions whichever agent they talk to.
+
+Send buttons when your message ends with a question the person can answer by picking one of 2 to 5 short options you already know: yes or no, choosing between things you named, picking a next step, or a multiple-choice question in a quiz. Each label is a complete answer, so a tap replaces typing. Put the question in text beside the buttons.
+
+Send one button when there is one thing to do next. A `url` button opens it inside the app: connect an account, sign in, open the page, pay. A plain button confirms one step: Start, Done, Continue. Do not paste a link or ask "ready?" when a single button does the job.
+
+Do not send buttons when the answer is open-ended, when your options are not the full set of likely answers, or when you are not asking anything and there is nothing to do. One question or one action per message; never a menu of things you can do, and never as decoration.
+
+If you would otherwise write "reply 1, 2 or 3", list choices for the person to type, or paste a link for them to open, send buttons instead. If the person asks for buttons, send them.
+
+Buttons disappear once tapped. Set `one_time` to false only for controls the person is meant to tap again and again, such as Next, Another one, or Refresh.
+
+## Send them from a runtime
+
+Buttons are a property of the Message, so every runtime sends them through the send it already has: a backend puts the `buttons` part beside the text part in `parts`, a runtime with a send tool takes `buttons` and `one_time` arguments, and a runtime that answers in text ends the answer with a fenced code block tagged `buttons` holding the items array, which the bridge lifts into the part. Each [integration](/integrations/index) says which applies in its "What it can do" table.
+
+## When it fails
+
+| Status | Code | Cause |
+| --- | --- | --- |
+| `400` | [1005](/api-reference/errors#1005) | No items or more than 5, a label missing or over 80 characters, two buttons parts in one Message, or an unknown field such as `id`. |
+| `403` | [2003](/api-reference/errors#2003) | A user sent buttons, or an agent replied to a buttons part. |
+| `422` | [2006](/api-reference/errors#2006) | A reply to a buttons part that is not one `text` part equal to one of its plain labels, or a reaction on a buttons part. |
+
+## Next steps
+
+- [Interactive components](/interactive-components/index)
+- [Send a message](/messages/send)
+- [Replies](/messages/replies)
