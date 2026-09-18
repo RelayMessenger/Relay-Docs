@@ -227,7 +227,7 @@ class IntegrationDocsTests(unittest.TestCase):
             self.assertEqual(relay_cli_version, published["npm"]["relaymessenger"]["staging"],
                              "The current staging install needs a fresh CLI help capture")
         installs = {
-            CLI: f"npm install --global relaymessenger@{relay_cli_version}",
+            CLI: "npm install --global relaymessenger@staging",
             MCP: "npm install --global @relaymessenger/mcp@staging",
             "integrations/openclaw.mdx": "openclaw plugins install @relaymessenger/openclaw-plugin@staging",
             "integrations/hermes.mdx": "hermes plugins install RelayMessenger/Relay-Hermes --enable",
@@ -237,7 +237,7 @@ class IntegrationDocsTests(unittest.TestCase):
         for page, command in installs.items():
             self.assertIn(expected(command), commands(read(page)), page)
         self.assertIn(
-            expected(f"npx relaymessenger@{relay_cli_version} --help"),
+            expected("npx relaymessenger@staging --help"),
             commands(read(CLI)),
         )
         self.assertEqual(
