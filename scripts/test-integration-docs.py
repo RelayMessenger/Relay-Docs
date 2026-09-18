@@ -31,7 +31,6 @@ AUTH = "cli/auth.mdx"
 OBSERVE = "cli/watch.mdx"
 # 2026-09-11: native setup is folded into the main page; the Claude Code
 # guide is the page that owns the native connect walkthrough now.
-NATIVE = "integrations/claude-code.mdx"
 SKILLS = "integrations/skills.mdx"
 MCP = "integrations/mcp.mdx"
 OBSERVER_REFERENCE = "websocket/observe-events.mdx"
@@ -279,8 +278,10 @@ class IntegrationDocsTests(unittest.TestCase):
     def test_cli_routes_to_task_owners_without_copying_agent_flows(self):
         for task in ("create-agent", "list-agents", "delete-agent"):
             self.assertLink(CLI, f"/agents/{task}")
-        for page in (AUTH, OBSERVE, NATIVE):
+        for page in (AUTH, OBSERVE):
             self.assertLink(CLI, "/" + page.removesuffix(".mdx"))
+        # Owner ruling 2026-09-18: general pages route to the runtimes index, never one provider.
+        self.assertLink(CLI, "/integrations")
         for path in ROOT.glob("integrations/**/*.mdx"):
             self.assertFalse(
                 any(re.search(r"\bagents (?:create|list|delete)\b", line) for line in commands(path.read_text())),
@@ -331,7 +332,7 @@ class IntegrationDocsTests(unittest.TestCase):
             self.assertIn(marker, reference, "Wire details belong to the observer reference")
         self.assertConcept(reference, r"(?:neither|no|without).*ack", "An observer must never ACK")
         self.assertConcept(reference, r"without.*consuming fallback", "Observer failure must not start a consumer")
-        self.assertLink(OBSERVE, "/integrations/claude-code")
+        self.assertLink(OBSERVE, "/integrations")
 
     def test_native_runtimes_route_setup_to_the_owning_guide(self):
         # Owner ruling 2026-09-12: no runtime is the default; each native guide routes to the runtimes index.

@@ -28,7 +28,7 @@ if (installedVersion !== expectedVersion) {
   throw new Error(`${production ? 'Production' : 'Staging'} CLI reference needs relaymessenger ${expectedVersion} installed, found ${installedVersion}`
     + (production ? ` (run: npm install --no-save relaymessenger@${latestVersion})` : ''));
 }
-const installSpec = production ? 'relaymessenger' : `relaymessenger@${pinnedVersion}`;
+const installSpec = production ? 'relaymessenger' : 'relaymessenger@staging';
 const sourceRef = production ? 'main' : 'staging';
 const programModule = await import(pathToFileURL(require.resolve('relaymessenger/dist/program.js')).href);
 const directory = path.join(root, 'cli/reference');
@@ -318,7 +318,7 @@ function collect(commandPath) {
   if (pages.has(slug)) throw new Error(`Duplicate command slug ${slug}`);
   const title = TITLES[slug];
   if (!title) throw new Error(`Missing CLI title for ${slug}`);
-  const invocation = ['relaymessenger', ...commandPath].join(' ');
+  const invocation = [installSpec, ...commandPath].join(' ');
   const guide = GUIDE_LINKS[commandPath[0]];
   if (!guide) throw new Error(`Missing guide link for ${commandPath[0]}`);
   const rawDescription = command.description();
@@ -501,7 +501,7 @@ ${fence}text command-tree
 ${commandTree()}
 ${fence}
 
-[Connect a runtime](/integrations/claude-code) · [Install Relay guidance](/integrations/skills)
+[Connect a runtime](/integrations) · [Install Relay guidance](/integrations/skills)
 
 Source: [Relay-SDK CLI](https://github.com/RelayMessenger/Relay-SDK/tree/${sourceRef}/packages/cli).
 
