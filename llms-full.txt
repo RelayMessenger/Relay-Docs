@@ -2798,6 +2798,390 @@ Send the empty request to the chat's share route with your Agent Token. Nothing 
 - [Update a profile photo](/agents/profile-photos)
 - [Send a message](/messages/send)
 
+# Individual audio calls
+
+> Understand ownership, permission, and lifecycle for an individual audio call.
+
+Source: https://docs.staging.relayapp.im/calls/index.md
+
+A Call connects one user and one agent with live audio in an existing individual Chat.
+
+## Ownership
+
+**Relay carries the call; your backend runs the agent.** Your per-call runtime connects the audio stream to your model, tools, and Chat context. Configure the model in your backend, not in the Call.
+
+```mermaid
+flowchart LR
+  App["User app"] <-->|"WebRTC audio"| Relay["Relay call and media"]
+  Relay <-->|"PCM audio"| Runtime["Your per-call runtime"]
+  Runtime <-->|"Audio, context, tools"| Model["Your model"]
+  Relay -->|"Call events"| Runtime
+```
+
+The built-in `@relay` uses the same public Call APIs and media protocol. The Call object contains identity, lifecycle, and timestamps. Audio travels on the media connection, separately from durable events and Chat history.
+
+## Permission
+
+- The user must have added the agent. An agent cannot grant itself call permission.
+- Both Contacts must be active, visible members of the individual Chat.
+- A block in either direction takes precedence over the contact relationship.
+- Only the recipient can accept or decline. Either side can end the call.
+- Ending remains possible after a block or relationship removal. Existing members can read retained call history.
+
+The backend uses its existing Agent Token for control requests. The user app uses its normal authenticated connection to Relay.
+
+## Lifecycle
+
+```mermaid
+stateDiagram-v2
+  [*] --> ringing
+  ringing --> connecting: recipient accepts
+  connecting --> active: both sides report media ready
+  ringing --> ended: decline, cancel, or expiry
+  connecting --> ended: end or setup failure
+  active --> ended: end or disconnect
+  ended --> [*]
+```
+
+- `ringing` starts at revision `1`. The setup lease is 60 seconds.
+- Accepting moves to `connecting` with a 30-second setup lease. Repeating accept does not extend it.
+- `active` requires both sides to acknowledge ready media. An accepted invitation or model handshake alone is insufficient.
+- `ended` is final. Ringing expiry ends with `no_answer`; connecting expiry ends with `failed`. An established call has no setup-lease duration limit.
+
+Relay emits `call.created`, `call.updated`, and `call.ended` with `data: {call}`. Keep the highest `revision` for each call and deduplicate envelopes by `event_id`.
+
+## Start or recover a call
+
+[Create a Call](/api-reference/calls/start-an-individual-call) with one recipient Handle, `mode: "audio"`, and an `Idempotency-Key` of 1 to 255 characters. Creation returns `201`; an identical retry returns `200`. Reuse the same key and body after an uncertain result. Mismatched reuse returns `409`.
+
+One live Call can occupy a Chat at a time. [Retrieve its snapshot](/api-reference/calls/retrieve-a-call) or [list that Chat's calls](/api-reference/calls/list-calls-in-a-chat) to recover state.
+
+## Next steps
+
+- [Answer a call](/calls/answer)
+- [Connect audio](/calls/media)
+- [Read the Call object](/api-reference/resources/calls/overview)
+- [Receive call.created](/events/call-created)
+
+# Answer an incoming call
+
+> Verify a call invitation, acknowledge it durably, and accept it in a per-call worker.
+
+Source: https://docs.staging.relayapp.im/calls/answer.md
+
+Answer an incoming Call by committing its signed event, then accepting it in a separate worker.
+
+## Before you start
+
+- Use an Agent Token and the signing secret for your [webhook subscription](/webhooks/subscriptions).
+- Subscribe to `call.created`, `call.updated`, and `call.ended`.
+- Provide a durable inbox with a unique `event_id` and a runtime keyed by `call.id`.
+- The caller must meet the [individual-call permission rules](/calls#permission).
+
+## Receive and queue the invitation
+
+**Return `2xx` after the durable write, not after the reply.** Read the raw request body before JSON middleware. `commitOnce` below is your inbox transaction: it stores the event or recognizes an already-committed duplicate.
+
+```typescript TypeScript SDK
+import Relay, { type CallWebhookEvent } from "@relaymessenger/sdk";
+
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+  baseURL: "https://api.staging.relayapp.im",
+  webhookSecret: process.env.RELAY_WEBHOOK_SECRET!,
+});
+
+export async function receive(
+  request: Request,
+  commitOnce: (event: CallWebhookEvent) => Promise<void>,
+): Promise<Response> {
+  const rawBody = await request.text();
+  let event: CallWebhookEvent;
+  try {
+    event = relay.webhooks.unwrap<CallWebhookEvent>(rawBody, {
+      headers: request.headers,
+    });
+  } catch {
+    return new Response("Webhook rejected", { status: 401 });
+  }
+  if (!["call.created", "call.updated", "call.ended"].includes(event.event_type)) {
+    return new Response(null, { status: 204 });
+  }
+  if (event.event_type === "call.created" &&
+      event.data.call.to[0].id !== event.agent_id) {
+    return new Response(null, { status: 204 });
+  }
+  try {
+    await commitOnce(event);
+  } catch {
+    return new Response("Inbox unavailable", { status: 503 });
+  }
+  return new Response(null, { status: 204 });
+}
+```
+
+The receiver verifies `webhook-id`, `webhook-timestamp`, and `webhook-signature` against the original body. A Standard Webhooks verifier can replace the SDK; the [signature format](/webhooks/verify-signatures#read-the-signature-format) is identical.
+
+```http Acknowledgment
+HTTP/1.1 204 No Content
+```
+
+## Accept in a per-call worker
+
+Read the committed `call.created` event, confirm it targets your agent, and serialize work by `call.id`. Run the following request in that worker:
+
+<CodeGroup>
+```typescript TypeScript SDK
+const { call } = await relay.calls.accept(callId);
+```
+
+```bash cURL
+curl -sS -X POST \
+  "https://api.staging.relayapp.im/v1/calls/$CALL_ID/accept" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+</CodeGroup>
+
+```mermaid
+sequenceDiagram
+  participant Relay
+  participant Receiver
+  participant Inbox
+  participant Runtime
+  Relay->>Receiver: signed call.created
+  Receiver->>Inbox: verify and commit event_id
+  Receiver-->>Relay: 204
+  Inbox->>Runtime: work keyed by call.id
+  Runtime->>Relay: accept
+  Relay-->>Runtime: connecting snapshot
+  Runtime->>Relay: create media connection
+```
+
+1. Stop if accept returns an `ended` snapshot. A queued invitation may already have expired.
+2. [Connect media](/calls/media), then report readiness after the audio path is ready.
+3. Keep model state, playback buffers, and cancellation local to this call. On `call.ended` or a socket close, cancel generation, clear queued output, close model and media connections, and stop timers.
+
+## What you get back
+
+A successful accept returns `200` with the current Call. A newly accepted call is `connecting`, not yet `active`:
+
+```json Accepted Call
+{
+  "call": {
+    "id": "01995978-1000-7000-8000-000000000001",
+    "chat_id": "01995978-1000-7000-8000-000000000002",
+    "from": {"id": "01995978-1000-7000-8000-000000000003", "handle": "alice", "kind": "user"},
+    "to": [{"id": "01995978-1000-7000-8000-000000000004", "handle": "example", "kind": "agent"}],
+    "mode": "audio",
+    "status": "connecting",
+    "revision": 2,
+    "created_at": "2026-09-17T23:00:00.000Z",
+    "ringing_at": "2026-09-17T23:00:00.000Z",
+    "answered_at": "2026-09-17T23:00:02.000Z",
+    "connected_at": null,
+    "ended_at": null,
+    "end_reason": null
+  }
+}
+```
+
+## When it fails
+
+- `401`: verify the Agent Token for API requests, or the subscription signing secret for webhook verification.
+- `403`: the agent is not the recipient or call permission changed. Stop setup.
+- `409`: read the current Call before retrying a state-dependent operation.
+- `503`: retain durable work and retry transient failures within the setup lease.
+
+Use `event_id` for inbox deduplication and `revision` for snapshot ordering. Never start a second runtime for a replayed event or revive an ended call.
+
+## Next steps
+
+- [Connect audio and release resources](/calls/media)
+- [Verify webhook signatures](/webhooks/verify-signatures)
+- [Read call.ended](/events/call-ended)
+- [Accept API reference](/api-reference/calls/accept-a-call)
+
+# Stream call audio
+
+> Connect a scoped media grant, stream bounded PCM audio, and clean up a call.
+
+Source: https://docs.staging.relayapp.im/calls/media.md
+
+Stream a Call's audio through an authenticated, call-scoped media WebSocket.
+
+## Before you start
+
+[Accept the Call](/calls/answer) before creating media. A user app uses WebRTC; an agent backend uses the WebSocket transport described here. Keep its model session and playback state in a runtime keyed by `call.id`.
+
+## Connect the media stream
+
+Create the agent's connection with its ordinary Agent Token:
+
+<CodeGroup>
+```typescript TypeScript SDK
+const { connection } = await relay.calls.connections.create(callId, {
+  transport: "websocket",
+});
+```
+
+```bash cURL
+curl -sS -X POST \
+  "https://api.staging.relayapp.im/v1/calls/$CALL_ID/connections" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"transport":"websocket"}'
+```
+</CodeGroup>
+
+The `201` response supplies an ephemeral Relay grant:
+
+```json Agent connection
+{
+  "connection": {
+    "id": "01995978-1000-7000-8000-000000000005",
+    "call_id": "01995978-1000-7000-8000-000000000001",
+    "transport": "websocket",
+    "url": "wss://api.staging.relayapp.im/v1/calls/01995978-1000-7000-8000-000000000001/media",
+    "token": "<media-grant>",
+    "expires_at": "2026-09-17T23:01:02.000Z",
+    "audio_format": {"encoding": "pcm_s16le", "sample_rate": 48000, "channels": 2}
+  }
+}
+```
+
+Open the returned URL with `Authorization: Bearer <media-grant>`. The grant is scoped to one Call, Contact, and connection, expires after 60 seconds, and is consumed by a successful upgrade. Relay checks current call permission and the connection's Agent Token before upgrading.
+
+```http WebSocket upgrade
+GET /v1/calls/01995978-1000-7000-8000-000000000001/media HTTP/1.1
+Host: api.staging.relayapp.im
+Upgrade: websocket
+Connection: Upgrade
+Authorization: Bearer <media-grant>
+Sec-WebSocket-Version: 13
+Sec-WebSocket-Key: <client-generated-key>
+```
+
+Use the grant only in the header, keep it out of logs, and use the returned URL without query parameters. SFU credentials remain inside Relay.
+
+## Read the frames
+
+The socket carries JSON text control frames and binary audio frames.
+
+| Direction | Frame | Meaning |
+| --- | --- | --- |
+| Relay → agent | `start` | Confirms Call, connection, and audio format |
+| Relay → agent | `ready` | Both audio directions are attached |
+| Either direction | Binary PCM | Audio bytes in the negotiated format |
+| Agent → Relay | `clear` | Discards pending generated speech |
+| Relay → agent | `ended` | Terminal reason, followed by a normal socket close |
+
+```json Start
+{"type":"start","call_id":"01995978-1000-7000-8000-000000000001","connection_id":"01995978-1000-7000-8000-000000000005","audio_format":{"encoding":"pcm_s16le","sample_rate":48000,"channels":2}}
+```
+
+```json Ready
+{"type":"ready"}
+```
+
+Wait for `ready` before sending audio. Report your side's readiness once its audio path is ready; the user app reports its own side separately:
+
+<CodeGroup>
+```typescript TypeScript SDK
+const { call } = await relay.calls.connected(callId);
+```
+
+```bash cURL
+curl -sS -X POST \
+  "https://api.staging.relayapp.im/v1/calls/$CALL_ID/connected" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+</CodeGroup>
+
+```http Readiness response
+HTTP/1.1 200 OK
+Content-Type: application/json
+```
+
+The body is a [Call snapshot](/api-reference/resources/calls/overview). It remains `connecting` until both sides have acknowledged ready media.
+
+## Send bounded audio
+
+**Send raw PCM bytes, not base64, JSON audio, or a provider envelope.**
+
+| Property | Value |
+| --- | --- |
+| Encoding | Signed 16-bit little-endian PCM, `pcm_s16le` |
+| Sample rate | 48,000 Hz |
+| Channels | 2, interleaved stereo |
+| Sample alignment | Non-empty frames with byte length divisible by 4 |
+| Maximum agent binary frame | 32 KiB, 32,768 bytes |
+| Relay output pacing | One 20 ms frame of 3,840 bytes per tick |
+| Maximum pending output | 500 ms, 96,000 bytes |
+
+Convert your model's audio to this format in your backend. Pace output at playback speed rather than sending an entire utterance at once. Relay zero-pads a final partial playback frame; invalid audio or an overflowing queue fails the call.
+
+On interruption, cancel the current model response, discard your own unsent chunks, and send:
+
+```json Clear pending speech
+{"type":"clear"}
+```
+
+`clear` discards Relay's pending playback. It cannot retract audio already sent. Keep listening to incoming audio while generated output is cleared.
+
+## End and release resources
+
+Either member can hang up:
+
+<CodeGroup>
+```typescript TypeScript SDK
+const { call } = await relay.calls.end(callId);
+```
+
+```bash cURL
+curl -sS -X POST \
+  "https://api.staging.relayapp.im/v1/calls/$CALL_ID/end" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+</CodeGroup>
+
+```http Hangup response
+HTTP/1.1 200 OK
+Content-Type: application/json
+```
+
+The response contains the ended Call. Ringing hangup uses `canceled`; an accepted call uses `completed`. Repeated terminal actions retain the existing state and reason.
+
+```json Ended
+{"type":"ended","reason":"completed"}
+```
+
+On `ended`, `call.ended`, socket close, or a setup failure, cancel model work, stop playback and timers, clear local buffers, and close both connections. Relay closes its media resources when the call ends. Blocks, contact removal, and Agent Token revocation also end affected calls.
+
+## When it fails
+
+| Status or signal | Action |
+| --- | --- |
+| `401` | Check the control Agent Token or the media grant's expiry, use, and token authority |
+| `403` | Stop setup: a block or relationship change removed call permission |
+| `409` | Read the Call; readiness or peer-track setup may still be pending, or the call has ended |
+| `503` | Retry temporary media failures only while setup remains valid |
+| `ended`, close, or error | Release the per-call runtime and model session |
+
+For WebRTC, [subscribe](/api-reference/calls/receive-the-other-sides-audio) returns `409` until the other audio track is ready. Retry during setup, then submit the answer through [renegotiate](/api-reference/calls/finish-audio-negotiation). Keep recovery bounded by the Call's [setup leases](/calls#lifecycle), rather than permanent polling.
+
+## Next steps
+
+- [Answer an incoming call](/calls/answer)
+- [Create a media connection](/api-reference/calls/connect-call-audio)
+- [Read call.ended](/events/call-ended)
+- [Review the Call lifecycle](/calls#lifecycle)
+
 # What an agent is
 
 > Choose how to create, connect, inspect, or delete a Relay Agent.
@@ -3880,10 +4264,10 @@ Relay sends six JSON text frames after the upgrade, and your backend sends three
 | `full_sync` | Relay to backend | Pause delivery and set the recovery boundary |
 | `error` | Relay to backend | Report a protocol or delivery failure |
 | `disconnect` | Relay to backend | State why Relay is closing the connection |
-| `ping` | Relay to backend | Check connection liveness |
+| `ping` | Backend to Relay | Show the connection is alive |
 | `ack` | Backend to Relay | Accept all events through one sequence |
 | `full_sync_complete` | Backend to Relay | Commit recovery through the required boundary |
-| `pong` | Backend to Relay | Answer a heartbeat |
+| `pong` | Relay to backend | Answer a heartbeat |
 
 ## Read the ready frame
 
@@ -3895,7 +4279,7 @@ The first frame after the upgrade is `ready`. Read `acked_through` for the agent
 | `acked_through` | Highest sequence Relay has durably accepted |
 | `full_sync_required` | Whether normal event delivery is paused for recovery |
 | `full_sync_through` | Exact recovery boundary, or `null` |
-| `heartbeat_interval_ms` | Server ping interval, `30000` |
+| `heartbeat_interval_ms` | How often to send `ping`, `30000` |
 | `max_in_flight` | Maximum unacknowledged events on this connection |
 
 ## Read the event frame
@@ -3934,10 +4318,10 @@ Relay pauses delivery when the connection holds `max_in_flight` unacknowledged e
 
 ## Handle heartbeats
 
-Relay sends a `ping` frame every 30 seconds. Answer within 60 seconds or Relay closes the connection with reason `heartbeat_timeout`. Heartbeats only show that the connection is alive; ACKs are what advance delivery:
+Send a `ping` frame every 30 seconds, serialized exactly as below. Relay answers `pong` at the edge without waking the agent's connection state. If no `pong` arrives within 60 seconds, reconnect with backoff. Relay closes a connection that has sent no `ping` for 60 seconds with reason `heartbeat_timeout`. Heartbeats only show that the connection is alive; ACKs are what advance delivery:
 
 ```json
-{"type":"pong"}
+{"type":"ping"}
 ```
 
 ## When it fails
@@ -4618,6 +5002,9 @@ console.log(await relay.webhookEvents.list());
     "chat.typing_indicator.stopped",
     "contact.added",
     "contact.removed",
+    "call.created",
+    "call.updated",
+    "call.ended",
     "chat.request.updated"
   ],
   "doc_url": "https://docs.relayapp.im/guides/webhooks/events"
@@ -9394,6 +9781,9 @@ Subscribe to the events your backend acts on and ignore the rest; a webhook subs
 | [`chat.typing_indicator.stopped`](/events/chat-typing-indicator-stopped) | A contact's typing indicator ends | `ChatTypingIndicatorStoppedEvent` |
 | [`contact.added`](/events/contact-added) | A person wrote to your agent first, replied to its message, or added your agent | `ContactAddedEvent` |
 | [`contact.removed`](/events/contact-removed) | A person removes or blocks your agent | `ContactRemovedEvent` |
+| [`call.created`](/events/call-created) | A call involving your agent is created and ringing | `CallResult` |
+| [`call.updated`](/events/call-updated) | A call involving your agent changes state | `CallResult` |
+| [`call.ended`](/events/call-ended) | A call involving your agent ends | `CallResult` |
 
 ## List event types
 
@@ -9432,7 +9822,10 @@ Relay answers `200` with every event name and the URL of this catalog. The order
     "chat.typing_indicator.started",
     "chat.typing_indicator.stopped",
     "contact.added",
-    "contact.removed"
+    "contact.removed",
+    "call.created",
+    "call.updated",
+    "call.ended"
   ],
   "doc_url": "https://docs.relayapp.im/guides/webhooks/events"
 }
@@ -10308,6 +10701,102 @@ Remove the matching reaction from part `part_index` of message `message_id`; the
 
 - [Send reactions](/messages/reactions)
 - [Read the reaction.added event](/events/reaction-added)
+- [Choose an event type](/events)
+
+# call.created
+
+> Read the call.created data payload and its fields.
+
+Source: https://docs.staging.relayapp.im/events/call-created.md
+
+`call.created` fires when a user starts a call to your agent, or when your agent's own call is created. The call is `ringing`.
+
+## Read the payload
+
+The `data` object is the `CallResult` schema from the API contract: one `call` field holding the full [Call object](/api-reference/resources/calls/overview). The envelope around it is the same on every event and is described in the [event catalog](/events#read-the-envelope).
+
+| Field | Meaning |
+| --- | --- |
+| `call.id` | Call ID |
+| `call.chat_id` | The individual chat that carries the call |
+| `call.from` | The caller's `id`, `handle`, and `kind` |
+| `call.to` | One recipient with `id`, `handle`, and `kind` |
+| `call.status` | One of `ringing`, `connecting`, `active`, or `ended` |
+| `call.revision` | Increases on every state change |
+| `call.end_reason` | Why the call ended, otherwise `null` |
+
+## Handle the event
+
+Confirm `call.to[0].id` is your agent, commit the event by `event_id`, then [accept](/api-reference/calls/accept-a-call) or [decline](/api-reference/calls/decline-a-call) it in a worker keyed by `call.id`. The ringing setup lease is 60 seconds.
+
+## Next steps
+
+- [Answer a call](/calls/answer)
+- [Read the call.updated event](/events/call-updated)
+- [Choose an event type](/events)
+
+# call.updated
+
+> Read the call.updated data payload and its fields.
+
+Source: https://docs.staging.relayapp.im/events/call-updated.md
+
+`call.updated` fires when a call involving your agent changes state without ending, for example from `ringing` to `connecting` or from `connecting` to `active`.
+
+## Read the payload
+
+The `data` object is the `CallResult` schema from the API contract: one `call` field holding the full [Call object](/api-reference/resources/calls/overview). The envelope around it is the same on every event and is described in the [event catalog](/events#read-the-envelope).
+
+| Field | Meaning |
+| --- | --- |
+| `call.id` | Call ID |
+| `call.chat_id` | The individual chat that carries the call |
+| `call.from` | The caller's `id`, `handle`, and `kind` |
+| `call.to` | One recipient with `id`, `handle`, and `kind` |
+| `call.status` | One of `ringing`, `connecting`, `active`, or `ended` |
+| `call.revision` | Increases on every state change |
+| `call.end_reason` | Why the call ended, otherwise `null` |
+
+## Handle the event
+
+Keep the snapshot with the highest `revision` for each `call.id` and drop older or duplicate envelopes. When `status` becomes `active`, both sides have reported connected media.
+
+## Next steps
+
+- [Connect audio](/calls/media)
+- [Read the call.ended event](/events/call-ended)
+- [Choose an event type](/events)
+
+# call.ended
+
+> Read the call.ended data payload and its fields.
+
+Source: https://docs.staging.relayapp.im/events/call-ended.md
+
+`call.ended` fires when a call involving your agent ends. `status` is `ended` and `end_reason` names why.
+
+## Read the payload
+
+The `data` object is the `CallResult` schema from the API contract: one `call` field holding the full [Call object](/api-reference/resources/calls/overview). The envelope around it is the same on every event and is described in the [event catalog](/events#read-the-envelope).
+
+| Field | Meaning |
+| --- | --- |
+| `call.id` | Call ID |
+| `call.chat_id` | The individual chat that carries the call |
+| `call.from` | The caller's `id`, `handle`, and `kind` |
+| `call.to` | One recipient with `id`, `handle`, and `kind` |
+| `call.status` | One of `ringing`, `connecting`, `active`, or `ended` |
+| `call.revision` | Increases on every state change |
+| `call.end_reason` | Why the call ended, otherwise `null` |
+
+## Handle the event
+
+Cancel model work, stop playback and timers, and close the media connection for `call.id`. `end_reason` is one of `completed`, `declined`, `canceled`, `no_answer`, `disconnected`, or `failed`. Never revive an ended call.
+
+## Next steps
+
+- [End and release resources](/calls/media#end-and-release-resources)
+- [Read the call.created event](/events/call-created)
 - [Choose an event type](/events)
 
 # Error codes
@@ -11278,6 +11767,84 @@ Common authentication, validation, and server errors apply alongside resource er
 - [Error codes](/api-reference/errors)
 - [Receive events](/events)
 
+# Calls
+
+> Start, answer, connect, and end individual audio calls between a user and an agent.
+
+Source: https://docs.staging.relayapp.im/api-reference/resources/calls/overview.md
+
+Start, answer, connect, and end individual audio calls between a user and an agent.
+
+## The Call object
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | Unique identifier for the call |
+| `chat_id` | string | The individual chat that carries the call |
+| `from` | object | The caller's `id`, `handle`, and `kind` (`user` or `agent`) |
+| `to` | array | One recipient with `id`, `handle`, and `kind` |
+| `mode` | string | `audio` |
+| `status` | string | One of `ringing`, `connecting`, `active`, or `ended` |
+| `revision` | integer | Increases on every state change; keep the highest per call |
+| `created_at` | string | When the call was created |
+| `ringing_at` | string | When the recipient started ringing |
+| `answered_at` | string or null | When the recipient accepted |
+| `connected_at` | string or null | When both sides reported connected media |
+| `ended_at` | string or null | When the call ended |
+| `end_reason` | string or null | One of `completed`, `declined`, `canceled`, `no_answer`, `disconnected`, or `failed` |
+
+## Example
+
+`POST /v1/chats/{chatId}/calls` with one recipient handle and `mode: "audio"` returns HTTP `201`:
+
+```json
+{
+  "call": {
+    "id": "01995978-1000-7000-8000-000000000001",
+    "chat_id": "01995978-1000-7000-8000-000000000002",
+    "from": {"id": "01995978-1000-7000-8000-000000000004", "handle": "example", "kind": "agent"},
+    "to": [{"id": "01995978-1000-7000-8000-000000000003", "handle": "alice", "kind": "user"}],
+    "mode": "audio",
+    "status": "ringing",
+    "revision": 1,
+    "created_at": "2026-09-17T23:00:00.000Z",
+    "ringing_at": "2026-09-17T23:00:00.000Z",
+    "answered_at": null,
+    "connected_at": null,
+    "ended_at": null,
+    "end_reason": null
+  }
+}
+```
+
+## Operations
+
+| Method | Path | What it does |
+| --- | --- | --- |
+| `POST` | [`/v1/chats/{chatId}/calls`](/api-reference/calls/start-an-individual-call) | Start an individual call |
+| `GET` | [`/v1/chats/{chatId}/calls`](/api-reference/calls/list-calls-in-a-chat) | List calls in a chat |
+| `GET` | [`/v1/calls/{callId}`](/api-reference/calls/retrieve-a-call) | Retrieve a call |
+| `POST` | [`/v1/calls/{callId}/accept`](/api-reference/calls/accept-a-call) | Accept a call |
+| `POST` | [`/v1/calls/{callId}/decline`](/api-reference/calls/decline-a-call) | Decline a call |
+| `POST` | [`/v1/calls/{callId}/end`](/api-reference/calls/end-a-call) | End a call |
+| `POST` | [`/v1/calls/{callId}/connected`](/api-reference/calls/report-connected-media) | Report connected media |
+| `POST` | [`/v1/calls/{callId}/connections`](/api-reference/calls/connect-call-audio) | Connect call audio |
+| `POST` | [`/v1/calls/{callId}/connections/{connectionId}/subscribe`](/api-reference/calls/receive-the-other-sides-audio) | Receive the other side's audio |
+| `POST` | [`/v1/calls/{callId}/connections/{connectionId}/renegotiate`](/api-reference/calls/finish-audio-negotiation) | Finish audio negotiation |
+| `GET` | [`/v1/calls/{callId}/media`](/api-reference/calls/stream-live-call-audio) | Stream live call audio |
+
+## Errors
+
+Common authentication, validation, and server errors apply alongside resource errors. Read `error.message` for the rejected condition.
+
+[1005](/api-reference/errors#1005), [2001](/api-reference/errors#2001), [2003](/api-reference/errors#2003), [2004](/api-reference/errors#2004), [3006](/api-reference/errors#3006).
+
+## Next steps
+
+- [API overview](/api-reference/overview)
+- [Error codes](/api-reference/errors)
+- [Answer a call](/calls/answer)
+
 # Product updates
 
 > Changes to Relay APIs, runtime connections, and developer documentation.
@@ -11568,6 +12135,8 @@ tags:
     description: Receive agent events over a durable acknowledged WebSocket.
   - name: Contacts
     description: Request a user Contact.
+  - name: Calls
+    description: Start, answer, end and connect individual user-agent audio calls.
 paths:
   /v1/agents/{handle}:
     delete:
@@ -13098,8 +13667,795 @@ paths:
         heartbeat: send {"type":"ping"} every heartbeat_interval_ms and Relay
         answers {"type":"pong"} from the edge runtime, without waking the
         Agent's connection state. Relay never sends a ping frame.
+  /v1/chats/{chatId}/calls:
+    post:
+      operationId: createCall
+      summary: Start an individual call
+      tags:
+        - Calls
+      security:
+        - BearerAuth: []
+      description: Start an audio Call in an existing individual Chat containing one user and one agent. The caller comes from authentication. The user must have added the agent; sending or replying to a Message establishes that relationship. A block in either direction prevents the call. A group Chat is rejected even when it has only two current members. Reuse the same Idempotency-Key and body after an uncertain response. Ringing has a 60-second setup lease; an accepted Call has 30 seconds to connect. Established calls have no duration limit imposed by these setup leases.
+      parameters:
+        - name: chatId
+          in: path
+          required: true
+          schema: &a1
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 255
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CallCreateRequest"
+      responses:
+        "200":
+          description: The original Call for the same idempotent request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallResult"
+        "201":
+          description: Call created and ringing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    get:
+      operationId: listCalls
+      summary: List calls in a chat
+      tags:
+        - Calls
+      security:
+        - BearerAuth: []
+      description: Read retained call history for a Chat you belong to.
+      parameters:
+        - name: chatId
+          in: path
+          required: true
+          schema: *a1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Operation completed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallListResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /v1/calls/{callId}:
+    get:
+      operationId: getCall
+      summary: Retrieve a call
+      tags:
+        - Calls
+      security:
+        - BearerAuth: []
+      description: Only a Contact in the Call can retrieve it.
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema: *a1
+      responses:
+        "200":
+          description: Operation completed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /v1/calls/{callId}/accept:
+    post:
+      operationId: acceptCall
+      summary: Accept a call
+      tags:
+        - Calls
+      security:
+        - BearerAuth: []
+      description: The recipient accepts a ringing Call. The Call becomes connecting, not active.
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema: *a1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CallEmptyRequest"
+      responses:
+        "200":
+          description: Operation completed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /v1/calls/{callId}/decline:
+    post:
+      operationId: declineCall
+      summary: Decline a call
+      tags:
+        - Calls
+      security:
+        - BearerAuth: []
+      description: The recipient declines a ringing Call. The Call ends with reason declined.
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema: *a1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CallEmptyRequest"
+      responses:
+        "200":
+          description: Operation completed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /v1/calls/{callId}/end:
+    post:
+      operationId: endCall
+      summary: End a call
+      tags:
+        - Calls
+      security:
+        - BearerAuth: []
+      description: Either Contact ends the Call. A ringing Call ends canceled; an answered Call ends completed. Cleanup remains available after a block or removal. Repeated terminal actions never restart the Call.
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema: *a1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CallEmptyRequest"
+      responses:
+        "200":
+          description: Operation completed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /v1/calls/{callId}/connected:
+    post:
+      operationId: markCallConnected
+      summary: Report connected media
+      tags:
+        - Calls
+      security:
+        - BearerAuth: []
+      description: Report that this Contact has connected media. The Call becomes active only after both Contacts have reported media readiness.
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema: *a1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CallEmptyRequest"
+      responses:
+        "200":
+          description: Operation completed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /v1/calls/{callId}/connections:
+    post:
+      operationId: createCallConnection
+      summary: Connect call audio
+      tags:
+        - Calls
+      security:
+        - BearerAuth: []
+      description: Connect an accepted Call. Users connect with WebRTC; agent backends connect a live audio WebSocket. The returned media grant is scoped to the authenticated Contact and Call. Provider credentials remain on Relay servers.
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema: *a1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CallConnectionRequest"
+      responses:
+        "201":
+          description: Operation completed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallConnectionResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /v1/calls/{callId}/connections/{connectionId}/subscribe:
+    post:
+      operationId: subscribeCallAudio
+      summary: Receive the other side’s audio
+      tags:
+        - Calls
+      security:
+        - BearerAuth: []
+      description: For a WebRTC connection, request the other side’s audio track. Apply the returned offer and submit your answer through renegotiate. A 409 means the other track is not ready; retry only during connection setup.
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema: *a1
+        - name: connectionId
+          in: path
+          required: true
+          schema: *a1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CallEmptyRequest"
+      responses:
+        "200":
+          description: Operation completed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallSubscribeResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /v1/calls/{callId}/connections/{connectionId}/renegotiate:
+    post:
+      operationId: renegotiateCallAudio
+      summary: Finish audio negotiation
+      tags:
+        - Calls
+      security:
+        - BearerAuth: []
+      description: Submit the WebRTC answer to an offer returned by subscribe.
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema: *a1
+        - name: connectionId
+          in: path
+          required: true
+          schema: *a1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CallRenegotiateRequest"
+      responses:
+        "200":
+          description: Operation completed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallRenegotiateResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /v1/calls/{callId}/media:
+    get:
+      operationId: connectCallAudioWebSocket
+      summary: Stream live call audio
+      tags:
+        - Calls
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema: *a1
+      description: 'Upgrade the URL returned by createCallConnection with Authorization: Bearer <media grant>. This route accepts a scoped Call media grant, not an Agent Token. Binary frames in both directions carry signed 16-bit little-endian PCM audio at 48,000 Hz, stereo. The server sends start with call_id, connection_id and audio_format, then ready once both audio directions are attached. Send JSON {"type":"clear"} to discard pending speech after interruption. The server sends ended with reason, then closes the connection when the Call ends. Audio frames are ephemeral and are not durable webhook or chat events.'
+      responses:
+        "101":
+          description: Call audio WebSocket connected.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
 components:
   schemas:
+    CallContact:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - handle
+        - kind
+      properties:
+        id: &uuid
+          type: string
+          format: uuid
+        handle:
+          type: string
+          minLength: 1
+        kind:
+          type: string
+          enum:
+            - user
+            - agent
+    Call:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - chat_id
+        - from
+        - to
+        - mode
+        - status
+        - revision
+        - created_at
+        - ringing_at
+        - answered_at
+        - connected_at
+        - ended_at
+        - end_reason
+      properties:
+        id: *uuid
+        chat_id: *uuid
+        from:
+          $ref: "#/components/schemas/CallContact"
+        to:
+          type: array
+          minItems: 1
+          maxItems: 1
+          items:
+            $ref: "#/components/schemas/CallContact"
+        mode:
+          type: string
+          enum:
+            - audio
+        status:
+          type: string
+          enum:
+            - ringing
+            - connecting
+            - active
+            - ended
+        revision:
+          type: integer
+          minimum: 1
+        created_at: &a2
+          type: string
+          format: date-time
+        ringing_at: *a2
+        answered_at: &a3
+          type:
+            - string
+            - "null"
+          format: date-time
+        connected_at: *a3
+        ended_at: *a3
+        end_reason:
+          type:
+            - string
+            - "null"
+          enum:
+            - null
+            - completed
+            - declined
+            - canceled
+            - no_answer
+            - disconnected
+            - failed
+    CallCreateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - to
+        - mode
+      properties:
+        to:
+          type: array
+          minItems: 1
+          maxItems: 1
+          items:
+            type: string
+            minLength: 1
+        mode:
+          type: string
+          enum:
+            - audio
+    CallResult:
+      type: object
+      additionalProperties: false
+      required:
+        - call
+      properties:
+        call:
+          $ref: "#/components/schemas/Call"
+    CallListResult:
+      type: object
+      additionalProperties: false
+      required:
+        - calls
+        - next_cursor
+      properties:
+        calls:
+          type: array
+          items:
+            $ref: "#/components/schemas/Call"
+        next_cursor:
+          type:
+            - string
+            - "null"
+    CallEmptyRequest:
+      type: object
+      additionalProperties: false
+      required: []
+      properties: {}
+    CallAudioFormat:
+      type: object
+      additionalProperties: false
+      required:
+        - encoding
+        - sample_rate
+        - channels
+      properties:
+        encoding:
+          type: string
+          enum:
+            - pcm_s16le
+        sample_rate:
+          type: integer
+          enum:
+            - 48000
+        channels:
+          type: integer
+          enum:
+            - 2
+    CallOffer:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - sdp
+      properties:
+        type:
+          type: string
+          enum:
+            - offer
+        sdp:
+          type: string
+          minLength: 1
+          maxLength: 65536
+    CallAnswer:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - sdp
+      properties:
+        type:
+          type: string
+          enum:
+            - answer
+        sdp:
+          type: string
+          minLength: 1
+          maxLength: 65536
+    CallWebRTCConnectionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - transport
+        - session_description
+        - tracks
+      properties:
+        transport:
+          type: string
+          enum:
+            - webrtc
+        session_description:
+          $ref: "#/components/schemas/CallOffer"
+        tracks:
+          type: array
+          minItems: 1
+          maxItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - mid
+              - name
+            properties:
+              mid:
+                type: string
+                minLength: 1
+                maxLength: 64
+              name:
+                type: string
+                enum:
+                  - microphone
+    CallWebSocketConnectionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - transport
+      properties:
+        transport:
+          type: string
+          enum:
+            - websocket
+    CallConnectionRequest:
+      oneOf:
+        - $ref: "#/components/schemas/CallWebRTCConnectionRequest"
+        - $ref: "#/components/schemas/CallWebSocketConnectionRequest"
+    CallWebRTCConnection:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - call_id
+        - transport
+        - session_description
+      properties:
+        id: *uuid
+        call_id: *uuid
+        transport:
+          type: string
+          enum:
+            - webrtc
+        session_description:
+          $ref: "#/components/schemas/CallAnswer"
+    CallWebSocketConnection:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - call_id
+        - transport
+        - url
+        - token
+        - expires_at
+        - audio_format
+      properties:
+        id: *uuid
+        call_id: *uuid
+        transport:
+          type: string
+          enum:
+            - websocket
+        url:
+          type: string
+          format: uri
+          pattern: ^wss://
+        token:
+          type: string
+          minLength: 32
+          description: Short-lived Relay media grant for this Call and connection. Supply it as the WebSocket Authorization bearer. Treat it as a secret.
+        expires_at: *a2
+        audio_format:
+          $ref: "#/components/schemas/CallAudioFormat"
+    CallConnectionResult:
+      type: object
+      additionalProperties: false
+      required:
+        - connection
+      properties:
+        connection:
+          oneOf:
+            - $ref: "#/components/schemas/CallWebRTCConnection"
+            - $ref: "#/components/schemas/CallWebSocketConnection"
+    CallSubscribeResult:
+      type: object
+      additionalProperties: false
+      required:
+        - session_description
+      properties:
+        session_description:
+          $ref: "#/components/schemas/CallOffer"
+    CallRenegotiateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - session_description
+      properties:
+        session_description:
+          $ref: "#/components/schemas/CallAnswer"
+    CallRenegotiateResult:
+      type: object
+      additionalProperties: false
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+          const: true
+    CallCreatedWebhook:
+      allOf:
+        - $ref: "#/components/schemas/WebhookEnvelopeBase"
+        - type: object
+          required:
+            - event_type
+            - data
+          properties:
+            event_type:
+              type: string
+              const: call.created
+            data:
+              $ref: "#/components/schemas/CallResult"
+    CallUpdatedWebhook:
+      allOf:
+        - $ref: "#/components/schemas/WebhookEnvelopeBase"
+        - type: object
+          required:
+            - event_type
+            - data
+          properties:
+            event_type:
+              type: string
+              const: call.updated
+            data:
+              $ref: "#/components/schemas/CallResult"
+    CallEndedWebhook:
+      allOf:
+        - $ref: "#/components/schemas/WebhookEnvelopeBase"
+        - type: object
+          required:
+            - event_type
+            - data
+          properties:
+            event_type:
+              type: string
+              const: call.ended
+            data:
+              $ref: "#/components/schemas/CallResult"
     AddParticipantRequest:
       type: object
       required:
@@ -15696,6 +17052,9 @@ components:
         - chat.typing_indicator.stopped
         - contact.added
         - contact.removed
+        - call.created
+        - call.updated
+        - call.ended
     WebhookEventsResult:
       type: object
       required:
@@ -15986,6 +17345,7 @@ x-tagGroups:
       - Chats
       - Messages
       - Attachments
+      - Calls
   - name: Contacts
     tags:
       - Contacts
@@ -16277,6 +17637,54 @@ x-relay-webhooks:
           application/json:
             schema:
               $ref: "#/components/schemas/ContactRemovedWebhook"
+      responses:
+        "200":
+          description: Webhook received successfully
+  call.created.v2026-08-30:
+    post:
+      tags:
+        - 2026-08-30
+      operationId: webhookCallCreatedV20260830
+      summary: Call created
+      description: A Call involving your agent changed. Compare call.revision when events arrive more than once or out of order.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CallCreatedWebhook"
+      responses:
+        "200":
+          description: Webhook received successfully
+  call.updated.v2026-08-30:
+    post:
+      tags:
+        - 2026-08-30
+      operationId: webhookCallUpdatedV20260830
+      summary: Call updated
+      description: A Call involving your agent changed. Compare call.revision when events arrive more than once or out of order.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CallUpdatedWebhook"
+      responses:
+        "200":
+          description: Webhook received successfully
+  call.ended.v2026-08-30:
+    post:
+      tags:
+        - 2026-08-30
+      operationId: webhookCallEndedV20260830
+      summary: Call ended
+      description: A Call involving your agent changed. Compare call.revision when events arrive more than once or out of order.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CallEndedWebhook"
       responses:
         "200":
           description: Webhook received successfully
