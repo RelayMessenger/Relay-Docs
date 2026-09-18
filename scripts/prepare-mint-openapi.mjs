@@ -52,6 +52,17 @@ const sidebarTitles = {
   setupContactCard: "Create",
   updateContactCard: "Update",
   connectAgentWebSocket: "Connect",
+  createCall: "Start",
+  listCalls: "List",
+  getCall: "Retrieve",
+  acceptCall: "Accept",
+  declineCall: "Decline",
+  endCall: "End",
+  markCallConnected: "Report connected",
+  createCallConnection: "Connect audio",
+  subscribeCallAudio: "Subscribe",
+  renegotiateCallAudio: "Renegotiate",
+  connectCallAudioWebSocket: "Stream audio",
 };
 
 for (const [operationId, sidebarTitle] of Object.entries(sidebarTitles)) {

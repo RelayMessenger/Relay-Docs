@@ -496,10 +496,11 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # A person's reply accepts a message request; the request route takes deleted
 # only, Relay-Server PR 207, September 9, 2026.
 # Add comes back: POST /v1/contacts for people, is_contact on chat handles, request_state, chat.request.updated and error 2029 removed, Relay-Server PR 225, September 13, 2026.
-# Source authority: Relay-Server commit 55e12f23; client heartbeat and send rate limits.
+# Client heartbeat and send rate limits, Relay-Server, September 16, 2026.
+# Source authority: Relay-Server commit 74b7603f; Calls API and call.created/updated/ended, September 17, 2026.
 # The digest pins source bytes independently of the Server release commit.
 expected_openapi_sha256 = (
-    "de33237b05b09414c1994446f746795ab8bf410cb2c8f1422259103775cfc182"
+    "9e92c51df654d6896e13a56e95b6a32ce0fbb4c77ed9c754603482890e84dfde"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
@@ -690,6 +691,17 @@ expected_operation_ids = {
     "updateChat",
     "updateContactCard",
     "updateWebhookSubscription",
+    "createCall",
+    "listCalls",
+    "getCall",
+    "acceptCall",
+    "declineCall",
+    "endCall",
+    "markCallConnected",
+    "createCallConnection",
+    "subscribeCallAudio",
+    "renegotiateCallAudio",
+    "connectCallAudioWebSocket",
 }
 if len(operation_ids) != len(expected_operation_ids) or set(operation_ids) != expected_operation_ids:
     raise SystemExit(
@@ -759,7 +771,7 @@ contract_events = {
 event_catalog_text = webhook_events_text
 documented_events = set(
     re.findall(
-        r"`((?:message|reaction|participant|chat|contact)\.[a-z_.]+)`",
+        r"`((?:message|reaction|participant|chat|contact|call)\.[a-z_.]+)`",
         event_catalog_text,
     )
 )
