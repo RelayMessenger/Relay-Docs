@@ -161,10 +161,15 @@ generation, or tests completed, say so and leave the connection pending.
 - A Message belongs to one Chat and contains ordered parts.
 - Parts are `text`, `media`, or `link` on sends.
 - Replies and reactions target zero-based `part_index`.
-- Button items have a text `label` and exactly one of `id` or `url`; never send
-  button image fields. A `buttons` part accepts only a `button_reply` tap, not
-  ordinary replies or reactions. Text and `button_reply` bubbles still accept
-  ordinary replies and reactions.
+- Button items have a text `label` of 1 to 80 characters and, for a link
+  button, a `url`; never send button ids or image fields. A tap is the person's
+  next text Message, equal to the label, with `reply_to` naming the `buttons`
+  part; a `buttons` part accepts only that, not ordinary replies or reactions.
+- Send buttons when the Message ends with a question answered by picking one
+  of 2 to 5 known options, or one button when there is one thing to do next
+  (a `url` button to open a page inside the app, a plain button to confirm a
+  step). Never as a menu of capabilities or as decoration. If the person asks
+  for buttons, send them.
 - Group membership controls which history a Contact can read.
 
 ## Webhook events

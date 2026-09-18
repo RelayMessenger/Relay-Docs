@@ -10,9 +10,9 @@ from origins import target
 
 ROOT = Path(__file__).resolve().parents[1]
 # Independently read canonical contract at the Server staging removal merge.
-UPSTREAM_COMMIT = "78d7991c7b8a615302ab30d727503779755df3ab"
-UPSTREAM_STAGING_COMMIT = "78d7991c7b8a615302ab30d727503779755df3ab"
-UPSTREAM_SHA256 = "1d790da998a8dfc26cffc098def76d85b8275af7a343148df8e78c486cd02849"
+UPSTREAM_COMMIT = "db71ee6047aac7d1f08fa3ede4b45c8e4ce70155"
+UPSTREAM_STAGING_COMMIT = "db71ee6047aac7d1f08fa3ede4b45c8e4ce70155"
+UPSTREAM_SHA256 = "6a0abd34db9d26e89170dd5cae6c7e0683af2cd076ec86f562367297330ec13e"
 
 
 class ContractSourceTests(unittest.TestCase):
@@ -28,21 +28,26 @@ class ContractSourceTests(unittest.TestCase):
                              f"Canonical input differs from Relay-Server {UPSTREAM_COMMIT}; "
                              "for local coordinated changes set RELAY_OPENAPI_SOURCE")
 
-    def test_buttons_are_text_only_and_keep_tap_reply_semantics(self):
+    def test_buttons_are_text_only_and_a_tap_is_the_label_as_text(self):
         canonical = (ROOT / "api-reference/openapi.yaml").read_text()
         items = canonical.split("    ButtonItem:\n", 1)[1].split("    ButtonsPart:\n", 1)[0]
         self.assertNotIn("image_url", items)
-        self.assertIn("only a valid sole-part `button_reply`", canonical)
-        self.assertIn("Text and `button_reply` parts remain replyable", canonical)
-        self.assertIn("Text and `button_reply` parts remain reactable", canonical)
+        self.assertNotIn("          id:", items)
+        self.assertNotIn("button_reply", canonical)
+        self.assertIn("The only reply it accepts is a tap", canonical)
         parts = (ROOT / "messages/parts.mdx").read_text()
         self.assertNotIn("image_url", parts)
-        self.assertIn('"type":"button_reply"', parts)
-        self.assertIn("ordinary replies and reactions", parts)
+        self.assertNotIn("button_reply", parts)
+        self.assertIn('"parts": [{"type":"text","value":"Approve"}]', parts)
+        self.assertIn("## Choose when to send buttons", parts)
+        self.assertIn("If the person asks for buttons, send them.", parts)
         for path in ("skill.md", ".mintlify/skills/relay/SKILL.md"):
-            self.assertIn("not\n  ordinary replies or reactions", (ROOT / path).read_text())
-
-        self.assertIn("The accompanying `text` part and the tap", (ROOT / "llms-full.txt").read_text())
+            skill = (ROOT / path).read_text()
+            self.assertIn("not ordinary replies or reactions", skill)
+            self.assertNotIn("button_reply", skill)
+        full = (ROOT / "llms-full.txt").read_text()
+        self.assertIn("The accompanying `text` part supports ordinary replies and reactions", full)
+        self.assertNotIn("button_reply", full)
 
     def test_projection_changes_only_environment_origins(self):
         expected = (ROOT / "api-reference/openapi.yaml").read_bytes()
