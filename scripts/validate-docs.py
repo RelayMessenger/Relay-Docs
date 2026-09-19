@@ -499,9 +499,10 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Client heartbeat and send rate limits, Relay-Server, September 16, 2026.
 # Source authority: Relay-Server commit 74b7603f; Calls API and call.created/updated/ended, September 17, 2026.
 # Source authority: Relay-Server commit ef8cedb1; call room socket GET /v1/calls/{callId}/room replaces the four REST media routes, September 18, 2026.
+# Source authority: Relay-Server commit 9cffa7a8; an unnamed group's display_name is null, September 18, 2026.
 # The digest pins source bytes independently of the Server release commit.
 expected_openapi_sha256 = (
-    "379ba81f3bd4092bf65c445a730c396620a162a37fec775c0e382bf9edce2640"
+    "ba2d90304cac9ae88a3d1b645c47793ebe376c39ada2799e6e98c99027d7ddb7"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
