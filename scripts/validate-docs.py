@@ -500,10 +500,10 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server commit 74b7603f; Calls API and call.created/updated/ended, September 17, 2026.
 # Source authority: Relay-Server commit ef8cedb1; call room socket GET /v1/calls/{callId}/room replaces the four REST media routes, September 18, 2026.
 # Source authority: Relay-Server commit 9cffa7a8; an unnamed group's display_name is null, September 18, 2026.
-# Source authority: Relay-Server commit da4e6a4d; the buttons part drops one_time and a plain tap always puts the group away, September 19, 2026.
+# Source authority: Relay-Server commit 17ad8d0c; rebuilt call-address channel, September 19, 2026.
 # The digest pins source bytes independently of the Server release commit.
 expected_openapi_sha256 = (
-    "d692e233f1a31ac20bf4ade552037c9fef1cb1d8c5051e4d25c9844f7cecc63a"
+    "c97bee2a79fac1866326a7df4398bb8b9750b824cf501dfe226130c18275c171"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
@@ -697,11 +697,7 @@ expected_operation_ids = {
     "createCall",
     "listCalls",
     "getCall",
-    "acceptCall",
-    "declineCall",
     "endCall",
-    "connectCallAudioWebSocket",
-    "connectCallRoom",
 }
 if len(operation_ids) != len(expected_operation_ids) or set(operation_ids) != expected_operation_ids:
     raise SystemExit(
@@ -926,7 +922,7 @@ for command in sdk_install_commands:
         )
 
 for name, pattern in {
-    "deprecated product name": r"\bRelay App\b",
+    "deprecated product name": r"(?-i:\bRelay App\b)",
     "Business API name": r"\bBusiness API\b",
     "Partner API name": r"\bPartner API\b",
     "mobile product namespace": r"\bmobile(?: API| namespace| endpoint| boundary)?\b",

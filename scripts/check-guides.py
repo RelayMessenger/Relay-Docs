@@ -61,6 +61,8 @@ def requests(text):
         variants = []
         for f in FENCES.finditer(block[0]):
             lang, code = f[2].lower(), f[3]
+            # Worker fetch handlers declare an inbound request handler, not an outbound call.
+            code = re.sub(r'\b(?:async\s+)?fetch\s*\([^)]*\)\s*\{', '', code)
             if re.search(r'\bcurl\s+(?:[^\n]*|\\\n)', code) and lang.split(' ')[0] in {'bash', 'sh', 'shell', 'console'}:
                 variants.append('curl')
             if lang.split(' ')[0] in {'typescript', 'ts', 'javascript', 'js'} and re.search(r'\b(?:(?:relay|client)\.(?!(?:webhooks\.(?:verify|unwrap)|events\.(?:on|off))\b)[\w.]+|Relay\.createAgent|\w+\.getNextPage|fetch)\s*\(', code):
