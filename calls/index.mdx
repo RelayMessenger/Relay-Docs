@@ -1,68 +1,159 @@
 ---
-title: "Individual audio calls"
+title: "Audio calls"
 sidebarTitle: "Overview"
-description: "Understand ownership, permission, and lifecycle for an individual audio call."
-keywords: ["calls", "audio", "individual chat", "call permission"]
+description: "Register a call address and answer calls with Twilio Media Streams."
+keywords: ["calls", "audio", "call_url", "WebSocket", "Twilio Media Streams"]
 ---
 
-A Call connects one user and one agent with live audio in an existing individual Chat.
+## What a call is
 
-## Ownership
+A person calls your agent from the Relay app. Relay rings your agent's call address and carries the audio. Your backend runs the agent.
 
-**Relay carries the call; your backend runs the agent.** Your per-call runtime connects the audio stream to your model, tools, and Chat context. Configure the model in your backend, not in the Call.
+## Register your call address
 
-```mermaid
-flowchart LR
-  App["User app"] <-->|"Room socket"| Room["Relay call room"]
-  Room <-->|"Room socket"| Runtime["Your per-call runtime"]
-  App <-->|"WebRTC audio"| Media["Relay media"]
-  Media <-->|"PCM audio"| Runtime
-  Runtime <-->|"Audio, context, tools"| Model["Your model"]
-  Room -->|"Call events"| Runtime
+Register one `call_url` on your agent. It must be a `wss://` URL that accepts a WebSocket connection.
+
+Set it in Relay Console, with the CLI, or with `PATCH /v1/contact_card?handle=<agent handle>`. The API request uses your Agent Token.
+
+```bash
+curl -sS -X PATCH 'https://api.staging.relayapp.im/v1/contact_card?handle=<agent handle>' \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"call_url":"wss://your-agent.example/relay"}'
 ```
 
-The built-in `@relay` uses the same public Call APIs, room socket, and audio protocol. The Call object contains identity, lifecycle, and timestamps. Signalling travels on the [room socket](/calls/room), audio on the media connection, separately from durable events and Chat history.
+## How Relay rings you
 
-## Permission
+When a person taps call, Relay opens a WebSocket to your `call_url`. The request is signed like a webhook.
 
-- The user must have added the agent. An agent cannot grant itself call permission.
-- Both Contacts must be active, visible members of the individual Chat.
-- A block in either direction takes precedence over the contact relationship.
-- Only the recipient can accept or decline. Either side can end the call.
-- Ending remains possible after a block or relationship removal. Existing members can read retained call history.
+Accept the WebSocket with HTTP `101` within the 10-second ring lease to answer. The call becomes `active`. Any other reply declines the call; no reply ends it with `no_answer`.
 
-The backend uses its existing Agent Token for control requests. The user app uses its normal authenticated connection to Relay.
+Relay speaks Twilio Media Streams. The first message identifies the protocol.
 
-## Lifecycle
-
-```mermaid
-stateDiagram-v2
-  [*] --> ringing
-  ringing --> connecting: recipient accepts
-  connecting --> active: both sides report media ready
-  ringing --> ended: decline, cancel, or expiry
-  connecting --> ended: end or setup failure
-  active --> ended: end or disconnect
-  ended --> [*]
+```json
+{"event":"connected","protocol":"Call","version":"1.0.0"}
 ```
 
-- `ringing` starts at revision `1`. The setup lease is 60 seconds.
-- Accepting moves to `connecting` with a 30-second setup lease. Repeating accept does not extend it.
-- `active` requires both sides to acknowledge ready media. An accepted invitation or model handshake alone is insufficient.
-- `ended` is final. Ringing expiry ends with `no_answer`; connecting expiry ends with `failed`. An established call has no setup-lease duration limit.
+The `start` message identifies the call, caller, callee, chat, and audio format. Both `streamSid` and `callSid` are the Relay call ID.
 
-Relay emits `call.created`, `call.updated`, and `call.ended` with `data: {call}`. Keep the highest `revision` for each call and deduplicate envelopes by `event_id`.
+```json
+{
+  "event": "start",
+  "sequenceNumber": "1",
+  "start": {
+    "streamSid": "<call id>",
+    "callSid": "<call id>",
+    "tracks": ["inbound"],
+    "mediaFormat": {
+      "encoding": "audio/x-mulaw",
+      "sampleRate": 8000,
+      "channels": 1
+    },
+    "customParameters": {
+      "from": "<caller handle>",
+      "to": "<callee handle>",
+      "chat_id": "<chat id>",
+      "direction": "inbound"
+    }
+  },
+  "streamSid": "<call id>"
+}
+```
 
-## Start or recover a call
+Then `media` messages carry base64-encoded mu-law audio at 8 kHz. The audio payload has this shape.
 
-[Create a Call](/api-reference/calls/start-an-individual-call) with one recipient Handle, `mode: "audio"`, and an `Idempotency-Key` of 1 to 255 characters. Creation returns `201`; an identical retry returns `200`. Reuse the same key and body after an uncertain result. Mismatched reuse returns `409`.
+```json
+{"event":"media","streamSid":"<call id>","media":{"payload":"<base64 mu-law 8 kHz>"}}
+```
 
-One live Call can occupy a Chat at a time. [Retrieve its snapshot](/api-reference/calls/retrieve-a-call) or [list that Chat's calls](/api-reference/calls/list-calls-in-a-chat) to recover state.
+A `stop` message ends the stream.
 
-## Next steps
+```json
+{"event":"stop","streamSid":"<call id>"}
+```
 
-- [Answer a call](/calls/answer)
-- [Read the call room frames](/calls/room)
-- [Stream call audio](/calls/media)
-- [Read the Call object](/api-reference/resources/calls/overview)
-- [Receive call.created](/events/call-created)
+## What you send back
+
+Send `media` to play audio to the caller. Encode raw mu-law audio at 8 kHz as base64, without audio file headers.
+
+```json
+{"event":"media","streamSid":"<call id>","media":{"payload":"<base64 mu-law 8 kHz>"}}
+```
+
+Send `clear` to drop buffered audio.
+
+```json
+{"event":"clear","streamSid":"<call id>"}
+```
+
+Send `mark` after audio to track playback. The returned mark has the same `name` when playback finishes or the buffer is cleared, as described in the [Twilio message reference](https://www.twilio.com/docs/voice/media-streams/websocket-messages#send-a-mark-message).
+
+```json
+{"event":"mark","streamSid":"<call id>","mark":{"name":"reply-finished"}}
+```
+
+## Use your framework's Twilio adapter
+
+On Cloudflare's Agents SDK, install `@cloudflare/voice-twilio` and route your call address to `TwilioAdapter.handleRequest`.
+
+```bash
+npm install agents @cloudflare/voice-twilio
+```
+
+```typescript
+import { Agent, routeAgentRequest } from "agents";
+import { withVoice, type VoiceTurnContext } from "agents/voice";
+import { TwilioAdapter } from "@cloudflare/voice-twilio";
+
+const VoiceAgent = withVoice(Agent);
+
+export class MyVoiceAgent extends VoiceAgent<Env> {
+  async onTurn(transcript: string, context: VoiceTurnContext) {
+    return "Hello! How can I help you?";
+  }
+}
+
+export default {
+  async fetch(request: Request, env: Env) {
+    const url = new URL(request.url);
+
+    if (url.pathname === "/relay") {
+      return TwilioAdapter.handleRequest(request, env, "MyVoiceAgent");
+    }
+
+    return (
+      (await routeAgentRequest(request, env)) ??
+      new Response("Not found", { status: 404 })
+    );
+  }
+};
+```
+
+Pipecat's Twilio transport accepts the same stream.
+
+OpenClaw's telephony provider accepts the same stream.
+
+## Ending a call
+
+Close the WebSocket to hang up. You can also end the call with `POST /v1/calls/{callId}/end`.
+
+## The call in the chat
+
+When a call ends for any reason, Relay writes one system message into its chat with `is_system_message: true` and `system_event.type: "call_ended"`. The event's `actor` is the caller, its `subject` is the callee, and its [`call` object](/api-reference/resources/messages/overview#system-events) records the outcome.
+
+`parts[0].value` is a plain sentence such as "Atlas called you" or "Atlas called you with no answer". The Relay app shows it as a call bubble on the caller's side. Agents receive it like any other system message and should not reply to it.
+
+## The Call object states
+
+| State | Meaning |
+| --- | --- |
+| `ringing` | Relay is waiting for your call address to accept the WebSocket. |
+| `active` | Your call address accepted the WebSocket within the ring lease. |
+| `ended` | The call has finished. |
+
+An ended Call has an `end_reason` of `completed`, `declined`, `canceled`, `no_answer`, `disconnected`, or `failed`.
+
+## See also
+
+- [Read call outcomes in messages](/api-reference/resources/messages/overview#system-events)
+- [Read chat history](/chats/history)
