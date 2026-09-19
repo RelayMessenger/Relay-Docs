@@ -1,48 +1,127 @@
 // A rendered buttons part, drawn the way the app draws it: a vertical stack of
 // pills under the message, a link button marked with an arrow, and the tap as
-// the person's own bubble. The bubble outline, tail included, is the Relay
-// bubble from images/hero/background.svg (228 x 75 at a 68-tall body),
-// scaled to the bubble's height and stretched to its width.
+// the person's own bubble. The bubble is the app's own silhouette: a port of
+// RelayBubbleGeometry.trailingRoundTailedPath (Relay-iOS,
+// Views/MessageBubbleShape.swift), the iOS 26.5 BubbleKit round-tailed bubble
+// at radius 20, with the app's 17pt body text and 14pt side insets.
 export const ButtonsPreview = ({ items, tapped, label }) => {
-  // Helpers live inside the component: the snippet is compiled as MDX, which
-  // keeps only exports in scope and reads a capitalised tag as an MDX component.
-  const bubblePath = (w, h) => {
-    const s = h / 68;
-    const L = (x) => (x * s).toFixed(2);
-    const R = (x) => (w - (228 - x) * s).toFixed(2);
-    const Y = (y) => (y * s).toFixed(2);
-    return [
-      `M ${L(0)} ${Y(30.57)}`,
-      `C ${L(0)} ${Y(21.77)} ${L(0)} ${Y(17.37)} ${L(1.5)} ${Y(12.63)}`,
-      `C ${L(3.38)} ${Y(7.46)} ${L(7.46)} ${Y(3.38)} ${L(12.63)} ${Y(1.5)}`,
-      `C ${L(17.37)} ${Y(0)} ${L(21.77)} ${Y(0)} ${L(30.57)} ${Y(0)}`,
-      `L ${R(197.43)} ${Y(0)}`,
-      `C ${R(206.23)} ${Y(0)} ${R(210.63)} ${Y(0)} ${R(215.37)} ${Y(1.5)}`,
-      `C ${R(220.54)} ${Y(3.38)} ${R(224.62)} ${Y(7.46)} ${R(226.5)} ${Y(12.63)}`,
-      `C ${R(228)} ${Y(17.37)} ${R(228)} ${Y(21.77)} ${R(228)} ${Y(30.57)}`,
-      `C ${R(228)} ${Y(52.31)} ${R(226.59)} ${Y(56.5)} ${R(223.97)} ${Y(59.92)}`,
-      `C ${R(222.91)} ${Y(61.31)} ${R(221.69)} ${Y(62.54)} ${R(220.34)} ${Y(63.58)}`,
-      `C ${R(218.42)} ${Y(65.08)} ${R(217.58)} ${Y(66.64)} ${R(217.58)} ${Y(68.4)}`,
-      `C ${R(217.58)} ${Y(69.59)} ${R(217.79)} ${Y(70.76)} ${R(219.49)} ${Y(72.99)}`,
-      `C ${R(220.31)} ${Y(74.06)} ${R(219.49)} ${Y(75.15)} ${R(218.21)} ${Y(74.67)}`,
-      `C ${R(215.59)} ${Y(73.67)} ${R(212.61)} ${Y(71.86)} ${R(210)} ${Y(69.93)}`,
-      `C ${R(207.65)} ${Y(68.19)} ${R(207.03)} ${Y(68.02)} ${R(205.93)} ${Y(68.01)}`,
-      `L ${L(30.57)} ${Y(68)}`,
-      `C ${L(21.77)} ${Y(68)} ${L(17.37)} ${Y(68)} ${L(12.63)} ${Y(66.5)}`,
-      `C ${L(7.46)} ${Y(64.62)} ${L(3.38)} ${Y(60.54)} ${L(1.5)} ${Y(55.37)}`,
-      `C ${L(0)} ${Y(50.63)} ${L(0)} ${Y(46.23)} ${L(0)} ${Y(37.43)}`,
-      "Z",
-    ].join(" ");
+  // Everything lives inside the component: the snippet is compiled as MDX,
+  // which keeps only exports in scope and reads a capitalised tag as an MDX
+  // component.
+  const WIDE = 20;
+  const TAIL_DEPTH_FACTOR = 0.33925;
+  const P = (x, y) => ({ x, y });
+  const corner = (start, c1, c2, p1, c3, c4, p2, c5, c6, end) => ({ start, c1, c2, p1, c3, c4, p2, c5, c6, end });
+  const KEYS = ["start", "c1", "c2", "p1", "c3", "c4", "p2", "c5", "c6", "end"];
+  const lerp = (a, b, t) => P(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
+  const mix = (a, b, t) => Object.fromEntries(KEYS.map((k) => [k, lerp(a[k], b[k], t)]));
+  const scaleCorner = (c, s) => Object.fromEntries(KEYS.map((k) => [k, P(c[k].x * s, c[k].y * s)]));
+  const swap = (p) => P(p.y, p.x);
+
+  // Direct iOS 26.5 control-point observations, one profile per body extent.
+  const samples = [
+    { extent: 40,
+      upper: corner(P(0, 20), P(0, 17.465204710537), P(0.481850397518, 14.953513771483), P(1.419892543171, 12.598675328518), P(3.452798428579, 7.495317284242), P(7.45648, 3.452798428579), P(12.62988, 1.498228), P(17.36814, 0), P(21.7698, 0), P(30.5733, 0)),
+      lower: corner(P(30.5733, 0), P(21.7698, 0), P(17.36814, 0), P(12.62988, 1.498228), P(7.45648, 3.3812), P(3.3812, 7.495317284242), P(1.419892543171, 12.598675328518), P(0.481850397518, 14.953513771483), P(0, 17.465204710537), P(0, 20)) },
+    { extent: 48,
+      upper: corner(P(0, 24), P(0, 19.093682211209), P(0.299560895653, 15.866994417456), P(1.449527740065, 12.610480411693), P(3.425711926322, 7.480624696595), P(7.45648, 3.425711926322), P(12.62988, 1.498228), P(17.36814, 0), P(21.7698, 0), P(30.5733, 0)),
+      lower: corner(P(30.5733, 0), P(21.7698, 0), P(17.36814, 0), P(12.62988, 1.498228), P(7.45648, 3.3812), P(3.3812, 7.480624696595), P(1.449527740065, 12.610480411693), P(0.299560895653, 15.866994417456), P(0, 19.093682211209), P(0, 24)) },
+    { extent: 60,
+      upper: corner(P(0, 30), P(0, 21.536398462216), P(0.026126642855, 17.237215386416), P(1.493980535405, 12.628188036454), P(3.385082172936, 7.458585815124), P(7.45648, 3.385082172936), P(12.62988, 1.498228), P(17.36814, 0), P(21.7698, 0), P(30.5733, 0)),
+      lower: corner(P(30.5733, 0), P(21.7698, 0), P(17.36814, 0), P(12.62988, 1.498228), P(7.45648, 3.3812), P(3.3812, 7.458585815124), P(1.493980535405, 12.628188036454), P(0.026126642855, 17.237215386416), P(0, 21.536398462216), P(0, 30)) },
+    { extent: 61.1466,
+      upper: corner(P(0, 30.5733), P(0, 21.7698), P(0, 17.36814), P(1.498228, 12.62988), P(3.3812, 7.45648), P(7.45648, 3.3812), P(12.62988, 1.498228), P(17.36814, 0), P(21.7698, 0), P(30.5733, 0)),
+      lower: corner(P(30.5733, 0), P(21.7698, 0), P(17.36814, 0), P(12.62988, 1.498228), P(7.45648, 3.3812), P(3.3812, 7.45648), P(1.498228, 12.62988), P(0, 17.36814), P(0, 21.7698), P(0, 30.5733)) },
+  ];
+
+  const profile = (extent) => {
+    const first = samples[0];
+    const last = samples[samples.length - 1];
+    if (extent <= first.extent) return first;
+    if (extent >= last.extent) return last;
+    for (let i = 0; i < samples.length - 1; i += 1) {
+      const lo = samples[i];
+      const hi = samples[i + 1];
+      if (extent >= lo.extent && extent <= hi.extent) {
+        const t = (extent - lo.extent) / (hi.extent - lo.extent);
+        return { upper: mix(lo.upper, hi.upper, t), lower: mix(lo.lower, hi.lower, t) };
+      }
+    }
+    return last;
   };
 
-  const tapBubble = (label) => {
-    const h = 38;
-    const w = Math.max(56, Math.round(label.length * 8.4 + 30));
-    const total = Math.ceil((75 / 68) * h);
+  // Each axis corrected on its own: the first half of a corner follows the
+  // vertical profile, the second the horizontal one.
+  const corners = (w, h) => {
+    const radius = Math.max(0, Math.min(WIDE, w / 2, h / 2));
+    const s = radius / WIDE;
+    const v = profile(h / s);
+    const hz = profile(w / s);
+    const vu = scaleCorner(v.upper, s);
+    const vl = scaleCorner(v.lower, s);
+    const hu = scaleCorner(hz.upper, s);
+    const hl = scaleCorner(hz.lower, s);
+    return {
+      radius,
+      upper: corner(vu.start, vu.c1, vu.c2, vu.p1, vu.c3, P(hu.c3.y, vu.c3.x), swap(hu.p1), swap(hu.c2), swap(hu.c1), swap(hu.start)),
+      lower: corner(swap(hl.end), swap(hl.c6), swap(hl.c5), swap(hl.p2), swap(hl.c4), vl.c4, vl.p2, vl.c5, vl.c6, vl.end),
+    };
+  };
+
+  const bubblePath = (w, h) => {
+    const { radius, upper, lower } = corners(w, h);
+    const s = radius / WIDE;
+    const f = (n) => n.toFixed(3);
+    const up = (p, mirrored) => P(mirrored ? w - p.x : p.x, p.y);
+    const low = (p) => P(p.x, h - p.y);
+    const tail = (xFromRight, yFromBottom) => P(w - xFromRight * s, h + yFromBottom * s);
+    const d = [];
+    const move = (p) => d.push(`M ${f(p.x)} ${f(p.y)}`);
+    const curve = (c1, c2, to) => d.push(`C ${f(c1.x)} ${f(c1.y)} ${f(c2.x)} ${f(c2.y)} ${f(to.x)} ${f(to.y)}`);
+
+    move(up(upper.start));
+    curve(up(upper.c1), up(upper.c2), up(upper.p1));
+    curve(up(upper.c3), up(upper.c4), up(upper.p2));
+    curve(up(upper.c5), up(upper.c6), up(upper.end));
+    const topRightStart = up(lower.start, true);
+    curve(up(upper.end), topRightStart, topRightStart);
+    curve(up(lower.c1, true), up(lower.c2, true), up(lower.p1, true));
+    curve(up(lower.c3, true), up(lower.c4, true), up(lower.p2, true));
+    curve(up(lower.c5, true), up(lower.c6, true), up(lower.end, true));
+    // The tail flow replaces the bottom-trailing corner.
+    const tailSideStart = up(lower.end, true);
+    const tailFlowStart = P(tailSideStart.x, Math.max(tailSideStart.y, low(lower.end).y));
+    curve(tailSideStart, tailFlowStart, tailFlowStart);
+    // BubbleKit's roundTailed(right, 1) contour at r=20, scaled by the radius.
+    curve(tail(0, -15.6938174), tail(1.4149, -11.5018174), tail(4.0279, -8.0758174));
+    curve(tail(5.0867, -6.687757), tail(6.3092, -5.4643142), tail(7.66, -4.4234174));
+    curve(tail(9.585, -2.9224174), tail(10.418, -1.3564174), tail(10.418, 0.4035826));
+    curve(tail(10.418, 1.5865826), tail(10.209, 2.7555826), tail(8.51, 4.9875826));
+    curve(tail(7.695, 6.0575826), tail(8.513, 7.1495826), tail(9.787, 6.6655826));
+    curve(tail(12.407, 5.6705826), tail(15.391, 3.8595826), tail(18.005, 1.9265826));
+    const rejoin = tail(22.07, 0.0125826);
+    curve(tail(20.347, 0.1945826), tail(20.971, 0.0195826), rejoin);
+    const bottomLeftStart = low(lower.start);
+    curve(rejoin, bottomLeftStart, bottomLeftStart);
+    curve(low(lower.c1), low(lower.c2), low(lower.p1));
+    curve(low(lower.c3), low(lower.c4), low(lower.p2));
+    curve(low(lower.c5), low(lower.c6), low(lower.end));
+    d.push("Z");
+    return d.join(" ");
+  };
+
+  const tapBubble = (text) => {
+    // The app's one-line body, measured on the simulator: 40pt tall, 17pt
+    // text, 14pt side insets. The text width is estimated; the page cannot
+    // measure it.
+    const h = 40;
+    const w = Math.max(2 * 20, Math.round(text.length * 8.6 + 28));
+    const radius = Math.min(WIDE, w / 2, h / 2);
+    const total = Math.ceil(h + radius * TAIL_DEPTH_FACTOR);
     return (
       <svg className="buttons-preview-tap" width={w} height={total} viewBox={`0 0 ${w} ${total}`} aria-hidden="true">
         <path d={bubblePath(w, h)} />
-        <text x={w / 2 - 3} y={h / 2} dominantBaseline="central" textAnchor="middle">{label}</text>
+        <text x={w / 2} y={h / 2} dominantBaseline="central" textAnchor="middle">{text}</text>
       </svg>
     );
   };
