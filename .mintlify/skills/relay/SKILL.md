@@ -167,9 +167,13 @@ generation, or tests completed, say so and leave the connection pending.
   part; a `buttons` part accepts only that, not ordinary replies or reactions.
 - Send buttons when the Message ends with a question answered by picking one
   of 2 to 5 known options, or one button when there is one thing to do next
-  (a `url` button to open a page inside the app, a plain button to confirm a
-  step). Never as a menu of capabilities or as decoration. If the person asks
-  for buttons, send them.
+  (a `url` button for a task done on a web page: pay, sign in, connect an
+  account; a plain button to confirm a step). Never as a menu of capabilities
+  or as decoration. If the person asks for buttons, send them.
+- Send a page the person will look at or read (an article, a listing, a
+  video, a place, a product page) as a `link` part alone in its own Message,
+  drawn as a card; never as a bare URL in text. A task goes on a `url`
+  button; a thing to look at goes out as a link.
 - Group membership controls which history a Contact can read.
 
 ## Webhook events
