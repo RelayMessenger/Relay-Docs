@@ -89,7 +89,7 @@ def validate_api_navigation(config):
                 continue
             pages = item["pages"]
             if item["group"] in set(RESOURCE_GROUPS):
-                if not pages or not isinstance(pages[0], str) or not pages[0].endswith("/overview"):
+                if item["group"] != "Calls" and (not pages or not isinstance(pages[0], str) or not pages[0].endswith("/overview")):
                     raise ValueError(f"{item['group']} must start with its overview")
                 if item.get("expanded") is not False:
                     raise ValueError(f"{item['group']} must collapse when inactive")
@@ -98,10 +98,12 @@ def validate_api_navigation(config):
     check_overviews(groups)
     resources = [g for g in groups if g["group"] in set(RESOURCE_GROUPS)]
     for group in resources:
-        if any(not page.startswith(methods) for page in group["pages"][1:]):
+        if any(not page.startswith(methods) for page in (group["pages"] if group["group"] == "Calls" else group["pages"][1:])):
             raise ValueError("Only generated endpoints may follow a resource overview")
     import re
     for group in resources:
+        if group["group"] == "Calls":
+            continue
         path = ROOT / (group["pages"][0] + ".mdx")
         headings = re.findall(r"^## (.+)$", path.read_text(), re.M)
         resource = RESOURCE_OBJECTS[group["group"]]

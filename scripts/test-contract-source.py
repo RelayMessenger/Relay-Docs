@@ -10,9 +10,9 @@ from origins import target
 
 ROOT = Path(__file__).resolve().parents[1]
 # Independently read canonical contract at the Server staging removal merge.
-UPSTREAM_COMMIT = "da4e6a4deff09c4c986289b96367300c5c9b361c"
-UPSTREAM_STAGING_COMMIT = "da4e6a4deff09c4c986289b96367300c5c9b361c"
-UPSTREAM_SHA256 = "d692e233f1a31ac20bf4ade552037c9fef1cb1d8c5051e4d25c9844f7cecc63a"
+UPSTREAM_COMMIT = "17ad8d0c1d1d420e88a008eeaa3f3e910cb01972"
+UPSTREAM_STAGING_COMMIT = "17ad8d0c1d1d420e88a008eeaa3f3e910cb01972"
+UPSTREAM_SHA256 = "c97bee2a79fac1866326a7df4398bb8b9750b824cf501dfe226130c18275c171"
 
 
 class ContractSourceTests(unittest.TestCase):
