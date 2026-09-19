@@ -2412,31 +2412,6 @@ A `url` button opens the page in a browser inside the app and sends nothing. Use
   </Tab>
 </Tabs>
 
-## Keep buttons on screen
-
-Buttons disappear once tapped, the way a quick reply does. Send `"one_time": false` to keep them on screen to be tapped again, for controls such as Next or Another one. Absent means true.
-
-<Tabs>
-  <Tab title="Preview">
-    <ButtonsPreview label="Two buttons that stay: Another one, That is enough" items={[{ label: "Another one" }, { label: "That is enough" }]} />
-  </Tab>
-  <Tab title="Request">
-    ```json
-    {
-      "message": {
-        "parts": [
-          {"type":"text","value":"Why did the developer go broke? He used up all his cache."},
-          {"type":"buttons","one_time":false,"items":[
-            {"label":"Another one"},
-            {"label":"That is enough"}
-          ]}
-        ]
-      }
-    }
-    ```
-  </Tab>
-</Tabs>
-
 ## Mix choices and a URL button
 
 A group can hold plain buttons and URL buttons together. A tap on a plain button hides the whole group, URL button included; a tap on the URL button opens the page and hides nothing.
@@ -2476,11 +2451,11 @@ Do not send buttons when the answer is open-ended, when your options are not the
 
 If you would otherwise write "reply 1, 2 or 3" or list choices for the person to type, send buttons instead. If the person asks for buttons, send them.
 
-Buttons disappear once tapped. Set `one_time` to false only for controls the person is meant to tap again and again, such as Next, Another one, or Refresh.
+Buttons disappear once tapped.
 
 ## Send them from a runtime
 
-Buttons are a property of the Message, so every runtime sends them through the send it already has: a backend puts the `buttons` part beside the text part in `parts`, a runtime with a send tool takes `buttons` and `one_time` arguments, and a runtime that answers in text ends the answer with a fenced code block tagged `buttons` holding the items array, which the bridge lifts into the part. Each [integration](/integrations/index) says which applies in its "What it can do" table.
+Buttons are a property of the Message, so every runtime sends them through the send it already has: a backend puts the `buttons` part beside the text part in `parts`, a runtime with a send tool takes a `buttons` argument, and a runtime that answers in text ends the answer with a fenced code block tagged `buttons` holding the items array, which the bridge lifts into the part. Each [integration](/integrations/index) says which applies in its "What it can do" table.
 
 ## When it fails
 
@@ -15275,7 +15250,9 @@ components:
         agent can send one, and a message carries at most one. Send a `text`
         part beside it that asks the question. Reactions to this part return
         422. The only reply it accepts is a tap: one `text` part equal to one
-        of its plain buttons' labels, sent by the user.
+        of its plain buttons' labels, sent by the user. The group disappears
+        once the person taps a plain button, the way a quick reply does; a
+        `url` button never puts it away, since its tap sends nothing.
       required:
         - type
         - items
@@ -15290,13 +15267,6 @@ components:
           maxItems: 5
           items:
             $ref: "#/components/schemas/ButtonItem"
-        one_time:
-          type: boolean
-          description: |
-            Whether a tap puts the buttons away. Absent means true: the group
-            disappears once the person taps a plain button, the way a quick
-            reply does. `false` leaves the buttons on screen to tap again. A
-            `url` button never puts them away, since its tap sends nothing.
     ButtonsPartResponse:
       type: object
       description: A buttons part as read back
@@ -15313,9 +15283,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ButtonItemResponse"
-        one_time:
-          type: boolean
-          description: As sent; absent means true.
         reactions:
           type:
             - array
