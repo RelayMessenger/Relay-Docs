@@ -10,14 +10,55 @@ from pathlib import Path
 from origins import target
 
 ROOT = Path(__file__).resolve().parents[1]
-# Independently read canonical contract at the Server staging removal merge.
-UPSTREAM_COMMIT = "328ba8ae07392d64de2570ba9161d75138bf82d5"
-UPSTREAM_STAGING_COMMIT = "328ba8ae07392d64de2570ba9161d75138bf82d5"
-UPSTREAM_SIZE = 166526
-UPSTREAM_SHA256 = "99e4c6315bffe93a2a3fe8f1bc3bffb8fbef087133439bb7c2c3f82263bc16a7"
+# Canonical activity contract read from the assigned Server worktree.
+# Pins the merged activity and live call-marker source bytes.
+UPSTREAM_COMMIT = "4394ff241d9bb3a25299f8e5364ab9b434861f2d"
+UPSTREAM_STAGING_COMMIT = "4394ff241d9bb3a25299f8e5364ab9b434861f2d"
+UPSTREAM_SIZE = 172715
+UPSTREAM_SHA256 = "1bd3d25ef7aa080a38db903445f83ba173753552ac1369b5aad06e8fba6d6472"
 
 
 class ContractSourceTests(unittest.TestCase):
+    def test_combined_contract_keeps_live_call_markers(self):
+        canonical = (ROOT / "api-reference/openapi.yaml").read_text()
+        marker = canonical.split("    CallMarker:\n", 1)[1].split("    SystemEventParty:\n", 1)[0]
+        for field in ("status", "answered_at", "ended_at", "from", "to"):
+            self.assertIn(f"        - {field}\n", marker)
+        self.assertIn("          description: The Call this event marks. Null unless type is call.", canonical)
+        for name in ("calls/index.mdx", "chats/history.mdx", "messages/message-details.mdx",
+                     "api-reference/resources/messages/overview.mdx"):
+            self.assertNotIn("call_ended", (ROOT / name).read_text())
+        self.assertIn('system_event.type: "call"', (ROOT / "calls/index.mdx").read_text())
+
+    def test_chat_activity_guide_and_generated_navigation_match_the_contract(self):
+        canonical = (ROOT / "api-reference/openapi.yaml").read_text()
+        activity_path = canonical.split("  /v1/chats/{chatId}/activity:\n", 1)[1].split(
+            "  /v1/chats/{chatId}/typing:\n", 1)[0]
+        routes = json.loads((ROOT / "scripts/api-page-paths.json").read_text())
+        for method, operation in (("GET", "getActivity"), ("PUT", "setActivity"), ("DELETE", "clearActivity")):
+            self.assertIn(f"operationId: {operation}", activity_path)
+            self.assertEqual(routes[operation]["endpoint"], f"{method} /v1/chats/{{chatId}}/activity")
+        self.assertIn("x-max-graphemes: 21", canonical)
+        self.assertIn("x-max-utf8-bytes: 1024", canonical)
+        self.assertIn("name: activity_id\n          in: query", activity_path)
+        guide = (ROOT / "chats/activity.mdx").read_text()
+        for name in ("getActivity", "setActivity", "clearActivity"):
+            self.assertIn(f"relay.chats.{name}(", guide)
+        groups = re.findall(r"<CodeGroup>(.*?)</CodeGroup>", guide, re.S)
+        self.assertEqual(len(groups), 4)
+        for group in groups:
+            self.assertLess(group.index("```typescript TypeScript SDK"), group.index("```bash cURL"))
+        for value in ("60 seconds", "90 seconds", "21 visible characters", "1024 UTF-8 bytes",
+                      "activity_id: activityId", "activity?activity_id=$ACTIVITY_ID", "`409`", "`204`"):
+            self.assertIn(value, guide)
+        for path in ("skill.md", ".mintlify/skills/relay/SKILL.md"):
+            prompt = (ROOT / path).read_text()
+            self.assertIn("not an agent webhook", prompt)
+            self.assertIn("Do not add polling", prompt)
+            self.assertIn("Do not create a `Typing` activity", prompt)
+        events = (ROOT / "events/index.mdx").read_text()
+        self.assertNotIn("chat.activity.updated", events)
+
     def test_canonical_bytes_equal_pinned_upstream(self):
         canonical = (ROOT / "api-reference/openapi.yaml").read_bytes()
         self.assertEqual(len(canonical), UPSTREAM_SIZE)

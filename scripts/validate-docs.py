@@ -371,9 +371,14 @@ for path in mdx_paths:
         text,
     ):
         if "TypeScript SDK" in block and "cURL" in block:
+            # Chat activity follows the requested SDK-first examples. Keep
+            # the established ordering checks for unrelated pages unchanged.
+            if path == root / "chats/activity.mdx":
+                if block.index("TypeScript SDK") > block.index("cURL"):
+                    raise SystemExit(f"TypeScript SDK must appear before cURL: {path.relative_to(root)}")
             # start/build-on-the-api is the main page's API walkthrough moved out
             # verbatim (2026-09-11), so it keeps the main page's cURL-first order.
-            if is_task_guide(path.relative_to(root).with_suffix("").as_posix()) or path in {root / "index.mdx", root / "start/build-on-the-api.mdx"}:
+            elif is_task_guide(path.relative_to(root).with_suffix("").as_posix()) or path in {root / "index.mdx", root / "start/build-on-the-api.mdx"}:
                 if block.index("cURL") > block.index("TypeScript SDK"):
                     raise SystemExit(f"cURL must appear before TypeScript SDK: {path.relative_to(root)}")
             elif block.index("TypeScript SDK") > block.index("cURL"):
@@ -504,8 +509,9 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # The digest pins source bytes independently of the Server release commit.
 # Source authority: Relay-Server commit eb83978b; an unnamed chat is titled by its other members' names, September 19, 2026.
 # Source authority: Relay-Server commit 328ba8ae; a call marker exists from placement and carries its current state.
+# Source authority: Relay-Server 4394ff241d9bb3a25299f8e5364ab9b434861f2d; Chat activity and live Call markers.
 expected_openapi_sha256 = (
-    "99e4c6315bffe93a2a3fe8f1bc3bffb8fbef087133439bb7c2c3f82263bc16a7"
+    "1bd3d25ef7aa080a38db903445f83ba173753552ac1369b5aad06e8fba6d6472"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
@@ -661,6 +667,9 @@ if leaked_private_operations:
         f"private operation entered public OpenAPI: {leaked_private_operations}"
     )
 expected_operation_ids = {
+    "getActivity",
+    "setActivity",
+    "clearActivity",
     "deleteAgent",
     "addParticipant",
     "blockHandle",
