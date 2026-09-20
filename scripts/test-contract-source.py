@@ -11,13 +11,24 @@ from origins import target
 
 ROOT = Path(__file__).resolve().parents[1]
 # Canonical activity contract read from the assigned Server worktree.
-# Replace the explicit pending pin with the commit that carries these bytes before integration.
-UPSTREAM_COMMIT = "PENDING_SERVER_ACTIVITY_COMMIT"
-UPSTREAM_STAGING_COMMIT = "PENDING_SERVER_ACTIVITY_COMMIT"
-UPSTREAM_SHA256 = "ec70d9ca659f6b06010fe3c04ff2c03e3463cf52a0755b97e8506b4110f0ac21"
+# Pins the merged activity and live call-marker source bytes.
+UPSTREAM_COMMIT = "4394ff241d9bb3a25299f8e5364ab9b434861f2d"
+UPSTREAM_STAGING_COMMIT = "4394ff241d9bb3a25299f8e5364ab9b434861f2d"
+UPSTREAM_SHA256 = "1bd3d25ef7aa080a38db903445f83ba173753552ac1369b5aad06e8fba6d6472"
 
 
 class ContractSourceTests(unittest.TestCase):
+    def test_combined_contract_keeps_live_call_markers(self):
+        canonical = (ROOT / "api-reference/openapi.yaml").read_text()
+        marker = canonical.split("    CallMarker:\n", 1)[1].split("    SystemEventParty:\n", 1)[0]
+        for field in ("status", "answered_at", "ended_at", "from", "to"):
+            self.assertIn(f"        - {field}\n", marker)
+        self.assertIn("          description: The Call this event marks. Null unless type is call.", canonical)
+        for name in ("calls/index.mdx", "chats/history.mdx", "messages/message-details.mdx",
+                     "api-reference/resources/messages/overview.mdx"):
+            self.assertNotIn("call_ended", (ROOT / name).read_text())
+        self.assertIn('system_event.type: "call"', (ROOT / "calls/index.mdx").read_text())
+
     def test_chat_activity_guide_and_generated_navigation_match_the_contract(self):
         canonical = (ROOT / "api-reference/openapi.yaml").read_text()
         activity_path = canonical.split("  /v1/chats/{chatId}/activity:\n", 1)[1].split(
