@@ -4,7 +4,7 @@
 // RelayBubbleGeometry.trailingRoundTailedPath (Relay-iOS,
 // Views/MessageBubbleShape.swift), the iOS 26.5 BubbleKit round-tailed bubble
 // at radius 20, with the app's 17pt body text and 14pt side insets.
-export const ButtonsPreview = ({ items, tapped, label }) => {
+export const ButtonsPreview = ({ text, items, tapped, label }) => {
   // Everything lives inside the component: the snippet is compiled as MDX,
   // which keeps only exports in scope and reads a capitalised tag as an MDX
   // component.
@@ -127,18 +127,21 @@ export const ButtonsPreview = ({ items, tapped, label }) => {
   };
 
   return (
-    <div className="buttons-preview" role="img" aria-label={label}>
+    <div className="buttons-preview" role="img" aria-label={text ? `${text} ${label}` : label}>
       <div className="buttons-preview-stage">
         {tapped ? (
           tapBubble(tapped)
         ) : (
-          <div className="buttons-preview-stack">
-            {items.map((item) => (
-              <div key={item.label} className={"buttons-preview-pill" + (item.url ? " is-link" : "")}>
-                <span>{item.label}</span>
-                {item.url ? <span className="buttons-preview-arrow" aria-hidden="true">↗</span> : null}
-              </div>
-            ))}
+          <div className="buttons-preview-message">
+            {text ? <div className="buttons-preview-text">{text}</div> : null}
+            <div className="buttons-preview-stack">
+              {items.map((item) => (
+                <div key={item.label} className={"buttons-preview-pill" + (item.url ? " is-link" : "")}>
+                  <span>{item.label}</span>
+                  {item.url ? <span className="buttons-preview-arrow" aria-hidden="true">↗</span> : null}
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

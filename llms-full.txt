@@ -1871,7 +1871,9 @@ Send the link on its own:
 
 Relay returns `202` with the message. The part you read back carries `value` and `reactions`. A person can react to the link like any other part, and the sender can reply to it by `part_index` 0.
 
-Every runtime sends link parts through the send it already has. A runtime with a send tool takes the URL as a `link` argument or a `link` kind and posts the words first, then the link as its own message. A runtime that sends the agent's final text lifts any line that is nothing but a URL out of the words and posts it as its own link message, in order with the text around it; a URL inside a sentence stays words. Each [integration](/integrations/index) says which in its "What it can do" table. When to send a link rather than a `url` button is in [Choose when to send buttons](/interactive-components/buttons#choose-when-to-send-buttons).
+Every runtime sends link parts through the send it already has. A runtime with a send tool takes the URL as a `link` argument or a `link` kind and posts the words first, then the link as its own message. A runtime that sends the agent's final text lifts any line that is nothing but a URL out of the words and posts it as its own link message, in order with the text around it; a URL inside a sentence stays words. Each [integration](/integrations/index) says which in its "What it can do" table.
+
+A link part renders a card with the page's title and image. A [URL button](/interactive-components/buttons#send-a-url-button) renders a label that opens the page when tapped.
 
 ## When it fails
 
@@ -2331,21 +2333,21 @@ New components are added here as parts, never as endpoints.
 
 # Buttons
 
-> One to five tappable buttons under a Message. A tap sends the label back as text; a URL button opens a page in the app.
+> Send one to five buttons, with or without text. A plain tap sends the label back as text; a URL button opens a page in the app.
 
 Source: https://docs.staging.relayapp.im/interactive-components/buttons.md
 
 import { ButtonsPreview } from "/snippets/buttons-preview.jsx";
 
-A `buttons` part draws a vertical stack of one to five buttons under the text part beside it. Each item has a `label` of 1 to 80 characters and, for a URL button, a `url`. Only an agent can send one, and a Message carries at most one.
+A `buttons` part draws a vertical stack of one to five buttons, on its own or alongside text. Each item has a `label` of 1 to 80 characters and, for a URL button, a `url`. Only an agent can send buttons, and a Message carries at most one `buttons` part.
 
 ## Send buttons
 
-Put the `buttons` part beside a `text` part that asks the question. The text is what previews, notifications, and text-only readers see; the buttons are what the app draws.
+This request contains a `text` part followed by a `buttons` part. The preview shows both in that order.
 
 <Tabs>
   <Tab title="Preview">
-    <ButtonsPreview label="Four choices: Jupiter, Saturn, Neptune, Mars" items={[{ label: "Jupiter" }, { label: "Saturn" }, { label: "Neptune" }, { label: "Mars" }]} />
+    <ButtonsPreview text="Which planet has the most moons?" label="Four choices: Jupiter, Saturn, Neptune, Mars" items={[{ "label": "Jupiter" }, { "label": "Saturn" }, { "label": "Neptune" }, { "label": "Mars" }]} />
   </Tab>
   <Tab title="Request">
     ```json
@@ -2366,9 +2368,32 @@ Put the `buttons` part beside a `text` part that asks the question. The text is 
   </Tab>
 </Tabs>
 
+### Buttons without text
+
+A Message can contain only a `buttons` part. Its `part_index` is `0`, so a plain tap replies to index `0` rather than index `1` in the example above.
+
+<Tabs>
+  <Tab title="Preview">
+    <ButtonsPreview label="One plain button, Continue, without a text part" items={[{ "label": "Continue" }]} />
+  </Tab>
+  <Tab title="Request">
+    ```json
+    {
+      "message": {
+        "parts": [
+          {"type":"buttons","items":[
+            {"label":"Continue"}
+          ]}
+        ]
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
 ## Receive a tap
 
-A tap is the person's next Message: one `text` part whose value is the label, with `reply_to` naming the buttons Message and its `part_index`. Your agent reads it like any other text. The buttons leave the screen once tapped, and the tap stays as the person's own bubble.
+A plain-button tap is the person's next Message: one `text` part whose value is the label, with `reply_to` naming the buttons Message and its `part_index`. Your agent reads it like any other text. The button group leaves the screen after a plain tap, and the tap stays as the person's own bubble.
 
 <Tabs>
   <Tab title="Preview">
@@ -2391,11 +2416,11 @@ The server accepts a reply to a `buttons` part only when it is one `text` part e
 
 ## Send a URL button
 
-A `url` button opens the page in a browser inside the app and sends nothing. Use one when there is one thing to do next: connect an account, sign in, open a page, pay. It never leaves the screen, so the person can open it again.
+A `url` button opens the page in a browser inside the app and sends nothing. Opening the URL leaves the button group visible, so the person can open it again.
 
 <Tabs>
   <Tab title="Preview">
-    <ButtonsPreview label="One URL button, Connect Google" items={[{ label: "Connect Google", url: "https://accounts.example.com/oauth/authorize" }]} />
+    <ButtonsPreview text="Connect your Google account to continue." label="One URL button, Connect Google" items={[{ "label": "Connect Google", "url": "https://accounts.example.com/oauth/authorize" }]} />
   </Tab>
   <Tab title="Request">
     ```json
@@ -2413,13 +2438,13 @@ A `url` button opens the page in a browser inside the app and sends nothing. Use
   </Tab>
 </Tabs>
 
-## Mix choices and a URL button
+### Mix choices and a URL button
 
 A group can hold plain buttons and URL buttons together. A tap on a plain button hides the whole group, URL button included; a tap on the URL button opens the page and hides nothing.
 
 <Tabs>
   <Tab title="Preview">
-    <ButtonsPreview label="Approve, and a URL button, Open report" items={[{ label: "Approve" }, { label: "Open report", url: "https://reports.example.com/q3" }]} />
+    <ButtonsPreview text="Your Q3 report is ready." label="Approve, and a URL button, Open report" items={[{ "label": "Approve" }, { "label": "Open report", "url": "https://reports.example.com/q3" }]} />
   </Tab>
   <Tab title="Request">
     ```json
@@ -2438,25 +2463,9 @@ A group can hold plain buttons and URL buttons together. A tap on a plain button
   </Tab>
 </Tabs>
 
-## Choose when to send buttons
-
-Every Relay runtime gives its agent this text, so a person gets buttons under the same conditions whichever agent they talk to.
-
-Send buttons when your message ends with a question the person can answer by picking one of 2 to 5 short options you already know: yes or no, choosing between things you named, picking a next step, or a multiple-choice question in a quiz. Each label is a complete answer, so a tap replaces typing. Put the question in text beside the buttons.
-
-Send one button when there is one thing to do next. A `url` button is for a task the person completes on a web page: pay, sign in, connect an account, open their booking or order, track a package. Its label names the action, not the site. A plain button confirms one step: Start, Done, Continue. Do not ask "ready?" when a single button does the job.
-
-A link is for something the person will look at or read: an article, a listing, a video, a place, a product page, a support article. Send it as a [link part](/messages/rich-link-previews) on its own, so it draws as a card with the page's title and image; never paste a bare URL into your words, and send one link per message. When the page is where the person does something, send a `url` button; when the page is the thing you are showing them, send a link.
-
-Do not send buttons when the answer is open-ended, when your options are not the full set of likely answers, or when you are not asking anything and there is nothing to do. One question or one action per message; never a menu of things you can do, and never as decoration.
-
-If you would otherwise write "reply 1, 2 or 3" or list choices for the person to type, send buttons instead. If the person asks for buttons, send them.
-
-Buttons disappear once tapped.
-
 ## Send them from a runtime
 
-Buttons are a property of the Message, so every runtime sends them through the send it already has: a backend puts the `buttons` part beside the text part in `parts`, a runtime with a send tool takes a `buttons` argument, and a runtime that answers in text ends the answer with a fenced code block tagged `buttons` holding the items array, which the bridge lifts into the part. Each [integration](/integrations/index) says which applies in its "What it can do" table.
+Buttons are a property of the Message, so every runtime sends them through the send it already has: a backend includes the `buttons` part in `parts`, with or without a `text` part; a runtime with a send tool takes a `buttons` argument; and a runtime that answers in text ends the answer with a fenced code block tagged `buttons` holding the items array, which the bridge lifts into the part. Each [integration](/integrations/index) says which applies in its "What it can do" table.
 
 ## When it fails
 
