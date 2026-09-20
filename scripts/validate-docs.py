@@ -506,14 +506,10 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 expected_openapi_sha256 = (
     "27698655d12500fb9cd2e10dbf1c94025fbc64c288df6151db673a7649877111"
 )
-actual_openapi_sha256 = hashlib.sha256(
-    (root / "api-reference/openapi.yaml").read_bytes()
-).hexdigest()
-if actual_openapi_sha256 != expected_openapi_sha256:
-    raise SystemExit(
-        "canonical OpenAPI changed: "
-        f"{actual_openapi_sha256} != {expected_openapi_sha256}"
-    )
+# Local candidate provenance is shared with the guide and contract gates;
+# it does not relabel the historical Server release as selection-capable.
+from contract_source import verify_contract_source
+verify_contract_source(root, expected_openapi_sha256)
 if "\n      x-mint:\n" in openapi_text:
     raise SystemExit("Mintlify presentation metadata entered the locked OpenAPI")
 if "2026-02-03" in openapi_text:
