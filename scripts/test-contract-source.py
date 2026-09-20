@@ -27,7 +27,7 @@ class ContractSourceTests(unittest.TestCase):
             "another incoming message makes it a message request.",
             normalized,
         )
-        for field in ("is_request", "request_expires_at"):
+        for field in ("is_request", "request_expires_at", "request_sender_id"):
             self.assertNotRegex(canonical, rf"(?m)^\s+{field}:")
 
     def test_combined_contract_keeps_live_call_markers(self):
