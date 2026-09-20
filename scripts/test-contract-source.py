@@ -20,6 +20,15 @@ UPSTREAM_SHA256 = "27698655d12500fb9cd2e10dbf1c94025fbc64c288df6151db673a7649877
 
 
 class ContractSourceTests(unittest.TestCase):
+    def test_all_interactive_overview_cards_are_icon_free(self):
+        overview = (ROOT / "interactive-components/index.mdx").read_text()
+        cards = re.findall(r"<Card\b[^>]*>", overview, re.S)
+        self.assertTrue(cards, "Overview must contain component cards")
+        for card in cards:
+            with self.subTest(card=card):
+                self.assertNotRegex(card, r"\sicon(?:\s|=|/?>)",
+                                    "Every interactive-component card must omit icon")
+
     def test_selection_review_uses_production_facing_copy(self):
         overview = (ROOT / "interactive-components/index.mdx").read_text()
         self.assertIn('<Card title="Selection" href="/interactive-components/selection">', overview)
