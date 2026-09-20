@@ -10,15 +10,50 @@ from pathlib import Path
 from origins import target
 
 ROOT = Path(__file__).resolve().parents[1]
-# Canonical activity contract read from the assigned Server worktree.
-# Pins the merged activity and live call-marker source bytes.
-UPSTREAM_COMMIT = "4394ff241d9bb3a25299f8e5364ab9b434861f2d"
-UPSTREAM_STAGING_COMMIT = "4394ff241d9bb3a25299f8e5364ab9b434861f2d"
-UPSTREAM_SIZE = 172715
-UPSTREAM_SHA256 = "1bd3d25ef7aa080a38db903445f83ba173753552ac1369b5aad06e8fba6d6472"
+# Canonical request lifecycle, scoped lookup, and fixed agent admission Server source.
+# Retains the merged activity and live call-marker shapes.
+UPSTREAM_COMMIT = "8b608647b0e75a28f9d7aa4bbb36097b644d43f2"
+UPSTREAM_STAGING_COMMIT = "8b608647b0e75a28f9d7aa4bbb36097b644d43f2"
+UPSTREAM_SIZE = 175404
+UPSTREAM_SHA256 = "46eeedd5a5e99e879e32c45972799364021143df9f81acd60837713210639735"
 
 
 class ContractSourceTests(unittest.TestCase):
+    def test_reverted_agent_admission_fields_are_absent_from_public_schemas(self):
+        canonical = (ROOT / "api-reference/openapi.yaml").read_text()
+        # Person-setting descriptions remain; the reverted public field does not.
+        self.assertNotRegex(canonical, r"(?m)^\s+message_requests_from:")
+        self.assertNotIn("  /v1/me:\n", canonical)
+
+    def test_public_contact_lookup_uses_only_the_approved_post_route(self):
+        canonical = (ROOT / "api-reference/openapi.yaml").read_text()
+        lookup = canonical.split("  /v1/contacts/lookup:\n", 1)[1].split(
+            "  /v1/contact_card:\n", 1)[0]
+        self.assertTrue(lookup.startswith("    post:\n"))
+        self.assertIn("      operationId: lookupContact\n", lookup)
+        self.assertIn(
+            "      description: Look up an active contact by handle. "
+            "A person resolves agents; an agent resolves people and agents.\n",
+            lookup,
+        )
+        self.assertIn("                - handle\n", lookup)
+        self.assertIn('                    $ref: "#/components/schemas/ContactLookup"', lookup)
+        self.assertNotIn("  /v1/contacts:\n", canonical)
+        self.assertNotIn("    get:\n", lookup)
+        routes = json.loads((ROOT / "scripts/api-page-paths.json").read_text())
+        self.assertEqual(routes["lookupContact"]["endpoint"], "POST /v1/contacts/lookup")
+
+    def test_request_lifecycle_description_does_not_expose_private_fields(self):
+        canonical = (ROOT / "api-reference/openapi.yaml").read_text()
+        normalized = " ".join(canonical.split())
+        self.assertIn(
+            "Removing a Contact keeps an existing conversation in Chats until "
+            "another incoming message makes it a message request.",
+            normalized,
+        )
+        for field in ("is_request", "request_expires_at", "request_sender_id"):
+            self.assertNotRegex(canonical, rf"(?m)^\s+{field}:")
+
     def test_combined_contract_keeps_live_call_markers(self):
         canonical = (ROOT / "api-reference/openapi.yaml").read_text()
         marker = canonical.split("    CallMarker:\n", 1)[1].split("    SystemEventParty:\n", 1)[0]

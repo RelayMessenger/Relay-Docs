@@ -52,6 +52,7 @@ const sidebarTitles = {
   updateWebhookSubscription: "Update",
   deleteWebhookSubscription: "Delete",
   getContactCard: "Retrieve",
+  lookupContact: "Look up",
   setupContactCard: "Create",
   updateContactCard: "Update",
   connectAgentWebSocket: "Connect",

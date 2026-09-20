@@ -413,7 +413,6 @@ private_path_prefixes = (
     "/v1/client/",
     "/v1/console/",
     "/v1/internal/",
-    "/v1/contacts",
     "/api/auth/",
 )
 private_user_operations = (
@@ -422,6 +421,12 @@ private_user_operations = (
 )
 for path in public_contract_paths:
     text = path.read_text()
+    # The approved public lookup does not expose private Contact list/write routes.
+    without_lookup = re.sub(r"/v1/contacts/lookup(?=$|[\s`\"':#?])", "", text)
+    if "/v1/contacts" in without_lookup:
+        raise SystemExit(
+            f"private Contact route leaked into {path.relative_to(root)}"
+        )
     if "is_premium_handle" in text:
         raise SystemExit(
             f"private premium Handle field leaked into {path.relative_to(root)}"
@@ -510,8 +515,9 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server commit eb83978b; an unnamed chat is titled by its other members' names, September 19, 2026.
 # Source authority: Relay-Server commit 328ba8ae; a call marker exists from placement and carries its current state.
 # Source authority: Relay-Server 4394ff241d9bb3a25299f8e5364ab9b434861f2d; Chat activity and live Call markers.
+# Source authority: Relay-Server 8b608647; request membership, scoped lookup, and removed agent admission fields.
 expected_openapi_sha256 = (
-    "1bd3d25ef7aa080a38db903445f83ba173753552ac1369b5aad06e8fba6d6472"
+    "46eeedd5a5e99e879e32c45972799364021143df9f81acd60837713210639735"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
@@ -681,6 +687,7 @@ expected_operation_ids = {
     "getAttachment",
     "getChat",
     "getContactCard",
+    "lookupContact",
     "getMessage",
     "getMessages",
     "getMessageThread",

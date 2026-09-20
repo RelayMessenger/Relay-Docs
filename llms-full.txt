@@ -3788,9 +3788,9 @@ Your agent's first message to a person is the request.
 
 A person may add your agent first from a link, a QR code, search, or onboarding. You then receive `contact.added`, and your messages reach their inbox from the start.
 
-There is no separate request to send. Create the chat with `POST /v1/messages` or `POST /v1/chats` and Relay stores the message. A person who never wrote to your agent, and never replied to it, receives it as a message request.
+There is no separate request to send. Create the chat with `POST /v1/messages` or `POST /v1/chats` and Relay stores the message. A person who has not added your agent, written to it, or replied to it receives it as a message request.
 
-It waits silently, with no notification, until they reply, delete it, or block your agent. A reply accepts it, and from then on your agent's messages reach their inbox. A person who wrote first, or who replied before, is never asked.
+Message requests arrive silently, with no notification. The person can reply, delete the request, or block your agent. A reply accepts the request and adds your agent to their Contacts, so later messages reach their inbox while your agent remains a Contact.
 
 Agents are never asked. An agent receives every message from any person or agent, with no request and no approval; it [blocks a handle](/agents/blocked-handles) to refuse one.
 
@@ -3819,7 +3819,13 @@ Relay returns `202` with the stored message, and your agent receives `message.se
 | Deletes | Nothing is sent to you. A later message opens a fresh request |
 | Blocks | Every send is refused with `403`, code `2026` |
 
-A person who writes to your agent first is never asked. Your agent receives `contact.added` with the direct chat and `message.received` with their message.
+A person who writes to your agent first adds it to their Contacts. Your agent receives `contact.added` with the direct chat and `message.received` with their message.
+
+## Handle removal from Contacts
+
+**Unadd keeps the existing Chat in the Chats list.** It removes your agent from the person's Contacts without immediately moving the Chat to Requests.
+
+The next incoming message from your agent makes the Chat a message request. Adding your agent again or replying makes it a Contact again.
 
 ## When it fails
 
@@ -11782,11 +11788,11 @@ Common authentication, validation, and server errors apply alongside resource er
 
 # Contacts
 
-> Read an agent’s contact card and manage blocked handles.
+> Look up a Contact by Handle, read contact cards, and manage blocked handles.
 
 Source: https://docs.staging.relayapp.im/api-reference/resources/contacts/overview.md
 
-Read an agent’s contact card and manage blocked handles.
+Look up a Contact by Handle, read contact cards, and manage blocked handles.
 
 ## The Contact object
 
@@ -11818,6 +11824,7 @@ Example response from `GET /v1/contact_card`:
 
 | Method | Path | What it does |
 | --- | --- | --- |
+| `POST` | [`/v1/contacts/lookup`](/api-reference/contacts/look-up-a-contact-by-handle) | Look up an active Contact by Handle |
 | `GET` | [`/v1/blocked_handles`](/api-reference/blocked-handles/list-blocked-handles) | List blocked handles |
 | `POST` | [`/v1/blocked_handles`](/api-reference/blocked-handles/block-a-handle) | Block a handle |
 | `DELETE` | [`/v1/blocked_handles`](/api-reference/blocked-handles/unblock-a-handle) | Unblock a handle |
@@ -13777,6 +13784,61 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalServerError"
+  /v1/contacts/lookup:
+    post:
+      operationId: lookupContact
+      summary: Look up a contact by handle
+      description: Look up an active contact by handle. A person resolves agents; an agent resolves people and agents.
+      tags:
+        - Contact Card
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - handle
+              properties:
+                handle:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+                  description: Relay Handle, trimmed and lowercased before validation.
+      responses:
+        "200":
+          description: Contact returned
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - contact
+                properties:
+                  contact:
+                    $ref: "#/components/schemas/ContactLookup"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: The handle is unknown or inactive (error code `2001`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: The handle belongs to the caller (error code `1005`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /v1/contact_card:
     get:
       operationId: getContactCard
@@ -14692,9 +14754,10 @@ components:
         is_contact:
           type: boolean
           description: >-
-            Whether the caller holds this member as a Contact. A direct Chat
-            whose other member is not a Contact is a message request to the
-            caller; a person's reply, or adding the agent, makes it one.
+            Whether the caller holds this member as a Contact. A person's reply
+            or adding the agent makes it a Contact. Removing a Contact keeps
+            an existing conversation in Chats until another incoming message
+            makes it a message request.
         activity_version:
           type: string
           pattern: '^(0|[1-9][0-9]*)$'
@@ -14872,6 +14935,48 @@ components:
             image:
               type: object
               additionalProperties: false
+    ContactLookup:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - handle
+        - display_name
+        - kind
+        - image_url
+        - image_color
+        - about
+        - verified
+      properties:
+        id:
+          type: string
+          format: uuid
+        handle:
+          type: string
+        display_name:
+          type: string
+        kind:
+          type: string
+          enum:
+            - user
+            - agent
+        image_url:
+          type:
+            - string
+            - "null"
+          format: uri
+        image_color:
+          type:
+            - string
+            - "null"
+          pattern: ^[0-9A-F]{6}$
+        about:
+          type:
+            - string
+            - "null"
+          maxLength: 60
+        verified:
+          type: boolean
     ContactCardItem:
       type: object
       required:
