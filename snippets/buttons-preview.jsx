@@ -134,22 +134,52 @@ export const MessageBubble = ({ text }) => {
 // Mintlify isolates snippet exports. The page passes the shared bubble renderer
 // explicitly so previews reuse geometry without relying on nested imports.
 export const ButtonsPreview = ({ text, items, tapped, label, bubble }) => {
+  const [reply, setReply] = useState(null);
+  const [openedURL, setOpenedURL] = useState(null);
   return (
-    <div className="buttons-preview" role="img" aria-label={text ? `${text} ${label}` : label}>
+    <div className="buttons-preview" role={tapped ? "img" : "group"} aria-label={text ? `${text} ${label}` : label}>
       <div className="buttons-preview-stage">
         {tapped ? (
           bubble({ text: tapped })
         ) : (
           <div className="buttons-preview-message">
             {text ? <div className="buttons-preview-text">{text}</div> : null}
-            <div className="buttons-preview-stack">
-              {items.map((item) => (
-                <div key={item.label} className={"buttons-preview-pill" + (item.url ? " is-link" : "")}>
-                  <span>{item.label}</span>
-                  {item.url ? <span className="buttons-preview-arrow" aria-hidden="true">↗</span> : null}
+            {reply !== null ? (
+              <div className="buttons-reply" role="status" aria-label={`Reply: ${reply}`}>
+                {bubble({ text: reply })}
+              </div>
+            ) : (
+              <div className="buttons-preview-stack">
+                {items.map((item, index) => (
+                  <button type="button" key={index}
+                    className={"buttons-preview-pill buttons-preview-action" + (item.url ? " is-link" : "")}
+                    onClick={() => {
+                      if (item.url) {
+                        // Documentation fixtures never navigate to example hosts.
+                        setOpenedURL(item.url);
+                      } else {
+                        setOpenedURL(null);
+                        setReply(item.label);
+                      }
+                    }}>
+                    <span>{item.label}</span>
+                    {item.url ? <span className="buttons-preview-arrow" aria-hidden="true">↗</span> : null}
+                  </button>
+                ))}
+              </div>
+            )}
+            {openedURL ? (
+              <div className="buttons-url-preview" role="group" aria-label="URL action preview">
+                <div role="status">
+                  <span className="buttons-url-caption">In-app browser preview</span>
+                  <span className="buttons-url-address">{openedURL}</span>
                 </div>
-              ))}
-            </div>
+                <button type="button" className="buttons-url-close" onClick={() => setOpenedURL(null)}>Close preview</button>
+              </div>
+            ) : null}
+            {reply !== null ? (
+              <button type="button" className="buttons-reset" onClick={() => { setReply(null); setOpenedURL(null); }}>Reset demo</button>
+            ) : null}
           </div>
         )}
       </div>
