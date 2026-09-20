@@ -103,6 +103,7 @@ const GUIDE_LINKS = {
 
 const TITLES = {
   "agents-create": "Create an agent",
+  "agents-update": "Update an agent",
   "agents-list": "List agents",
   "agents-delete": "Delete an agent",
   "auth-login": "Save a token",
@@ -172,6 +173,7 @@ const CLI_GROUPS = [
     "pages": [
       "cli/agents",
       "cli/reference/agents-create",
+      "cli/reference/agents-update",
       "cli/reference/agents-list",
       "cli/reference/agents-delete"
     ]
