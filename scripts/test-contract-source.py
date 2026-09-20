@@ -10,15 +10,28 @@ from pathlib import Path
 from origins import target
 
 ROOT = Path(__file__).resolve().parents[1]
-# Canonical request lifecycle description read from the committed Server source.
+# Canonical merged request lifecycle and public contact lookup Server source.
 # Retains the merged activity and live call-marker shapes.
-UPSTREAM_COMMIT = "1cde828c2dea5ca504d93ee5b7130a5e5f2dcb4b"
-UPSTREAM_STAGING_COMMIT = "1cde828c2dea5ca504d93ee5b7130a5e5f2dcb4b"
-UPSTREAM_SIZE = 172763
-UPSTREAM_SHA256 = "0352d85494344137abcdc5dd27287705ea14e87897aedd127f875d8362b83fb6"
+UPSTREAM_COMMIT = "e72d4813a531539dae7ffdc8ddd19de3346ea1fe"
+UPSTREAM_STAGING_COMMIT = "e72d4813a531539dae7ffdc8ddd19de3346ea1fe"
+UPSTREAM_SIZE = 175370
+UPSTREAM_SHA256 = "f04d3359999ace37219eea0fd63c3ea4249d91ee91efe2ef86fdb63f2e236c69"
 
 
 class ContractSourceTests(unittest.TestCase):
+    def test_public_contact_lookup_uses_only_the_approved_post_route(self):
+        canonical = (ROOT / "api-reference/openapi.yaml").read_text()
+        lookup = canonical.split("  /v1/contacts/lookup:\n", 1)[1].split(
+            "  /v1/contact_card:\n", 1)[0]
+        self.assertTrue(lookup.startswith("    post:\n"))
+        self.assertIn("      operationId: lookupContact\n", lookup)
+        self.assertIn("                - handle\n", lookup)
+        self.assertIn('                    $ref: "#/components/schemas/ContactLookup"', lookup)
+        self.assertNotIn("  /v1/contacts:\n", canonical)
+        self.assertNotIn("    get:\n", lookup)
+        routes = json.loads((ROOT / "scripts/api-page-paths.json").read_text())
+        self.assertEqual(routes["lookupContact"]["endpoint"], "POST /v1/contacts/lookup")
+
     def test_request_lifecycle_description_does_not_expose_private_fields(self):
         canonical = (ROOT / "api-reference/openapi.yaml").read_text()
         normalized = " ".join(canonical.split())
