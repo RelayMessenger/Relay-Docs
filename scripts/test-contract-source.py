@@ -35,7 +35,10 @@ class ContractSourceTests(unittest.TestCase):
         parts = (ROOT / "messages/parts.mdx").read_text()
         section = parts.split("## Add interactive components\n", 1)[1].split("\n## ", 1)[0]
         self.assertIn("[Interactive components](/interactive-components/index)", section)
-        self.assertLess(len(section.split()), 30)
+        self.assertLess(len(section.split()), 60)
+        self.assertNotIn("buttons", section.lower())
+        self.assertNotIn("selections", section.lower())
+        self.assertIn("`parts`", section)
 
     def test_canonical_bytes_equal_pinned_upstream(self):
         verify_contract_source(ROOT, UPSTREAM_SHA256)
