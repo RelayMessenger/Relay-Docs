@@ -24,7 +24,9 @@ def verify_contract_source(root: Path, released_sha256: str) -> None:
         assert re.fullmatch(r'[0-9a-f]{64}', record['sha256']), 'Invalid contract hash'
         expected = record['sha256']
         state = record.get('source_state', 'checkpoint')
-        assert state in ('checkpoint', 'working-tree'), 'Invalid local source state'
+        assert state in ('checkpoint', 'committed', 'working-tree'), 'Invalid local source state'
+        if state == 'committed':
+            assert 'checkpoint_sha256' not in record, 'Committed provenance must pin its own blob, not a historical base'
         checkpoint_sha256 = expected
         if state == 'working-tree':
             checkpoint_sha256 = record['checkpoint_sha256']

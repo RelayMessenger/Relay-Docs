@@ -6,6 +6,7 @@ import os
 import re
 import tempfile
 import subprocess
+from unittest.mock import patch
 import unittest
 from pathlib import Path
 
@@ -87,6 +88,38 @@ class ContractSourceTests(unittest.TestCase):
 
     def test_canonical_bytes_equal_pinned_upstream(self):
         verify_contract_source(ROOT, UPSTREAM_SHA256)
+
+    def test_committed_source_verifies_immutable_blob_not_dirty_worktree(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "docs"
+            sdk = Path(directory) / "sdk"
+            (root / "scripts").mkdir(parents=True)
+            (root / "api-reference").mkdir()
+            (sdk / ".git").mkdir(parents=True)
+            (sdk / "contracts").mkdir()
+            canonical = (ROOT / "api-reference/openapi.yaml").read_bytes()
+            (root / "api-reference/openapi.yaml").write_bytes(canonical)
+            (sdk / "contracts/relay-v1-openapi.yaml").write_bytes(b"unrelated later worktree edit")
+            record = json.loads((ROOT / "scripts/local-contract-source.json").read_text())
+            self.assertEqual(record["source_state"], "committed")
+            record_path = root / "scripts/local-contract-source.json"
+            record_path.write_text(json.dumps(record))
+            with patch("contract_source.subprocess.check_output", return_value=canonical) as show:
+                verify_contract_source(root, UPSTREAM_SHA256)
+                show.assert_called_once_with(
+                    ["git", "show", f"{record['commit']}:{record['path']}"], cwd=sdk)
+            with patch("contract_source.subprocess.check_output", return_value=b"wrong committed bytes"):
+                with self.assertRaisesRegex(AssertionError, "SDK checkpoint differs"):
+                    verify_contract_source(root, UPSTREAM_SHA256)
+            record["checkpoint_sha256"] = UPSTREAM_SHA256
+            record_path.write_text(json.dumps(record))
+            with self.assertRaisesRegex(AssertionError, "Committed provenance must pin its own blob"):
+                verify_contract_source(root, UPSTREAM_SHA256)
+            record.pop("checkpoint_sha256")
+            record["source_state"] = "unchecked"
+            record_path.write_text(json.dumps(record))
+            with self.assertRaisesRegex(AssertionError, "Invalid local source state"):
+                verify_contract_source(root, UPSTREAM_SHA256)
 
     def test_local_candidate_rejects_modified_bytes_and_release_relabeling(self):
         with tempfile.TemporaryDirectory() as directory:
