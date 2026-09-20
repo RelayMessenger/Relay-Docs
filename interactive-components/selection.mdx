@@ -4,6 +4,8 @@ description: "Coming soon: ask a person to choose several options and receive st
 keywords: ["selection", "multiselect", "selected_values", "selection_response", "has_responded", "interactive components"]
 ---
 
+import { SelectionPreview, MessageBubble } from "/snippets/buttons-preview.jsx";
+
 Send a question with a `selection` part to collect several choices in one reply.
 
 <Info>
@@ -12,7 +14,31 @@ Coming soon. This component and its SDK helpers are under local development. The
 
 ## Send a selection
 
-Use an Agent Token and an existing chat ID. Choose explicit stable values for application logic and readable labels for the person.
+This request contains a required nonblank `text` part followed by a `selection` part. The preview shows the same question and options, in the same order. Try toggling choices, **Clear**, and **Send**; this demo stays in your browser and sends no request.
+
+<Tabs>
+  <Tab title="Preview">
+    <SelectionPreview bubble={MessageBubble} text="Which topics interest you?" options={[{ "value": "research", "label": "Research" }, { "value": "design", "label": "Design" }]} />
+  </Tab>
+  <Tab title="Request">
+    ```json
+    {
+      "message": {
+        "parts": [
+          {"type":"text","value":"Which topics interest you?"},
+          {"type":"selection","options":[
+            {"value":"research","label":"Research"},
+            {"value":"design","label":"Design"}
+          ]}
+        ],
+        "idempotency_key":"topics-prompt-001"
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+Use an Agent Token and an existing chat ID to send the same request:
 
 <CodeGroup>
 ```typescript TypeScript SDK, coming soon
@@ -58,7 +84,7 @@ curl -sS "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
 
 The candidate send path returns `202` after storing the message. Keep the returned message ID so your application can associate responses with this question. Reuse the same request and idempotency key after an uncertain send.
 
-## Choose and submit
+### Choose and submit
 
 The app starts with empty choices. Toggling a choice stages it locally; **Clear** empties the selection. **Send** becomes available when at least one choice is selected and submits one reply.
 
@@ -72,19 +98,30 @@ Read responses expose `has_responded` on the prompt part. This read-only flag re
 
 The user's submission contains exactly two ordered parts: readable text, then structured metadata. Its `reply_to` identifies the source message and selection part.
 
-```json User submission, coming soon
-{
-  "parts": [
-    {"type":"text","value":"Research, Design"},
-    {"type":"selection_response","selected_values":["research","design"]}
-  ],
-  "reply_to": {
-    "message_id":"01993d50-ef7b-7b37-886b-23fd80c7ec13",
-    "part_index":1
-  },
-  "idempotency_key":"existing-logical-outgoing-id"
-}
-```
+<Tabs>
+  <Tab title="Preview">
+    <SelectionPreview bubble={MessageBubble} options={[]} received="Research, Design" />
+  </Tab>
+  <Tab title="What you receive">
+    ```json
+    {
+      "event_type":"message.received",
+      "data": {
+        "parts": [
+          {"type":"text","value":"Research, Design"},
+          {"type":"selection_response","selected_values":["research","design"]}
+        ],
+        "reply_to": {
+          "message_id":"01993d50-ef7b-7b37-886b-23fd80c7ec13",
+          "part_index":1
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+The event example shows the response fields used by your handler. The preview displays exactly the text part, **Research, Design**; metadata adds no visible text.
 
 The text equals the selected source labels joined with `, `, in source-option order. It supplies the readable bubble and notification text. The `selection_response` part carries metadata only.
 
@@ -108,7 +145,7 @@ function selectionFrom(event: RelayWebhookEvent) {
 
 Dispatch your own application handler using the source message ID, part index, and stable values. Preserve the metadata when forwarding events to a runtime. Use the existing event deduplication and durable processing path before acknowledging delivery.
 
-## Authoring rules
+## Selection fields
 
 | Field or rule | Candidate contract |
 | --- | --- |
@@ -123,6 +160,8 @@ Dispatch your own application handler using the source message ID, part index, a
 | Retry | Same outgoing idempotency key and identical request |
 
 The SDK's `selectionPart` validates an options array or a complete request part and returns either the normalized part or an error string. `partsWithSelection` validates the part and requires nonblank question text. Labels and values remain independent.
+
+## Send from a runtime
 
 The shared `answerMessages` helper accepts a `selection` fenced JSON block beside question text. Local runtime integrations teach the agent to use it when asked for selections and retain the structured response separately from the readable message. These paths are also coming soon.
 

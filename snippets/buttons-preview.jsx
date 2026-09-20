@@ -1,10 +1,12 @@
+// Adapted from buttons-docs-fix dc55e9e; bubble geometry shared by component previews.
 // A rendered buttons part, drawn the way the app draws it: a vertical stack of
-// pills under the message, a URL button marked with an arrow, and the tap as
+// equally sized pills capped at 75% of the maximum text-balloon column, a URL
+// button marked with an arrow, and the tap as
 // the person's own bubble. The bubble is the app's own silhouette: a port of
 // RelayBubbleGeometry.trailingRoundTailedPath (Relay-iOS,
 // Views/MessageBubbleShape.swift), the iOS 26.5 BubbleKit round-tailed bubble
 // at radius 20, with the app's 17pt body text and 14pt side insets.
-export const ButtonsPreview = ({ items, tapped, label }) => {
+export const MessageBubble = ({ text }) => {
   // Everything lives inside the component: the snippet is compiled as MDX,
   // which keeps only exports in scope and reads a capitalised tag as an MDX
   // component.
@@ -126,19 +128,70 @@ export const ButtonsPreview = ({ items, tapped, label }) => {
     );
   };
 
+  return tapBubble(text);
+};
+
+// Mintlify isolates snippet exports. The page passes the shared bubble renderer
+// explicitly so previews reuse geometry without relying on nested imports.
+export const ButtonsPreview = ({ text, items, tapped, label, bubble }) => {
   return (
-    <div className="buttons-preview" role="img" aria-label={label}>
+    <div className="buttons-preview" role="img" aria-label={text ? `${text} ${label}` : label}>
       <div className="buttons-preview-stage">
         {tapped ? (
-          tapBubble(tapped)
+          bubble({ text: tapped })
         ) : (
-          <div className="buttons-preview-stack">
-            {items.map((item) => (
-              <div key={item.label} className={"buttons-preview-pill" + (item.url ? " is-link" : "")}>
-                <span>{item.label}</span>
-                {item.url ? <span className="buttons-preview-arrow" aria-hidden="true">↗</span> : null}
+          <div className="buttons-preview-message">
+            {text ? <div className="buttons-preview-text">{text}</div> : null}
+            <div className="buttons-preview-stack">
+              {items.map((item) => (
+                <div key={item.label} className={"buttons-preview-pill" + (item.url ? " is-link" : "")}>
+                  <span>{item.label}</span>
+                  {item.url ? <span className="buttons-preview-arrow" aria-hidden="true">↗</span> : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+
+// Local-only interaction. No API, analytics, or credentials. Uses the same
+// column/pills/bubble primitives as ButtonsPreview and native selection colors.
+export const SelectionPreview = ({ text, options, received, bubble }) => {
+  const [selected, setSelected] = useState([]);
+  const [sent, setSent] = useState(false);
+  const ordered = options.filter((option) => selected.includes(option.value));
+  const reply = received || ordered.map((option) => option.label).join(", ");
+  return (
+    <div className="buttons-preview selection-preview" role="group" aria-label={received ? "Selection reply preview" : "Interactive selection preview"}>
+      <div className="buttons-preview-stage">
+        {received ? bubble({ text: received }) : (
+          <div className="buttons-preview-message">
+            <div className="buttons-preview-text">{text}</div>
+            {sent ? (
+              <div className="selection-reply" role="status">{bubble({ text: reply })}</div>
+            ) : (
+              <div className="buttons-preview-stack selection-stack">
+                {options.map((option) => (
+                  <button type="button" key={option.value} className="buttons-preview-pill selection-option"
+                    aria-pressed={selected.includes(option.value)} onClick={() => setSelected((current) => current.includes(option.value) ? current.filter((value) => value !== option.value) : [...current, option.value])}>
+                    <svg viewBox="0 0 20 20" className="selection-check" aria-hidden="true">
+                      <circle cx="10" cy="10" r="8.5" />
+                      <path d="m6 10 2.5 2.5 5.5-6" />
+                    </svg>
+                    <span>{option.label}</span>
+                  </button>
+                ))}
+                <div className="selection-actions">
+                  <button type="button" disabled={!selected.length} onClick={() => setSelected([])}>Clear</button>
+                  <button type="button" disabled={!selected.length} onClick={() => setSent(true)}>Send</button>
+                </div>
               </div>
-            ))}
+            )}
+            {sent ? <button type="button" className="selection-reset" onClick={() => { setSent(false); setSelected([]); }}>Reset demo</button> : null}
           </div>
         )}
       </div>
