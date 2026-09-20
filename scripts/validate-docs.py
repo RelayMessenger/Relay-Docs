@@ -371,9 +371,14 @@ for path in mdx_paths:
         text,
     ):
         if "TypeScript SDK" in block and "cURL" in block:
+            # Chat activity follows the requested SDK-first examples. Keep
+            # the established ordering checks for unrelated pages unchanged.
+            if path == root / "chats/activity.mdx":
+                if block.index("TypeScript SDK") > block.index("cURL"):
+                    raise SystemExit(f"TypeScript SDK must appear before cURL: {path.relative_to(root)}")
             # start/build-on-the-api is the main page's API walkthrough moved out
             # verbatim (2026-09-11), so it keeps the main page's cURL-first order.
-            if is_task_guide(path.relative_to(root).with_suffix("").as_posix()) or path in {root / "index.mdx", root / "start/build-on-the-api.mdx"}:
+            elif is_task_guide(path.relative_to(root).with_suffix("").as_posix()) or path in {root / "index.mdx", root / "start/build-on-the-api.mdx"}:
                 if block.index("cURL") > block.index("TypeScript SDK"):
                     raise SystemExit(f"cURL must appear before TypeScript SDK: {path.relative_to(root)}")
             elif block.index("TypeScript SDK") > block.index("cURL"):
