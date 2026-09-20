@@ -19,6 +19,23 @@ UPSTREAM_SHA256 = "27698655d12500fb9cd2e10dbf1c94025fbc64c288df6151db673a7649877
 
 
 class ContractSourceTests(unittest.TestCase):
+    def test_selection_review_uses_production_facing_copy(self):
+        overview = (ROOT / "interactive-components/index.mdx").read_text()
+        self.assertIn('<Card title="Selection"', overview)
+        pages = [
+            ROOT / "interactive-components/index.mdx",
+            ROOT / "interactive-components/selection.mdx",
+            *(ROOT / "integrations").glob("*.mdx"),
+        ]
+        for page in pages:
+            source = page.read_text().lower()
+            self.assertNotIn("selection, coming soon", source)
+            self.assertNotIn("candidate request", source)
+            self.assertNotIn("interactive local preview", source)
+        selection = (ROOT / "interactive-components/selection.mdx").read_text().lower()
+        self.assertNotIn("coming soon", selection)
+        self.assertNotIn("under local development", selection)
+
     def test_selection_guide_keeps_runtime_summary_brief(self):
         selection = (ROOT / "interactive-components/selection.mdx").read_text()
         self.assertNotIn("### Choose and submit", selection)
