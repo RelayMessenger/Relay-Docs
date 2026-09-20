@@ -1,5 +1,6 @@
 // A rendered buttons part, drawn the way the app draws it: a vertical stack of
-// pills under the message, a URL button marked with an arrow, and the tap as
+// equally sized pills capped at 75% of the maximum text-balloon column, a URL
+// button marked with an arrow, and the tap as
 // the person's own bubble. The bubble is the app's own silhouette: a port of
 // RelayBubbleGeometry.trailingRoundTailedPath (Relay-iOS,
 // Views/MessageBubbleShape.swift), the iOS 26.5 BubbleKit round-tailed bubble

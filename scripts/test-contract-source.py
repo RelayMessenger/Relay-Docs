@@ -93,6 +93,30 @@ class ContractSourceTests(unittest.TestCase):
         self.assert_buttons_previews_match_requests(
             (ROOT / "interactive-components/buttons.mdx").read_text())
 
+    def test_buttons_preview_matches_native_shared_width(self):
+        # Relay-iOS 004cd885, RelayButtonsRowLayout: pillWidthShare = 0.75,
+        # pillHeight = 48, pillSpacing = 4, leading/trailingInset = 20/16.
+        css = (ROOT / "style.css").read_text()
+
+        def declarations(selector):
+            block = re.search(r"^" + re.escape(selector) + r"\s*\{([^}]*)\}", css, re.M)
+            self.assertIsNotNone(block, f"Missing {selector}")
+            return dict(re.findall(r"([\w-]+)\s*:\s*([^;]+);", block[1]))
+
+        stack = declarations(".buttons-preview-stack")
+        self.assertEqual(stack["width"], "75%")
+        self.assertEqual(stack["max-width"], "75%")
+        self.assertEqual(stack["align-self"], "flex-start")
+        self.assertEqual(stack["gap"], "4px")
+        pill = declarations(".buttons-preview-pill")
+        # Every pill fills the narrowed stack, never the whole message column
+        # and never a separate label-dependent width.
+        self.assertEqual(pill["width"], "100%")
+        self.assertEqual(pill["box-sizing"], "border-box")
+        self.assertEqual(pill["min-height"], "48px")
+        self.assertEqual(pill["padding"], "12px 16px 12px 20px")
+        self.assertEqual(pill["border-radius"], "24px")
+
     def test_buttons_preview_regressions_are_detected(self):
         source = (ROOT / "interactive-components/buttons.mdx").read_text()
         text_prop = re.search(r'\btext\s*=\s*("(?:\\.|[^"\\])*")', source)
