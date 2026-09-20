@@ -10,15 +10,26 @@ from pathlib import Path
 from origins import target
 
 ROOT = Path(__file__).resolve().parents[1]
-# Canonical activity contract read from the assigned Server worktree.
-# Pins the merged activity and live call-marker source bytes.
-UPSTREAM_COMMIT = "4394ff241d9bb3a25299f8e5364ab9b434861f2d"
-UPSTREAM_STAGING_COMMIT = "4394ff241d9bb3a25299f8e5364ab9b434861f2d"
-UPSTREAM_SIZE = 172715
-UPSTREAM_SHA256 = "1bd3d25ef7aa080a38db903445f83ba173753552ac1369b5aad06e8fba6d6472"
+# Canonical request lifecycle description read from the committed Server source.
+# Retains the merged activity and live call-marker shapes.
+UPSTREAM_COMMIT = "1cde828c2dea5ca504d93ee5b7130a5e5f2dcb4b"
+UPSTREAM_STAGING_COMMIT = "1cde828c2dea5ca504d93ee5b7130a5e5f2dcb4b"
+UPSTREAM_SIZE = 172763
+UPSTREAM_SHA256 = "0352d85494344137abcdc5dd27287705ea14e87897aedd127f875d8362b83fb6"
 
 
 class ContractSourceTests(unittest.TestCase):
+    def test_request_lifecycle_description_does_not_expose_private_fields(self):
+        canonical = (ROOT / "api-reference/openapi.yaml").read_text()
+        normalized = " ".join(canonical.split())
+        self.assertIn(
+            "Removing a Contact keeps an existing conversation in Chats until "
+            "another incoming message makes it a message request.",
+            normalized,
+        )
+        for field in ("is_request", "request_expires_at"):
+            self.assertNotRegex(canonical, rf"(?m)^\s+{field}:")
+
     def test_combined_contract_keeps_live_call_markers(self):
         canonical = (ROOT / "api-reference/openapi.yaml").read_text()
         marker = canonical.split("    CallMarker:\n", 1)[1].split("    SystemEventParty:\n", 1)[0]
