@@ -27,33 +27,109 @@ try {
   page.on('request', r => new URL(r.url()).origin === origin.origin || r.url().startsWith('data:') ? r.continue() : r.abort());
   await page.goto(new URL('/interactive-components/selection', origin).href, { waitUntil: 'networkidle0', timeout: 120000 });
   await page.waitForSelector('.selection-option', { timeout: 20000 });
-  assert.equal(await page.$eval('[aria-label="Selection reply preview"] svg text', e => e.textContent), 'Research, Design');
+  assert.deepEqual(await page.$$eval('[aria-label="Selection reply preview"] svg text', rows => rows.map(e => e.textContent)), ['• Research', '• Design']);
+  const assertSend = async (dark, disabled) => {
+    await new Promise(resolve => setTimeout(resolve, 250));
+    const style = await page.$eval('.selection-actions button', e => {
+      const pill = e.querySelector('.selection-send-pill');
+      const box = e.getBoundingClientRect(), visual = pill.getBoundingClientRect();
+      const parent = e.parentElement.getBoundingClientRect();
+      const option = [...e.closest('.selection-stack').querySelectorAll('.selection-option')].at(-1).getBoundingClientRect();
+      const hitStyle = getComputedStyle(e), visualStyle = getComputedStyle(pill);
+      return {
+        disabled: e.disabled, width: box.width, height: box.height,
+        visualWidth: visual.width, visualHeight: visual.height,
+        inset: visual.y - box.y, gap: box.y - option.bottom,
+        offset: Math.abs(box.x + box.width / 2 - parent.x - parent.width / 2),
+        visualOffset: Math.abs(visual.x + visual.width / 2 - box.x - box.width / 2),
+        fill: visualStyle.backgroundColor, color: visualStyle.color,
+        fontSize: visualStyle.fontSize, fontWeight: visualStyle.fontWeight,
+        hitFill: hitStyle.backgroundColor, opacity: hitStyle.opacity,
+        visualOpacity: visualStyle.opacity, transition: visualStyle.transitionProperty,
+        duration: visualStyle.transitionDuration,
+      };
+    });
+    assert.equal(style.disabled, disabled);
+    assert.deepEqual([style.width, style.height, style.visualWidth, style.visualHeight], [84, 44, 84, 32]);
+    assert.ok(Math.abs(style.inset - 6) < .1);
+    assert.ok(Math.abs(style.gap - 4) < .1, 'Hit target starts 4px below the last option');
+    assert.ok(style.offset < .1 && style.visualOffset < .1, 'Both target and visual are centered');
+    assert.equal(style.hitFill, 'rgba(0, 0, 0, 0)');
+    const fill = dark ? '20, 45, 77' : '232, 241, 255';
+    const color = dark ? '111, 176, 255' : '11, 117, 255';
+    assert.equal(style.fill, disabled ? `rgba(${fill}, 0.34)` : `rgb(${fill})`);
+    assert.equal(style.color, disabled ? `rgba(${color}, 0.34)` : `rgb(${color})`);
+    assert.equal(style.fontSize, '15px');
+    assert.equal(style.fontWeight, '600');
+    assert.equal(style.opacity, '1');
+    assert.equal(style.visualOpacity, '1', 'Only colors dim, not control opacity');
+    assert.equal(style.transition, 'background-color, color');
+    assert.equal(style.duration, '0.2s, 0.2s');
+  };
   for (const width of [1280, 390, 320]) {
     await page.setViewport({ width, height: 1000 });
     for (const dark of [false, true]) {
       await page.evaluate(dark => document.documentElement.classList.toggle('dark', dark), dark);
-      assert.equal(await page.$eval('.selection-actions button:last-child', e => e.disabled), true);
+      assert.deepEqual(await page.$$eval('.selection-actions button', buttons => buttons.map(e => e.textContent.trim())), ['Send']);
+      await assertSend(dark, true);
       await click('.selection-option');
       assert.equal(await page.$eval('.selection-option', e => e.getAttribute('aria-pressed')), 'true');
+      await assertSend(dark, false);
       await new Promise(r => setTimeout(r, 250));
       const style = await page.$eval('.selection-option', e => ({ fill: getComputedStyle(e).backgroundColor, opacity: getComputedStyle(e).opacity, border: getComputedStyle(e).borderWidth, overflow: e.scrollWidth > e.clientWidth }));
       assert.equal(style.fill, dark ? 'rgb(29, 55, 89)' : 'rgb(214, 230, 255)');
       assert.equal(style.opacity, '1');
       assert.equal(style.border, '0px');
       assert.equal(style.overflow, false);
-      await click('.selection-actions button:first-child');
-      assert.equal(await page.$eval('.selection-actions button:last-child', e => e.disabled), true);
+      await click('.selection-option');
+      assert.equal(await page.$eval('.selection-option', e => e.getAttribute('aria-pressed')), 'false');
+      assert.equal(await page.$('.selection-reply'), null);
+      await assertSend(dark, true);
       // Reverse click order must still yield source-option order.
       await click('.selection-option:nth-child(2)');
       await click('.selection-option:nth-child(1)');
-      await click('.selection-actions button:last-child');
+      await assertSend(dark, false);
+      const send = await page.$('.selection-actions button');
+      await send.evaluate(e => e.scrollIntoView({ block: 'center', behavior: 'instant' }));
+      await new Promise(resolve => setTimeout(resolve, 400));
+      const box = await send.boundingBox();
+      // The transparent top inset belongs to the hit target too.
+      await page.mouse.move(box.x + box.width / 2, box.y + 2);
+      await page.mouse.down();
+      await new Promise(resolve => setTimeout(resolve, 200));
+      const pressed = await send.evaluate(e => ({
+        scale: new DOMMatrix(getComputedStyle(e).transform).a,
+        opacity: getComputedStyle(e).opacity,
+      }));
+      assert.ok(Math.abs(pressed.scale - .97) < .001);
+      assert.equal(pressed.opacity, '1');
+      await page.mouse.up();
       await page.waitForSelector('.selection-reply text', { timeout: 3000 });
-      assert.equal(await page.$eval('.selection-reply text', e => e.textContent), 'Research, Design');
+      assert.deepEqual(await page.$$eval('.selection-reply text', rows => rows.map(e => e.textContent)), ['• Research', '• Design']);
+      assert.equal(await page.$eval('.selection-reply', e => e.getAttribute('aria-label')), 'Reply: • Research\n• Design');
       assert.equal(await page.$('.selection-option'), null);
       await click('.selection-reset');
       console.log(`PASS selection ${width}px ${dark ? 'dark' : 'light'}`);
     }
   }
+  await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+  await click('.selection-option');
+  const reducedSend = await page.$('.selection-actions button');
+  await reducedSend.evaluate(e => e.scrollIntoView({ block: 'center', behavior: 'instant' }));
+  await new Promise(resolve => setTimeout(resolve, 400));
+  const reducedBox = await reducedSend.boundingBox();
+  await page.mouse.move(reducedBox.x + reducedBox.width / 2, reducedBox.y + 2);
+  await page.mouse.down();
+  assert.deepEqual(await reducedSend.evaluate(e => ({
+    transform: getComputedStyle(e).transform,
+    opacity: getComputedStyle(e).opacity,
+    transition: getComputedStyle(e).transitionDuration,
+    colorTransition: getComputedStyle(e.querySelector('.selection-send-pill')).transitionDuration,
+  })), { transform: 'none', opacity: '1', transition: '0s', colorTransition: '0s' });
+  await page.mouse.up();
+  await page.waitForSelector('.selection-reply');
+  await click('.selection-reset');
+  await page.emulateMediaFeatures([]);
   await page.goto(new URL('/interactive-components/buttons', origin).href, { waitUntil: 'networkidle0' });
   await page.waitForSelector('.buttons-preview-tap text');
   assert.equal(await page.$eval('.buttons-preview-tap text', e => e.textContent), 'Jupiter');

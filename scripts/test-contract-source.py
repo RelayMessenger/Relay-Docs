@@ -29,22 +29,40 @@ class ContractSourceTests(unittest.TestCase):
                 self.assertNotRegex(card, r"\sicon(?:\s|=|/?>)",
                                     "Every interactive-component card must omit icon")
 
-    def test_selection_review_uses_production_facing_copy(self):
+    def test_selection_local_review_preserves_production_facing_copy(self):
         overview = (ROOT / "interactive-components/index.mdx").read_text()
         self.assertIn('<Card title="Selection" href="/interactive-components/selection">', overview)
-        pages = [
-            ROOT / "interactive-components/index.mdx",
-            ROOT / "interactive-components/selection.mdx",
-            *(ROOT / "integrations").glob("*.mdx"),
-        ]
-        for page in pages:
-            source = page.read_text().lower()
-            self.assertNotIn("selection, coming soon", source)
-            self.assertNotIn("candidate request", source)
-            self.assertNotIn("interactive local preview", source)
-        selection = (ROOT / "interactive-components/selection.mdx").read_text().lower()
-        self.assertNotIn("coming soon", selection)
-        self.assertNotIn("under local development", selection)
+        selection = (ROOT / "interactive-components/selection.mdx").read_text()
+        for page in [ROOT / "interactive-components/index.mdx",
+                     ROOT / "interactive-components/selection.mdx",
+                     *(ROOT / "integrations").glob("*.mdx")]:
+            self.assertNotIn("coming soon", page.read_text().lower(), page)
+        self.assertIn("literal `• `", selection)
+        self.assertIn("exact selected source labels joined with `, `", selection)
+        self.assertNotIn("**Clear**", selection)
+        # Production-facing localhost copy does not change release provenance.
+        record = json.loads((ROOT / "scripts/local-contract-source.json").read_text())
+        self.assertEqual(record["status"], "local-candidate-not-published")
+
+    def test_selection_preview_and_response_share_canonical_bullet_text(self):
+        source = (ROOT / "interactive-components/selection.mdx").read_text()
+        groups = re.findall(r"<Tabs\b[^>]*>(.*?)</Tabs>", source, re.S)
+        send = next(group for group in groups if '<Tab title="Request">' in group)
+        received = next(group for group in groups if '<Tab title="What you receive">' in group)
+        request = json.loads(re.search(r"```json\s*\n(.*?)```", send, re.S)[1])
+        response = json.loads(re.search(r"```json\s*\n(.*?)```", received, re.S)[1])["data"]
+        options = request["message"]["parts"][1]["options"]
+        values = response["parts"][1]["selected_values"]
+        canonical = "\n".join("• " + option["label"] for option in options if option["value"] in values)
+        self.assertEqual(response["parts"][0]["value"], canonical)
+        self.assertEqual(response["reply_to"]["part_index"], 1)
+        preview = re.search(r'received=\{("(?:\\.|[^"\\])*")\}', received)
+        self.assertIsNotNone(preview)
+        self.assertEqual(json.loads(preview[1]), canonical)
+        preview_options = re.search(r'options=\{(\[.*?\])\}', send, re.S)
+        self.assertEqual(json.loads(preview_options[1]), options)
+        question = re.search(r'text=("(?:\\.|[^"\\])*")', send)
+        self.assertEqual(json.loads(question[1]), request["message"]["parts"][0]["value"])
 
     def test_selection_guide_keeps_runtime_summary_brief(self):
         selection = (ROOT / "interactive-components/selection.mdx").read_text()
@@ -234,13 +252,46 @@ assert.equal(openedURL, null);
         self.assertIn('role="group"', selection)
         self.assertIn('aria-pressed={selected.includes(option.value)}', selection)
         self.assertIn("options.filter((option) => selected.includes(option.value))", selection)
-        self.assertIn('ordered.map((option) => option.label).join(", ")', selection)
+        self.assertIn('ordered.map((option) => "• " + option.label).join("\\n")', selection)
+        self.assertNotIn(">Clear<", selection)
+        self.assertIn("current.filter((value) => value !== option.value)", selection)
+        actions = selection.split('className="selection-actions"', 1)[1].split("</div>", 1)[0]
+        self.assertEqual(actions.count("<button"), 1)
+        self.assertIn('<span className="selection-send-pill">Send</span>', actions)
         self.assertIn("setSelected([])", selection)
         self.assertIn("setSent(true)", selection)
         self.assertIn("setSent(false)", selection)
         self.assertIn('disabled={!selected.length}', selection)
         self.assertIn('className="selection-reply" role="status"', selection)
         self.assertIn("bubble({ text: received })", selection)
+
+    def test_selection_send_matches_approved_visual_and_hit_target(self):
+        css = (ROOT / "style.css").read_text()
+        def rule(selector):
+            match = re.search(r"(?:^|\n)" + re.escape(selector) + r"\s*\{([^{}]*)\}", css)
+            self.assertIsNotNone(match, selector)
+            return match[1]
+        hit = rule(".selection-actions button")
+        visual = rule(".selection-send-pill")
+        for declaration in ("width: 84px", "height: 44px", "padding: 6px 0",
+                            "background: transparent", "font: 600 15px/20px", "opacity: 1"):
+            self.assertIn(declaration, hit)
+        for declaration in ("width: 84px", "height: 32px", "background: #e8f1ff",
+                            "color: #0b75ff", "background-color .2s", "color .2s"):
+            self.assertIn(declaration, visual)
+        self.assertIn("background: #142d4d", rule(".dark .selection-send-pill"))
+        self.assertIn("gap: 4px", rule(".buttons-preview-stack"))
+        self.assertIn("justify-content: center", rule(".selection-actions"))
+        self.assertIn("rgba(232, 241, 255, .34)", rule(".selection-actions button:disabled .selection-send-pill"))
+        self.assertIn("rgba(11, 117, 255, .34)", rule(".selection-actions button:disabled .selection-send-pill"))
+        self.assertIn("rgba(20, 45, 77, .34)", rule(".dark .selection-actions button:disabled .selection-send-pill"))
+        self.assertIn("rgba(111, 176, 255, .34)", rule(".dark .selection-actions button:disabled .selection-send-pill"))
+        self.assertIn("opacity: 1", rule(".selection-actions button:disabled"))
+        self.assertIn("transform: scale(.97)", rule(".selection-option:active, .selection-actions button:active:not(:disabled)"))
+        reduced = css.split("@media (prefers-reduced-motion: reduce)")[-1]
+        for declaration in ("transition: none", "animation: none", "transform: none"):
+            self.assertIn(declaration, reduced)
+        self.assertIn(".selection-actions button:active:not(:disabled)", reduced)
 
     def test_button_animation_has_scale_only_press_and_reduced_motion(self):
         css = (ROOT / "style.css").read_text()

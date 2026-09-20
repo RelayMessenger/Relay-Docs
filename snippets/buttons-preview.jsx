@@ -113,17 +113,20 @@ export const MessageBubble = ({ text }) => {
   };
 
   const tapBubble = (text) => {
-    // The app's one-line body, measured on the simulator: 40pt tall, 17pt
-    // text, 14pt side insets. The text width is estimated; the page cannot
-    // measure it.
-    const h = 40;
-    const w = Math.max(2 * 20, Math.round(text.length * 8.6 + 28));
+    // Preserve portable newlines as distinct rows. Single-line button replies
+    // keep their existing 40pt geometry, 17pt text, and 14pt side insets.
+    const lines = text.split("\n");
+    const h = 40 + (lines.length - 1) * 24;
+    const w = Math.max(2 * 20, Math.round(Math.max(...lines.map(line => line.length)) * 8.6 + 28));
     const radius = Math.min(WIDE, w / 2, h / 2);
     const total = Math.ceil(h + radius * TAIL_DEPTH_FACTOR);
     return (
       <svg className="buttons-preview-tap" width={w} height={total} viewBox={`0 0 ${w} ${total}`} aria-hidden="true">
         <path d={bubblePath(w, h)} />
-        <text x={w / 2} y={h / 2} dominantBaseline="central" textAnchor="middle">{text}</text>
+        {lines.map((line, index) => (
+          <text key={index} x={lines.length === 1 ? w / 2 : 14} y={20 + index * 24}
+            dominantBaseline="central" textAnchor={lines.length === 1 ? "middle" : "start"}>{line}</text>
+        ))}
       </svg>
     );
   };
@@ -194,7 +197,7 @@ export const SelectionPreview = ({ text, options, received, bubble }) => {
   const [selected, setSelected] = useState([]);
   const [sent, setSent] = useState(false);
   const ordered = options.filter((option) => selected.includes(option.value));
-  const reply = received || ordered.map((option) => option.label).join(", ");
+  const reply = received || ordered.map((option) => "• " + option.label).join("\n");
   return (
     <div className="buttons-preview selection-preview" role="group" aria-label={received ? "Selection reply preview" : "Interactive selection preview"}>
       <div className="buttons-preview-stage">
@@ -202,7 +205,7 @@ export const SelectionPreview = ({ text, options, received, bubble }) => {
           <div className="buttons-preview-message">
             <div className="buttons-preview-text">{text}</div>
             {sent ? (
-              <div className="selection-reply" role="status">{bubble({ text: reply })}</div>
+              <div className="selection-reply" role="status" aria-label={`Reply: ${reply}`}>{bubble({ text: reply })}</div>
             ) : (
               <div className="buttons-preview-stack selection-stack">
                 {options.map((option) => (
@@ -216,8 +219,9 @@ export const SelectionPreview = ({ text, options, received, bubble }) => {
                   </button>
                 ))}
                 <div className="selection-actions">
-                  <button type="button" disabled={!selected.length} onClick={() => setSelected([])}>Clear</button>
-                  <button type="button" disabled={!selected.length} onClick={() => setSent(true)}>Send</button>
+                  <button type="button" disabled={!selected.length} onClick={() => setSent(true)}>
+                    <span className="selection-send-pill">Send</span>
+                  </button>
                 </div>
               </div>
             )}

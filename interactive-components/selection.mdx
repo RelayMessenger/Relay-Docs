@@ -10,7 +10,7 @@ Send a question with a `selection` part containing 1 to 25 options. Each option 
 
 ## Send a selection
 
-This request contains a required nonblank `text` part followed by a `selection` part. The preview shows the same question and options, in the same order. Try toggling choices, **Clear**, and **Send**; this demo stays in your browser and sends no request.
+This request contains a required nonblank `text` part followed by a `selection` part. The preview shows the same question and options, in the same order. Tap a selected choice again to deselect it, then use the centered compact light-blue **Send** button; this demo stays in your browser and sends no request.
 
 <Tabs>
   <Tab title="Preview">
@@ -80,13 +80,17 @@ curl -sS "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
 
 The send path returns `202` after storing the message. Keep the returned message ID so your application can associate responses with this question. Reuse the same request and idempotency key after an uncertain send.
 
+```http
+HTTP/1.1 202 Accepted
+```
+
 ## Receive stable values
 
 The user's submission contains exactly two ordered parts: readable text, then structured metadata. Its `reply_to` identifies the source message and selection part.
 
 <Tabs>
   <Tab title="Preview">
-    <SelectionPreview bubble={MessageBubble} options={[]} received="Research, Design" />
+    <SelectionPreview bubble={MessageBubble} options={[]} received={"• Research\n• Design"} />
   </Tab>
   <Tab title="What you receive">
     ```json
@@ -94,7 +98,7 @@ The user's submission contains exactly two ordered parts: readable text, then st
       "event_type":"message.received",
       "data": {
         "parts": [
-          {"type":"text","value":"Research, Design"},
+          {"type":"text","value":"• Research\n• Design"},
           {"type":"selection_response","selected_values":["research","design"]}
         ],
         "reply_to": {
@@ -107,9 +111,9 @@ The user's submission contains exactly two ordered parts: readable text, then st
   </Tab>
 </Tabs>
 
-The event example shows the response fields used by your handler. The preview displays exactly the text part, **Research, Design**; metadata adds no visible text.
+The event example shows the response fields used by your handler. The preview displays the text part as two bullet lines; metadata adds no visible text.
 
-The text equals the selected source labels joined with `, `, in source-option order. It supplies the readable bubble and notification text. The `selection_response` part carries metadata only.
+New text equals literal `• ` + each selected source label joined with `\n`, in source-option order. It supplies portable bubble, notification, and copy text; iOS may display round checked circles as presentation only. The `selection_response` part carries metadata only.
 
 Your existing signed [webhook](/webhooks/verify-signatures) or [WebSocket](/websocket/index) handler receives the ordinary `message.received` event. The SDK's default event types expose the metadata:
 
@@ -138,6 +142,8 @@ Selections use the runtime's existing send path: a backend includes a `selection
 ## Handle rejected submissions
 
 Invalid option shapes, duplicate values, and unsupported fields fail validation. The server verifies the response against the visible source question, including the exact readable text, source order, permissions, and chat membership.
+
+For compatibility, it also accepts the exact selected source labels joined with `, `; new clients send bullet lines. Dispatch always uses `selected_values` and the explicit source target, never arbitrary label parsing.
 
 A same-key retry retains existing message idempotency behavior. A different-key response after the same person has consumed the prompt conflicts with `409` and code `1005`. Keep the original outgoing identity when retrying an uncertain submission.
 
