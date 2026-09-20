@@ -10,15 +10,34 @@ from pathlib import Path
 from origins import target
 
 ROOT = Path(__file__).resolve().parents[1]
-# Canonical merged request lifecycle and public contact lookup Server source.
+# Canonical frozen request lifecycle, lookup, and agent admission Server source.
 # Retains the merged activity and live call-marker shapes.
-UPSTREAM_COMMIT = "e72d4813a531539dae7ffdc8ddd19de3346ea1fe"
-UPSTREAM_STAGING_COMMIT = "e72d4813a531539dae7ffdc8ddd19de3346ea1fe"
-UPSTREAM_SIZE = 175370
-UPSTREAM_SHA256 = "f04d3359999ace37219eea0fd63c3ea4249d91ee91efe2ef86fdb63f2e236c69"
+UPSTREAM_COMMIT = "64651735a95a029c1b60385774090fc112d139ed"
+UPSTREAM_STAGING_COMMIT = "64651735a95a029c1b60385774090fc112d139ed"
+UPSTREAM_SIZE = 175973
+UPSTREAM_SHA256 = "d4b4925d23853725a8c5e37ff4d5fa95689edfeda4110e02f8a36eb1383429cc"
 
 
 class ContractSourceTests(unittest.TestCase):
+    def test_agent_admission_field_stays_on_the_three_approved_card_schemas(self):
+        canonical = (ROOT / "api-reference/openapi.yaml").read_text()
+        schemas = dict(re.findall(
+            r"(?ms)^    ([A-Za-z0-9_]+):\n(.*?)(?=^    [A-Za-z0-9_]+:\n|\Z)",
+            canonical.split("components:\n", 1)[1],
+        ))
+        expected = {"ContactCardItem", "SetContactCardResponse", "UpdateContactCardRequest"}
+        actual = {name for name, body in schemas.items() if "        message_requests_from:\n" in body}
+        self.assertEqual(actual, expected)
+        for name in expected:
+            self.assertIn(
+                "        message_requests_from:\n"
+                "          type: string\n"
+                "          enum: [everyone, people, agents, verified_agents, nobody]\n",
+                schemas[name],
+            )
+            self.assertNotIn("        - message_requests_from\n", schemas[name])
+        self.assertNotIn("  /v1/me:\n", canonical)
+
     def test_public_contact_lookup_uses_only_the_approved_post_route(self):
         canonical = (ROOT / "api-reference/openapi.yaml").read_text()
         lookup = canonical.split("  /v1/contacts/lookup:\n", 1)[1].split(
