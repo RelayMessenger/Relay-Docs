@@ -5,6 +5,7 @@ import json
 import os
 import re
 import tempfile
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -144,6 +145,112 @@ class ContractSourceTests(unittest.TestCase):
     def test_buttons_previews_match_adjacent_requests(self):
         self.assert_buttons_previews_match_requests(
             (ROOT / "interactive-components/buttons.mdx").read_text())
+
+    def test_buttons_preview_has_local_native_controls_and_accessible_feedback(self):
+        source = (ROOT / "snippets/buttons-preview.jsx").read_text()
+        buttons = source.split("export const ButtonsPreview =", 1)[1].split(
+            "export const SelectionPreview =", 1)[0]
+        self.assertRegex(buttons, r"\[reply,\s*setReply\]\s*=\s*useState\(")
+        self.assertRegex(buttons, r"\[openedURL,\s*setOpenedURL\]\s*=\s*useState\(")
+        tags = re.findall(r"<button\b[\s\S]*?(?=>)", buttons)
+        self.assertTrue(any("buttons-preview-action" in tag and
+                            'type="button"' in tag for tag in tags))
+        self.assertIn('role="group"', buttons)
+        self.assertRegex(buttons, r'className="buttons-reply"[^>]*role="status"')
+        self.assertRegex(buttons, r'aria-label=\{`Reply: \$\{reply\}`\}')
+        self.assertRegex(buttons, r'className="buttons-url-preview"[^>]*role="group"')
+        self.assertIn('aria-label="URL action preview"', buttons)
+        self.assertIn("buttons-url-close", buttons)
+        self.assertIn("buttons-reset", buttons)
+        self.assertIn("Reset demo", buttons)
+        # URL actions must use local state, never navigation or a network send.
+        self.assertRegex(buttons, r"setOpenedURL\(item\.url\)")
+        self.assertRegex(buttons, r"setReply\(item\.label\)")
+        self.assertRegex(buttons, r"setReply\((?:null|\"\"|'')\)")
+        self.assertRegex(buttons, r"setOpenedURL\((?:null|\"\"|'')\)")
+        self.assertRegex(buttons, r"\{openedURL\}")
+        self.assertRegex(buttons, r"reply(?:\s*!==\s*null)?\s*\?\s*\(")
+        self.assertIn("bubble({ text: reply })", buttons)
+        self.assertIn("bubble({ text: tapped })", buttons)
+        for unsafe in (r"<a\b", r"\bhref\s*=", r"\bwindow\.open\s*\(",
+                       r"\blocation\s*(?:[.=]|\[)", r"\bfetch\s*\(",
+                       r"\bXMLHttpRequest\b", r"\bnavigator\.sendBeacon"):
+            self.assertNotRegex(buttons, unsafe)
+
+    def test_actual_button_handlers_keep_url_local_and_plain_reply_exact(self):
+        # Execute only extracted event-handler JavaScript with state setters.
+        # Node built-ins only: no JSX compiler, React, browser or network.
+        source = (ROOT / "snippets/buttons-preview.jsx").read_text()
+        buttons = source.split("export const ButtonsPreview =", 1)[1].split(
+            "export const SelectionPreview =", 1)[0]
+        click = re.search(r'onClick=\{\(\) => \{([\s\S]*?)\}\}', buttons)
+        reset = re.search(r'className="buttons-reset"[^>]*onClick=\{\(\) => \{([\s\S]*?)\}\}', buttons)
+        self.assertIsNotNone(click)
+        self.assertIsNotNone(reset)
+        program = r"""
+import assert from 'node:assert/strict';
+const source = JSON.parse(process.argv[1]);
+const click = new Function('item', 'setReply', 'setOpenedURL', source.click);
+const reset = new Function('setReply', 'setOpenedURL', source.reset);
+let reply = null, openedURL = null;
+const setReply = value => { reply = value; };
+const setOpenedURL = value => { openedURL = value; };
+for (const label of ['Jupiter', 'Continue', ' Approve exactly! ', '研究']) {
+  click({label}, setReply, setOpenedURL);
+  assert.equal(reply, label);
+  assert.equal(openedURL, null);
+  reset(setReply, setOpenedURL);
+  assert.equal(reply, null);
+  assert.equal(openedURL, null);
+}
+const url = 'https://example.invalid/local-only';
+click({label:'Open report', url}, setReply, setOpenedURL);
+assert.equal(openedURL, url);
+assert.equal(reply, null, 'URL must not consume the group');
+click({label:'Open report', url}, setReply, setOpenedURL);
+assert.equal(reply, null, 'URL remains repeatable');
+click({label:'Approve'}, setReply, setOpenedURL);
+assert.equal(reply, 'Approve');
+assert.equal(openedURL, null, 'Plain choice clears the URL preview in a mixed group');
+reset(setReply, setOpenedURL);
+assert.equal(reply, null);
+assert.equal(openedURL, null);
+"""
+        subprocess.run(["node", "--input-type=module", "-e", program,
+                        json.dumps({"click": click[1], "reset": reset[1]})], check=True)
+
+    def test_interactive_previews_preserve_selection_behavior(self):
+        source = (ROOT / "snippets/buttons-preview.jsx").read_text()
+        selection = source.split("export const SelectionPreview =", 1)[1]
+        self.assertIn('role="group"', selection)
+        self.assertIn('aria-pressed={selected.includes(option.value)}', selection)
+        self.assertIn("options.filter((option) => selected.includes(option.value))", selection)
+        self.assertIn('ordered.map((option) => option.label).join(", ")', selection)
+        self.assertIn("setSelected([])", selection)
+        self.assertIn("setSent(true)", selection)
+        self.assertIn("setSent(false)", selection)
+        self.assertIn('disabled={!selected.length}', selection)
+        self.assertIn('className="selection-reply" role="status"', selection)
+        self.assertIn("bubble({ text: received })", selection)
+
+    def test_button_animation_has_scale_only_press_and_reduced_motion(self):
+        css = (ROOT / "style.css").read_text()
+        active = re.findall(r"([^{}]*\.buttons-preview-action:active[^{}]*)\{([^{}]*)\}", css)
+        self.assertTrue(active, "Native buttons need press feedback")
+        declarations = "\n".join(body for _, body in active)
+        self.assertRegex(declarations, r"transform:\s*scale\(")
+        for _, body in active:
+            opacity = re.search(r"opacity:\s*([^;]+)", body)
+            if opacity:
+                self.assertEqual(opacity[1].strip(), "1", "Press feedback must not dim")
+        self.assertRegex(css, r"\.buttons-preview-action:focus-visible")
+        reduced = css.split("@media (prefers-reduced-motion: reduce)")[-1]
+        self.assertIn(".buttons-preview", reduced)
+        for rule in ("transition: none", "animation: none", "transform: none"):
+            self.assertIn(rule, reduced)
+        reply_rule = re.search(r"\.buttons-reply[^{}]*\{([^{}]*)\}", css)
+        self.assertIsNotNone(reply_rule)
+        self.assertRegex(reply_rule[1], r"animation:")
 
     def test_buttons_preview_matches_native_shared_width(self):
         # Relay-iOS 004cd885, RelayButtonsRowLayout: pillWidthShare = 0.75,
