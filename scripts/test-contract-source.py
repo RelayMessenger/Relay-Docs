@@ -21,7 +21,7 @@ UPSTREAM_SHA256 = "27698655d12500fb9cd2e10dbf1c94025fbc64c288df6151db673a7649877
 class ContractSourceTests(unittest.TestCase):
     def test_selection_review_uses_production_facing_copy(self):
         overview = (ROOT / "interactive-components/index.mdx").read_text()
-        self.assertIn('<Card title="Selection"', overview)
+        self.assertIn('<Card title="Selection" href="/interactive-components/selection">', overview)
         pages = [
             ROOT / "interactive-components/index.mdx",
             ROOT / "interactive-components/selection.mdx",
