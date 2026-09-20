@@ -11,14 +11,16 @@ from origins import target
 
 ROOT = Path(__file__).resolve().parents[1]
 # Independently read canonical contract at the Server staging removal merge.
-UPSTREAM_COMMIT = "eb83978b6b2c625da82471e4af16acad8de0e618"
-UPSTREAM_STAGING_COMMIT = "eb83978b6b2c625da82471e4af16acad8de0e618"
-UPSTREAM_SHA256 = "27698655d12500fb9cd2e10dbf1c94025fbc64c288df6151db673a7649877111"
+UPSTREAM_COMMIT = "328ba8ae07392d64de2570ba9161d75138bf82d5"
+UPSTREAM_STAGING_COMMIT = "328ba8ae07392d64de2570ba9161d75138bf82d5"
+UPSTREAM_SIZE = 166526
+UPSTREAM_SHA256 = "99e4c6315bffe93a2a3fe8f1bc3bffb8fbef087133439bb7c2c3f82263bc16a7"
 
 
 class ContractSourceTests(unittest.TestCase):
     def test_canonical_bytes_equal_pinned_upstream(self):
         canonical = (ROOT / "api-reference/openapi.yaml").read_bytes()
+        self.assertEqual(len(canonical), UPSTREAM_SIZE)
         local_source = os.environ.get("RELAY_OPENAPI_SOURCE")
         if local_source:
             # Uncommitted coordinated work uses independent Server bytes without
