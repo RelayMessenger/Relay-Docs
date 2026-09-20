@@ -2148,8 +2148,10 @@ Call `GET /v1/messages/{messageId}` ([reference](/api-reference/messages/get-a-m
 | `edited_at` | When the sender last edited it, or `null` |
 | `unsent_at` | When the sender unsent it, or `null` |
 | `deliveries` | Per-recipient Delivered and Read times |
-| `is_system_message` | `true` for a chat event such as a participant joining or a call ending |
-| `system_event` | [Event type and fields](/api-reference/resources/messages/overview#system-events), including `call` and its current call state |
+| `is_system_message` | `true` for a chat event such as a participant joining or a call |
+| `system_event` | [Event type and fields](/api-reference/resources/messages/overview#system-events), including `call` and its `call` object |
+
+The marker exists from the moment the call is placed; `call.status` and `call.end_reason` carry its state.
 
 `edited_at` and `unsent_at` carry a time only on messages from before message editing and unsending were retired. On every message since, both are `null`.
 
@@ -2977,9 +2979,9 @@ Call `GET /v1/chats/{chatId}/messages` ([reference](/api-reference/messages/get-
 
 The default order is oldest first; `order=desc` opens on the newest and pages toward older ones. Pass `next_cursor` back unchanged, with the same order, until it is `null`. The SDK's `page.getNextPage()` does that for you.
 
-Group activity and ended calls sit in the same timeline as messages. A row with `is_system_message: true` carries a system part such as "Alice added you" and a `system_event` naming the type, the actor, and the subject. Replies and reactions target regular rows only.
+Group activity and calls sit in the same timeline as messages. A row with `is_system_message: true` carries a system part such as "Alice added you" and a `system_event` naming the type, the actor, and the subject. Replies and reactions target regular rows only.
 
-A call has one [`call` system event](/api-reference/resources/messages/overview#system-events) from placement, with the caller as `actor`, the callee as `subject`, and its current state and outcome in `system_event.call`.
+A call has one [`call` system event](/api-reference/resources/messages/overview#system-events) with the caller as `actor`, the callee as `subject`, and its state in `system_event.call`. The marker exists from the moment the call is placed; `call.status` and `call.end_reason` carry its state.
 
 Read history after a restart or an uncertain response; events arrive through webhooks or a WebSocket.
 
@@ -3285,7 +3287,7 @@ Close the WebSocket to hang up. You can also end the call with `POST /v1/calls/{
 
 ## The call in the chat
 
-When a call is placed, Relay writes one system message into its chat with `is_system_message: true` and `system_event.type: "call"`. The event's `actor` is the caller and its `subject` is the callee. The same marker's [`call` object](/api-reference/resources/messages/overview#system-events) reflects the current status and, when the call ends, its outcome.
+Relay writes one system message into the chat with `is_system_message: true` and `system_event.type: "call"`. The marker exists from the moment the call is placed; `call.status` and `call.end_reason` carry its state. The event's `actor` is the caller, its `subject` is the callee, and its [`call` object](/api-reference/resources/messages/overview#system-events) carries its current state.
 
 `parts[0].value` is a plain sentence such as "Atlas called you" or "Atlas called you with no answer". The Relay app shows it as a call bubble on the caller's side. Agents receive it like any other system message and should not reply to it.
 
@@ -11613,19 +11615,22 @@ Read multipart messages, replies, reactions, and delivery state.
 
 A system message has `is_system_message: true`. Its `system_event.type` is `chat_created`, `participant_added`, `participant_removed`, `group_name_updated`, `group_icon_updated`, `contact_card_shared`, or `call`.
 
-For `call`, `actor` is the caller and `subject` is the callee. The marker exists from placement and projects the current Call state. `system_event.call` carries these fields and is `null` on every other system event type.
+The marker exists from the moment the call is placed; `call.status` and `call.end_reason` carry its state.
+
+For `call`, `actor` is the caller and `subject` is the callee. `system_event.call` carries these fields and is `null` on every other system event type.
 
 | Field | Type | Description |
 | --- | --- | --- |
 | `id` | string | ID of the call. |
 | `mode` | string | `audio`. |
 | `status` | string | `ringing`, `active`, or `ended`. |
-| `answered_at`, `ended_at` | string or null | ISO 8601 timestamps, or `null` until the corresponding transition. |
-| `from` | object | Caller Contact. |
-| `to` | array | One callee Contact. |
-| `end_reason` | string or null | `completed`, `declined`, `canceled`, `no_answer`, `disconnected`, or `failed`. `null` until the call ends. |
+| `answered_at` | string or null | When the call was answered, or `null`. |
+| `ended_at` | string or null | When the call ended, or `null`. |
+| `from` | object | Caller as a CallContact. |
+| `to` | array | One callee as a CallContact. |
+| `end_reason` | string or null | `null` until the call ends; then `completed`, `declined`, `canceled`, `no_answer`, `disconnected`, or `failed`. |
 | `connected` | boolean | Whether the call was answered. |
-| `duration_seconds` | integer or null | Whole seconds from answer to end. `null` while unfinished or if never answered. |
+| `duration_seconds` | integer or null | Whole seconds from answer to end; `null` if unanswered or not yet ended. |
 
 ## Example
 

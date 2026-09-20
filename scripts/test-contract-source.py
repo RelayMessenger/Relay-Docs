@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # Pins the merged activity and live call-marker source bytes.
 UPSTREAM_COMMIT = "4394ff241d9bb3a25299f8e5364ab9b434861f2d"
 UPSTREAM_STAGING_COMMIT = "4394ff241d9bb3a25299f8e5364ab9b434861f2d"
+UPSTREAM_SIZE = 172715
 UPSTREAM_SHA256 = "1bd3d25ef7aa080a38db903445f83ba173753552ac1369b5aad06e8fba6d6472"
 
 
@@ -60,6 +61,7 @@ class ContractSourceTests(unittest.TestCase):
 
     def test_canonical_bytes_equal_pinned_upstream(self):
         canonical = (ROOT / "api-reference/openapi.yaml").read_bytes()
+        self.assertEqual(len(canonical), UPSTREAM_SIZE)
         local_source = os.environ.get("RELAY_OPENAPI_SOURCE")
         if local_source:
             # Uncommitted coordinated work uses independent Server bytes without

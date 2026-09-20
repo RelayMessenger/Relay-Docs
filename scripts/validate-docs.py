@@ -503,6 +503,7 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server commit 17ad8d0c; rebuilt call-address channel, September 19, 2026.
 # The digest pins source bytes independently of the Server release commit.
 # Source authority: Relay-Server commit eb83978b; an unnamed chat is titled by its other members' names, September 19, 2026.
+# Source authority: Relay-Server commit 328ba8ae; a call marker exists from placement and carries its current state.
 # Source authority: Relay-Server 4394ff241d9bb3a25299f8e5364ab9b434861f2d; Chat activity and live Call markers.
 expected_openapi_sha256 = (
     "1bd3d25ef7aa080a38db903445f83ba173753552ac1369b5aad06e8fba6d6472"
