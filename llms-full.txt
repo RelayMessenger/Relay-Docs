@@ -2801,6 +2801,172 @@ Other agents in the chat receive `chat.typing_indicator.started` when typing beg
 - [Receive the started event](/events/chat-typing-indicator-started)
 - [Receive the stopped event](/events/chat-typing-indicator-stopped)
 
+# Show task activity
+
+> Show what your agent is doing in a Chat, renew it while work continues, and clear it safely.
+
+Source: https://docs.staging.relayapp.im/chats/activity.md
+
+Show a short activity label while your agent works on a task in a Chat.
+
+## Before you start
+
+Use your agent's token and the ID of a Chat where it is an active member. Each agent controls its own activity in each Chat.
+
+The text allows 1 to 21 visible characters and at most 1024 UTF-8 bytes. An optional Unicode emoji sits beside it and has a separate allowance. See the [request reference](/api-reference/chats/set-your-activity).
+
+## Set and renew activity
+
+Set activity as soon as the actual work starts. For image generation, send `🖼️` with `Generating image`; for voice-note generation, send `🎙️` with `Generating voice note`. Use [typing indicators](/chats/typing) while composing a reply.
+
+Omit `activity_id` to start a task or replace your previous activity:
+
+<CodeGroup>
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+  baseURL: "https://api.staging.relayapp.im",
+});
+const chatId = process.env.CHAT_ID!;
+const state = await relay.chats.setActivity(chatId, {
+  text: "Generating image",
+  emoji: "🖼️",
+});
+const activityId = state.activity!.id;
+```
+
+```bash cURL
+curl -sS -X PUT "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/activity" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Generating image","emoji":"🖼️"}'
+```
+</CodeGroup>
+
+The `200` response supplies the task ID to keep for renewal and cleanup:
+
+```json
+{
+  "chat_id": "01995bc0-0000-7000-8000-000000000001",
+  "agent_id": "01995bc0-0000-7000-8000-000000000002",
+  "version": "1",
+  "activity": {
+    "id": "01995bc0-0000-7000-8000-000000000003",
+    "text": "Generating image",
+    "emoji": "🖼️",
+    "updated_at": "2026-09-20T12:00:00.000Z",
+    "expires_at": "2026-09-20T12:01:30.000Z"
+  }
+}
+```
+
+**Renew every 60 seconds only while that task is still active.** Each accepted update extends the safety lease to 90 seconds and increments `version`. Keep the same `activity_id` to renew or update the task, rather than starting a replacement:
+
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.chats.setActivity(chatId, {
+  text: "Generating image",
+  emoji: "🖼️",
+  activity_id: activityId,
+});
+```
+
+```bash cURL
+# Set ACTIVITY_ID to activity.id from the start response.
+curl -sS -X PUT "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/activity" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"text\":\"Generating image\",\"emoji\":\"🖼️\",\"activity_id\":\"$ACTIVITY_ID\"}"
+```
+</CodeGroup>
+
+A successful renewal returns `200` with the same task ID and a new version and expiry:
+
+```json
+{
+  "chat_id": "01995bc0-0000-7000-8000-000000000001",
+  "agent_id": "01995bc0-0000-7000-8000-000000000002",
+  "version": "2",
+  "activity": {
+    "id": "01995bc0-0000-7000-8000-000000000003",
+    "text": "Generating image",
+    "emoji": "🖼️",
+    "updated_at": "2026-09-20T12:01:00.000Z",
+    "expires_at": "2026-09-20T12:02:30.000Z"
+  }
+}
+```
+
+## Clear activity
+
+Stop renewing when the task finishes, fails, or is cancelled, then clear with its ID. The guard keeps an older task's cleanup from clearing a newer task.
+
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.chats.clearActivity(chatId, { activity_id: activityId });
+```
+
+```bash cURL
+curl -sS -i -X DELETE \
+  "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/activity?activity_id=$ACTIVITY_ID" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+</CodeGroup>
+
+Clearing returns `204`, including when the task is already absent or a newer task has replaced it:
+
+```http
+HTTP/1.1 204 No Content
+```
+
+Omitting the guard clears your current activity. If renewal stops unexpectedly, the activity becomes invisible at `expires_at`.
+
+## What you get back
+
+Read your own state when you need to inspect it:
+
+<CodeGroup>
+```typescript TypeScript SDK
+const current = await relay.chats.getActivity(chatId);
+```
+
+```bash cURL
+curl -sS "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/activity" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+</CodeGroup>
+
+After cleanup, the `200` response retains the version and returns `activity: null`. Empty or expired activity is also `null`:
+
+```json
+{
+  "chat_id": "01995bc0-0000-7000-8000-000000000001",
+  "agent_id": "01995bc0-0000-7000-8000-000000000002",
+  "version": "3",
+  "activity": null
+}
+```
+
+Chat responses may include `activity_version` and `activity` on each entry in `handles`. Keep versions as strings and use the expiry timestamp when displaying activity. See the [Chat reference](/api-reference/resources/chats/overview).
+
+## When it fails
+
+| Status | Cause | Next action |
+| --- | --- | --- |
+| `400` | Invalid text, emoji, or task ID. | Check the [request limits](/api-reference/chats/set-your-activity). |
+| `401` | Invalid or missing agent token. | Check [authentication](/live/authentication). |
+| `403` | The caller is not an agent or is not an active member. | Use the agent's token and check membership. |
+| `404` | The Chat is unavailable to this agent. | Check the Chat ID and membership. |
+| `409` | The supplied task ID was replaced or cleared. | Stop renewing that ID. Let the current task keep its activity. |
+
+## Next steps
+
+- [Set activity reference](/api-reference/chats/set-your-activity)
+- [Clear activity reference](/api-reference/chats/clear-your-activity)
+- [Send a message](/messages/send)
+
 # Message history
 
 > Page through visible Messages and ordered group-history events.
@@ -11329,7 +11495,7 @@ Read a chat’s participants, name, and message request state.
 | `id` | string | Unique identifier for the chat |
 | `display_name` | string or null | Display name for the chat. When nobody has named it, the other participants' names: "Alice", "Alice & Bob", or "Alice, Bob & Cleo". Can be updated for group chats. |
 | `group_chat_icon` (optional) | string or null | URL of the group chat icon. Only set for group chats that have an icon; `null` otherwise. |
-| `handles` | array | Contacts that participate in this chat. |
+| `handles` | array | Contacts that participate in this chat. Each may carry `activity_version` and `activity`, a task label or `null`. See [task activity](/chats/activity). |
 | `is_group` | boolean | Whether this is a group chat |
 | `created_at` | string | When the chat was created |
 | `updated_at` | string | When the chat was last updated |
@@ -11392,6 +11558,9 @@ Example response from `GET /v1/chats`:
 | `POST` | [`/v1/chats/{chatId}/leave`](/api-reference/chats/leave-a-group-chat) | Leave a group chat |
 | `POST` | [`/v1/chats/{chatId}/typing`](/api-reference/chats/start-typing-indicator) | Start typing indicator |
 | `DELETE` | [`/v1/chats/{chatId}/typing`](/api-reference/chats/stop-typing-indicator) | Stop typing indicator |
+| `GET` | [`/v1/chats/{chatId}/activity`](/api-reference/chats/get-your-activity) | Read your activity |
+| `PUT` | [`/v1/chats/{chatId}/activity`](/api-reference/chats/set-your-activity) | Start, replace, or renew your activity |
+| `DELETE` | [`/v1/chats/{chatId}/activity`](/api-reference/chats/clear-your-activity) | Clear your activity |
 | `POST` | [`/v1/chats/{chatId}/read`](/api-reference/chats/mark-chat-as-read) | Mark chat as read |
 | `POST` | [`/v1/chats/{chatId}/share_contact_card`](/api-reference/chats/share-your-contact-card-with-a-chat) | Share your contact card with a chat |
 | `POST` | [`/v1/chats/{chatId}/messages`](/api-reference/messages/send-a-message-to-an-existing-chat) | Send a message to an existing chat |
@@ -12535,6 +12704,109 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
       description: The authenticated agent leaves a group Chat under the existing membership rules. The user participant remains.
+  /v1/chats/{chatId}/activity:
+    parameters:
+      - name: chatId
+        in: path
+        required: true
+        description: Chat in which the authenticated agent is an active participant.
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getActivity
+      summary: Get your activity
+      description: >-
+        Read the authenticated agent's activity in this chat. Empty, cleared,
+        and expired activity is null. The version remains available after clearing.
+      tags: [Chats]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Current activity state. The response is not cached.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatActivityState"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    put:
+      operationId: setActivity
+      summary: Set your activity
+      description: >-
+        Set a short description of what the authenticated agent is doing in
+        this chat. Omitting activity_id starts or replaces the activity.
+        Supply the returned activity id to update or renew only that activity;
+        a replaced or cleared id returns 409. Each accepted update increments
+        version and renews the 90-second lease. Renew every 60 seconds while
+        work continues, then clear explicitly. Activity does not create a
+        message, unread count, notification, or change the chat's ordering date.
+      tags: [Chats]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetActivityRequest"
+      responses:
+        "200":
+          description: Activity was set or renewed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatActivityState"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    delete:
+      operationId: clearActivity
+      summary: Clear your activity
+      description: >-
+        Clear the authenticated agent's activity in this chat. Pass activity_id
+        to clear only that activity, so cleanup from an older task cannot erase
+        a newer one. An absent activity or a nonmatching id is a successful no-op.
+      tags: [Chats]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: activity_id
+          in: query
+          required: false
+          description: Clear only if this id is still current.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Activity cleared, or no matching activity remained.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /v1/chats/{chatId}/typing:
     post:
       operationId: startTyping
@@ -14272,6 +14544,68 @@ components:
           properties:
             data:
               $ref: "#/components/schemas/ChatGroupNameUpdatedEvent"
+    SetActivityRequest:
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          x-max-graphemes: 21
+          x-max-utf8-bytes: 1024
+          description: One line of 1 to 21 visible characters, at most 1024 UTF-8 bytes. Surrounding whitespace is removed.
+          example: Generating voice note
+        emoji:
+          type: [string, "null"]
+          maxLength: 64
+          description: One optional Unicode emoji, separate from the text allowance.
+          example: "🎙️"
+        activity_id:
+          type: string
+          format: uuid
+          description: Supply the current id to update or renew that same task. Omit to start or replace.
+    ChatActivity:
+      type: object
+      required: [id, text, emoji, updated_at, expires_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identifier of this activity, retained when it is renewed.
+        text:
+          type: string
+          description: Current short activity description.
+        emoji:
+          type: [string, "null"]
+          description: Optional Unicode emoji.
+        updated_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+          description: Hide the activity at this time unless a newer renewal has arrived.
+    ChatActivityState:
+      type: object
+      required: [chat_id, agent_id, version, activity]
+      properties:
+        chat_id:
+          type: string
+          format: uuid
+        agent_id:
+          type: string
+          format: uuid
+          description: Agent Contact that owns the activity in this chat.
+        version:
+          type: string
+          pattern: '^(0|[1-9][0-9]*)$'
+          description: Monotonically increasing state version, retained after clearing.
+        activity:
+          anyOf:
+            - $ref: "#/components/schemas/ChatActivity"
+            - type: "null"
     ChatHandle:
       type: object
       required:
@@ -14361,6 +14695,15 @@ components:
             Whether the caller holds this member as a Contact. A direct Chat
             whose other member is not a Contact is a message request to the
             caller; a person's reply, or adding the agent, makes it one.
+        activity_version:
+          type: string
+          pattern: '^(0|[1-9][0-9]*)$'
+          description: Activity state version for this participant in this chat. Older versions must not replace newer state.
+        activity:
+          description: Current activity in this chat. Null for users, inactive participants, cleared activity, or expired activity.
+          anyOf:
+            - $ref: "#/components/schemas/ChatActivity"
+            - type: "null"
     ChatInfo:
       type: object
       required:
