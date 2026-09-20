@@ -10,32 +10,19 @@ from pathlib import Path
 from origins import target
 
 ROOT = Path(__file__).resolve().parents[1]
-# Canonical frozen request lifecycle, lookup, and agent admission Server source.
+# Canonical request lifecycle, scoped lookup, and fixed agent admission Server source.
 # Retains the merged activity and live call-marker shapes.
-UPSTREAM_COMMIT = "64651735a95a029c1b60385774090fc112d139ed"
-UPSTREAM_STAGING_COMMIT = "64651735a95a029c1b60385774090fc112d139ed"
-UPSTREAM_SIZE = 175973
-UPSTREAM_SHA256 = "d4b4925d23853725a8c5e37ff4d5fa95689edfeda4110e02f8a36eb1383429cc"
+UPSTREAM_COMMIT = "8b608647b0e75a28f9d7aa4bbb36097b644d43f2"
+UPSTREAM_STAGING_COMMIT = "8b608647b0e75a28f9d7aa4bbb36097b644d43f2"
+UPSTREAM_SIZE = 175404
+UPSTREAM_SHA256 = "46eeedd5a5e99e879e32c45972799364021143df9f81acd60837713210639735"
 
 
 class ContractSourceTests(unittest.TestCase):
-    def test_agent_admission_field_stays_on_the_three_approved_card_schemas(self):
+    def test_reverted_agent_admission_fields_are_absent_from_public_schemas(self):
         canonical = (ROOT / "api-reference/openapi.yaml").read_text()
-        schemas = dict(re.findall(
-            r"(?ms)^    ([A-Za-z0-9_]+):\n(.*?)(?=^    [A-Za-z0-9_]+:\n|\Z)",
-            canonical.split("components:\n", 1)[1],
-        ))
-        expected = {"ContactCardItem", "SetContactCardResponse", "UpdateContactCardRequest"}
-        actual = {name for name, body in schemas.items() if "        message_requests_from:\n" in body}
-        self.assertEqual(actual, expected)
-        for name in expected:
-            self.assertIn(
-                "        message_requests_from:\n"
-                "          type: string\n"
-                "          enum: [everyone, people, agents, verified_agents, nobody]\n",
-                schemas[name],
-            )
-            self.assertNotIn("        - message_requests_from\n", schemas[name])
+        # Person-setting descriptions remain; the reverted public field does not.
+        self.assertNotRegex(canonical, r"(?m)^\s+message_requests_from:")
         self.assertNotIn("  /v1/me:\n", canonical)
 
     def test_public_contact_lookup_uses_only_the_approved_post_route(self):
@@ -44,6 +31,11 @@ class ContractSourceTests(unittest.TestCase):
             "  /v1/contact_card:\n", 1)[0]
         self.assertTrue(lookup.startswith("    post:\n"))
         self.assertIn("      operationId: lookupContact\n", lookup)
+        self.assertIn(
+            "      description: Look up an active contact by handle. "
+            "A person resolves agents; an agent resolves people and agents.\n",
+            lookup,
+        )
         self.assertIn("                - handle\n", lookup)
         self.assertIn('                    $ref: "#/components/schemas/ContactLookup"', lookup)
         self.assertNotIn("  /v1/contacts:\n", canonical)

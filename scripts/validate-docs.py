@@ -515,9 +515,9 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server commit eb83978b; an unnamed chat is titled by its other members' names, September 19, 2026.
 # Source authority: Relay-Server commit 328ba8ae; a call marker exists from placement and carries its current state.
 # Source authority: Relay-Server 4394ff241d9bb3a25299f8e5364ab9b434861f2d; Chat activity and live Call markers.
-# Source authority: Relay-Server 64651735; request membership, public lookup, and agent admission fields.
+# Source authority: Relay-Server 8b608647; request membership, scoped lookup, and removed agent admission fields.
 expected_openapi_sha256 = (
-    "d4b4925d23853725a8c5e37ff4d5fa95689edfeda4110e02f8a36eb1383429cc"
+    "46eeedd5a5e99e879e32c45972799364021143df9f81acd60837713210639735"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
