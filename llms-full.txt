@@ -1619,7 +1619,7 @@ Limits: 100 parts per message, 40 public URL media parts, 10,000 UTF-16 code uni
 
 # Message Parts
 
-> Build ordered text, media, and link parts for a Message.
+> Build ordered text, media, link, and interactive parts for a Message.
 
 Source: https://docs.staging.relayapp.im/messages/parts.md
 
@@ -1650,7 +1650,9 @@ The text part is `part_index` 0 and the media part is 1. To send a hosted file i
 
 For Markdown source in `value`, see [Markdown syntax and current rendering behavior](/messages/send#markdown).
 
-A Message can also carry one interactive component, such as buttons; see [Interactive components](/interactive-components/index).
+## Add interactive components
+
+Buttons and selections are Message parts. See [Interactive components](/interactive-components/index).
 
 ## Read parts in a response
 
@@ -2502,7 +2504,7 @@ Source: https://docs.staging.relayapp.im/interactive-components/selection.md
 
 import { SelectionPreview, MessageBubble } from "/snippets/buttons-preview.jsx";
 
-Send a question with a `selection` part to collect several choices in one reply.
+Send a question with a `selection` part containing 1 to 25 options. Each option has a readable `label` and a stable `value`; the person can choose several options and send them in one reply.
 
 ## Send a selection
 
@@ -2576,16 +2578,6 @@ curl -sS "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
 
 The send path returns `202` after storing the message. Keep the returned message ID so your application can associate responses with this question. Reuse the same request and idempotency key after an uncertain send.
 
-### Choose and submit
-
-The app starts with empty choices. Toggling a choice stages it locally; **Clear** empties the selection. **Send** becomes available when at least one choice is selected and submits one reply.
-
-While a submission is pending, the choices stay fixed. Acceptance removes the choice controls and leaves the question plus the person's ordinary text reply. A failed attempt retains the choices and retries the same logical operation.
-
-Selection inherits existing Chat membership rules: a Chat supports at most one human user, with multiple agents allowed. The human user submits the response; agents send prompts and receive responses.
-
-Read responses expose `has_responded` on the prompt part. This read-only flag reflects the authenticated viewer's durable response claim, shared across that user's devices and idempotency keys. A group response follows the chat's normal recipient visibility.
-
 ## Receive stable values
 
 The user's submission contains exactly two ordered parts: readable text, then structured metadata. Its `reply_to` identifies the source message and selection part.
@@ -2637,59 +2629,9 @@ function selectionFrom(event: RelayWebhookEvent) {
 
 Dispatch your own application handler using the source message ID, part index, and stable values. Preserve the metadata when forwarding events to a runtime. Use the existing event deduplication and durable processing path before acknowledging delivery.
 
-## Selection fields
-
-| Field or rule | Contract |
-| --- | --- |
-| Sender | Agent sends the prompt; only the human user submits the response |
-| Chat membership | Existing rules apply: at most one human user, with multiple agents allowed |
-| Prompt | One selection beside nonblank text, with buttons kept in separate messages |
-| Options | 1–25, displayed in source order |
-| `label` | Trimmed visible text, 1–80 characters |
-| `value` | Unique, case-sensitive, 1–100 characters matching `^[A-Za-z0-9][A-Za-z0-9._:-]*$` |
-| `selected_values` | At least one unique known value, in source-option order |
-| Response target | Explicit source `message_id` and `part_index` |
-| Retry | Same outgoing idempotency key and identical request |
-
-The SDK's `selectionPart` validates an options array or a complete request part and returns either the normalized part or an error string. `partsWithSelection` validates the part and requires nonblank question text. Labels and values remain independent.
-
 ## Send from a runtime
 
-The shared `answerMessages` helper accepts a `selection` fenced JSON block beside question text. Runtime integrations teach the agent to use it when asked for selections and retain the structured response separately from the readable message.
-
-| Integration | Author a selection | Discover the response |
-| --- | --- | --- |
-| CLI Codex and Claude bridges | End the answer with a `selection` fenced options array | Agent context includes JSON `selected_values` and `reply_to` alongside the readable text |
-| Pi | End the answer with a `selection` fenced options array | The Pi prompt includes the structured response as data |
-| OpenClaw | End the answer with a `selection` fenced options array | Admitted agent context includes the structured response; raw message text stays readable |
-| Claude Code channel | Pass an options array as `reply.selection` with nonblank `text` | Channel tags `selection_response` and `reply_to` contain JSON strings, including after FULL sync |
-| MCP | Search `selection` with `detail: "verbose"`, then send native parts through `execute` | Read message parts and `reply_to` from SDK HTTP results |
-| Chat SDK adapter | Use `RelayClient.sendMessage` with native `selection` parts | Read `message.raw.message.parts` and `message.raw.message.reply_to` |
-
-For text-answer runtimes, the agent's answer has this form:
-
-````text Selection answer
-Which topics interest you?
-```selection
-[{"value":"research","label":"Research"},{"value":"design","label":"Design"}]
-```
-````
-
-For the Claude Code channel, call `reply` with the active turn's chat ID and a stable `send_id`:
-
-```json Claude channel arguments
-{
-  "chat_id":"01993d50-ef7b-7b37-886b-23fd80c7ec12",
-  "send_id":"topics-prompt-001",
-  "text":"Which topics interest you?",
-  "selection":[
-    {"value":"research","label":"Research"},
-    {"value":"design","label":"Design"}
-  ]
-}
-```
-
-Selection values are data for your handler, not executable callback names. The SDK's `selectionReply(parts, replyTo)` helper extracts the values and explicit source target without parsing labels.
+Selections use the runtime's existing send path: a backend includes a `selection` part beside question text in `parts`; a runtime with a send tool takes a `selection` argument; and a runtime that answers in text ends its answer with a fenced code block tagged `selection` containing the options array. Responses carry `selected_values` and `reply_to` alongside the readable text. Each [integration](/integrations/index) describes its send and receive format.
 
 ## Handle rejected submissions
 

@@ -19,6 +19,24 @@ UPSTREAM_SHA256 = "27698655d12500fb9cd2e10dbf1c94025fbc64c288df6151db673a7649877
 
 
 class ContractSourceTests(unittest.TestCase):
+    def test_selection_guide_keeps_runtime_summary_brief(self):
+        selection = (ROOT / "interactive-components/selection.mdx").read_text()
+        self.assertNotIn("### Choose and submit", selection)
+        self.assertNotIn("## Selection fields", selection)
+        runtime = selection.split("## Send from a runtime\n", 1)[1].split("\n## ", 1)[0]
+        self.assertLess(len(runtime.split()), 100)
+        self.assertNotIn("\n|", runtime)
+        self.assertNotIn("```", runtime)
+        self.assertIn("/integrations/index", runtime)
+        self.assertIn("selected_values", selection)
+        self.assertIn("reply_to", selection)
+
+    def test_message_parts_links_to_interactive_components(self):
+        parts = (ROOT / "messages/parts.mdx").read_text()
+        section = parts.split("## Add interactive components\n", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("[Interactive components](/interactive-components/index)", section)
+        self.assertLess(len(section.split()), 30)
+
     def test_canonical_bytes_equal_pinned_upstream(self):
         verify_contract_source(ROOT, UPSTREAM_SHA256)
 
