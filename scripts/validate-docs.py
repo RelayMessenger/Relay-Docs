@@ -687,6 +687,7 @@ expected_operation_ids = {
     "getAttachment",
     "getChat",
     "getContactCard",
+    "lookupContact",
     "getMessage",
     "getMessages",
     "getMessageThread",
