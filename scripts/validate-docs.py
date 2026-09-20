@@ -504,7 +504,7 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # The digest pins source bytes independently of the Server release commit.
 # Source authority: Relay-Server commit eb83978b; an unnamed chat is titled by its other members' names, September 19, 2026.
 expected_openapi_sha256 = (
-    "27698655d12500fb9cd2e10dbf1c94025fbc64c288df6151db673a7649877111"
+    "ec70d9ca659f6b06010fe3c04ff2c03e3463cf52a0755b97e8506b4110f0ac21"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()
@@ -660,6 +660,9 @@ if leaked_private_operations:
         f"private operation entered public OpenAPI: {leaked_private_operations}"
     )
 expected_operation_ids = {
+    "getActivity",
+    "setActivity",
+    "clearActivity",
     "deleteAgent",
     "addParticipant",
     "blockHandle",
