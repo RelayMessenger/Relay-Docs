@@ -25,6 +25,8 @@ try {
   page.on('console', m => { if (m.type() === 'error' && m.text().includes('component')) errors.push(m.text()); });
   await page.setRequestInterception(true);
   page.on('request', r => new URL(r.url()).origin === origin.origin || r.url().startsWith('data:') ? r.continue() : r.abort());
+  // The preview follows the host appearance; pin light so the explicit .dark toggle below is the only variable.
+  await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
   await page.goto(new URL('/interactive-components/selection', origin).href, { waitUntil: 'networkidle0', timeout: 120000 });
   await page.waitForSelector('.selection-option', { timeout: 20000 });
   assert.deepEqual(await page.$$eval('[aria-label="Selection reply preview"] svg text', rows => rows.map(e => e.textContent)), ['• Research', '• Design']);
@@ -112,7 +114,7 @@ try {
       console.log(`PASS selection ${width}px ${dark ? 'dark' : 'light'}`);
     }
   }
-  await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+  await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }, { name: 'prefers-reduced-motion', value: 'reduce' }]);
   await click('.selection-option');
   const reducedSend = await page.$('.selection-actions button');
   await reducedSend.evaluate(e => e.scrollIntoView({ block: 'center', behavior: 'instant' }));
@@ -129,7 +131,7 @@ try {
   await page.mouse.up();
   await page.waitForSelector('.selection-reply');
   await click('.selection-reset');
-  await page.emulateMediaFeatures([]);
+  await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
   await page.goto(new URL('/interactive-components/buttons', origin).href, { waitUntil: 'networkidle0' });
   await page.waitForSelector('.buttons-preview-tap text');
   assert.equal(await page.$eval('.buttons-preview-tap text', e => e.textContent), 'Jupiter');
@@ -213,7 +215,7 @@ try {
   await page.waitForSelector('.buttons-reply[aria-label="Reply: Jupiter"]');
   await click('.buttons-reset');
   // Reduced motion changes only presentation; the same controls remain usable.
-  await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+  await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }, { name: 'prefers-reduced-motion', value: 'reduce' }]);
   const action = await page.$('.buttons-preview-action');
   await action.evaluate(e => e.scrollIntoView({ block: 'center', behavior: 'instant' }));
   await new Promise(resolve => setTimeout(resolve, 400));
