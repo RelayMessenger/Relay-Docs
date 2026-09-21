@@ -516,8 +516,9 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server commit 328ba8ae; a call marker exists from placement and carries its current state.
 # Source authority: Relay-Server 4394ff241d9bb3a25299f8e5364ab9b434861f2d; Chat activity and live Call markers.
 # Source authority: Relay-Server 8b608647; request membership, scoped lookup, and removed agent admission fields.
+# Source authority: Relay-Server a2511152; call status copies Twilio's words, end_reason and connected removed, September 20, 2026.
 expected_openapi_sha256 = (
-    "46eeedd5a5e99e879e32c45972799364021143df9f81acd60837713210639735"
+    "9f3e662a13cd0e6b16a52fba4b53c75fe5817d134dcf152e00b054699c37839c"
 )
 actual_openapi_sha256 = hashlib.sha256(
     (root / "api-reference/openapi.yaml").read_bytes()

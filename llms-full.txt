@@ -2151,7 +2151,7 @@ Call `GET /v1/messages/{messageId}` ([reference](/api-reference/messages/get-a-m
 | `is_system_message` | `true` for a chat event such as a participant joining or a call |
 | `system_event` | [Event type and fields](/api-reference/resources/messages/overview#system-events), including `call` and its `call` object |
 
-The marker exists from the moment the call is placed; `call.status` and `call.end_reason` carry its state.
+The marker exists from the moment the call is placed; `call.status` carries its state.
 
 `edited_at` and `unsent_at` carry a time only on messages from before message editing and unsending were retired. On every message since, both are `null`.
 
@@ -2981,7 +2981,7 @@ The default order is oldest first; `order=desc` opens on the newest and pages to
 
 Group activity and calls sit in the same timeline as messages. A row with `is_system_message: true` carries a system part such as "Alice added you" and a `system_event` naming the type, the actor, and the subject. Replies and reactions target regular rows only.
 
-A call has one [`call` system event](/api-reference/resources/messages/overview#system-events) with the caller as `actor`, the callee as `subject`, and its state in `system_event.call`. The marker exists from the moment the call is placed; `call.status` and `call.end_reason` carry its state.
+A call has one [`call` system event](/api-reference/resources/messages/overview#system-events) with the caller as `actor`, the callee as `subject`, and its state in `system_event.call`. The marker exists from the moment the call is placed; `call.status` carries its state.
 
 Read history after a restart or an uncertain response; events arrive through webhooks or a WebSocket.
 
@@ -3174,7 +3174,7 @@ HTTP/1.1 200 OK
 
 When a person taps call, Relay opens a WebSocket to your `call_url`. The request is signed like a webhook.
 
-Accept the WebSocket with HTTP `101` within the 10-second ring lease to answer. The call becomes `active`. Any other reply declines the call; no reply ends it with `no_answer`.
+Accept the WebSocket with HTTP `101` within the 10-second ring lease to answer. The call becomes `in-progress`. Any other reply ends it `no-answer`, and so does silence.
 
 Relay speaks Twilio Media Streams. The first message identifies the protocol.
 
@@ -3287,19 +3287,23 @@ Close the WebSocket to hang up. You can also end the call with `POST /v1/calls/{
 
 ## The call in the chat
 
-Relay writes one system message into the chat with `is_system_message: true` and `system_event.type: "call"`. The marker exists from the moment the call is placed; `call.status` and `call.end_reason` carry its state. The event's `actor` is the caller, its `subject` is the callee, and its [`call` object](/api-reference/resources/messages/overview#system-events) carries its current state.
+Relay writes one system message into the chat with `is_system_message: true` and `system_event.type: "call"`. The marker exists from the moment the call is placed; `call.status` carries its state. The event's `actor` is the caller, its `subject` is the callee, and its [`call` object](/api-reference/resources/messages/overview#system-events) carries its current state.
 
 `parts[0].value` is a plain sentence such as "Atlas called you" or "Atlas called you with no answer". The Relay app shows it as a call bubble on the caller's side. Agents receive it like any other system message and should not reply to it.
 
 ## The Call object states
 
-| State | Meaning |
+`status` uses Twilio's call status words. `ringing` and `in-progress` are live. The other five are terminal and set `ended_at`.
+
+| Status | Meaning |
 | --- | --- |
 | `ringing` | Relay is waiting for your call address to accept the WebSocket. |
-| `active` | Your call address accepted the WebSocket within the ring lease. |
-| `ended` | The call has finished. |
-
-An ended Call has an `end_reason` of `completed`, `declined`, `canceled`, `no_answer`, `disconnected`, or `failed`.
+| `in-progress` | Your call address accepted the WebSocket within the ring lease. |
+| `completed` | An answered call ended. |
+| `no-answer` | The ring lease passed with no answer, or the recipient declined. |
+| `canceled` | The caller ended the call while it was ringing. |
+| `busy` | The person was already on another call. An agent is never busy. |
+| `failed` | Relay could not connect or keep the call. |
 
 ## See also
 
@@ -10937,9 +10941,8 @@ The `data` object is the `CallResult` schema from the API contract: one `call` f
 | `call.chat_id` | The individual chat that carries the call |
 | `call.from` | The caller's `id`, `handle`, and `kind` |
 | `call.to` | One recipient with `id`, `handle`, and `kind` |
-| `call.status` | One of `ringing`, `connecting`, `active`, or `ended` |
+| `call.status` | One of `ringing`, `in-progress`, `completed`, `no-answer`, `canceled`, `busy`, or `failed` |
 | `call.revision` | Increases on every state change |
-| `call.end_reason` | Why the call ended, otherwise `null` |
 
 ## Handle the event
 
@@ -10957,7 +10960,7 @@ Relay [rings your call address](/calls/index#how-relay-rings-you). Accept the We
 
 Source: https://docs.staging.relayapp.im/events/call-updated.md
 
-`call.updated` fires when a call involving your agent changes state without ending, for example from `ringing` to `connecting` or from `connecting` to `active`.
+`call.updated` fires when a call involving your agent changes state without ending, for example from `ringing` to `in-progress`.
 
 ## Read the payload
 
@@ -10969,13 +10972,12 @@ The `data` object is the `CallResult` schema from the API contract: one `call` f
 | `call.chat_id` | The individual chat that carries the call |
 | `call.from` | The caller's `id`, `handle`, and `kind` |
 | `call.to` | One recipient with `id`, `handle`, and `kind` |
-| `call.status` | One of `ringing`, `connecting`, `active`, or `ended` |
+| `call.status` | One of `ringing`, `in-progress`, `completed`, `no-answer`, `canceled`, `busy`, or `failed` |
 | `call.revision` | Increases on every state change |
-| `call.end_reason` | Why the call ended, otherwise `null` |
 
 ## Handle the event
 
-Keep the snapshot with the highest `revision` for each `call.id` and drop older or duplicate envelopes. When `status` becomes `active`, both sides have reported connected media.
+Keep the snapshot with the highest `revision` for each `call.id` and drop older or duplicate envelopes. When `status` becomes `in-progress`, your call address accepted the WebSocket and audio is flowing.
 
 ## Next steps
 
@@ -10989,7 +10991,7 @@ Keep the snapshot with the highest `revision` for each `call.id` and drop older 
 
 Source: https://docs.staging.relayapp.im/events/call-ended.md
 
-`call.ended` fires when a call involving your agent ends. `status` is `ended` and `end_reason` names why.
+`call.ended` fires when a call involving your agent ends. `status` is `completed`, `no-answer`, `canceled`, `busy`, or `failed`, and `ended_at` is set.
 
 ## Read the payload
 
@@ -11001,13 +11003,12 @@ The `data` object is the `CallResult` schema from the API contract: one `call` f
 | `call.chat_id` | The individual chat that carries the call |
 | `call.from` | The caller's `id`, `handle`, and `kind` |
 | `call.to` | One recipient with `id`, `handle`, and `kind` |
-| `call.status` | One of `ringing`, `connecting`, `active`, or `ended` |
+| `call.status` | One of `ringing`, `in-progress`, `completed`, `no-answer`, `canceled`, `busy`, or `failed` |
 | `call.revision` | Increases on every state change |
-| `call.end_reason` | Why the call ended, otherwise `null` |
 
 ## Handle the event
 
-Cancel model work, stop playback and timers, and close the media connection for `call.id`. `end_reason` is one of `completed`, `declined`, `canceled`, `no_answer`, `disconnected`, or `failed`. Never revive an ended call.
+Cancel model work, stop playback and timers, and close the media connection for `call.id`. `status` names the outcome in Twilio's words. Never revive an ended call.
 
 ## Next steps
 
@@ -11623,7 +11624,7 @@ Read multipart messages, replies, reactions, and delivery state.
 
 A system message has `is_system_message: true`. Its `system_event.type` is `chat_created`, `participant_added`, `participant_removed`, `group_name_updated`, `group_icon_updated`, `contact_card_shared`, or `call`.
 
-The marker exists from the moment the call is placed; `call.status` and `call.end_reason` carry its state.
+The marker exists from the moment the call is placed; `call.status` carries its state.
 
 For `call`, `actor` is the caller and `subject` is the callee. `system_event.call` carries these fields and is `null` on every other system event type.
 
@@ -11631,13 +11632,11 @@ For `call`, `actor` is the caller and `subject` is the callee. `system_event.cal
 | --- | --- | --- |
 | `id` | string | ID of the call. |
 | `mode` | string | `audio`. |
-| `status` | string | `ringing`, `active`, or `ended`. |
+| `status` | string | `ringing`, `in-progress`, `completed`, `no-answer`, `canceled`, `busy`, or `failed`. `ringing` and `in-progress` are live; the rest are terminal. |
 | `answered_at` | string or null | When the call was answered, or `null`. |
 | `ended_at` | string or null | When the call ended, or `null`. |
 | `from` | object | Caller as a CallContact. |
 | `to` | array | One callee as a CallContact. |
-| `end_reason` | string or null | `null` until the call ends; then `completed`, `declined`, `canceled`, `no_answer`, `disconnected`, or `failed`. |
-| `connected` | boolean | Whether the call was answered. |
 | `duration_seconds` | integer or null | Whole seconds from answer to end; `null` if unanswered or not yet ended. |
 
 ## Example
@@ -13996,7 +13995,7 @@ paths:
         - Calls
       security:
         - BearerAuth: []
-      description: Start an audio Call in an existing individual Chat containing one user and one agent. The caller comes from authentication. The user must have added the agent; sending or replying to a Message establishes that relationship. A block in either direction prevents the call. A group Chat is rejected even when it has only two current members. Reuse the same Idempotency-Key and body after an uncertain response. Relay opens a WebSocket to the agent's call address (call_url) in Twilio Media Streams' shape, signed like a webhook; a 101 within the 10-second ring lease answers the Call (status active), any other reply declines it, and silence ends it no_answer. An answered Call has no duration limit.
+      description: Start an audio Call in an existing individual Chat containing one user and one agent. The caller comes from authentication. The user must have added the agent; sending or replying to a Message establishes that relationship. A block in either direction prevents the call. A group Chat is rejected even when it has only two current members. Reuse the same Idempotency-Key and body after an uncertain response. Relay opens a WebSocket to the agent's call address (call_url) in Twilio Media Streams' shape, signed like a webhook; a 101 within the 10-second ring lease answers the Call (status in-progress), any other reply ends it no-answer, and so does silence. A Call to a person who is already ringing or in-progress on another Call is created and finished at once with status busy; an agent is never busy. An answered Call has no duration limit.
       parameters:
         - name: chatId
           in: path
@@ -14132,7 +14131,7 @@ paths:
         - Calls
       security:
         - BearerAuth: []
-      description: Either Contact ends the Call. A ringing Call ends canceled when its caller ends it and declined when its recipient does; an answered Call ends completed. An agent declines by refusing the upgrade at its call address, and hangs up by closing that socket. Cleanup remains available after a block or removal. Repeated terminal actions never restart the Call.
+      description: Either Contact ends the Call. A ringing Call ends canceled when its caller ends it and no-answer when its recipient does; an answered Call ends completed. An agent declines by refusing the upgrade at its call address, and hangs up by closing that socket. Cleanup remains available after a block or removal. Repeated terminal actions never restart the Call.
       parameters:
         - name: callId
           in: path
@@ -14199,7 +14198,6 @@ components:
         - ringing_at
         - answered_at
         - ended_at
-        - end_reason
       properties:
         id: *uuid
         chat_id: *uuid
@@ -14217,10 +14215,19 @@ components:
             - audio
         status:
           type: string
+          description: >-
+            Twilio's Call status words. `ringing` and `in-progress` are live;
+            `completed`, `no-answer`, `canceled`, `busy` and `failed` are
+            terminal and set `ended_at`. Relay dials at creation, so `queued`
+            is never sent.
           enum:
             - ringing
-            - active
-            - ended
+            - in-progress
+            - completed
+            - no-answer
+            - canceled
+            - busy
+            - failed
         revision:
           type: integer
           minimum: 1
@@ -14234,18 +14241,6 @@ components:
             - "null"
           format: date-time
         ended_at: *a3
-        end_reason:
-          type:
-            - string
-            - "null"
-          enum:
-            - null
-            - completed
-            - declined
-            - canceled
-            - no_answer
-            - disconnected
-            - failed
     CallCreateRequest:
       type: object
       additionalProperties: false
@@ -16475,8 +16470,8 @@ components:
       additionalProperties: false
       description: >-
         A call in this chat, present from the moment it is placed. The actor is
-        the caller and the subject the callee; read `call.status` (ringing,
-        connecting, active, ended) and `call.end_reason` for its state.
+        the caller and the subject the callee; `call.status` carries its whole
+        state, in Twilio's words.
       required:
         - id
         - mode
@@ -16485,8 +16480,6 @@ components:
         - ended_at
         - from
         - to
-        - end_reason
-        - connected
         - duration_seconds
       properties:
         id:
@@ -16499,10 +16492,15 @@ components:
             - audio
         status:
           type: string
+          description: The same values as Call.status.
           enum:
             - ringing
-            - active
-            - ended
+            - in-progress
+            - completed
+            - no-answer
+            - canceled
+            - busy
+            - failed
         answered_at: *a3
         ended_at: *a3
         from:
@@ -16513,22 +16511,6 @@ components:
           maxItems: 1
           items:
             $ref: "#/components/schemas/CallContact"
-        end_reason:
-          type:
-            - string
-            - "null"
-          enum:
-            - null
-            - completed
-            - declined
-            - canceled
-            - no_answer
-            - disconnected
-            - failed
-          description: Why the Call ended. The same values as Call.end_reason, null until it ends.
-        connected:
-          type: boolean
-          description: Whether the Call was answered (answered_at set).
         duration_seconds:
           type:
             - integer
