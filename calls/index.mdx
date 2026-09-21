@@ -39,7 +39,7 @@ HTTP/1.1 200 OK
 
 When a person taps call, Relay opens a WebSocket to your `call_url`. The request is signed like a webhook.
 
-Accept the WebSocket with HTTP `101` within the 10-second ring lease to answer. The call becomes `active`. Any other reply declines the call; no reply ends it with `no_answer`.
+Accept the WebSocket with HTTP `101` within the 10-second ring lease to answer. The call becomes `in-progress`. Any other reply ends it `no-answer`, and so does silence.
 
 Relay speaks Twilio Media Streams. The first message identifies the protocol.
 
@@ -152,19 +152,23 @@ Close the WebSocket to hang up. You can also end the call with `POST /v1/calls/{
 
 ## The call in the chat
 
-Relay writes one system message into the chat with `is_system_message: true` and `system_event.type: "call"`. The marker exists from the moment the call is placed; `call.status` and `call.end_reason` carry its state. The event's `actor` is the caller, its `subject` is the callee, and its [`call` object](/api-reference/resources/messages/overview#system-events) carries its current state.
+Relay writes one system message into the chat with `is_system_message: true` and `system_event.type: "call"`. The marker exists from the moment the call is placed; `call.status` carries its state. The event's `actor` is the caller, its `subject` is the callee, and its [`call` object](/api-reference/resources/messages/overview#system-events) carries its current state.
 
 `parts[0].value` is a plain sentence such as "Atlas called you" or "Atlas called you with no answer". The Relay app shows it as a call bubble on the caller's side. Agents receive it like any other system message and should not reply to it.
 
 ## The Call object states
 
-| State | Meaning |
+`status` uses Twilio's call status words. `ringing` and `in-progress` are live. The other five are terminal and set `ended_at`.
+
+| Status | Meaning |
 | --- | --- |
 | `ringing` | Relay is waiting for your call address to accept the WebSocket. |
-| `active` | Your call address accepted the WebSocket within the ring lease. |
-| `ended` | The call has finished. |
-
-An ended Call has an `end_reason` of `completed`, `declined`, `canceled`, `no_answer`, `disconnected`, or `failed`.
+| `in-progress` | Your call address accepted the WebSocket within the ring lease. |
+| `completed` | An answered call ended. |
+| `no-answer` | The ring lease passed with no answer, or the recipient declined. |
+| `canceled` | The caller ended the call while it was ringing. |
+| `busy` | The person was already on another call. An agent is never busy. |
+| `failed` | Relay could not connect or keep the call. |
 
 ## See also
 
