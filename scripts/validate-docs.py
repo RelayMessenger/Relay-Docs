@@ -371,9 +371,14 @@ for path in mdx_paths:
         text,
     ):
         if "TypeScript SDK" in block and "cURL" in block:
+            # Chat activity follows the requested SDK-first examples. Keep
+            # the established ordering checks for unrelated pages unchanged.
+            if path == root / "chats/activity.mdx":
+                if block.index("TypeScript SDK") > block.index("cURL"):
+                    raise SystemExit(f"TypeScript SDK must appear before cURL: {path.relative_to(root)}")
             # start/build-on-the-api is the main page's API walkthrough moved out
             # verbatim (2026-09-11), so it keeps the main page's cURL-first order.
-            if is_task_guide(path.relative_to(root).with_suffix("").as_posix()) or path in {root / "index.mdx", root / "start/build-on-the-api.mdx"}:
+            elif is_task_guide(path.relative_to(root).with_suffix("").as_posix()) or path in {root / "index.mdx", root / "start/build-on-the-api.mdx"}:
                 if block.index("cURL") > block.index("TypeScript SDK"):
                     raise SystemExit(f"cURL must appear before TypeScript SDK: {path.relative_to(root)}")
             elif block.index("TypeScript SDK") > block.index("cURL"):
@@ -408,15 +413,27 @@ private_path_prefixes = (
     "/v1/client/",
     "/v1/console/",
     "/v1/internal/",
-    "/v1/contacts",
     "/api/auth/",
 )
 private_user_operations = (
     "acknowledgeMessageDelivered",
     "acknowledgeDelivered",
 )
+# The approved public lookup and the public agent ratings, Relay-Server PR 337,
+# are the only Contact routes a public surface may name. Private Contact
+# list/write routes stay banned.
+public_contact_route = re.compile(
+    r"(?:/v1/contacts/lookup"
+    r"|/v1/contacts/\{handle\}/ratings"
+    r"|/v1/contacts/\{handle\}/rating)(?=$|[\s`\"':#?])"
+)
 for path in public_contract_paths:
     text = path.read_text()
+    without_public_routes = public_contact_route.sub("", text)
+    if "/v1/contacts" in without_public_routes:
+        raise SystemExit(
+            f"private Contact route leaked into {path.relative_to(root)}"
+        )
     if "is_premium_handle" in text:
         raise SystemExit(
             f"private premium Handle field leaked into {path.relative_to(root)}"
@@ -503,8 +520,12 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server commit 17ad8d0c; rebuilt call-address channel, September 19, 2026.
 # The digest pins source bytes independently of the Server release commit.
 # Source authority: Relay-Server commit eb83978b; an unnamed chat is titled by its other members' names, September 19, 2026.
+# Source authority: Relay-Server commit 328ba8ae; a call marker exists from placement and carries its current state.
+# Source authority: Relay-Server 4394ff241d9bb3a25299f8e5364ab9b434861f2d; Chat activity and live Call markers.
+# Source authority: Relay-Server 8b608647; request membership, scoped lookup, and removed agent admission fields.
+# Source authority: Relay-Server a2511152; call status copies Twilio's words, end_reason and connected removed, September 20, 2026.
 expected_openapi_sha256 = (
-    "27698655d12500fb9cd2e10dbf1c94025fbc64c288df6151db673a7649877111"
+    "9f3e662a13cd0e6b16a52fba4b53c75fe5817d134dcf152e00b054699c37839c"
 )
 # Local candidate provenance is shared with the guide and contract gates;
 # it does not relabel the historical Server release as selection-capable.
@@ -656,6 +677,9 @@ if leaked_private_operations:
         f"private operation entered public OpenAPI: {leaked_private_operations}"
     )
 expected_operation_ids = {
+    "getActivity",
+    "setActivity",
+    "clearActivity",
     "deleteAgent",
     "addParticipant",
     "blockHandle",
@@ -667,6 +691,11 @@ expected_operation_ids = {
     "getAttachment",
     "getChat",
     "getContactCard",
+    "lookupContact",
+    "listDirectory",
+    "rateAgent",
+    "deleteAgentRating",
+    "listAgentRatings",
     "getMessage",
     "getMessages",
     "getMessageThread",

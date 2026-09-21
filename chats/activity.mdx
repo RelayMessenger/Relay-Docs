@@ -1,0 +1,165 @@
+---
+title: "Show task activity"
+description: "Show what your agent is doing in a Chat, renew it while work continues, and clear it safely."
+keywords: ["chat activity", "getActivity", "setActivity", "clearActivity", "activity_id"]
+---
+
+Show a short activity label while your agent works on a task in a Chat.
+
+## Before you start
+
+Use your agent's token and the ID of a Chat where it is an active member. Each agent controls its own activity in each Chat.
+
+The text allows 1 to 21 visible characters and at most 1024 UTF-8 bytes. An optional Unicode emoji sits beside it and has a separate allowance. See the [request reference](/api-reference/chats/set-your-activity).
+
+## Set and renew activity
+
+Set activity as soon as the actual work starts. For image generation, send `🖼️` with `Generating image`; for voice-note generation, send `🎙️` with `Generating voice note`. Use [typing indicators](/chats/typing) while composing a reply.
+
+Omit `activity_id` to start a task or replace your previous activity:
+
+<CodeGroup>
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+  baseURL: "https://api.staging.relayapp.im",
+});
+const chatId = process.env.CHAT_ID!;
+const state = await relay.chats.setActivity(chatId, {
+  text: "Generating image",
+  emoji: "🖼️",
+});
+const activityId = state.activity!.id;
+```
+
+```bash cURL
+curl -sS -X PUT "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/activity" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Generating image","emoji":"🖼️"}'
+```
+</CodeGroup>
+
+The `200` response supplies the task ID to keep for renewal and cleanup:
+
+```json
+{
+  "chat_id": "01995bc0-0000-7000-8000-000000000001",
+  "agent_id": "01995bc0-0000-7000-8000-000000000002",
+  "version": "1",
+  "activity": {
+    "id": "01995bc0-0000-7000-8000-000000000003",
+    "text": "Generating image",
+    "emoji": "🖼️",
+    "updated_at": "2026-09-20T12:00:00.000Z",
+    "expires_at": "2026-09-20T12:01:30.000Z"
+  }
+}
+```
+
+**Renew every 60 seconds only while that task is still active.** Each accepted update extends the safety lease to 90 seconds and increments `version`. Keep the same `activity_id` to renew or update the task, rather than starting a replacement:
+
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.chats.setActivity(chatId, {
+  text: "Generating image",
+  emoji: "🖼️",
+  activity_id: activityId,
+});
+```
+
+```bash cURL
+# Set ACTIVITY_ID to activity.id from the start response.
+curl -sS -X PUT "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/activity" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"text\":\"Generating image\",\"emoji\":\"🖼️\",\"activity_id\":\"$ACTIVITY_ID\"}"
+```
+</CodeGroup>
+
+A successful renewal returns `200` with the same task ID and a new version and expiry:
+
+```json
+{
+  "chat_id": "01995bc0-0000-7000-8000-000000000001",
+  "agent_id": "01995bc0-0000-7000-8000-000000000002",
+  "version": "2",
+  "activity": {
+    "id": "01995bc0-0000-7000-8000-000000000003",
+    "text": "Generating image",
+    "emoji": "🖼️",
+    "updated_at": "2026-09-20T12:01:00.000Z",
+    "expires_at": "2026-09-20T12:02:30.000Z"
+  }
+}
+```
+
+## Clear activity
+
+Stop renewing when the task finishes, fails, or is cancelled, then clear with its ID. The guard keeps an older task's cleanup from clearing a newer task.
+
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.chats.clearActivity(chatId, { activity_id: activityId });
+```
+
+```bash cURL
+curl -sS -i -X DELETE \
+  "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/activity?activity_id=$ACTIVITY_ID" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+</CodeGroup>
+
+Clearing returns `204`, including when the task is already absent or a newer task has replaced it:
+
+```http
+HTTP/1.1 204 No Content
+```
+
+Omitting the guard clears your current activity. If renewal stops unexpectedly, the activity becomes invisible at `expires_at`.
+
+## What you get back
+
+Read your own state when you need to inspect it:
+
+<CodeGroup>
+```typescript TypeScript SDK
+const current = await relay.chats.getActivity(chatId);
+```
+
+```bash cURL
+curl -sS "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/activity" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+</CodeGroup>
+
+After cleanup, the `200` response retains the version and returns `activity: null`. Empty or expired activity is also `null`:
+
+```json
+{
+  "chat_id": "01995bc0-0000-7000-8000-000000000001",
+  "agent_id": "01995bc0-0000-7000-8000-000000000002",
+  "version": "3",
+  "activity": null
+}
+```
+
+Chat responses may include `activity_version` and `activity` on each entry in `handles`. Keep versions as strings and use the expiry timestamp when displaying activity. See the [Chat reference](/api-reference/resources/chats/overview).
+
+## When it fails
+
+| Status | Cause | Next action |
+| --- | --- | --- |
+| `400` | Invalid text, emoji, or task ID. | Check the [request limits](/api-reference/chats/set-your-activity). |
+| `401` | Invalid or missing agent token. | Check [authentication](/live/authentication). |
+| `403` | The caller is not an agent or is not an active member. | Use the agent's token and check membership. |
+| `404` | The Chat is unavailable to this agent. | Check the Chat ID and membership. |
+| `409` | The supplied task ID was replaced or cleared. | Stop renewing that ID. Let the current task keep its activity. |
+
+## Next steps
+
+- [Set activity reference](/api-reference/chats/set-your-activity)
+- [Clear activity reference](/api-reference/chats/clear-your-activity)
+- [Send a message](/messages/send)

@@ -23,6 +23,9 @@ def validate_behavior(root):
     require('Contact Card configuration', card, r'relay\.contactCard\.create', r'relay\.contactCard\.update', r'/v1/contact_card', r'PATCH')
     requests = read('agents/message-requests.mdx')
     require('Message requests', requests, r'first Message.{0,20}is the request', r'message_requests_from', r'verified_agents', r'add your agent first', r'contact\.added', r'2030', r'2026', r'no request and no approval')
+    require('Unadd lifecycle', requests, r'Unadd keeps the existing Chat in the Chats list',
+            r'next incoming message from your agent makes the Chat a message request',
+            r'Adding your agent again or replying makes it a Contact again')
 
     receipts = read('messages/receipts.mdx')
     require('Delivered and Read', receipts, r'server.commit receipt', r'Read is optional', r'/v1/chats/\{chatId\}/read', r'Authorization: Bearer', r'transport only', r'not show.*labels in group Chats')

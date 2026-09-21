@@ -14,13 +14,126 @@ from origins import target
 from contract_source import verify_contract_source
 
 ROOT = Path(__file__).resolve().parents[1]
-# Independently read canonical contract at the Server staging removal merge.
-UPSTREAM_COMMIT = "eb83978b6b2c625da82471e4af16acad8de0e618"
-UPSTREAM_STAGING_COMMIT = "eb83978b6b2c625da82471e4af16acad8de0e618"
-UPSTREAM_SHA256 = "27698655d12500fb9cd2e10dbf1c94025fbc64c288df6151db673a7649877111"
+# Canonical request lifecycle, scoped lookup, and fixed agent admission Server source.
+# Retains the merged activity and live call-marker shapes.
+UPSTREAM_COMMIT = "a25111520f7fc92c25ecd945d1dfc9afa9f60a1f"
+UPSTREAM_STAGING_COMMIT = "a25111520f7fc92c25ecd945d1dfc9afa9f60a1f"
+UPSTREAM_SIZE = 175262
+UPSTREAM_SHA256 = "9f3e662a13cd0e6b16a52fba4b53c75fe5817d134dcf152e00b054699c37839c"
 
 
 class ContractSourceTests(unittest.TestCase):
+    def test_reverted_agent_admission_fields_are_absent_from_public_schemas(self):
+        canonical = (ROOT / "api-reference/openapi.yaml").read_text()
+        # Person-setting descriptions remain; the reverted public field does not.
+        self.assertNotRegex(canonical, r"(?m)^\s+message_requests_from:")
+        self.assertNotIn("  /v1/me:\n", canonical)
+
+    def test_public_contact_lookup_uses_only_the_approved_post_route(self):
+        canonical = (ROOT / "api-reference/openapi.yaml").read_text()
+        # The lookup path item ends where the next top-level path begins.
+        lookup = re.split(
+            r"^  /v1/", canonical.split("  /v1/contacts/lookup:\n", 1)[1],
+            maxsplit=1, flags=re.M)[0]
+        self.assertTrue(lookup.startswith("    post:\n"))
+        self.assertIn("      operationId: lookupContact\n", lookup)
+        # Server #336 folded the public directory search into this route.
+        wrapped = " ".join(lookup.split())
+        self.assertIn("Send a handle to look up one active contact", wrapped)
+        self.assertIn(
+            "Send a task instead to find the public agents whose name, "
+            "subtitle, about or skills match it, verified agents first",
+            wrapped,
+        )
+        self.assertIn("                - handle\n", lookup)
+        self.assertIn('                    $ref: "#/components/schemas/ContactLookup"', lookup)
+        self.assertNotIn("  /v1/contacts:\n", canonical)
+        self.assertNotIn("    get:\n", lookup)
+        routes = json.loads((ROOT / "scripts/api-page-paths.json").read_text())
+        self.assertEqual(routes["lookupContact"]["endpoint"], "POST /v1/contacts/lookup")
+
+    def test_public_directory_and_rating_routes_are_registered(self):
+        canonical = (ROOT / "api-reference/openapi.yaml").read_text()
+        routes = json.loads((ROOT / "scripts/api-page-paths.json").read_text())
+        # Server #336 and #337: the directory and an agent's ratings are public;
+        # rating and removing a rating carry the caller's token.
+        for operation, endpoint, security in (
+            ("listDirectory", "GET /v1/directory", "      security: []\n"),
+            ("rateAgent", "PUT /v1/contacts/{handle}/rating",
+             "      security:\n        - BearerAuth: []\n"),
+            ("deleteAgentRating", "DELETE /v1/contacts/{handle}/rating",
+             "      security:\n        - BearerAuth: []\n"),
+            ("listAgentRatings", "GET /v1/contacts/{handle}/ratings",
+             "      security: []\n"),
+        ):
+            method, path = endpoint.split(" ", 1)
+            block = re.split(
+                r"^  /v1/", canonical.split(f"  {path}:\n", 1)[1],
+                maxsplit=1, flags=re.M)[0]
+            operation_block = block.split(f"    {method.lower()}:\n", 1)[1]
+            self.assertTrue(operation_block.startswith(f"      operationId: {operation}\n"))
+            self.assertIn(security, operation_block)
+            self.assertEqual(routes[operation]["endpoint"], endpoint)
+        navigation = json.loads((ROOT / "docs.json").read_text())
+        api = next(tab for tab in navigation["navigation"]["tabs"]
+                   if tab["tab"] == "API Reference")
+        contacts = next(group for group in api["groups"] if group["group"] == "Contacts")
+        for endpoint in ("GET /v1/directory", "PUT /v1/contacts/{handle}/rating",
+                         "DELETE /v1/contacts/{handle}/rating",
+                         "GET /v1/contacts/{handle}/ratings"):
+            self.assertIn(endpoint, contacts["pages"])
+
+    def test_request_lifecycle_description_does_not_expose_private_fields(self):
+        canonical = (ROOT / "api-reference/openapi.yaml").read_text()
+        normalized = " ".join(canonical.split())
+        self.assertIn(
+            "Removing a Contact keeps an existing conversation in Chats until "
+            "another incoming message makes it a message request.",
+            normalized,
+        )
+        for field in ("is_request", "request_expires_at", "request_sender_id"):
+            self.assertNotRegex(canonical, rf"(?m)^\s+{field}:")
+
+    def test_combined_contract_keeps_live_call_markers(self):
+        canonical = (ROOT / "api-reference/openapi.yaml").read_text()
+        marker = canonical.split("    CallMarker:\n", 1)[1].split("    SystemEventParty:\n", 1)[0]
+        for field in ("status", "answered_at", "ended_at", "from", "to"):
+            self.assertIn(f"        - {field}\n", marker)
+        self.assertIn("          description: The Call this event marks. Null unless type is call.", canonical)
+        for name in ("calls/index.mdx", "chats/history.mdx", "messages/message-details.mdx",
+                     "api-reference/resources/messages/overview.mdx"):
+            self.assertNotIn("call_ended", (ROOT / name).read_text())
+        self.assertIn('system_event.type: "call"', (ROOT / "calls/index.mdx").read_text())
+
+    def test_chat_activity_guide_and_generated_navigation_match_the_contract(self):
+        canonical = (ROOT / "api-reference/openapi.yaml").read_text()
+        activity_path = canonical.split("  /v1/chats/{chatId}/activity:\n", 1)[1].split(
+            "  /v1/chats/{chatId}/typing:\n", 1)[0]
+        routes = json.loads((ROOT / "scripts/api-page-paths.json").read_text())
+        for method, operation in (("GET", "getActivity"), ("PUT", "setActivity"), ("DELETE", "clearActivity")):
+            self.assertIn(f"operationId: {operation}", activity_path)
+            self.assertEqual(routes[operation]["endpoint"], f"{method} /v1/chats/{{chatId}}/activity")
+        self.assertIn("x-max-graphemes: 21", canonical)
+        self.assertIn("x-max-utf8-bytes: 1024", canonical)
+        self.assertIn("name: activity_id\n          in: query", activity_path)
+        guide = (ROOT / "chats/activity.mdx").read_text()
+        for name in ("getActivity", "setActivity", "clearActivity"):
+            self.assertIn(f"relay.chats.{name}(", guide)
+        groups = re.findall(r"<CodeGroup>(.*?)</CodeGroup>", guide, re.S)
+        self.assertEqual(len(groups), 4)
+        for group in groups:
+            self.assertLess(group.index("```typescript TypeScript SDK"), group.index("```bash cURL"))
+        for value in ("60 seconds", "90 seconds", "21 visible characters", "1024 UTF-8 bytes",
+                      "activity_id: activityId", "activity?activity_id=$ACTIVITY_ID", "`409`", "`204`"):
+            self.assertIn(value, guide)
+        for path in ("skill.md", ".mintlify/skills/relay/SKILL.md"):
+            prompt = (ROOT / path).read_text()
+            self.assertIn("not an agent webhook", prompt)
+            self.assertIn("Do not add polling", prompt)
+            self.assertIn("Do not create a `Typing` activity", prompt)
+        events = (ROOT / "events/index.mdx").read_text()
+        self.assertNotIn("chat.activity.updated", events)
+
     def test_all_interactive_overview_cards_are_icon_free(self):
         overview = (ROOT / "interactive-components/index.mdx").read_text()
         cards = re.findall(r"<Card\b[^>]*>", overview, re.S)
@@ -87,6 +200,11 @@ class ContractSourceTests(unittest.TestCase):
         self.assertIn("`parts`", section)
 
     def test_canonical_bytes_equal_pinned_upstream(self):
+        canonical = (ROOT / "api-reference/openapi.yaml").read_bytes()
+        # A committed local candidate names its own bytes; the release size
+        # applies only when no candidate record is in force.
+        if not (ROOT / "scripts/local-contract-source.json").exists():
+            self.assertEqual(len(canonical), UPSTREAM_SIZE)
         verify_contract_source(ROOT, UPSTREAM_SHA256)
 
     def test_committed_source_verifies_immutable_blob_not_dirty_worktree(self):

@@ -176,6 +176,30 @@ generation, or tests completed, say so and leave the connection pending.
   button; a thing to look at goes out as a link.
 - Group membership controls which history a Contact can read.
 
+## Chat activity
+
+- Use `chats.getActivity`, `chats.setActivity`, and `chats.clearActivity` for
+  `GET`, `PUT`, and `DELETE /v1/chats/{chatId}/activity`. Each agent owns its
+  activity in each Chat. GET reads only that agent's state.
+- Set activity immediately when real work starts. Image generation uses
+  `🖼️` with `Generating image`; voice-note generation uses `🎙️` with
+  `Generating voice note`. Do not create a `Typing` activity.
+- Text is 1 to 21 visible characters and at most 1024 UTF-8 bytes. `emoji` is
+  one optional Unicode emoji or null.
+- Omit `activity_id` to start or replace. Keep the returned `activity.id`
+  and send it in PUT to refresh or update that same task. A replaced or
+  cleared ID returns 409; do not restart that old task's activity.
+- Renew every 60 seconds only while the task is active. The 90-second lease
+  removes stale display state if the backend stops renewing.
+- Clear on completion, failure, or cancellation with DELETE's optional
+  `activity_id` query guard. Missing or replaced activity returns 204.
+- Keep `version` and each Chat handle's optional `activity_version` as
+  strings. An optional handle `activity` is an object or null.
+- `chat.activity.updated` is internal user sync, not an agent webhook or
+  an agent WebSocket event. Do not add polling as an event transport.
+- Read the [activity guide](https://docs.staging.relayapp.im/chats/activity)
+  and the current OpenAPI before implementing this lifecycle.
+
 ## Selection, coming soon
 
 Selection is a local, unshipped SDK/API candidate, not a capability of the
