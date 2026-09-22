@@ -174,6 +174,13 @@ generation, or tests completed, say so and leave the connection pending.
   video, a place, a product page) as a `link` part alone in its own Message,
   drawn as a card; never as a bare URL in text. A task goes on a `url`
   button; a thing to look at goes out as a link.
+- An `invoice` part is a request to pay, alone in its own Message like a
+  `link` part: `title`, integer minor-unit `amount`, `currency`, `goods`
+  (`physical` or `digital`), an `https` checkout `url` that is your own, and
+  optional `recurring`. Only an agent sends one; only the person can react
+  to it; only the sending agent moves its `status` through the invoice
+  route, from its own payment webhook, never from guesswork. Relay carries
+  the card and takes no fee; it never touches the money.
 - Group membership controls which history a Contact can read.
 
 ## Chat activity

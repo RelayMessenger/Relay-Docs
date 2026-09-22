@@ -39,6 +39,7 @@ const sidebarTitles = {
   sendVoiceMemoToChat: "Send voice memo",
   getMessage: "Retrieve",
   sendReaction: "Update",
+  updateInvoiceStatus: "Update status",
   requestUpload: "Create",
   getAttachment: "Retrieve",
   deleteAttachment: "Delete",

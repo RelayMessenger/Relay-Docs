@@ -441,3 +441,97 @@ export const SelectionPreview = ({ text, options, received, bubble }) => {
     </div>
   );
 };
+
+// Local-only interaction. No API, analytics, or credentials. The invoice is
+// Relay's own surface, not a chat bubble (owner, 2026-09-22: no logo tile,
+// just the business name, the amount, and the title): it never reuses
+// MessageBubble's tail geometry above. It shares only the .buttons-preview
+// frame that stages every interaction preview as a simulated phone, and the
+// same in-app browser chrome a `buttons` URL item opens (Relay-iOS
+// ChatView relayButtonsActions), since a payable card opens the agent's own
+// checkout the same way. A card that cannot be paid here — resolved, or
+// outside the region that can buy digital goods — stays inert and the grey
+// line under it says why.
+export const InvoicePreview = ({ agent, title, amount, currency = "usd", goods = "physical", recurring, payable = true, status, url = "https://buy.stripe.com/example" }) => {
+  const [openedURL, setOpenedURL] = useState(null);
+  const formatted = (() => {
+    try {
+      return new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() }).format(amount / 100);
+    } catch (error) {
+      return `${(amount / 100).toFixed(2)} ${currency.toUpperCase()}`;
+    }
+  })();
+  const cadence = recurring
+    ? (recurring.interval_count && recurring.interval_count > 1
+      ? `every ${recurring.interval_count} ${recurring.interval}s`
+      : `/${recurring.interval}`)
+    : null;
+  const caption = status || (payable ? null : "Not available in your region");
+  const tappable = payable && !status;
+  const hostOf = (value) => {
+    try { return new URL(value).host; } catch (error) { return value; }
+  };
+  const closeBrowser = (event) => {
+    const root = event && event.currentTarget && event.currentTarget.closest(".invoice-preview");
+    setOpenedURL(null);
+    const opener = root && root.querySelector(".invoice-card");
+    if (opener) opener.focus();
+  };
+  return (
+    <div className={"buttons-preview invoice-preview" + (openedURL ? " is-browser-open" : "")}
+      role="group" aria-label={`Invoice from ${agent}: ${title}, ${formatted}${cadence ? " " + cadence : ""}${caption ? `. ${caption}` : ""}`}>
+      <div className="buttons-preview-frame">
+        <div className="buttons-preview-stage">
+          <div className="buttons-preview-message invoice-preview-message">
+            <button type="button" className={"invoice-card" + (tappable ? "" : " is-inert")}
+              disabled={!tappable} tabIndex={openedURL ? -1 : 0}
+              onClick={() => { if (tappable) setOpenedURL(url); }}>
+              <span className="invoice-card-agent">{agent}</span>
+              <span className="invoice-card-amount">
+                {formatted}
+                {cadence ? <span className="invoice-card-cadence">{cadence}</span> : null}
+              </span>
+              <span className="invoice-card-title">{title}</span>
+            </button>
+            {caption ? <span className="invoice-card-caption">{caption}</span> : null}
+          </div>
+        </div>
+        {openedURL ? (
+          <div className="buttons-url-preview" role="dialog" aria-modal="true" aria-label="Checkout preview"
+            onKeyDown={(event) => { if (event.key === "Escape") closeBrowser(event); }}>
+            <div className="buttons-browser-bar">
+              <button type="button" className="buttons-url-close" autoFocus aria-label="Close" onClick={closeBrowser}>
+                <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+              </button>
+              <div className="buttons-browser-address">
+                <svg viewBox="0 0 12 14" aria-hidden="true" focusable="false">
+                  <rect x="1.5" y="6" width="9" height="7" rx="1.5" />
+                  <path d="M3.5 6V4.5a2.5 2.5 0 0 1 5 0V6" />
+                </svg>
+                <span>{hostOf(openedURL)}</span>
+              </div>
+              <svg className="buttons-browser-reload" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path d="M13 8a5 5 0 1 1-1.46-3.54M13 3v3h-3" />
+              </svg>
+            </div>
+            <div className="buttons-browser-page" role="status">
+              <span className="buttons-url-caption">Checkout preview</span>
+              <span className="buttons-url-address">{openedURL}</span>
+              <span className="buttons-browser-note">
+                {goods === "physical"
+                  ? "A physical invoice opens the agent's checkout here, in the app's own in-app browser. The demo loads nothing."
+                  : "A digital invoice opens the agent's checkout in Safari, outside the app. The demo loads nothing."}
+              </span>
+            </div>
+            <div className="buttons-browser-toolbar" aria-hidden="true">
+              <svg viewBox="0 0 20 20"><path d="M12.5 4l-6 6 6 6" /></svg>
+              <svg viewBox="0 0 20 20" className="is-disabled"><path d="M7.5 4l6 6-6 6" /></svg>
+              <svg viewBox="0 0 20 20"><path d="M10 12.5V2.5M6.5 6L10 2.5 13.5 6M6 9H4.5v8.5h11V9H14" /></svg>
+              <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5" /><path d="M12.8 7.2l-1.6 4-4 1.6 1.6-4z" /></svg>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+};

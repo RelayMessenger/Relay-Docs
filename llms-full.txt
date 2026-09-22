@@ -1666,7 +1666,7 @@ Interactions add controls that agents can send directly in the chat. Include the
 
 ## Read parts in a response
 
-A part you read back carries more than the part you sent. Most parts gain `reactions`, the current reactions on that part or `null`; a `selection` part's `reactions` is always `null`, and a `selection_response` part has no `reactions` key. A media part gains the Attachment ID, a download URL, and the file's metadata; a text part gains `mentions`; a `selection` part gains [`has_responded` and `selected_values`](/interactions/selection#read-whether-someone-answered).
+A part you read back carries more than the part you sent. Most parts gain `reactions`, the current reactions on that part or `null`; a `selection` part's `reactions` is always `null`, and a `selection_response` part has no `reactions` key. A media part gains the Attachment ID, a download URL, and the file's metadata; a text part gains `mentions`; a `selection` part gains [`has_responded` and `selected_values`](/interactions/selection#read-whether-someone-answered); an `invoice` part gains [`status`](/interactions/invoice#mark-it-paid), `requested` until the sending agent moves it.
 
 Relay also returns parts of `type: "system"` for visible chat events such as a participant joining or a group being renamed. Your agent cannot send a system part.
 
@@ -2351,6 +2351,9 @@ Only an agent can send an interaction. The app draws it, the person acts on it, 
   <Card title="Selection" href="/interactions/selection">
     Choose several options, then send one readable reply with stable values for your application.
   </Card>
+  <Card title="Invoice" href="/interactions/invoice">
+    Ask the person to pay with your own checkout link. Relay carries the card; it never touches the money.
+  </Card>
 </CardGroup>
 
 New interactions are added here as parts, never as endpoints.
@@ -2358,6 +2361,8 @@ New interactions are added here as parts, never as endpoints.
 ## Next steps
 
 - [Buttons](/interactions/buttons)
+- [Selection](/interactions/selection)
+- [Invoice](/interactions/invoice)
 - [Send a message](/messages/send)
 
 # Buttons
@@ -2698,6 +2703,164 @@ Keep the original body and idempotency key when retrying an uncertain submission
 - [Interactions](/interactions/index)
 - [Buttons](/interactions/buttons)
 - [Replies](/messages/replies)
+
+# Invoice
+
+> Ask a person to pay with your own checkout link. Relay never touches the money.
+
+Source: https://docs.staging.relayapp.im/interactions/invoice.md
+
+import { InvoicePreview } from "/snippets/buttons-preview.jsx";
+
+An `invoice` part is a card that asks the person to pay. It shows your business name, an amount, and a title; tapping it opens your own checkout link. Relay never touches the money: there is no Relay Stripe account, no processing step, and no Relay fee. You get paid the way you already get paid; Relay only carries the card and tells you, through the status you set, when the person finishes.
+
+## Send an invoice
+
+An `invoice` part carries a `title`, an integer `amount` in minor currency units, a `currency`, whether the goods are `physical` or `digital`, and the `url` your own checkout opens. Only an agent can send an invoice, and it must be the only part in its Message. Tap the card in the demo to see the checkout open; the demo loads nothing from the example URL.
+
+<Tabs>
+  <Tab title="Preview">
+    <InvoicePreview agent="Sonic Coffee" title="House blend, 250 g" amount={2400} currency="usd" goods="physical" url="https://buy.stripe.com/test_123" />
+  </Tab>
+  <Tab title="Request">
+    ```json
+    {
+      "message": {
+        "parts": [
+          {
+            "type": "invoice",
+            "title": "House blend, 250 g",
+            "amount": 2400,
+            "currency": "usd",
+            "goods": "physical",
+            "url": "https://buy.stripe.com/test_123"
+          }
+        ]
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Fields
+
+- Only an agent can send an invoice; a person's attempt fails.
+- A Message carries at most one `invoice` part, and it must be the Message's only part: no text, media, buttons, or selection beside it.
+- `title` is 1 to 32 characters after surrounding whitespace is trimmed.
+- `amount` is an integer number of minor currency units from 1 to 99,999,999 (Stripe's own ceiling).
+- `currency` is a 3-letter ISO code, case-insensitive in, always returned lowercase.
+- `goods` is `physical` or `digital`; see [Physical and digital](#physical-and-digital).
+- `url` is the `https` link to your own checkout, up to 2048 characters, with a host and no username or password (`https://buy.stripe.com@evil.com` is `evil.com`, and is refused). Relay stores it normalized, so a mixed-case scheme or missing trailing slash comes back the way Relay wrote it, not the way you sent it.
+- `recurring` is optional; see [Subscriptions](#subscriptions).
+- Unknown fields are rejected.
+
+## Physical and digital
+
+What the card does when it's tapped depends on `goods` and, for digital goods, the App Store storefront the person's device last reported:
+
+| Goods | Storefront | What happens |
+| --- | --- | --- |
+| `physical` | Any | The card opens your checkout `url` in the app's own in-app browser. |
+| `digital` | US App Store | The card opens your checkout `url` in Safari, outside the app. |
+| `digital` | Any other App Store | The invoice is rejected when you send it. The card is never created. |
+
+<InvoicePreview agent="Nimbus Cloud" title="Pro plan" amount={1900} currency="usd" goods="digital" payable={false} />
+
+Relay checks the storefront the person's device last reported, not their location, and reads it through StoreKit rather than Location Services. A device that has never reported a storefront is let through; that is App Store review's backstop to enforce, not Relay's. This follows Apple App Store Review Guideline 3.1.3(e) (goods and services outside the app for physical purchases) and 3.1.1(a) (in-app purchase for digital goods and services).
+
+## Subscriptions
+
+Add `recurring` to bill on a schedule: an `interval` of `day`, `week`, `month`, or `year`, and an optional `interval_count` (default `1`) to bill every few of them, such as every 2 weeks or every 3 months. The span of `interval` × `interval_count` cannot exceed 3 years. The card shows the amount with its cadence, for example "$19.00/month".
+
+<InvoicePreview agent="Nimbus Cloud" title="Pro plan" amount={1900} currency="usd" goods="digital" recurring={{ interval: "month" }} url="https://buy.stripe.com/sub_123" />
+
+Relay does not run the subscription. Your own checkout link and your own billing system own the recurring charge, the retries, and the renewal; call [Mark it paid](#mark-it-paid) from your billing webhook on every charge so the card in Relay stays current.
+
+## Mark it paid
+
+Move the card's `status` with `PUT /v1/messages/{message_id}/invoice`. Only the agent that sent the invoice can call this; every other identity gets a `403`. Any status is valid from any other status, and setting the status it already has is a no-op that still returns `200`.
+
+| `status` | What the card shows |
+| --- | --- |
+| `requested` | The card as sent: tappable, no caption. This is the default when you never call this route. |
+| `succeeded` | "Paid". The card stops opening the checkout. |
+| `canceled` | "Canceled". |
+| `expired` | "Expired". |
+| `refunded` | "Refunded". |
+
+<InvoicePreview agent="Sonic Coffee" title="House blend, 250 g" amount={2400} currency="usd" goods="physical" status="Paid" />
+
+Call this from your own payment provider's webhook (Stripe, or whichever processor your checkout `url` uses), not from guesswork about whether the person paid.
+
+<CodeGroup>
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+  baseURL: "https://api.staging.relayapp.im",
+});
+
+await relay.messages.invoice.update(messageId, { status: "succeeded" });
+```
+
+```bash HTTPS
+curl -sS -X PUT "https://api.staging.relayapp.im/v1/messages/$MESSAGE_ID/invoice" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"succeeded"}'
+```
+</CodeGroup>
+
+```http
+HTTP/1.1 200 OK
+```
+
+A real status change pushes a `message.upserted` for the card to every person in the chat; a no-op pushes nothing. There is no separate webhook for this, since you are the one who called it, so you already know.
+
+## Send one from a runtime
+
+Invoices are a property of the Message, so every runtime sends them through the send path it already has: a backend includes the `invoice` part alone in `parts`; a runtime with a send tool takes an `invoice` argument; and a runtime that answers in text ends its answer with a fenced code block tagged `invoice` holding the fields, which the bridge lifts out into its own solo Message. Any words before the fence go out first, as an ordinary text Message, since an invoice cannot share a Message with anything else. Sending more than one invoice fence, or an invoice fence alongside a `buttons` or `selection` fence, in the same answer is an error.
+
+````text
+Here's your total for the order.
+
+```invoice
+{
+  "title": "House blend, 250 g",
+  "amount": 2400,
+  "currency": "usd",
+  "goods": "physical",
+  "url": "https://buy.stripe.com/test_123"
+}
+```
+````
+
+Each [integration](/integrations/index) says which of these applies in its "What it can do" table.
+
+## Only people pay
+
+- Only an agent can send an invoice.
+- Only a person can react to an invoice; an agent's reaction is rejected.
+- Only the agent that sent an invoice can move its status; every other identity, including another agent in the same chat, is rejected.
+- Invoices work in direct and group chats the same as any other part.
+- Replies to an invoice Message are ordinary replies; an invoice has no reply format of its own.
+
+## When it fails
+
+| Status | Code | Cause |
+| --- | --- | --- |
+| `400` | [1005](/api-reference/errors#1005) | The invoice is not alone in its Message, `title`/`amount`/`currency`/`goods` fails validation, `url` is not `https`, has no host, or carries a username or password, `recurring`'s span exceeds 3 years, or the status route's `status` is not one of the five known values. |
+| `403` | [2003](/api-reference/errors#2003) | A person sent an invoice, an agent reacted to one, or an identity other than the sending agent called the status route. |
+| `404` | [2001](/api-reference/errors#2001) | The status route's message does not exist, is not visible to the caller, or carries no invoice part. |
+| `422` | [2006](/api-reference/errors#2006) | A digital invoice would go to a person whose device last reported a non-US App Store storefront. |
+
+## Next steps
+
+- [Interactions](/interactions/index)
+- [Buttons](/interactions/buttons)
+- [Selection](/interactions/selection)
+- [Send a message](/messages/send)
 
 # Direct and group chats
 
@@ -11930,6 +12093,7 @@ Example response from `GET /v1/messages/{messageId}`:
 | `GET` | [`/v1/messages/{messageId}/thread`](/api-reference/messages/get-all-messages-in-a-thread) | Get all messages in a thread |
 | `GET` | [`/v1/messages/{messageId}`](/api-reference/messages/get-a-message-by-id) | Get a message by ID |
 | `POST` | [`/v1/messages/{messageId}/reactions`](/api-reference/messages/add-or-remove-a-reaction-to-a-message) | Add or remove a reaction to a message |
+| `PUT` | [`/v1/messages/{messageId}/invoice`](/api-reference/messages/update-an-invoices-status) | Update an invoice's status |
 
 ## Errors
 
@@ -13574,7 +13738,7 @@ paths:
     post:
       operationId: sendReaction
       summary: Add or remove a reaction to a message
-      description: Add or remove a reaction on one Message part. Targeting a `buttons`, `selection`, or `selection_response` part returns 422.
+      description: Add or remove a reaction on one Message part. Targeting a `buttons`, `selection`, or `selection_response` part returns 422. Only a person can react to an `invoice` part; an agent gets 403 (error code `2003`).
       tags:
         - Messages
       security:
@@ -13617,6 +13781,58 @@ paths:
           $ref: "#/components/responses/NotFound"
         "422":
           description: "`part_index` does not exist on this Message (error code `2006`)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /v1/messages/{messageId}/invoice:
+    put:
+      operationId: updateInvoiceStatus
+      summary: Update an invoice's status
+      description: Move an `invoice` part's status. Only the agent that sent the Message may call this — the card turns itself into the new status in place. Any status to any status is allowed. Setting the current status is a no-op that still returns 200; a real change pushes `message.upserted` to every person in the chat and raises no webhook, since the agent authored the change itself.
+      tags:
+        - Messages
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          description: Unique identifier of the message carrying the invoice
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInvoiceStatusRequest"
+      responses:
+        "200":
+          description: Invoice status updated (or already at the requested status)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message:
+                    $ref: "#/components/schemas/Message"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: "The authenticated principal is not the agent that sent this invoice (error code `2003`)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "The message does not exist, is not visible to the caller, or carries no invoice part."
           content:
             application/json:
               schema:
@@ -16404,6 +16620,86 @@ components:
       allOf:
         - $ref: "#/components/schemas/SelectionResponsePart"
       description: Persisted selection metadata; contributes no fallback text and cannot receive reactions.
+    InvoiceRecurring:
+      type: object
+      additionalProperties: false
+      description: Stripe-style billing cadence. Total span (interval * interval_count) is capped at 3 years (1095 days / 156 weeks / 36 months / 3 years). Omit for a one-time invoice.
+      required: [interval]
+      properties:
+        interval:
+          type: string
+          enum: [day, week, month, year]
+        interval_count:
+          type: integer
+          minimum: 1
+          default: 1
+          description: Defaults to 1 when omitted.
+    InvoiceStatus:
+      type: string
+      description: Payment statuses, plus Stripe's `refunded`. A part with no status update yet reads as `requested`.
+      enum: [requested, succeeded, canceled, expired, refunded]
+    InvoicePart:
+      type: object
+      additionalProperties: false
+      description: "Agent-only request to pay, drawn like Apple Cash. Must be the only part of its message. `goods=physical` may link out anywhere (Apple 3.1.3(e)); `goods=digital` may only link out to a person on the United States storefront (Apple 3.1.1(a)); sending one to a person whose devices report only other storefronts returns 422 (error code `2006`)."
+      required: [type, title, amount, currency, goods, url]
+      properties:
+        type:
+          type: string
+          enum: [invoice]
+        title:
+          type: string
+          minLength: 1
+          maxLength: 32
+          description: Trimmed before storage (Telegram sendInvoice).
+        amount:
+          type: integer
+          minimum: 1
+          maximum: 99999999
+          description: Integer amount in the currency's minor units (Stripe maximum).
+        currency:
+          type: string
+          pattern: '^[A-Za-z]{3}$'
+          description: 3-letter ISO 4217 code. Accepted in any case, stored and returned lowercase.
+        goods:
+          type: string
+          enum: [physical, digital]
+        url:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: The checkout page the card opens. https only; the same cap as a buttons url.
+        recurring:
+          $ref: "#/components/schemas/InvoiceRecurring"
+    InvoicePartResponse:
+      type: object
+      required: [type, title, amount, currency, goods, url, status, reactions]
+      properties:
+        type:
+          type: string
+          enum: [invoice]
+        title:
+          type: string
+        amount:
+          type: integer
+        currency:
+          type: string
+        goods:
+          type: string
+          enum: [physical, digital]
+        url:
+          type: string
+        recurring:
+          $ref: "#/components/schemas/InvoiceRecurring"
+        status:
+          $ref: "#/components/schemas/InvoiceStatus"
+        reactions:
+          type:
+            - array
+            - "null"
+          description: Reactions on this message part
+          items:
+            $ref: "#/components/schemas/Reaction"
     LinkPart:
       type: object
       required:
@@ -16609,6 +16905,7 @@ components:
               - $ref: "#/components/schemas/ButtonsPartResponse"
               - $ref: "#/components/schemas/SelectionPartResponse"
               - $ref: "#/components/schemas/SelectionResponsePartResponse"
+              - $ref: "#/components/schemas/InvoicePartResponse"
               - $ref: "#/components/schemas/SystemPartResponse"
         reply_to:
           oneOf:
@@ -16798,6 +17095,7 @@ components:
               - $ref: "#/components/schemas/ButtonsPartResponse"
               - $ref: "#/components/schemas/SelectionPartResponse"
               - $ref: "#/components/schemas/SelectionResponsePartResponse"
+              - $ref: "#/components/schemas/InvoicePartResponse"
             discriminator:
               propertyName: type
               mapping:
@@ -16807,6 +17105,7 @@ components:
                 buttons: "#/components/schemas/ButtonsPartResponse"
                 selection: "#/components/schemas/SelectionPartResponse"
                 selection_response: "#/components/schemas/SelectionResponsePartResponse"
+                invoice: "#/components/schemas/InvoicePartResponse"
         sent_at:
           type:
             - string
@@ -16862,6 +17161,7 @@ components:
           buttons: "#/components/schemas/ButtonsPart"
           selection: "#/components/schemas/SelectionPart"
           selection_response: "#/components/schemas/SelectionResponsePart"
+          invoice: "#/components/schemas/InvoicePart"
       oneOf:
         - $ref: "#/components/schemas/TextPart"
         - $ref: "#/components/schemas/MediaPart"
@@ -16869,6 +17169,7 @@ components:
         - $ref: "#/components/schemas/ButtonsPart"
         - $ref: "#/components/schemas/SelectionPart"
         - $ref: "#/components/schemas/SelectionResponsePart"
+        - $ref: "#/components/schemas/InvoicePart"
     MessageReadWebhook:
       description: Complete webhook payload for message.read events (2026-08-30 format)
       allOf:
@@ -17326,6 +17627,14 @@ components:
           - custom_emoji
         properties:
           custom_emoji: {}
+    UpdateInvoiceStatusRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+      properties:
+        status:
+          $ref: "#/components/schemas/InvoiceStatus"
     SendVoiceMemoToChatRequest:
       type: object
       description: |
@@ -17421,6 +17730,7 @@ components:
               - $ref: "#/components/schemas/ButtonsPartResponse"
               - $ref: "#/components/schemas/SelectionPartResponse"
               - $ref: "#/components/schemas/SelectionResponsePartResponse"
+              - $ref: "#/components/schemas/InvoicePartResponse"
         created_at:
           type: string
           format: date-time
