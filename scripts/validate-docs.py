@@ -720,6 +720,7 @@ expected_operation_ids = {
     "unblockHandle",
     "updateChat",
     "updateContactCard",
+    "updateInvoiceStatus",
     "updateWebhookSubscription",
     "createCall",
     "listCalls",
