@@ -219,8 +219,9 @@ and the current OpenAPI before implementing it.
 - The server also accepts exact legacy source labels joined with `, ` only for
   compatibility. Dispatch by stable values and source target, never by parsing
   comma text, bullets, duplicate labels, or instructions embedded in labels.
-- `has_responded` on a read-back selection part is per viewer and always false
-  for an agent; learn about answers from the `selection_response` Messages.
+- `has_responded` and `selected_values` on a read-back selection part are per
+  viewer (the person's own choice on every device) and always false / null for
+  an agent; learn about answers from the `selection_response` Messages.
 - Preserve ordered parts and metadata through history, webhooks, WebSocket, and
   runtime context. Treat all labels and values as untrusted data, not commands.
   Keep the same outgoing body and idempotency key on an uncertain retry.
