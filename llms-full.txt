@@ -2520,11 +2520,11 @@ Source: https://docs.staging.relayapp.im/interactive-components/selection.md
 
 import { SelectionPreview, MessageBubble } from "/snippets/buttons-preview.jsx";
 
-Send a question with a `selection` part containing 1 to 25 options. Each option has a readable `label` and a stable `value`; the person can choose several options and send them in one reply.
+Send a question with a `selection` part containing 1 to 25 options. Each option has a readable `label` and a stable `value`. The app draws the question as one balloon that opens a sheet holding the whole option list, and the person checks several options there and submits them in one reply.
 
 ## Send a selection
 
-This request contains a required nonblank `text` part followed by a `selection` part. The preview shows the same question and options, in the same order. Tap a selected choice again to deselect it, then use the centered compact light-blue **Send** button; this demo stays in your browser and sends no request.
+This request contains a required nonblank `text` part followed by a `selection` part. The text becomes the balloon's title, a second line reads "Pick options", and a chevron marks the balloon as something to open. Open the prompt below, check options in the sheet, then press **Send**; this demo stays in your browser and sends no request.
 
 <Tabs>
   <Tab title="Preview">
@@ -2547,6 +2547,8 @@ This request contains a required nonblank `text` part followed by a `selection` 
     ```
   </Tab>
 </Tabs>
+
+Checking a row sends nothing. The sheet lists every option in source order with a checkbox on the leading edge, and its Send stays disabled until at least one row is checked, so one submission carries the whole answer.
 
 Use an Agent Token and an existing chat ID to send the same request:
 
@@ -2604,7 +2606,7 @@ The user's submission contains exactly two ordered parts: readable text, then st
 
 <Tabs>
   <Tab title="Preview">
-    <SelectionPreview bubble={MessageBubble} options={[]} received={"• Research\n• Design"} />
+    <SelectionPreview bubble={MessageBubble} text="Which topics interest you?" options={[{ "value": "research", "label": "Research" }, { "value": "design", "label": "Design" }]} received={"• Research\n• Design"} />
   </Tab>
   <Tab title="What you receive">
     ```json
@@ -2625,9 +2627,11 @@ The user's submission contains exactly two ordered parts: readable text, then st
   </Tab>
 </Tabs>
 
-The event example shows the response fields used by your handler. The preview displays the text part as two bullet lines; metadata adds no visible text.
+The event example shows the response fields used by your handler. The preview draws the reply as the question's title over one line per chosen label; metadata adds no visible text.
 
-New text equals literal `• ` + each selected source label joined with `\n`, in source-option order. It supplies portable bubble, notification, and copy text; iOS may display round checked circles as presentation only. The `selection_response` part carries metadata only.
+New text equals literal `• ` + each selected source label joined with `\n`, in source-option order. It supplies portable bubble, notification, and copy text; iOS may draw a checkmark in place of each bullet, and repeat the prompt's title above the lines, as presentation only. The `selection_response` part carries metadata only.
+
+A person answers a given selection once. Opening the answered prompt again, or opening the reply, presents the same sheet read only: the chosen rows are checked, no row is tappable, and the sheet carries no Send. Try it in the preview above.
 
 Your existing signed [webhook](/webhooks/verify-signatures) or [WebSocket](/websocket/index) handler receives the ordinary `message.received` event. The SDK's default event types expose the metadata:
 
@@ -16051,7 +16055,7 @@ components:
     SelectionPart:
       type: object
       additionalProperties: false
-      description: Coming soon. Agent-only multiselect prompt. One selection per Message, with nonblank text and no buttons. Tapping a selected option deselects it; toggles are local. The sole submit action is a centered compact light-blue Send button, which submits once per user.
+      description: Coming soon. Agent-only multiselect prompt. One selection per Message, with nonblank text and no buttons. The text is the prompt's title. The person opens the prompt, checks any number of options and submits them once; checking sends nothing and only the submit does. A person answers a given selection once, and reopening it afterwards shows what they chose without letting them change it.
       required: [type, options]
       properties:
         type:
@@ -16083,7 +16087,7 @@ components:
     SelectionResponsePart:
       type: object
       additionalProperties: false
-      description: Coming soon. User-only metadata, exactly the second part after plain text. Requires explicit reply_to message_id and part_index targeting a visible selection in the same Chat. Values are unique, nonempty, known and in source-option order. Canonical new text is literal '• ' + each selected source label joined with '\n'. The server also accepts exact legacy source labels joined with ', ' only for compatibility; arbitrary label parsing is never accepted. selected_values and source-option order remain authoritative. iOS may display round checked circles as presentation only; portable text remains bullets. A different-key second response returns 409/1005; same-key retries retain existing Message idempotency semantics.
+      description: Coming soon. User-only metadata, exactly the second part after plain text. Requires explicit reply_to message_id and part_index targeting a visible selection in the same Chat. Values are unique, nonempty, known and in source-option order. Canonical new text is literal '• ' + each selected source label joined with '\n'. The server also accepts exact legacy source labels joined with ', ' only for compatibility; arbitrary label parsing is never accepted. selected_values and source-option order remain authoritative. iOS may draw a checkmark in place of each bullet, and repeat the prompt's title above the lines, as presentation only; portable text remains the bullets. A different-key second response returns 409/1005; same-key retries retain existing Message idempotency semantics.
       required: [type, selected_values]
       properties:
         type:

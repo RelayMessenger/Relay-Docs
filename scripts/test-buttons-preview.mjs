@@ -33,6 +33,11 @@ try {
   for (const width of [1280, 390, 320]) {
     for (const theme of ["light", "dark"]) {
       await page.setViewport({ width, height: 1000 });
+      // Pin the host appearance first: Mintlify's own theme script reacts to
+      // prefers-color-scheme and will overwrite the class we set below, which
+      // read the wrong palette on a dark host. Same fix the selection proof
+      // already carries.
+      await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: theme }]);
       await page.evaluate((value) => {
         document.documentElement.classList.toggle("dark", value === "dark");
         document.documentElement.style.colorScheme = value;

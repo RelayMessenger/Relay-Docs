@@ -15,15 +15,16 @@ from contract_source import verify_contract_source
 
 ROOT = Path(__file__).resolve().parents[1]
 # Canonical request lifecycle, scoped lookup, and fixed agent admission Server source.
-# Retains the merged activity and live call-marker shapes.
-UPSTREAM_COMMIT = "56f31c13956ee41f4e2e5945973645e17faa3338"
-UPSTREAM_STAGING_COMMIT = "56f31c13956ee41f4e2e5945973645e17faa3338"
-UPSTREAM_SIZE = 196178
-UPSTREAM_SHA256 = "7f1056cd6d5dc81a1cd23f1e40520fc3c0a32b5a577dd222988fc26f92e6c8d4"
+# Retains the merged activity and live call-marker shapes. The selection
+# descriptions now carry the shipped sheet flow; the wire shapes are untouched.
+UPSTREAM_COMMIT = "fe3ec1e91608e923ec5ee0e37896eb8bf24d863a"
+UPSTREAM_STAGING_COMMIT = "fe3ec1e91608e923ec5ee0e37896eb8bf24d863a"
+UPSTREAM_SIZE = 196369
+UPSTREAM_SHA256 = "262e832ad356375b1a912faa6f9a8ea9c008effa6c24e2618b000ad6b69d858f"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
-    "commit": "1abb93ad96bbcfd5e31414e89f0cec61e4c40db2",
+    "commit": "dc2d82c4126cfdd42fd5dc9ebfdbd9a82ee3514d",
     "path": "contracts/relay-v1-openapi.yaml",
     "sha256": UPSTREAM_SHA256,
     "note": "Fixture: a committed local candidate carrying the released bytes.",
@@ -406,20 +407,46 @@ assert.equal(openedURL, null);
         source = (ROOT / "snippets/buttons-preview.jsx").read_text()
         selection = source.split("export const SelectionPreview =", 1)[1]
         self.assertIn('role="group"', selection)
-        self.assertIn('aria-pressed={selected.includes(option.value)}', selection)
-        self.assertIn("options.filter((option) => selected.includes(option.value))", selection)
-        self.assertIn('ordered.map((option) => "• " + option.label).join("\\n")', selection)
+        # Nothing is picked in the transcript: the prompt is one balloon with
+        # the question as its title, a fixed second line, and a chevron.
+        self.assertIn('{ kind: "title", text: title }', selection)
+        self.assertIn('{ kind: "subtitle", text: "Pick options" }', selection)
+        self.assertIn('bubble({ rows: promptRows, side: "leading", chevron: true })', selection)
+        self.assertNotIn("selection-option", selection)
+        self.assertNotIn("selection-actions", selection)
         self.assertNotIn(">Clear<", selection)
-        self.assertIn("current.filter((value) => value !== option.value)", selection)
-        actions = selection.split('className="selection-actions"', 1)[1].split("</div>", 1)[0]
-        self.assertEqual(actions.count("<button"), 1)
-        self.assertIn('<span className="selection-send-pill">Send</span>', actions)
-        self.assertIn("setSelected([])", selection)
-        self.assertIn("setSent(true)", selection)
-        self.assertIn("setSent(false)", selection)
-        self.assertIn('disabled={!selected.length}', selection)
-        self.assertIn('className="selection-reply" role="status"', selection)
-        self.assertIn("bubble({ text: received })", selection)
+        self.assertNotIn("<img", selection)
+        # The sheet the balloon opens: title alone, an Options header, one
+        # checkbox row per option, and a single Send under the list.
+        sheet = selection.split('role="dialog"', 1)[1]
+        self.assertIn('aria-modal="true"', sheet)
+        self.assertIn('<div className="selection-sheet-title">{title}</div>', sheet)
+        self.assertNotIn("Pick options", sheet)
+        self.assertIn('<div className="selection-sheet-section">Options</div>', sheet)
+        self.assertIn('role="checkbox" aria-checked={checked}', sheet)
+        self.assertIn("current.filter((value) => value !== option.value)", sheet)
+        self.assertEqual(sheet.count('className="selection-send"'), 1)
+        footer = sheet.split("isReadOnly ? null : (", 1)[1]
+        self.assertIn('className="selection-sheet-footer"', footer)
+        self.assertIn("disabled={draft.length === 0}", footer)
+        # A reopened prompt or reply is inert and carries no footer at all.
+        self.assertIn('className="selection-sheet-option" disabled={isReadOnly}', sheet)
+        self.assertIn("const checked = (isReadOnly ? answered : draft).includes(option.value)", sheet)
+        # The reply repeats the title over one checkmark line per chosen label,
+        # in source-option order, and reopens the same sheet.
+        self.assertIn("options.filter((option) => (answered || []).includes(option.value))", selection)
+        self.assertIn('...labels.map((label) => ({ kind: "label", text: label }))', selection)
+        self.assertIn('bubble({ rows: answerRows, side: "trailing", chevron: true })', selection)
+        self.assertIn('openSheet("selection-answer")', selection)
+        self.assertIn('openSheet("selection-prompt")', selection)
+        self.assertIn("setAnswered(draft)", selection)
+        self.assertIn("setAnswered(receivedValues)", selection)
+        self.assertIn("setDraft([])", selection)
+        # The card renderer draws a bare checkmark, never a dot or a circle.
+        card = source.split("const cardBubble =", 1)[1].split("return rows ?", 1)[0]
+        self.assertIn("selection-card-mark", card)
+        self.assertNotIn("<circle", card)
+        self.assertNotIn("\u2022", card)
 
     def test_selection_send_matches_approved_visual_and_hit_target(self):
         css = (ROOT / "style.css").read_text()
@@ -427,27 +454,32 @@ assert.equal(openedURL, null);
             match = re.search(r"(?:^|\n)" + re.escape(selector) + r"\s*\{([^{}]*)\}", css)
             self.assertIsNotNone(match, selector)
             return match[1]
-        hit = rule(".selection-actions button")
-        visual = rule(".selection-send-pill")
-        for declaration in ("width: 84px", "height: 44px", "padding: 6px 0",
-                            "background: transparent", "font: 600 15px/20px", "opacity: 1"):
-            self.assertIn(declaration, hit)
-        for declaration in ("width: 84px", "height: 32px", "background: #e8f1ff",
-                            "color: #0b75ff", "background-color .2s", "color .2s"):
-            self.assertIn(declaration, visual)
-        self.assertIn("background: #142d4d", rule(".dark .selection-send-pill"))
+        # Full width, pinned under the list, and dimmed by its own fill.
+        send = rule(".selection-send")
+        for declaration in ("width: 100%", "height: 44px", "border-radius: 22px",
+                            "background: #0b75ff", "color: #ffffff",
+                            "font-size: 17px", "font-weight: 600", "opacity: 1"):
+            self.assertIn(declaration, send)
+        disabled = rule(".selection-send:disabled")
+        self.assertIn("rgba(11, 117, 255, .32)", disabled)
+        self.assertIn("rgba(255, 255, 255, .55)", disabled)
+        self.assertIn("opacity: 1", disabled)
+        pressed = rule(".selection-send:active:not(:disabled)")
+        self.assertIn("transform: scale(.96)", pressed)
+        self.assertIn("opacity: 1", pressed)
+        self.assertIn("border-top", rule(".selection-sheet-footer"))
+        # Title alone at the top: no rule under it.
+        self.assertNotIn("border-bottom", rule(".selection-sheet-title"))
+        # Leading checkbox, no icon column, and a scrolling list.
+        option = rule(".selection-sheet-option")
+        self.assertIn("display: flex", option)
+        self.assertIn("overflow-y: auto", rule(".selection-sheet-list"))
         self.assertIn("gap: 4px", rule(".buttons-preview-stack"))
-        self.assertIn("justify-content: center", rule(".selection-actions"))
-        self.assertIn("rgba(232, 241, 255, .34)", rule(".selection-actions button:disabled .selection-send-pill"))
-        self.assertIn("rgba(11, 117, 255, .34)", rule(".selection-actions button:disabled .selection-send-pill"))
-        self.assertIn("rgba(20, 45, 77, .34)", rule(".dark .selection-actions button:disabled .selection-send-pill"))
-        self.assertIn("rgba(111, 176, 255, .34)", rule(".dark .selection-actions button:disabled .selection-send-pill"))
-        self.assertIn("opacity: 1", rule(".selection-actions button:disabled"))
-        self.assertIn("transform: scale(.97)", rule(".selection-option:active, .selection-actions button:active:not(:disabled)"))
         reduced = css.split("@media (prefers-reduced-motion: reduce)")[-1]
         for declaration in ("transition: none", "animation: none", "transform: none"):
             self.assertIn(declaration, reduced)
-        self.assertIn(".selection-actions button:active:not(:disabled)", reduced)
+        self.assertIn(".selection-send:active:not(:disabled)", reduced)
+        self.assertIn(".selection-prompt:active", reduced)
 
     def test_button_animation_has_scale_only_press_and_reduced_motion(self):
         css = (ROOT / "style.css").read_text()

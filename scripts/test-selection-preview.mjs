@@ -1,4 +1,7 @@
 // Local-only browser proof. Run only with explicit browser-test authorization. PUPPETEER_MODULE may name an existing installation.
+// Drives the shipped selection flow (Relay-iOS RelaySelectionRow/RelaySelectionSheet):
+// nothing is picked in the transcript, the prompt balloon opens a sheet, Send
+// posts once, and the answered prompt or its reply reopens that sheet read-only.
 import assert from 'node:assert/strict';
 const { default: puppeteer } = await import(process.env.PUPPETEER_MODULE || 'puppeteer');
 const origin = new URL(process.argv[2] || 'http://127.0.0.1:3012');
@@ -14,7 +17,7 @@ try {
     await element.evaluate(e => e.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }));
     await new Promise(resolve => setTimeout(resolve, 400));
     await element.click();
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 150));
   };
   const errors = [];
   const attemptedURLs = [];
@@ -28,110 +31,259 @@ try {
   // The preview follows the host appearance; pin light so the explicit .dark toggle below is the only variable.
   await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
   await page.goto(new URL('/interactive-components/selection', origin).href, { waitUntil: 'networkidle0', timeout: 120000 });
-  await page.waitForSelector('.selection-option', { timeout: 20000 });
-  assert.deepEqual(await page.$$eval('[aria-label="Selection reply preview"] svg text', rows => rows.map(e => e.textContent)), ['• Research', '• Design']);
-  const assertSend = async (dark, disabled) => {
-    await new Promise(resolve => setTimeout(resolve, 250));
-    const style = await page.$eval('.selection-actions button', e => {
-      const pill = e.querySelector('.selection-send-pill');
-      const box = e.getBoundingClientRect(), visual = pill.getBoundingClientRect();
-      const parent = e.parentElement.getBoundingClientRect();
-      const option = [...e.closest('.selection-stack').querySelectorAll('.selection-option')].at(-1).getBoundingClientRect();
-      const hitStyle = getComputedStyle(e), visualStyle = getComputedStyle(pill);
-      return {
-        disabled: e.disabled, width: box.width, height: box.height,
-        visualWidth: visual.width, visualHeight: visual.height,
-        inset: visual.y - box.y, gap: box.y - option.bottom,
-        offset: Math.abs(box.x + box.width / 2 - parent.x - parent.width / 2),
-        visualOffset: Math.abs(visual.x + visual.width / 2 - box.x - box.width / 2),
-        fill: visualStyle.backgroundColor, color: visualStyle.color,
-        fontSize: visualStyle.fontSize, fontWeight: visualStyle.fontWeight,
-        hitFill: hitStyle.backgroundColor, opacity: hitStyle.opacity,
-        visualOpacity: visualStyle.opacity, transition: visualStyle.transitionProperty,
-        duration: visualStyle.transitionDuration,
-      };
-    });
-    assert.equal(style.disabled, disabled);
-    assert.deepEqual([style.width, style.height, style.visualWidth, style.visualHeight], [84, 44, 84, 32]);
-    assert.ok(Math.abs(style.inset - 6) < .1);
-    assert.ok(Math.abs(style.gap - 4) < .1, 'Hit target starts 4px below the last option');
-    assert.ok(style.offset < .1 && style.visualOffset < .1, 'Both target and visual are centered');
-    assert.equal(style.hitFill, 'rgba(0, 0, 0, 0)');
-    const fill = dark ? '20, 45, 77' : '232, 241, 255';
-    const color = dark ? '111, 176, 255' : '11, 117, 255';
-    assert.equal(style.fill, disabled ? `rgba(${fill}, 0.34)` : `rgb(${fill})`);
-    assert.equal(style.color, disabled ? `rgba(${color}, 0.34)` : `rgb(${color})`);
-    assert.equal(style.fontSize, '15px');
-    assert.equal(style.fontWeight, '600');
-    assert.equal(style.opacity, '1');
-    assert.equal(style.visualOpacity, '1', 'Only colors dim, not control opacity');
-    assert.equal(style.transition, 'background-color, color');
-    assert.equal(style.duration, '0.2s, 0.2s');
+  await page.waitForSelector('.selection-prompt', { timeout: 20000 });
+
+  const QUESTION = 'Which topics interest you?';
+  const rowsOf = (card, selector) => card.$$eval(`${selector} .selection-card text`, nodes => nodes.map(e => e.textContent));
+  const sheetOf = async (card) => {
+    const sheet = await card.$('.selection-sheet');
+    assert.ok(sheet, 'The sheet must live inside its own preview card');
+    return sheet;
   };
+  // Every option row: its label, its checked state, whether it is inert, and
+  // whether its checkbox really leads the label.
+  const optionState = (sheet) => sheet.$$eval('.selection-sheet-option', rows => rows.map(row => {
+    const box = row.querySelector('.selection-box').getBoundingClientRect();
+    const label = row.querySelector('.selection-sheet-label');
+    return {
+      label: label.textContent,
+      checked: row.getAttribute('aria-checked'),
+      role: row.getAttribute('role'),
+      disabled: row.disabled,
+      leadingCheckbox: box.right <= label.getBoundingClientRect().left,
+      icons: row.querySelectorAll('img, .selection-sheet-icon').length,
+    };
+  }));
+  const sendStyle = (sheet) => sheet.$eval('.selection-send', e => {
+    const css = getComputedStyle(e);
+    const footer = getComputedStyle(e.parentElement);
+    const box = e.getBoundingClientRect(), parent = e.parentElement.getBoundingClientRect();
+    return {
+      text: e.textContent, disabled: e.disabled,
+      fill: css.backgroundColor, color: css.color, opacity: css.opacity,
+      height: box.height,
+      fullWidth: Math.abs(box.width - (parent.width - parseFloat(footer.paddingLeft) - parseFloat(footer.paddingRight))) < 0.5,
+      pinnedLast: e.parentElement === e.closest('.selection-sheet').lastElementChild,
+    };
+  });
+
   for (const width of [1280, 390, 320]) {
     await page.setViewport({ width, height: 1000 });
     for (const dark of [false, true]) {
-      await page.evaluate(dark => document.documentElement.classList.toggle('dark', dark), dark);
-      assert.deepEqual(await page.$$eval('.selection-actions button', buttons => buttons.map(e => e.textContent.trim())), ['Send']);
-      await assertSend(dark, true);
-      await click('.selection-option');
-      assert.equal(await page.$eval('.selection-option', e => e.getAttribute('aria-pressed')), 'true');
-      await assertSend(dark, false);
-      await new Promise(r => setTimeout(r, 250));
-      const style = await page.$eval('.selection-option', e => ({ fill: getComputedStyle(e).backgroundColor, opacity: getComputedStyle(e).opacity, border: getComputedStyle(e).borderWidth, overflow: e.scrollWidth > e.clientWidth }));
-      assert.equal(style.fill, dark ? 'rgb(29, 55, 89)' : 'rgb(214, 230, 255)');
-      assert.equal(style.opacity, '1');
-      assert.equal(style.border, '0px');
-      assert.equal(style.overflow, false);
-      await click('.selection-option');
-      assert.equal(await page.$eval('.selection-option', e => e.getAttribute('aria-pressed')), 'false');
-      assert.equal(await page.$('.selection-reply'), null);
-      await assertSend(dark, true);
+      await page.evaluate(value => document.documentElement.classList.toggle('dark', value), dark);
+      const label = `${width}px ${dark ? 'dark' : 'light'}`;
+      const cards = await page.$$('.selection-preview');
+      assert.equal(cards.length, 2, 'Keep the interactive prompt preview and the received reply preview');
+      const [live, receivedCard] = cards;
+
+      // 1. The transcript carries one balloon and no pickable option.
+      assert.deepEqual(await rowsOf(live, '.selection-prompt'), [QUESTION, 'Pick options']);
+      assert.equal(await live.$('.selection-sheet'), null);
+      assert.equal(await live.$('.selection-sheet-option'), null, 'Nothing is picked in the transcript');
+      assert.equal(await live.$('.selection-answer'), null);
+      const promptShape = await live.$eval('.selection-prompt .selection-card', e => {
+        const svg = e.getBoundingClientRect();
+        const column = e.closest('.buttons-preview-message').getBoundingClientRect();
+        return {
+          columnWidth: Math.abs(svg.width - column.width) < 1,
+          height: e.getAttribute('height'),
+          mirrored: e.querySelector('.selection-card-shape').parentElement.getAttribute('transform'),
+          chevrons: e.querySelectorAll('.selection-card-chevron').length,
+          icons: e.querySelectorAll('image, .selection-card-icon').length,
+          marks: e.querySelectorAll('.selection-card-mark').length,
+          fill: getComputedStyle(e.querySelector('.selection-card-shape')).fill,
+          chevronRight: e.querySelector('.selection-card-chevron').getBoundingClientRect().right
+            > e.querySelector('.selection-card-title').getBoundingClientRect().right,
+        };
+      });
+      assert.ok(promptShape.columnWidth, 'The balloon is as wide as a text balloon may be');
+      // A 20pt title over a 18pt second line inside 10pt insets is a 60pt
+      // body; the extra 7 is the round tail hanging below it (radius 20 x
+      // RelayBubbleGeometry's 0.33925 depth factor).
+      assert.equal(promptShape.height, '67', 'The balloon keeps its tail below the body');
+      assert.match(promptShape.mirrored, /scale\(-1,1\)/, 'An incoming balloon mirrors the tail');
+      assert.equal(promptShape.chevrons, 1);
+      assert.equal(promptShape.icons, 0, 'The prompt balloon carries no icon');
+      assert.equal(promptShape.marks, 0);
+      assert.ok(promptShape.chevronRight, 'The chevron sits at the trailing edge');
+      assert.equal(promptShape.fill, dark ? 'rgb(36, 43, 54)' : 'rgb(241, 243, 245)');
+      assert.equal(await live.$eval('.selection-prompt', e => e.getAttribute('aria-haspopup')), 'dialog');
+
+      // 2. Tapping it opens the sheet.
+      await click(await live.$('.selection-prompt'));
+      const sheet = await sheetOf(live);
+      assert.equal(await page.evaluate(() => document.activeElement.className), 'selection-sheet-grabber');
+      assert.equal(await sheet.$eval('.selection-sheet-title', e => e.textContent), QUESTION);
+      assert.equal(await sheet.evaluate(e => e.getAttribute('aria-modal')), 'true');
+      assert.equal(await sheet.$eval('.selection-sheet-section', e => e.textContent), 'Options');
+      const headerGeometry = await sheet.$eval('.selection-sheet-title', e => {
+        const css = getComputedStyle(e);
+        return { borderBottom: css.borderBottomWidth, next: e.nextElementSibling.className };
+      });
+      assert.equal(headerGeometry.borderBottom, '0px', 'No separator under the title');
+      assert.equal(headerGeometry.next, 'selection-sheet-list', 'The title stands alone above the list');
+      assert.deepEqual(await optionState(sheet), [
+        { label: 'Research', checked: 'false', role: 'checkbox', disabled: false, leadingCheckbox: true, icons: 0 },
+        { label: 'Design', checked: 'false', role: 'checkbox', disabled: false, leadingCheckbox: true, icons: 0 },
+      ]);
+      assert.equal(await sheet.$eval('.selection-sheet-list', e => getComputedStyle(e).overflowY), 'auto');
+
+      // 3. Send is disabled until something is checked, and full width at the bottom.
+      let send = await sendStyle(sheet);
+      assert.equal(send.text, 'Send');
+      assert.equal(send.disabled, true);
+      assert.ok(send.fullWidth, 'Send spans the sheet');
+      assert.ok(send.pinnedLast, 'Send is pinned under the list');
+      assert.equal(send.fill, 'rgba(11, 117, 255, 0.32)');
+      assert.equal(send.color, 'rgba(255, 255, 255, 0.55)');
+      assert.equal(send.opacity, '1', 'Disabled dims the fill, never the control');
+      await click(await sheet.$('.selection-sheet-option:nth-of-type(1)'));
+      assert.equal((await optionState(sheet))[0].checked, 'true');
+      assert.equal(await live.$('.selection-answer'), null, 'Checking sends nothing');
+      await click(await sheet.$('.selection-sheet-option:nth-of-type(1)'));
+      assert.equal((await optionState(sheet))[0].checked, 'false');
+      send = await sendStyle(sheet);
+      assert.equal(send.disabled, true);
+
       // Reverse click order must still yield source-option order.
-      await click('.selection-option:nth-child(2)');
-      await click('.selection-option:nth-child(1)');
-      await assertSend(dark, false);
-      const send = await page.$('.selection-actions button');
-      await send.evaluate(e => e.scrollIntoView({ block: 'center', behavior: 'instant' }));
+      await click(await sheet.$('.selection-sheet-option:nth-of-type(2)'));
+      await click(await sheet.$('.selection-sheet-option:nth-of-type(1)'));
+      send = await sendStyle(sheet);
+      assert.equal(send.disabled, false);
+      assert.equal(send.fill, 'rgb(11, 117, 255)');
+      assert.equal(send.color, 'rgb(255, 255, 255)');
+      assert.equal(send.opacity, '1');
+
+      // 4. Press feedback: scale only, never opacity.
+      const sendHandle = await sheet.$('.selection-send');
+      await sendHandle.evaluate(e => e.scrollIntoView({ block: 'center', behavior: 'instant' }));
       await new Promise(resolve => setTimeout(resolve, 400));
-      const box = await send.boundingBox();
-      // The transparent top inset belongs to the hit target too.
-      await page.mouse.move(box.x + box.width / 2, box.y + 2);
+      const sendBox = await sendHandle.boundingBox();
+      await page.mouse.move(sendBox.x + sendBox.width / 2, sendBox.y + sendBox.height / 2);
       await page.mouse.down();
-      await new Promise(resolve => setTimeout(resolve, 200));
-      const pressed = await send.evaluate(e => ({
+      await new Promise(resolve => setTimeout(resolve, 220));
+      const pressed = await sendHandle.evaluate(e => ({
         scale: new DOMMatrix(getComputedStyle(e).transform).a,
         opacity: getComputedStyle(e).opacity,
       }));
-      assert.ok(Math.abs(pressed.scale - .97) < .001);
+      assert.ok(Math.abs(pressed.scale - 0.96) < 0.001, `Send compresses on press (${pressed.scale})`);
       assert.equal(pressed.opacity, '1');
       await page.mouse.up();
-      await page.waitForSelector('.selection-reply text', { timeout: 3000 });
-      assert.deepEqual(await page.$$eval('.selection-reply text', rows => rows.map(e => e.textContent)), ['• Research', '• Design']);
-      assert.equal(await page.$eval('.selection-reply', e => e.getAttribute('aria-label')), 'Reply: • Research\n• Design');
-      assert.equal(await page.$('.selection-option'), null);
-      await click('.selection-reset');
-      console.log(`PASS selection ${width}px ${dark ? 'dark' : 'light'}`);
+
+      // 5. Send dismisses and leaves the reply.
+      await page.waitForSelector('.selection-answer', { timeout: 3000 });
+      assert.equal(await live.$('.selection-sheet'), null, 'Send dismisses the sheet');
+      assert.deepEqual(await rowsOf(live, '.selection-answer'), [QUESTION, 'Research', 'Design']);
+      const replyShape = await live.$eval('.selection-answer .selection-card', e => ({
+        marks: e.querySelectorAll('.selection-card-mark').length,
+        circles: e.querySelectorAll('circle').length,
+        dots: [...e.querySelectorAll('text')].filter(t => t.textContent.includes('•')).length,
+        mirrored: e.querySelector('.selection-card-shape').parentElement.getAttribute('transform'),
+        fill: getComputedStyle(e.querySelector('.selection-card-shape')).fill,
+        height: e.getAttribute('height'),
+      }));
+      assert.equal(replyShape.marks, 2, 'One bare checkmark per chosen label');
+      assert.equal(replyShape.circles, 0, 'Not a circle');
+      assert.equal(replyShape.dots, 0, 'Not a dot');
+      assert.equal(replyShape.mirrored, null, 'An outgoing balloon keeps the trailing tail');
+      assert.equal(replyShape.fill, 'rgb(11, 117, 255)');
+      // Title plus two label lines is an 85pt body, and the tail hangs below.
+      assert.equal(replyShape.height, '92');
+      assert.equal(await live.$eval('.selection-answer', e => e.getAttribute('aria-label')),
+        `${QUESTION}. Research, Design. Opens the options you chose`);
+
+      // 6. The reply reopens the sheet read-only.
+      await click(await live.$('.selection-answer'));
+      const readOnly = await sheetOf(live);
+      assert.deepEqual(await optionState(readOnly), [
+        { label: 'Research', checked: 'true', role: 'checkbox', disabled: true, leadingCheckbox: true, icons: 0 },
+        { label: 'Design', checked: 'true', role: 'checkbox', disabled: true, leadingCheckbox: true, icons: 0 },
+      ]);
+      assert.equal(await readOnly.$('.selection-sheet-footer'), null, 'The footer is absent, not disabled');
+      assert.equal(await readOnly.$('.selection-send'), null);
+      await page.keyboard.press('Escape');
+      await new Promise(resolve => setTimeout(resolve, 150));
+      assert.equal(await live.$('.selection-sheet'), null, 'Escape dismisses the sheet');
+      assert.equal(await page.evaluate(() => document.activeElement.className), 'selection-answer');
+
+      // 7. The answered prompt reopens the same read-only sheet.
+      await click(await live.$('.selection-prompt'));
+      const reopened = await sheetOf(live);
+      assert.equal(await reopened.$('.selection-sheet-footer'), null);
+      assert.deepEqual((await optionState(reopened)).map(row => row.disabled), [true, true]);
+      await click(await reopened.$('.selection-sheet-grabber'));
+      assert.equal(await live.$('.selection-sheet'), null, 'The grabber dismisses the sheet');
+      assert.equal(await page.evaluate(() => document.activeElement.className), 'selection-prompt');
+
+      // 8. The received preview is the reply alone, and it reopens read-only.
+      assert.equal(await receivedCard.$('.selection-prompt'), null);
+      assert.equal(await receivedCard.$('.selection-reset'), null);
+      assert.deepEqual(await rowsOf(receivedCard, '.selection-answer'), [QUESTION, 'Research', 'Design']);
+      await click(await receivedCard.$('.selection-answer'));
+      const staticSheet = await sheetOf(receivedCard);
+      assert.deepEqual((await optionState(staticSheet)).map(row => [row.checked, row.disabled]),
+        [['true', true], ['true', true]]);
+      assert.equal(await staticSheet.$('.selection-send'), null);
+      await page.keyboard.press('Escape');
+      await new Promise(resolve => setTimeout(resolve, 150));
+      assert.equal(await receivedCard.$('.selection-sheet'), null);
+
+      // 9. Reset returns the live demo to the unanswered prompt.
+      await click(await live.$('.selection-reset'));
+      assert.equal(await live.$('.selection-answer'), null);
+      assert.equal(await live.$('.selection-sheet'), null);
+      assert.deepEqual(await rowsOf(live, '.selection-prompt'), [QUESTION, 'Pick options']);
+      console.log(`PASS selection ${label}`);
     }
   }
+
+  // Keyboard only: open, check, submit, reopen, reset.
+  await page.setViewport({ width: 1280, height: 1000 });
+  await page.evaluate(() => document.documentElement.classList.remove('dark'));
+  const live = (await page.$$('.selection-preview'))[0];
+  await (await live.$('.selection-prompt')).focus();
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('.selection-sheet');
+  await (await live.$('.selection-sheet-option:nth-of-type(1)')).focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await live.$eval('.selection-sheet-option', e => e.getAttribute('aria-checked')), 'true');
+  await (await live.$('.selection-send')).focus();
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('.selection-answer');
+  assert.deepEqual(await live.$$eval('.selection-answer .selection-card text', n => n.map(e => e.textContent)),
+    ['Which topics interest you?', 'Research']);
+  await (await live.$('.selection-answer')).focus();
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('.selection-sheet');
+  assert.equal(await live.$('.selection-send'), null);
+  await page.keyboard.press('Escape');
+  await new Promise(resolve => setTimeout(resolve, 150));
+  await click(await live.$('.selection-reset'));
+  assert.equal(await live.$('.selection-answer'), null);
+  console.log('PASS selection keyboard');
+
+  // Reduced motion changes only presentation; the same controls remain usable.
   await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }, { name: 'prefers-reduced-motion', value: 'reduce' }]);
-  await click('.selection-option');
-  const reducedSend = await page.$('.selection-actions button');
+  await click(await live.$('.selection-prompt'));
+  await click(await live.$('.selection-sheet-option:nth-of-type(1)'));
+  const reducedSend = await live.$('.selection-send');
   await reducedSend.evaluate(e => e.scrollIntoView({ block: 'center', behavior: 'instant' }));
   await new Promise(resolve => setTimeout(resolve, 400));
   const reducedBox = await reducedSend.boundingBox();
-  await page.mouse.move(reducedBox.x + reducedBox.width / 2, reducedBox.y + 2);
+  await page.mouse.move(reducedBox.x + reducedBox.width / 2, reducedBox.y + reducedBox.height / 2);
   await page.mouse.down();
+  await new Promise(resolve => setTimeout(resolve, 200));
   assert.deepEqual(await reducedSend.evaluate(e => ({
     transform: getComputedStyle(e).transform,
     opacity: getComputedStyle(e).opacity,
     transition: getComputedStyle(e).transitionDuration,
-    colorTransition: getComputedStyle(e.querySelector('.selection-send-pill')).transitionDuration,
-  })), { transform: 'none', opacity: '1', transition: '0s', colorTransition: '0s' });
+  })), { transform: 'none', opacity: '1', transition: '0s' });
   await page.mouse.up();
-  await page.waitForSelector('.selection-reply');
-  await click('.selection-reset');
+  await page.waitForSelector('.selection-answer');
+  await click(await live.$('.selection-reset'));
+  console.log('PASS selection reduced motion');
   await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
+
   await page.goto(new URL('/interactive-components/buttons', origin).href, { waitUntil: 'networkidle0' });
   await page.waitForSelector('.buttons-preview-tap text');
   assert.equal(await page.$eval('.buttons-preview-tap text', e => e.textContent), 'Jupiter');

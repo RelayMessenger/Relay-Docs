@@ -189,30 +189,195 @@ html.dark {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
 }
 
-/* Selection preview: 20pt circle, 8pt label gap. The stack's 4px gap places
-   Send's 84x44 hit target below the options; its centered visual is 84x32.
-   Disabled state dims colors only; press feedback changes scale only. */
-.selection-option { border: 0; justify-content: flex-start; gap: 8px; text-align: left; cursor: pointer; transition: background-color .2s ease-in-out, transform .15s ease-out; }
-.selection-option[aria-pressed="true"] { background: #d6e6ff; }
-.dark .selection-option[aria-pressed="true"] { background: #1d3759; }
-.selection-option:active, .selection-actions button:active:not(:disabled) { transform: scale(.97); opacity: 1; }
-.selection-option:focus-visible, .selection-actions button:focus-visible, .selection-reset:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
-.selection-check { width: 20px; height: 20px; flex: none; }
-.selection-check circle { fill: transparent; stroke: currentColor; stroke-width: 1.5; transition: fill .2s ease-in-out; }
-.selection-check path { fill: none; stroke: white; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; opacity: 0; transition: opacity .2s ease-in-out; }
-.selection-option[aria-pressed="true"] .selection-check circle { fill: currentColor; }
-.selection-option[aria-pressed="true"] .selection-check path { opacity: 1; }
-.selection-actions { display: flex; justify-content: center; }
-.selection-actions button { box-sizing: border-box; display: flex; align-items: center; justify-content: center; flex: 0 0 84px; width: 84px; height: 44px; min-width: 84px; min-height: 44px; margin: 0; padding: 6px 0; appearance: none; background: transparent; border: 0; border-radius: 16px; color: #0b75ff; opacity: 1; font: 600 15px/20px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; transition: transform .15s ease-out; cursor: pointer; }
-.selection-send-pill { box-sizing: border-box; display: flex; align-items: center; justify-content: center; flex: none; width: 84px; height: 32px; border-radius: 16px; background: #e8f1ff; color: #0b75ff; opacity: 1; pointer-events: none; transition: background-color .2s ease-in-out, color .2s ease-in-out; }
-.dark .selection-actions button { color: #6fb0ff; }
-.dark .selection-send-pill { background: #142d4d; color: #6fb0ff; }
-.selection-actions button:disabled { opacity: 1; cursor: default; }
-.selection-actions button:disabled .selection-send-pill { background: rgba(232, 241, 255, .34); color: rgba(11, 117, 255, .34); }
-.dark .selection-actions button:disabled .selection-send-pill { background: rgba(20, 45, 77, .34); color: rgba(111, 176, 255, .34); }
-.selection-reply { align-self: flex-end; animation: selection-appear .2s ease-in-out; max-width: 100%; }
-.selection-reply svg { max-width: 100%; height: auto; }
+/* Selection preview. Relay-iOS RelaySelectionRow/RelaySelectionSheet: the
+   prompt and the reply are one balloon each, drawn by MessageBubble's card
+   mode, and every choice is made in the sheet the balloon opens. The sheet
+   keeps the app's rulings: title alone at the top, an "Options" header,
+   a leading checkbox on every row, and a full-width Send that dims its own
+   fill when disabled and compresses without changing opacity on press. */
+.selection-preview { position: relative; overflow: hidden; }
+.selection-preview.is-sheet-open { min-height: 400px; }
+.selection-prompt, .selection-answer {
+  display: block;
+  align-self: flex-start;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  transition: transform .15s ease-out;
+}
+.selection-answer { align-self: flex-end; animation: selection-appear .2s ease-in-out; }
+.selection-prompt:active, .selection-answer:active { transform: scale(.97); opacity: 1; }
+.selection-prompt:focus-visible, .selection-answer:focus-visible,
+.selection-reset:focus-visible, .selection-sheet-grabber:focus-visible,
+.selection-sheet-option:focus-visible, .selection-send:focus-visible {
+  outline: 2px solid #0b75ff;
+  outline-offset: 3px;
+}
+.dark .selection-prompt:focus-visible, .dark .selection-answer:focus-visible,
+.dark .selection-reset:focus-visible, .dark .selection-sheet-grabber:focus-visible,
+.dark .selection-sheet-option:focus-visible, .dark .selection-send:focus-visible {
+  outline-color: #6fb0ff;
+}
+.selection-card {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+}
+.selection-card-leading .selection-card-shape { fill: #f1f3f5; }
+.dark .selection-card-leading .selection-card-shape { fill: #242b36; }
+.selection-card-trailing .selection-card-shape { fill: #0b75ff; }
+.selection-card-title { font-size: 15px; font-weight: 600; }
+.selection-card-subtitle { font-size: 13px; }
+.selection-card-label { font-size: 15px; }
+.selection-card-leading .selection-card-title, .selection-card-leading .selection-card-label { fill: #111827; }
+.selection-card-leading .selection-card-subtitle { fill: #68717e; }
+.selection-card-leading .selection-card-mark { stroke: #111827; }
+.selection-card-leading .selection-card-chevron { stroke: #68717e; }
+.dark .selection-card-leading .selection-card-title,
+.dark .selection-card-leading .selection-card-label { fill: #f3f4f6; }
+.dark .selection-card-leading .selection-card-subtitle { fill: #a0a7b2; }
+.dark .selection-card-leading .selection-card-mark { stroke: #f3f4f6; }
+.dark .selection-card-leading .selection-card-chevron { stroke: #a0a7b2; }
+.selection-card-trailing .selection-card-title, .selection-card-trailing .selection-card-label { fill: #ffffff; }
+.selection-card-trailing .selection-card-mark { stroke: #ffffff; }
+.selection-card-trailing .selection-card-chevron { stroke: rgba(255, 255, 255, .75); }
+.selection-card-mark, .selection-card-chevron {
+  fill: none;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The sheet rises over the transcript, the way .presentationDetents does. */
+.selection-sheet-layer { position: absolute; inset: 0; }
+.selection-sheet-scrim { position: absolute; inset: 0; background: rgba(15, 23, 42, .38); }
+.selection-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  border-radius: 16px 16px 11px 11px;
+  background: #ffffff;
+  color: #111827;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
+  animation: selection-rise .22s ease-out;
+}
+.dark .selection-sheet { background: #151a23; color: #f3f4f6; }
+.selection-sheet-grabber {
+  flex: none;
+  align-self: center;
+  width: 56px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.selection-sheet-grabber::before {
+  content: "";
+  display: block;
+  width: 36px;
+  height: 5px;
+  margin: 7px auto 0;
+  border-radius: 3px;
+  background: #c7c7cc;
+}
+.dark .selection-sheet-grabber::before { background: #48484a; }
+.selection-sheet-title {
+  flex: none;
+  padding: 6px 20px 0;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.selection-sheet-list { flex: 1 1 auto; min-height: 0; max-height: 216px; overflow-y: auto; padding-bottom: 8px; }
+/* With no footer, the list keeps the app's own bottom inset under the last row. */
+.selection-sheet.is-read-only .selection-sheet-list { padding-bottom: 26px; }
+.selection-sheet-section {
+  padding: 14px 20px 6px;
+  color: #68717e;
+  font-size: 12px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.dark .selection-sheet-section { color: #a0a7b2; }
+.selection-sheet-option {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  padding: 14px 20px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 16px;
+  text-align: left;
+  cursor: pointer;
+}
+.selection-sheet-option + .selection-sheet-option::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 52px;
+  right: 0;
+  height: 1px;
+  background: #e5e7eb;
+}
+.dark .selection-sheet-option + .selection-sheet-option::before { background: #2b323d; }
+.selection-sheet-option:disabled { cursor: default; }
+.selection-sheet-label { overflow-wrap: anywhere; }
+.selection-sheet-option[aria-checked="true"] .selection-sheet-label { font-weight: 600; }
+.selection-box { flex: none; width: 22px; height: 22px; }
+.selection-box circle { fill: transparent; stroke: #b9bec7; stroke-width: 1.5; transition: fill .2s ease-in-out, stroke .2s ease-in-out; }
+.dark .selection-box circle { stroke: #6b7280; }
+.selection-box path { fill: none; stroke: #ffffff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: 0; transition: opacity .2s ease-in-out; }
+.selection-sheet-option[aria-checked="true"] .selection-box circle { fill: #0b75ff; stroke: #0b75ff; }
+.selection-sheet-option[aria-checked="true"] .selection-box path { opacity: 1; }
+.selection-sheet-footer { flex: none; padding: 10px 16px 16px; border-top: 1px solid #e5e7eb; }
+.dark .selection-sheet-footer { border-top-color: #2b323d; }
+.selection-send {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 22px;
+  background: #0b75ff;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 600;
+  opacity: 1;
+  cursor: pointer;
+  transition: background-color .2s ease-in-out, color .2s ease-in-out, transform .15s ease-out;
+}
+.selection-send:active:not(:disabled) { transform: scale(.96); opacity: 1; }
+.selection-send:disabled {
+  background: rgba(11, 117, 255, .32);
+  color: rgba(255, 255, 255, .55);
+  opacity: 1;
+  cursor: default;
+}
 .selection-reset { align-self: center; background: transparent; border: 0; color: #68717e; font-size: 12px; cursor: pointer; }
 .dark .selection-reset { color: #a0a7b2; }
 @keyframes selection-appear { from { opacity: 0; } to { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .buttons-preview *, .buttons-preview *::before { transition: none !important; animation: none !important; } .selection-option:active, .buttons-preview-action:active, .selection-actions button:active:not(:disabled) { transform: none; } }
+@keyframes selection-rise { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .buttons-preview *, .buttons-preview *::before { transition: none !important; animation: none !important; }
+  .buttons-preview-action:active, .selection-prompt:active, .selection-answer:active,
+  .selection-send:active:not(:disabled) { transform: none; }
+}

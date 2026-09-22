@@ -6,7 +6,13 @@
 // RelayBubbleGeometry.trailingRoundTailedPath (Relay-iOS,
 // Views/MessageBubbleShape.swift), the iOS 26.5 BubbleKit round-tailed bubble
 // at radius 20, with the app's 17pt body text and 14pt side insets.
-export const MessageBubble = ({ text }) => {
+//
+// `rows` switches the same silhouette to the selection card the app draws
+// (Relay-iOS, Views/Transcript/RelaySelectionRow.swift): the balloon fills the
+// text-balloon column, carries a title a step below body text, a smaller
+// second line or one line per chosen label, and a trailing chevron. `side`
+// mirrors the tail for an incoming balloon; the glyphs are never mirrored.
+export const MessageBubble = ({ text, rows, side = "trailing", chevron = false, width = 260 }) => {
   // Everything lives inside the component: the snippet is compiled as MDX,
   // which keeps only exports in scope and reads a capitalised tag as an MDX
   // component.
@@ -131,7 +137,63 @@ export const MessageBubble = ({ text }) => {
     );
   };
 
-  return tapBubble(text);
+  // RelaySelectionRowLayout: 14pt side insets, 10pt vertical, 8pt before the
+  // chevron, 2pt under the title, 3pt between chosen labels, and a bare
+  // checkmark the width of the gap it replaces.
+  const CARD_INSET = 14;
+  const CARD_VERTICAL = 10;
+  const CARD_TITLE_GAP = 2;
+  const CARD_LINE_GAP = 3;
+  const CARD_MARK_WIDTH = 17;
+  const CHEVRON = { width: 8, height: 13 };
+  const ROW_METRICS = { title: 20, subtitle: 18, label: 20 };
+
+  const cardBubble = (rows, side, showsChevron, w) => {
+    let cursor = 0;
+    const placed = rows.map((row, index) => {
+      if (index > 0) cursor += rows[index - 1].kind === "title" ? CARD_TITLE_GAP : CARD_LINE_GAP;
+      const line = ROW_METRICS[row.kind];
+      const top = cursor;
+      cursor += line;
+      return { ...row, line, top };
+    });
+    const interior = Math.max(cursor, showsChevron ? CHEVRON.height : 0);
+    const h = Math.ceil(interior + CARD_VERTICAL * 2);
+    const radius = Math.min(WIDE, w / 2, h / 2);
+    const total = Math.ceil(h + radius * TAIL_DEPTH_FACTOR);
+    const stackTop = Math.round(CARD_VERTICAL + (interior - cursor) / 2);
+    const f = (n) => Number(n.toFixed(2));
+    const chevronX = w - CARD_INSET - CHEVRON.width;
+    const chevronY = h / 2;
+    return (
+      <svg className={`selection-card selection-card-${side}`} width={w} height={total}
+        viewBox={`0 0 ${w} ${total}`} aria-hidden="true" focusable="false">
+        <g transform={side === "leading" ? `translate(${w},0) scale(-1,1)` : undefined}>
+          <path className="selection-card-shape" d={bubblePath(w, h)} />
+        </g>
+        {placed.map((row, index) => {
+          const middle = f(stackTop + row.top + row.line / 2);
+          return (
+            <g key={index}>
+              {row.kind === "label" ? (
+                <path className="selection-card-mark"
+                  d={`M ${CARD_INSET} ${f(stackTop + row.top + row.line / 2 + 0.6)} l 3.6 3.7 l 6.9 -8.5`} />
+              ) : null}
+              <text className={`selection-card-${row.kind}`} dominantBaseline="central"
+                x={row.kind === "label" ? CARD_INSET + CARD_MARK_WIDTH : CARD_INSET}
+                y={middle}>{row.text}</text>
+            </g>
+          );
+        })}
+        {showsChevron ? (
+          <path className="selection-card-chevron"
+            d={`M ${chevronX} ${f(chevronY - 5.6)} L ${chevronX + 6.2} ${f(chevronY)} L ${chevronX} ${f(chevronY + 5.6)}`} />
+        ) : null}
+      </svg>
+    );
+  };
+
+  return rows ? cardBubble(rows, side, chevron, width) : tapBubble(text);
 };
 
 // Mintlify isolates snippet exports. The page passes the shared bubble renderer
@@ -191,44 +253,128 @@ export const ButtonsPreview = ({ text, items, tapped, label, bubble }) => {
 };
 
 
-// Local-only interaction. No API, analytics, or credentials. Uses the same
-// column/pills/bubble primitives as ButtonsPreview and native selection colors.
+// Local-only interaction. No API, analytics, or credentials. Mirrors the app
+// (Relay-iOS, Views/Transcript/RelaySelectionRow.swift and
+// RelaySelectionSheet.swift): nothing is picked in the transcript. The prompt
+// balloon opens a sheet carrying the whole option list, Send posts once, and
+// the answered prompt or its reply reopens the same sheet read-only.
 export const SelectionPreview = ({ text, options, received, bubble }) => {
-  const [selected, setSelected] = useState([]);
-  const [sent, setSent] = useState(false);
-  const ordered = options.filter((option) => selected.includes(option.value));
-  const reply = received || ordered.map((option) => "• " + option.label).join("\n");
+  const title = text || "Multi-select";
+  // The received fixture is the canonical wire text; its labels name the
+  // chosen options, so the same sheet can reopen over a static reply.
+  const receivedValues = received
+    ? options
+        .filter((option) => received.split("\n").includes("\u2022 " + option.label))
+        .map((option) => option.value)
+    : null;
+  const [draft, setDraft] = useState([]);
+  const [answered, setAnswered] = useState(receivedValues);
+  const [opener, setOpener] = useState(null);
+  const isStatic = received !== undefined && received !== null;
+  const isAnswered = answered !== null;
+  const isReadOnly = isAnswered;
+  const open = opener !== null;
+  const chosen = options.filter((option) => (answered || []).includes(option.value));
+  const labels = chosen.map((option) => option.label);
+
+  const focusWithin = (event, selector) => {
+    const root = event && event.currentTarget && event.currentTarget.closest(".selection-preview");
+    const target = root && root.querySelector(selector);
+    if (target) target.focus();
+  };
+  const openSheet = (from) => {
+    setDraft(answered || []);
+    setOpener(from);
+  };
+  const close = (event) => {
+    const from = opener;
+    setOpener(null);
+    focusWithin(event, "." + (from || "selection-prompt"));
+  };
+  const send = (event) => {
+    setAnswered(draft);
+    setOpener(null);
+    focusWithin(event, ".selection-prompt");
+  };
+  const reset = () => {
+    setAnswered(receivedValues);
+    setDraft([]);
+    setOpener(null);
+  };
+
+  const promptRows = [
+    { kind: "title", text: title },
+    { kind: "subtitle", text: "Pick options" },
+  ];
+  const answerRows = [
+    { kind: "title", text: title },
+    ...labels.map((label) => ({ kind: "label", text: label })),
+  ];
+
   return (
-    <div className="buttons-preview selection-preview" role="group" aria-label={received ? "Selection reply preview" : "Interactive selection preview"}>
+    <div className={"buttons-preview selection-preview" + (open ? " is-sheet-open" : "")}
+      role="group" aria-label={isStatic ? "Selection reply preview" : "Interactive selection preview"}>
       <div className="buttons-preview-stage">
-        {received ? bubble({ text: received }) : (
-          <div className="buttons-preview-message">
-            <div className="buttons-preview-text">{text}</div>
-            {sent ? (
-              <div className="selection-reply" role="status" aria-label={`Reply: ${reply}`}>{bubble({ text: reply })}</div>
-            ) : (
-              <div className="buttons-preview-stack selection-stack">
-                {options.map((option) => (
-                  <button type="button" key={option.value} className="buttons-preview-pill selection-option"
-                    aria-pressed={selected.includes(option.value)} onClick={() => setSelected((current) => current.includes(option.value) ? current.filter((value) => value !== option.value) : [...current, option.value])}>
-                    <svg viewBox="0 0 20 20" className="selection-check" aria-hidden="true">
-                      <circle cx="10" cy="10" r="8.5" />
-                      <path d="m6 10 2.5 2.5 5.5-6" />
+        <div className="buttons-preview-message">
+          {isStatic ? null : (
+            <button type="button" className="selection-prompt" tabIndex={open ? -1 : 0}
+              aria-haspopup="dialog" aria-expanded={opener === "selection-prompt"}
+              aria-label={isAnswered ? `${title}. Opens the options you chose` : `${title}. Opens the options`}
+              onClick={() => openSheet("selection-prompt")}>
+              {bubble({ rows: promptRows, side: "leading", chevron: true })}
+            </button>
+          )}
+          {isAnswered ? (
+            <button type="button" className="selection-answer" tabIndex={open ? -1 : 0}
+              aria-haspopup="dialog" aria-expanded={opener === "selection-answer"}
+              aria-label={`${title}. ${labels.join(", ")}. Opens the options you chose`}
+              onClick={() => openSheet("selection-answer")}>
+              {bubble({ rows: answerRows, side: "trailing", chevron: true })}
+            </button>
+          ) : null}
+          {isAnswered && !isStatic ? (
+            <button type="button" className="selection-reset" tabIndex={open ? -1 : 0}
+              onClick={reset}>Reset demo</button>
+          ) : null}
+        </div>
+      </div>
+      {open ? (
+        <div className="selection-sheet-layer">
+          <div className="selection-sheet-scrim" onClick={close} />
+          <div className={"selection-sheet" + (isReadOnly ? " is-read-only" : "")}
+            role="dialog" aria-modal="true" aria-label={title}
+            onKeyDown={(event) => { if (event.key === "Escape") close(event); }}>
+            <button type="button" className="selection-sheet-grabber" autoFocus
+              aria-label="Close options" onClick={close} />
+            <div className="selection-sheet-title">{title}</div>
+            <div className="selection-sheet-list">
+              <div className="selection-sheet-section">Options</div>
+              {options.map((option) => {
+                const checked = (isReadOnly ? answered : draft).includes(option.value);
+                return (
+                  <button type="button" key={option.value} role="checkbox" aria-checked={checked}
+                    className="selection-sheet-option" disabled={isReadOnly}
+                    onClick={() => setDraft((current) => current.includes(option.value)
+                      ? current.filter((value) => value !== option.value)
+                      : [...current, option.value])}>
+                    <svg className="selection-box" viewBox="0 0 22 22" aria-hidden="true" focusable="false">
+                      <circle cx="11" cy="11" r="10" />
+                      <path d="m6.4 11.2 3 3 6.2-6.8" />
                     </svg>
-                    <span>{option.label}</span>
+                    <span className="selection-sheet-label">{option.label}</span>
                   </button>
-                ))}
-                <div className="selection-actions">
-                  <button type="button" disabled={!selected.length} onClick={() => setSent(true)}>
-                    <span className="selection-send-pill">Send</span>
-                  </button>
-                </div>
+                );
+              })}
+            </div>
+            {isReadOnly ? null : (
+              <div className="selection-sheet-footer">
+                <button type="button" className="selection-send" disabled={draft.length === 0}
+                  onClick={send}>Send</button>
               </div>
             )}
-            {sent ? <button type="button" className="selection-reset" onClick={() => { setSent(false); setSelected([]); }}>Reset demo</button> : null}
           </div>
-        )}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 };
