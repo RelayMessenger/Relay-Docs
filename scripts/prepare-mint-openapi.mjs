@@ -63,6 +63,7 @@ const sidebarTitles = {
   createCall: "Start",
   listCalls: "List",
   getCall: "Retrieve",
+  connectCallRoom: "Join room",
   endCall: "End",
 };
 

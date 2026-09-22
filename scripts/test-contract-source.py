@@ -17,14 +17,14 @@ ROOT = Path(__file__).resolve().parents[1]
 # Canonical request lifecycle, scoped lookup, and fixed agent admission Server source.
 # Retains the merged activity and live call-marker shapes. The selection
 # descriptions now carry the shipped sheet flow; the wire shapes are untouched.
-UPSTREAM_COMMIT = "fe3ec1e91608e923ec5ee0e37896eb8bf24d863a"
-UPSTREAM_STAGING_COMMIT = "fe3ec1e91608e923ec5ee0e37896eb8bf24d863a"
-UPSTREAM_SIZE = 196369
-UPSTREAM_SHA256 = "262e832ad356375b1a912faa6f9a8ea9c008effa6c24e2618b000ad6b69d858f"
+UPSTREAM_COMMIT = "b334eba06ce194cee4ee1b6d308145789d90a6fd"
+UPSTREAM_STAGING_COMMIT = "b334eba06ce194cee4ee1b6d308145789d90a6fd"
+UPSTREAM_SIZE = 202823
+UPSTREAM_SHA256 = "a64a98ca91ad7298b5e2584032453034bbeba925a5fe20f7808944e62404a9cf"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
-    "commit": "dc2d82c4126cfdd42fd5dc9ebfdbd9a82ee3514d",
+    "commit": "26ea68fdc3d07da2c74b09e1beed45c059bf1c3f",
     "path": "contracts/relay-v1-openapi.yaml",
     "sha256": UPSTREAM_SHA256,
     "note": "Fixture: a committed local candidate carrying the released bytes.",
