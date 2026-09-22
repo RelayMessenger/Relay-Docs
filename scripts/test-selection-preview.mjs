@@ -63,6 +63,8 @@ try {
       fill: css.backgroundColor, color: css.color, opacity: css.opacity,
       height: box.height,
       fullWidth: Math.abs(box.width - (parent.width - parseFloat(footer.paddingLeft) - parseFloat(footer.paddingRight))) < 0.5,
+      centred: Math.abs((box.left + box.width / 2) - (parent.left + parent.width / 2)) < 1,
+      capsuleWidth: Math.abs(box.width - (parent.width / 2 + 16)) < 1,
       pinnedLast: e.parentElement === e.closest('.selection-sheet').lastElementChild,
     };
   });
@@ -115,39 +117,30 @@ try {
       assert.equal(await page.evaluate(() => document.activeElement.className), 'selection-sheet-grabber');
       assert.equal(await sheet.$eval('.selection-sheet-title', e => e.textContent), QUESTION);
       assert.equal(await sheet.evaluate(e => e.getAttribute('aria-modal')), 'true');
-      assert.equal(await sheet.$eval('.selection-sheet-section', e => e.textContent), 'Options');
+      assert.equal(await sheet.$('.selection-sheet-section'), null, 'No Options heading');
       const headerGeometry = await sheet.$eval('.selection-sheet-title', e => {
         const css = getComputedStyle(e);
         return { borderBottom: css.borderBottomWidth, next: e.nextElementSibling.className };
       });
       assert.equal(headerGeometry.borderBottom, '0px', 'No separator under the title');
-      // The title carries no subtitle; the only thing under it is the pinned
-      // "Options" heading, and that heading sits OUTSIDE the scroller so it
-      // stays put while the rows move (owner, 2026-09-22).
-      assert.equal(headerGeometry.next, 'selection-sheet-section',
-        'Only the Options heading follows the title');
-      const sectionGeometry = await sheet.$eval('.selection-sheet-section', e => ({
-        next: e.nextElementSibling.className,
-        insideScroller: Boolean(e.closest('.selection-sheet-list')),
-      }));
-      assert.equal(sectionGeometry.next, 'selection-sheet-list',
-        'The list follows the Options heading');
-      assert.equal(sectionGeometry.insideScroller, false,
-        'The Options heading must not scroll away with the rows it labels');
+      // The title alone, with the list straight under it (owner, 2026-09-22).
+      assert.equal(headerGeometry.next, 'selection-sheet-list', 'The list follows the title');
       assert.deepEqual(await optionState(sheet), [
         { label: 'Research', checked: 'false', role: 'checkbox', disabled: false, leadingCheckbox: true, icons: 0 },
         { label: 'Design', checked: 'false', role: 'checkbox', disabled: false, leadingCheckbox: true, icons: 0 },
       ]);
       assert.equal(await sheet.$eval('.selection-sheet-list', e => getComputedStyle(e).overflowY), 'auto');
 
-      // 3. Send is disabled until something is checked, and full width at the bottom.
+      // 3. Send is disabled until something is checked: the New Chat capsule,
+      // centred and floating, not full width.
       let send = await sendStyle(sheet);
       assert.equal(send.text, 'Send');
       assert.equal(send.disabled, true);
-      assert.ok(send.fullWidth, 'Send spans the sheet');
-      assert.ok(send.pinnedLast, 'Send is pinned under the list');
-      assert.equal(send.fill, 'rgba(11, 117, 255, 0.32)');
-      assert.equal(send.color, 'rgba(255, 255, 255, 0.55)');
+      assert.ok(!send.fullWidth, 'Send is a capsule, not full width');
+      assert.ok(send.centred, 'Send is centred');
+      assert.ok(send.capsuleWidth, 'Send is the New Chat capsule width');
+      assert.ok(send.pinnedLast, 'Send floats at the bottom of the sheet');
+      assert.equal(send.fill, dark ? 'rgb(44, 44, 46)' : 'rgb(236, 238, 241)');
       assert.equal(send.opacity, '1', 'Disabled dims the fill, never the control');
       await click(await sheet.$('.selection-sheet-option:nth-of-type(1)'));
       assert.equal((await optionState(sheet))[0].checked, 'true');

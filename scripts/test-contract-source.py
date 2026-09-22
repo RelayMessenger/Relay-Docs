@@ -416,13 +416,14 @@ assert.equal(openedURL, null);
         self.assertNotIn("selection-actions", selection)
         self.assertNotIn(">Clear<", selection)
         self.assertNotIn("<img", selection)
-        # The sheet the balloon opens: title alone, an Options header, one
-        # checkbox row per option, and a single Send under the list.
+        # The sheet the balloon opens: the title alone (no Options heading),
+        # one checkbox row per option, and a single floating Send.
         sheet = selection.split('role="dialog"', 1)[1]
         self.assertIn('aria-modal="true"', sheet)
         self.assertIn('<div className="selection-sheet-title">{title}</div>', sheet)
         self.assertNotIn("Pick options", sheet)
-        self.assertIn('<div className="selection-sheet-section">Options</div>', sheet)
+        self.assertNotIn("selection-sheet-section", sheet)
+        self.assertNotIn(">Options<", sheet)
         self.assertIn('role="checkbox" aria-checked={checked}', sheet)
         self.assertIn("current.filter((value) => value !== option.value)", sheet)
         self.assertEqual(sheet.count('className="selection-send"'), 1)
@@ -454,20 +455,25 @@ assert.equal(openedURL, null);
             match = re.search(r"(?:^|\n)" + re.escape(selector) + r"\s*\{([^{}]*)\}", css)
             self.assertIsNotNone(match, selector)
             return match[1]
-        # Full width, pinned under the list, and dimmed by its own fill.
+        # The New Chat capsule: centred, inset a quarter of the content width
+        # each side, floating over the list; disabled is a grey capsule.
         send = rule(".selection-send")
-        for declaration in ("width: 100%", "height: 44px", "border-radius: 22px",
+        for declaration in ("width: calc(50% + 16px)", "height: 48px", "border-radius: 24px",
                             "background: #0b75ff", "color: #ffffff",
                             "font-size: 17px", "font-weight: 600", "opacity: 1"):
             self.assertIn(declaration, send)
+        self.assertNotIn("width: 100%", send)
         disabled = rule(".selection-send:disabled")
-        self.assertIn("rgba(11, 117, 255, .32)", disabled)
-        self.assertIn("rgba(255, 255, 255, .55)", disabled)
+        self.assertIn("background: #eceef1", disabled)
         self.assertIn("opacity: 1", disabled)
         pressed = rule(".selection-send:active:not(:disabled)")
         self.assertIn("transform: scale(.96)", pressed)
         self.assertIn("opacity: 1", pressed)
-        self.assertIn("border-top", rule(".selection-sheet-footer"))
+        footer = rule(".selection-sheet-footer")
+        self.assertIn("position: absolute", footer)
+        self.assertNotIn("border-top", footer)
+        # Rows fade under the title and under Send: the app's edge blur.
+        self.assertIn("mask-image: linear-gradient", rule(".selection-sheet-list"))
         # Title alone at the top: no rule under it.
         self.assertNotIn("border-bottom", rule(".selection-sheet-title"))
         # Leading checkbox, no icon column, and a scrolling list.

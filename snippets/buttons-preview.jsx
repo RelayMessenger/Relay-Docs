@@ -397,13 +397,11 @@ export const SelectionPreview = ({ text, options, received, bubble }) => {
             onKeyDown={(event) => { if (event.key === "Escape") close(event); }}>
             <button type="button" className="selection-sheet-grabber" autoFocus
               aria-label="Close options" onClick={close} />
+            {/* The title alone (owner, 2026-09-22): no "Options" heading.
+                Rows fade under it and under the floating Send, the edge
+                blur Relay-iOS RelaySelectionSheet.swift gets from its top
+                and bottom safeAreaBars. */}
             <div className="selection-sheet-title">{title}</div>
-            {/* Pinned beside the title, not inside the scroller (owner,
-                2026-09-22): "Options" names the rows below it, so it must
-                stay put while they scroll. Matches Relay-iOS
-                RelaySelectionSheet.swift, where both live in the list's top
-                safe-area inset. */}
-            <div className="selection-sheet-section">Options</div>
             <div className="selection-sheet-list">
               {options.map((option) => {
                 const checked = (isReadOnly ? answered : draft).includes(option.value);
