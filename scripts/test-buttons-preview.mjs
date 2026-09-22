@@ -38,6 +38,14 @@ try {
       // read the wrong palette on a dark host. Same fix the selection proof
       // already carries.
       await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: theme }]);
+      // Reload INTO the appearance. Mintlify's theme script decides the
+      // palette while the document initialises, so changing the emulated
+      // media feature on an already-loaded page leaves the previous palette
+      // painted and the dark pass reads light values (proved 2026-09-22:
+      // loading with prefers-color-scheme dark gives rgb(16,30,51); toggling
+      // after load leaves rgb(238,245,255), even after an 800ms settle).
+      await page.reload({ waitUntil: "networkidle0", timeout: 120000 });
+      await page.waitForSelector(".buttons-preview");
       await page.evaluate((value) => {
         document.documentElement.classList.toggle("dark", value === "dark");
         document.documentElement.style.colorScheme = value;

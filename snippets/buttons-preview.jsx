@@ -203,6 +203,7 @@ export const ButtonsPreview = ({ text, items, tapped, label, bubble }) => {
   const [openedURL, setOpenedURL] = useState(null);
   return (
     <div className="buttons-preview" role={tapped ? "img" : "group"} aria-label={text ? `${text} ${label}` : label}>
+      <div className="buttons-preview-frame">
       <div className="buttons-preview-stage">
         {tapped ? (
           bubble({ text: tapped })
@@ -242,12 +243,15 @@ export const ButtonsPreview = ({ text, items, tapped, label, bubble }) => {
                 <button type="button" className="buttons-url-close" onClick={() => setOpenedURL(null)}>Close preview</button>
               </div>
             ) : null}
-            {reply !== null ? (
-              <button type="button" className="buttons-reset" onClick={() => { setReply(null); setOpenedURL(null); }}>Reset demo</button>
-            ) : null}
           </div>
         )}
       </div>
+      </div>
+      {reply !== null ? (
+        <div className="buttons-preview-controls">
+          <button type="button" className="buttons-reset" onClick={() => { setReply(null); setOpenedURL(null); }}>Reset demo</button>
+        </div>
+      ) : null}
     </div>
   );
 };
@@ -314,6 +318,7 @@ export const SelectionPreview = ({ text, options, received, bubble }) => {
   return (
     <div className={"buttons-preview selection-preview" + (open ? " is-sheet-open" : "")}
       role="group" aria-label={isStatic ? "Selection reply preview" : "Interactive selection preview"}>
+      <div className="buttons-preview-frame">
       <div className="buttons-preview-stage">
         <div className="buttons-preview-message">
           {isStatic ? null : (
@@ -331,10 +336,6 @@ export const SelectionPreview = ({ text, options, received, bubble }) => {
               onClick={() => openSheet("selection-answer")}>
               {bubble({ rows: answerRows, side: "trailing", chevron: true })}
             </button>
-          ) : null}
-          {isAnswered && !isStatic ? (
-            <button type="button" className="selection-reset" tabIndex={open ? -1 : 0}
-              onClick={reset}>Reset demo</button>
           ) : null}
         </div>
       </div>
@@ -378,6 +379,13 @@ export const SelectionPreview = ({ text, options, received, bubble }) => {
               </div>
             )}
           </div>
+        </div>
+      ) : null}
+      </div>
+      {isAnswered && !isStatic ? (
+        <div className="buttons-preview-controls">
+          <button type="button" className="selection-reset" tabIndex={open ? -1 : 0}
+            onClick={reset}>Reset demo</button>
         </div>
       ) : null}
     </div>
