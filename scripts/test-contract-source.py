@@ -16,10 +16,19 @@ from contract_source import verify_contract_source
 ROOT = Path(__file__).resolve().parents[1]
 # Canonical request lifecycle, scoped lookup, and fixed agent admission Server source.
 # Retains the merged activity and live call-marker shapes.
-UPSTREAM_COMMIT = "a25111520f7fc92c25ecd945d1dfc9afa9f60a1f"
-UPSTREAM_STAGING_COMMIT = "a25111520f7fc92c25ecd945d1dfc9afa9f60a1f"
-UPSTREAM_SIZE = 175262
-UPSTREAM_SHA256 = "9f3e662a13cd0e6b16a52fba4b53c75fe5817d134dcf152e00b054699c37839c"
+UPSTREAM_COMMIT = "56f31c13956ee41f4e2e5945973645e17faa3338"
+UPSTREAM_STAGING_COMMIT = "56f31c13956ee41f4e2e5945973645e17faa3338"
+UPSTREAM_SIZE = 196178
+UPSTREAM_SHA256 = "7f1056cd6d5dc81a1cd23f1e40520fc3c0a32b5a577dd222988fc26f92e6c8d4"
+CANDIDATE_RECORD = {
+    "status": "local-candidate-not-published",
+    "repository": "Relay-SDK",
+    "commit": "1abb93ad96bbcfd5e31414e89f0cec61e4c40db2",
+    "path": "contracts/relay-v1-openapi.yaml",
+    "sha256": UPSTREAM_SHA256,
+    "note": "Fixture: a committed local candidate carrying the released bytes.",
+    "source_state": "committed",
+}
 
 
 class ContractSourceTests(unittest.TestCase):
@@ -154,9 +163,8 @@ class ContractSourceTests(unittest.TestCase):
         self.assertIn("literal `• `", selection)
         self.assertIn("exact selected source labels joined with `, `", selection)
         self.assertNotIn("**Clear**", selection)
-        # Production-facing localhost copy does not change release provenance.
-        record = json.loads((ROOT / "scripts/local-contract-source.json").read_text())
-        self.assertEqual(record["status"], "local-candidate-not-published")
+        # The contract is a published pin; no local candidate record remains.
+        self.assertFalse((ROOT / "scripts/local-contract-source.json").exists())
 
     def test_selection_preview_and_response_share_canonical_bullet_text(self):
         source = (ROOT / "interactive-components/selection.mdx").read_text()
@@ -201,10 +209,7 @@ class ContractSourceTests(unittest.TestCase):
 
     def test_canonical_bytes_equal_pinned_upstream(self):
         canonical = (ROOT / "api-reference/openapi.yaml").read_bytes()
-        # A committed local candidate names its own bytes; the release size
-        # applies only when no candidate record is in force.
-        if not (ROOT / "scripts/local-contract-source.json").exists():
-            self.assertEqual(len(canonical), UPSTREAM_SIZE)
+        self.assertEqual(len(canonical), UPSTREAM_SIZE)
         verify_contract_source(ROOT, UPSTREAM_SHA256)
 
     def test_committed_source_verifies_immutable_blob_not_dirty_worktree(self):
@@ -218,7 +223,7 @@ class ContractSourceTests(unittest.TestCase):
             canonical = (ROOT / "api-reference/openapi.yaml").read_bytes()
             (root / "api-reference/openapi.yaml").write_bytes(canonical)
             (sdk / "contracts/relay-v1-openapi.yaml").write_bytes(b"unrelated later worktree edit")
-            record = json.loads((ROOT / "scripts/local-contract-source.json").read_text())
+            record = dict(CANDIDATE_RECORD)
             self.assertEqual(record["source_state"], "committed")
             record_path = root / "scripts/local-contract-source.json"
             record_path.write_text(json.dumps(record))
@@ -244,7 +249,7 @@ class ContractSourceTests(unittest.TestCase):
             root = Path(directory)
             (root / "scripts").mkdir()
             (root / "api-reference").mkdir()
-            record = json.loads((ROOT / "scripts/local-contract-source.json").read_text())
+            record = dict(CANDIDATE_RECORD)
             record_file = root / "scripts/local-contract-source.json"
             record_file.write_text(json.dumps(record))
             contract = root / "api-reference/openapi.yaml"
