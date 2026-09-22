@@ -121,7 +121,19 @@ try {
         return { borderBottom: css.borderBottomWidth, next: e.nextElementSibling.className };
       });
       assert.equal(headerGeometry.borderBottom, '0px', 'No separator under the title');
-      assert.equal(headerGeometry.next, 'selection-sheet-list', 'The title stands alone above the list');
+      // The title carries no subtitle; the only thing under it is the pinned
+      // "Options" heading, and that heading sits OUTSIDE the scroller so it
+      // stays put while the rows move (owner, 2026-09-22).
+      assert.equal(headerGeometry.next, 'selection-sheet-section',
+        'Only the Options heading follows the title');
+      const sectionGeometry = await sheet.$eval('.selection-sheet-section', e => ({
+        next: e.nextElementSibling.className,
+        insideScroller: Boolean(e.closest('.selection-sheet-list')),
+      }));
+      assert.equal(sectionGeometry.next, 'selection-sheet-list',
+        'The list follows the Options heading');
+      assert.equal(sectionGeometry.insideScroller, false,
+        'The Options heading must not scroll away with the rows it labels');
       assert.deepEqual(await optionState(sheet), [
         { label: 'Research', checked: 'false', role: 'checkbox', disabled: false, leadingCheckbox: true, icons: 0 },
         { label: 'Design', checked: 'false', role: 'checkbox', disabled: false, leadingCheckbox: true, icons: 0 },
