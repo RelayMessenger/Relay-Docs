@@ -30,7 +30,7 @@ try {
   page.on('request', r => new URL(r.url()).origin === origin.origin || r.url().startsWith('data:') ? r.continue() : r.abort());
   // The preview follows the host appearance; pin light so the explicit .dark toggle below is the only variable.
   await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
-  await page.goto(new URL('/interactive-components/selection', origin).href, { waitUntil: 'networkidle0', timeout: 120000 });
+  await page.goto(new URL('/interactions/selection', origin).href, { waitUntil: 'networkidle0', timeout: 120000 });
   await page.waitForSelector('.selection-prompt', { timeout: 20000 });
 
   const QUESTION = 'Which topics interest you?';
@@ -296,7 +296,7 @@ try {
   console.log('PASS selection reduced motion');
   await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
 
-  await page.goto(new URL('/interactive-components/buttons', origin).href, { waitUntil: 'networkidle0' });
+  await page.goto(new URL('/interactions/buttons', origin).href, { waitUntil: 'networkidle0' });
   await page.waitForSelector('.buttons-preview-tap text');
   assert.equal(await page.$eval('.buttons-preview-tap text', e => e.textContent), 'Jupiter');
   console.log('PASS shared buttons bubble');
@@ -329,8 +329,26 @@ try {
           await assertLabels(card, fixture.labels); // URL tap consumes nothing.
           const local = await card.$('.buttons-url-preview');
           assert.ok(local);
-          assert.equal(await local.evaluate(e => e.getAttribute('role')), 'group');
+          assert.equal(await local.evaluate(e => e.getAttribute('role')), 'dialog');
+          assert.equal(await local.evaluate(e => e.getAttribute('aria-modal')), 'true');
           assert.equal(await local.evaluate(e => e.getAttribute('aria-label')), 'URL action preview');
+          // Full-screen cover, like SFSafariViewController in the app: the
+          // browser covers the whole simulated phone frame.
+          const cover = await local.evaluate(e => {
+            const frame = e.closest('.buttons-preview-frame').getBoundingClientRect();
+            const box = e.getBoundingClientRect();
+            return { dx: Math.abs(box.x - frame.x), dy: Math.abs(box.y - frame.y),
+              dw: Math.abs(box.width - frame.width), dh: Math.abs(box.height - frame.height),
+              focused: e.contains(document.activeElement) };
+          });
+          await new Promise(r => setTimeout(r, 400));
+          const settled = await local.evaluate(e => {
+            const frame = e.closest('.buttons-preview-frame').getBoundingClientRect();
+            const box = e.getBoundingClientRect();
+            return Math.abs(box.y - frame.y) < 2 && Math.abs(box.height - frame.height) < 3 && Math.abs(box.width - frame.width) < 3;
+          });
+          assert.ok(settled, `Browser must cover the frame: ${JSON.stringify(cover)}`);
+          assert.ok(cover.focused, 'Focus moves into the browser cover');
           assert.ok((await local.evaluate(e => e.textContent)).includes(fixture.url));
           assert.equal(await local.$('a[href]'), null);
           assert.equal(await card.$('.buttons-reply'), null);
@@ -339,8 +357,17 @@ try {
           assert.deepEqual(popups, []);
           await click(await card.$('.buttons-url-close'));
           assert.equal(await card.$('.buttons-url-preview'), null);
+          assert.ok(await card.evaluate(e => document.activeElement === e.querySelector('.buttons-preview-action.is-link')),
+            'Closing the browser returns focus to the URL button');
           await assertLabels(card, fixture.labels);
-          if (fixture.plain) await click((await card.$$('.buttons-preview-action')).at(-1));
+          if (fixture.plain) {
+            // A URL button stays repeatable. The browser is a full-screen
+            // cover, so it must be closed before a plain choice is reachable.
+            await click((await card.$$('.buttons-preview-action')).at(-1));
+            assert.ok(await card.$('.buttons-url-preview'), 'URL button reopens the browser');
+            await click(await card.$('.buttons-url-close'));
+            assert.equal(await card.$('.buttons-url-preview'), null);
+          }
         }
         if (fixture.plain) {
           const plain = (await card.$$('.buttons-preview-action'))[0];

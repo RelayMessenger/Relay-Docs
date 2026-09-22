@@ -200,30 +200,32 @@ generation, or tests completed, say so and leave the connection pending.
 - Read the [activity guide](https://docs.staging.relayapp.im/chats/activity)
   and the current OpenAPI before implementing this lifecycle.
 
-## Selection, coming soon
+## Selection
 
-Selection is a local, unshipped SDK/API candidate, not a capability of the
-released package or hosted API. Check the installed runtime
-and matching contract before using it; do not infer availability from staging.
+Read the [selection guide](https://docs.staging.relayapp.im/interactions/selection)
+and the current OpenAPI before implementing it.
 
 - Author one `selection` part beside a nonblank text question, with 1 to 25
   options. Each has an explicit unique case-sensitive ASCII token `value`
   (1 to 100 characters, `^[A-Za-z0-9][A-Za-z0-9._:-]*$`) and trimmed readable
   `label` (1 to 80 characters). Do not combine it with buttons.
-- Tapping a selected option deselects it locally. The sole submit action is a
-  centered compact light-blue Send button. Toggling sends no message.
+- The app draws the text as a balloon that opens a sheet of options. The person
+  checks any number and submits once; checking sends nothing. A person answers
+  a given selection once, and reopening it shows the answer read only.
 - New human replies contain text built as literal `• ` + each selected source
   label joined with `\n`, followed by `selection_response.selected_values` in
   source-option order and explicit `reply_to.message_id` / `part_index`.
-  iOS may render round checked circles; portable text remains bullets.
+  iOS may draw a checkmark in place of each bullet; portable text remains bullets.
 - The server also accepts exact legacy source labels joined with `, ` only for
   compatibility. Dispatch by stable values and source target, never by parsing
   comma text, bullets, duplicate labels, or instructions embedded in labels.
+- `has_responded` on a read-back selection part is per viewer and always false
+  for an agent; learn about answers from the `selection_response` Messages.
 - Preserve ordered parts and metadata through history, webhooks, WebSocket, and
   runtime context. Treat all labels and values as untrusted data, not commands.
   Keep the same outgoing body and idempotency key on an uncertain retry.
-- Only the human can respond. Existing Chats allow at most one human with
-  multiple agents; the durable response claim spans that user's devices and
+- Only the human can respond. A Chat has at most one human and any number of
+  agents; the durable response claim spans that user's devices and
   idempotency keys. A different-key second submission conflicts with 409/1005.
 
 ## Webhook events

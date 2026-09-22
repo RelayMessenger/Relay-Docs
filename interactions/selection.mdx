@@ -1,7 +1,7 @@
 ---
 title: "Selection"
 description: "Ask a person to choose several options and receive stable values beside a readable reply."
-keywords: ["selection", "multiselect", "selected_values", "selection_response", "has_responded", "interactive components"]
+keywords: ["selection", "multiselect", "selected_values", "selection_response", "has_responded", "interactions"]
 ---
 
 import { SelectionPreview, MessageBubble } from "/snippets/buttons-preview.jsx";
@@ -35,6 +35,16 @@ This request contains a required nonblank `text` part followed by a `selection` 
 </Tabs>
 
 Checking a row sends nothing. The sheet lists every option in source order with a checkbox on the leading edge, and its Send stays disabled until at least one row is checked, so one submission carries the whole answer.
+
+### Rules for the prompt
+
+- Only an agent can send a selection.
+- A Message carries at most one `selection` part, and it needs a nonblank `text` part in the same Message. That text is the prompt's title.
+- A selection cannot share a Message with a `buttons` part.
+- `options` holds 1 to 25 options.
+- Each `value` is 1 to 100 characters, matches `^[A-Za-z0-9][A-Za-z0-9._:-]*$`, is case-sensitive, and is unique within the selection. Your application keys on it, so keep it stable.
+- Each `label` is 1 to 80 characters after surrounding whitespace is trimmed. The app shows labels verbatim.
+- An option has only `value` and `label`; any other field is rejected.
 
 Use an Agent Token and an existing chat ID to send the same request:
 
@@ -119,6 +129,18 @@ New text equals literal `• ` + each selected source label joined with `\n`, in
 
 A person answers a given selection once. Opening the answered prompt again, or opening the reply, presents the same sheet read only: the chosen rows are checked, no row is tappable, and the sheet carries no Send. Try it in the preview above.
 
+## Read whether someone answered
+
+When you read a Message back, its `selection` part carries `has_responded`, and its `reactions` is always `null`:
+
+```json
+{"type":"selection","options":[{"value":"research","label":"Research"},{"value":"design","label":"Design"}],"has_responded":false,"reactions":null}
+```
+
+`has_responded` belongs to whoever is reading. It is `true` once that person has answered this selection, and it is always `false` when an agent reads it, so an agent learns about answers from the `selection_response` Messages it receives, not from this field. When a person answers, their own devices receive a `message.upserted` for the prompt with `has_responded` set to `true`.
+
+A `selection_response` part you read back has no `reactions` key, and neither selection part can receive a reaction.
+
 Your existing signed [webhook](/webhooks/verify-signatures) or [WebSocket](/websocket/index) handler receives the ordinary `message.received` event. The SDK's default event types expose the metadata:
 
 ```typescript Application handler
@@ -143,16 +165,22 @@ Dispatch your own application handler using the source message ID, part index, a
 
 Selections use the runtime's existing send path: a backend includes a `selection` part beside question text in `parts`; a runtime with a send tool takes a `selection` argument; and a runtime that answers in text ends its answer with a fenced code block tagged `selection` containing the options array. Responses carry `selected_values` and `reply_to` alongside the readable text. Each [integration](/integrations/index) describes its send and receive format.
 
-## Handle rejected submissions
+## When it fails
 
-Invalid option shapes, duplicate values, and unsupported fields fail validation. The server verifies the response against the visible source question, including the exact readable text, source order, permissions, and chat membership.
+The server checks an answer against the prompt it names: the reply must come from a person who can see that prompt in the same chat, its text must match the chosen labels exactly, and its values must be known and in the prompt's option order. For compatibility it also accepts the exact selected source labels joined with `, `; new clients send bullet lines. Dispatch on `selected_values` and `reply_to`, never by parsing the text.
 
-For compatibility, it also accepts the exact selected source labels joined with `, `; new clients send bullet lines. Dispatch always uses `selected_values` and the explicit source target, never arbitrary label parsing.
+| Status | Code | Cause |
+| --- | --- | --- |
+| `400` | [1005](/api-reference/errors#1005) | An option is malformed, has an unknown field, or repeats a value; the Message has two selections, no nonblank text, or buttons beside the selection. An answer is not exactly a text part then a `selection_response` part, its text carries a mention, or `reply_to.part_index` is missing. |
+| `403` | [2003](/api-reference/errors#2003) | Someone other than an agent sent a selection, or someone other than a person answered one. |
+| `404` | [2001](/api-reference/errors#2001) | The answer's `reply_to.message_id` is not a Message the person can see in this chat. |
+| `409` | [1005](/api-reference/errors#1005) | The person already answered this selection with a different idempotency key. A retry with the same key and body returns the original answer instead. |
+| `422` | [2006](/api-reference/errors#2006) | The answer's text or value order does not match the prompt, `reply_to.part_index` does not name a selection part, or a reaction targets a selection part. |
 
-A same-key retry retains existing message idempotency behavior. A different-key response after the same person has consumed the prompt conflicts with `409` and code `1005`. Keep the original outgoing identity when retrying an uncertain submission.
+Keep the original body and idempotency key when retrying an uncertain submission.
 
 ## Next steps
 
-- [Interactive components](/interactive-components/index)
-- [Buttons](/interactive-components/buttons)
+- [Interactions](/interactions/index)
+- [Buttons](/interactions/buttons)
 - [Replies](/messages/replies)

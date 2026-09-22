@@ -17,14 +17,14 @@ ROOT = Path(__file__).resolve().parents[1]
 # Canonical request lifecycle, scoped lookup, and fixed agent admission Server source.
 # Retains the merged activity and live call-marker shapes. The selection
 # descriptions now carry the shipped sheet flow; the wire shapes are untouched.
-UPSTREAM_COMMIT = "b334eba06ce194cee4ee1b6d308145789d90a6fd"
-UPSTREAM_STAGING_COMMIT = "b334eba06ce194cee4ee1b6d308145789d90a6fd"
-UPSTREAM_SIZE = 202823
-UPSTREAM_SHA256 = "a64a98ca91ad7298b5e2584032453034bbeba925a5fe20f7808944e62404a9cf"
+UPSTREAM_COMMIT = "59f1a65adbe27ab1f9aca3bf9de19204942d872a"
+UPSTREAM_STAGING_COMMIT = "59f1a65adbe27ab1f9aca3bf9de19204942d872a"
+UPSTREAM_SIZE = 202797
+UPSTREAM_SHA256 = "cb3566bd1d6eba35ab4a775ed739d8b829c1b9a8dbad33ba23f85ba314fc8c13"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
-    "commit": "26ea68fdc3d07da2c74b09e1beed45c059bf1c3f",
+    "commit": "e668141c94673b25a55fcb949f29bb2197d22a01",
     "path": "contracts/relay-v1-openapi.yaml",
     "sha256": UPSTREAM_SHA256,
     "note": "Fixture: a committed local candidate carrying the released bytes.",
@@ -145,20 +145,20 @@ class ContractSourceTests(unittest.TestCase):
         self.assertNotIn("chat.activity.updated", events)
 
     def test_all_interactive_overview_cards_are_icon_free(self):
-        overview = (ROOT / "interactive-components/index.mdx").read_text()
+        overview = (ROOT / "interactions/index.mdx").read_text()
         cards = re.findall(r"<Card\b[^>]*>", overview, re.S)
         self.assertTrue(cards, "Overview must contain component cards")
         for card in cards:
             with self.subTest(card=card):
                 self.assertNotRegex(card, r"\sicon(?:\s|=|/?>)",
-                                    "Every interactive-component card must omit icon")
+                                    "Every interaction card must omit icon")
 
     def test_selection_local_review_preserves_production_facing_copy(self):
-        overview = (ROOT / "interactive-components/index.mdx").read_text()
-        self.assertIn('<Card title="Selection" href="/interactive-components/selection">', overview)
-        selection = (ROOT / "interactive-components/selection.mdx").read_text()
-        for page in [ROOT / "interactive-components/index.mdx",
-                     ROOT / "interactive-components/selection.mdx",
+        overview = (ROOT / "interactions/index.mdx").read_text()
+        self.assertIn('<Card title="Selection" href="/interactions/selection">', overview)
+        selection = (ROOT / "interactions/selection.mdx").read_text()
+        for page in [ROOT / "interactions/index.mdx",
+                     ROOT / "interactions/selection.mdx",
                      *(ROOT / "integrations").glob("*.mdx")]:
             self.assertNotIn("coming soon", page.read_text().lower(), page)
         self.assertIn("literal `• `", selection)
@@ -168,7 +168,7 @@ class ContractSourceTests(unittest.TestCase):
         self.assertFalse((ROOT / "scripts/local-contract-source.json").exists())
 
     def test_selection_preview_and_response_share_canonical_bullet_text(self):
-        source = (ROOT / "interactive-components/selection.mdx").read_text()
+        source = (ROOT / "interactions/selection.mdx").read_text()
         groups = re.findall(r"<Tabs\b[^>]*>(.*?)</Tabs>", source, re.S)
         send = next(group for group in groups if '<Tab title="Request">' in group)
         received = next(group for group in groups if '<Tab title="What you receive">' in group)
@@ -188,7 +188,7 @@ class ContractSourceTests(unittest.TestCase):
         self.assertEqual(json.loads(question[1]), request["message"]["parts"][0]["value"])
 
     def test_selection_guide_keeps_runtime_summary_brief(self):
-        selection = (ROOT / "interactive-components/selection.mdx").read_text()
+        selection = (ROOT / "interactions/selection.mdx").read_text()
         self.assertNotIn("### Choose and submit", selection)
         self.assertNotIn("## Selection fields", selection)
         runtime = selection.split("## Send from a runtime\n", 1)[1].split("\n## ", 1)[0]
@@ -199,10 +199,10 @@ class ContractSourceTests(unittest.TestCase):
         self.assertIn("selected_values", selection)
         self.assertIn("reply_to", selection)
 
-    def test_message_parts_links_to_interactive_components(self):
+    def test_message_parts_links_to_interactions(self):
         parts = (ROOT / "messages/parts.mdx").read_text()
-        section = parts.split("## Add interactive components\n", 1)[1].split("\n## ", 1)[0]
-        self.assertIn("[Interactive components](/interactive-components/index)", section)
+        section = parts.split("## Add interactions\n", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("[Interactions](/interactions/index)", section)
         self.assertLess(len(section.split()), 60)
         self.assertNotIn("buttons", section.lower())
         self.assertNotIn("selections", section.lower())
@@ -275,8 +275,8 @@ class ContractSourceTests(unittest.TestCase):
         self.assertIn("The only reply it accepts is a tap", canonical)
         parts = (ROOT / "messages/parts.mdx").read_text()
         self.assertNotIn("button_reply", parts)
-        self.assertIn("/interactive-components/index", parts)
-        buttons = (ROOT / "interactive-components/buttons.mdx").read_text()
+        self.assertIn("/interactions/index", parts)
+        buttons = (ROOT / "interactions/buttons.mdx").read_text()
         self.assertNotIn("image_url", buttons)
         self.assertNotIn("button_reply", buttons)
         self.assertIn('"parts": [{"type":"text","value":"Jupiter"}]', buttons)
@@ -328,7 +328,7 @@ class ContractSourceTests(unittest.TestCase):
 
     def test_buttons_previews_match_adjacent_requests(self):
         self.assert_buttons_previews_match_requests(
-            (ROOT / "interactive-components/buttons.mdx").read_text())
+            (ROOT / "interactions/buttons.mdx").read_text())
 
     def test_buttons_preview_has_local_native_controls_and_accessible_feedback(self):
         source = (ROOT / "snippets/buttons-preview.jsx").read_text()
@@ -339,10 +339,10 @@ class ContractSourceTests(unittest.TestCase):
         tags = re.findall(r"<button\b[\s\S]*?(?=>)", buttons)
         self.assertTrue(any("buttons-preview-action" in tag and
                             'type="button"' in tag for tag in tags))
-        self.assertIn('role="group"', buttons)
+        self.assertRegex(buttons, r'role=\{tapped \? "img" : "group"\}')
         self.assertRegex(buttons, r'className="buttons-reply"[^>]*role="status"')
         self.assertRegex(buttons, r'aria-label=\{`Reply: \$\{reply\}`\}')
-        self.assertRegex(buttons, r'className="buttons-url-preview"[^>]*role="group"')
+        self.assertRegex(buttons, r'className="buttons-url-preview"[^>]*role="dialog"[^>]*aria-modal="true"')
         self.assertIn('aria-label="URL action preview"', buttons)
         self.assertIn("buttons-url-close", buttons)
         self.assertIn("buttons-reset", buttons)
@@ -525,7 +525,7 @@ assert.equal(openedURL, null);
         self.assertEqual(pill["border-radius"], "24px")
 
     def test_buttons_preview_regressions_are_detected(self):
-        source = (ROOT / "interactive-components/buttons.mdx").read_text()
+        source = (ROOT / "interactions/buttons.mdx").read_text()
         text_prop = re.search(r'\btext\s*=\s*("(?:\\.|[^"\\])*")', source)
         self.assertIsNotNone(text_prop, "Need a text preview for regression checks")
         for name, replacement in (

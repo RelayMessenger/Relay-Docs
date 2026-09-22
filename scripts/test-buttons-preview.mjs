@@ -26,7 +26,7 @@ try {
       void request.abort();
     }
   });
-  await page.goto(new URL("/interactive-components/buttons", origin).href, {
+  await page.goto(new URL("/interactions/buttons", origin).href, {
     waitUntil: "networkidle0", timeout: 120_000,
   });
   await page.waitForSelector(".buttons-preview");

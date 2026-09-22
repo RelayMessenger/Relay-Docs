@@ -198,18 +198,46 @@ export const MessageBubble = ({ text, rows, side = "trailing", chevron = false, 
 
 // Mintlify isolates snippet exports. The page passes the shared bubble renderer
 // explicitly so previews reuse geometry without relying on nested imports.
+// A URL item mirrors Relay-iOS ChatView.relayButtonsActions: the pill opens
+// MessagesInAppBrowser (SFSafariViewController, close-style dismiss button)
+// as a full-screen cover over the chat, and the button group stays put. The
+// cover here is drawn locally and loads nothing.
 export const ButtonsPreview = ({ text, items, tapped, label, bubble }) => {
   const [reply, setReply] = useState(null);
   const [openedURL, setOpenedURL] = useState(null);
+  const hostOf = (url) => {
+    try { return new URL(url).host; } catch (error) { return url; }
+  };
+  const closeBrowser = (event) => {
+    const root = event && event.currentTarget && event.currentTarget.closest(".buttons-preview");
+    setOpenedURL(null);
+    const opener = root && root.querySelector(".buttons-preview-action.is-link");
+    if (opener) opener.focus();
+  };
   return (
-    <div className="buttons-preview" role={tapped ? "img" : "group"} aria-label={text ? `${text} ${label}` : label}>
+    <div className={"buttons-preview" + (openedURL ? " is-browser-open" : "")}
+      role={tapped ? "img" : "group"} aria-label={text ? `${text} ${label}` : label}>
       <div className="buttons-preview-frame">
       <div className="buttons-preview-stage">
         {tapped ? (
           bubble({ text: tapped })
         ) : (
           <div className="buttons-preview-message">
-            {text ? <div className="buttons-preview-text">{text}</div> : null}
+            {/* The agent's balloon is the last in its run once a plain tap
+                hides the buttons, so it takes the incoming tail then: the
+                same BubbleKit roundTailed contour as MessageBubble's tap
+                bubble, mirrored to the leading edge. With buttons below it,
+                the balloon stays tailless. */}
+            {text ? (
+              <div className={"buttons-preview-text" + (reply !== null ? " has-tail" : "")}>
+                {text}
+                {reply !== null ? (
+                  <svg className="buttons-preview-text-tail" width="23" height="24" viewBox="0 0 23 24" aria-hidden="true" focusable="false">
+                    <path d="M 0 0 C 0 0.306 1.415 4.498 4.028 7.924 C 5.087 9.312 6.309 10.536 7.660 11.577 C 9.585 13.078 10.418 14.644 10.418 16.404 C 10.418 17.587 10.209 18.756 8.510 20.988 C 7.695 22.058 8.513 23.150 9.787 22.666 C 12.407 21.671 15.391 19.860 18.005 17.927 C 20.347 16.195 20.971 16.020 22.070 16.013 L 22.070 0 Z" />
+                  </svg>
+                ) : null}
+              </div>
+            ) : null}
             {reply !== null ? (
               <div className="buttons-reply" role="status" aria-label={`Reply: ${reply}`}>
                 {bubble({ text: reply })}
@@ -217,7 +245,7 @@ export const ButtonsPreview = ({ text, items, tapped, label, bubble }) => {
             ) : (
               <div className="buttons-preview-stack">
                 {items.map((item, index) => (
-                  <button type="button" key={index}
+                  <button type="button" key={index} tabIndex={openedURL ? -1 : 0}
                     className={"buttons-preview-pill buttons-preview-action" + (item.url ? " is-link" : "")}
                     onClick={() => {
                       if (item.url) {
@@ -234,18 +262,40 @@ export const ButtonsPreview = ({ text, items, tapped, label, bubble }) => {
                 ))}
               </div>
             )}
-            {openedURL ? (
-              <div className="buttons-url-preview" role="group" aria-label="URL action preview">
-                <div role="status">
-                  <span className="buttons-url-caption">In-app browser preview</span>
-                  <span className="buttons-url-address">{openedURL}</span>
-                </div>
-                <button type="button" className="buttons-url-close" onClick={() => setOpenedURL(null)}>Close preview</button>
-              </div>
-            ) : null}
           </div>
         )}
       </div>
+      {openedURL ? (
+        <div className="buttons-url-preview" role="dialog" aria-modal="true" aria-label="URL action preview"
+          onKeyDown={(event) => { if (event.key === "Escape") closeBrowser(event); }}>
+          <div className="buttons-browser-bar">
+            <button type="button" className="buttons-url-close" autoFocus aria-label="Close" onClick={closeBrowser}>
+              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+            </button>
+            <div className="buttons-browser-address">
+              <svg viewBox="0 0 12 14" aria-hidden="true" focusable="false">
+                <rect x="1.5" y="6" width="9" height="7" rx="1.5" />
+                <path d="M3.5 6V4.5a2.5 2.5 0 0 1 5 0V6" />
+              </svg>
+              <span>{hostOf(openedURL)}</span>
+            </div>
+            <svg className="buttons-browser-reload" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path d="M13 8a5 5 0 1 1-1.46-3.54M13 3v3h-3" />
+            </svg>
+          </div>
+          <div className="buttons-browser-page" role="status">
+            <span className="buttons-url-caption">In-app browser preview</span>
+            <span className="buttons-url-address">{openedURL}</span>
+            <span className="buttons-browser-note">The app opens this page here. The demo loads nothing.</span>
+          </div>
+          <div className="buttons-browser-toolbar" aria-hidden="true">
+            <svg viewBox="0 0 20 20"><path d="M12.5 4l-6 6 6 6" /></svg>
+            <svg viewBox="0 0 20 20" className="is-disabled"><path d="M7.5 4l6 6-6 6" /></svg>
+            <svg viewBox="0 0 20 20"><path d="M10 12.5V2.5M6.5 6L10 2.5 13.5 6M6 9H4.5v8.5h11V9H14" /></svg>
+            <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5" /><path d="M12.8 7.2l-1.6 4-4 1.6 1.6-4z" /></svg>
+          </div>
+        </div>
+      ) : null}
       </div>
       {reply !== null ? (
         <div className="buttons-preview-controls">
