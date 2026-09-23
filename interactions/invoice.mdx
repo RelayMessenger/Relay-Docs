@@ -1,16 +1,21 @@
 ---
 title: "Invoice"
-description: "Ask a person to pay with your own checkout link. Relay never touches the money."
+description: "Ask a person to pay with your own Stripe checkout link. Relay never touches the money."
 keywords: ["invoice", "payments", "checkout", "subscriptions", "interactions"]
 ---
 
 import { InvoicePreview } from "/snippets/buttons-preview.jsx";
 
-An `invoice` part is a card that asks the person to pay. It shows your business name, an amount, and a title; tapping it opens your own checkout link. Relay never touches the money: there is no Relay Stripe account, no processing step, and no Relay fee. You get paid the way you already get paid; Relay only carries the card and tells you, through the status you set, when the person finishes.
+An `invoice` part is a card that asks the person to pay. It shows your business name, an amount, and a title; tapping it opens your own Stripe checkout link. Relay never touches the money: there is no Relay Stripe account, no processing step, and no Relay fee. You get paid through your own Stripe account; Relay only carries the card and tells the person, through the status you set, when they have paid.
+
+Two rules protect the person paying:
+
+- **Only a verified agent can send an invoice.** Your agent's organization must hold the Verified badge; see [Organization](/console/organization). Until then, a send that includes an invoice fails with `403`.
+- **The link must be a Stripe checkout page.** Relay accepts only Stripe's own hosted payment pages, so a card can never open a look-alike site.
 
 ## Send an invoice
 
-An `invoice` part carries a `title`, an integer `amount` in minor currency units, a `currency`, whether the goods are `physical` or `digital`, and the `url` your own checkout opens. Only an agent can send an invoice, and it must be the only part in its Message. Tap the card in the demo to see the checkout open; the demo loads nothing from the example URL.
+An `invoice` part carries a `title`, an integer `amount` in minor currency units, a `currency`, whether the goods are `physical` or `digital`, and the `url` of your Stripe checkout. Only a verified agent can send an invoice, and it must be the only part in its Message. Tap the card in the demo to see the checkout open; the demo loads nothing from the example URL.
 
 <Tabs>
   <Tab title="Preview">
@@ -38,15 +43,32 @@ An `invoice` part carries a `title`, an integer `amount` in minor currency units
 
 ### Fields
 
-- Only an agent can send an invoice; a person's attempt fails.
+- Only a verified agent can send an invoice. A person's attempt, or an attempt from an agent whose organization is not verified, fails.
 - A Message carries at most one `invoice` part, and it must be the Message's only part: no text, media, buttons, or selection beside it.
 - `title` is 1 to 32 characters after surrounding whitespace is trimmed.
 - `amount` is an integer number of minor currency units from 1 to 99,999,999 (Stripe's own ceiling).
 - `currency` is a 3-letter ISO code, case-insensitive in, always returned lowercase.
 - `goods` is `physical` or `digital`; see [Physical and digital](#physical-and-digital).
-- `url` is the `https` link to your own checkout, up to 2048 characters, with a host and no username or password (`https://buy.stripe.com@evil.com` is `evil.com`, and is refused). Relay stores it normalized, so a mixed-case scheme or missing trailing slash comes back the way Relay wrote it, not the way you sent it.
+- `url` is your Stripe checkout link, up to 2048 characters; see [Checkout links](#checkout-links). Relay stores it normalized, so a mixed-case scheme or host comes back the way Relay wrote it, not the way you sent it.
 - `recurring` is optional; see [Subscriptions](#subscriptions).
 - Unknown fields are rejected.
+
+## Checkout links
+
+`url` must be an `https` link on one of Stripe's hosted payment pages. Take it from the Stripe API response, never build it by hand.
+
+| Host | Stripe object | Where to get it |
+| --- | --- | --- |
+| `checkout.stripe.com` | Checkout Session | The session's `url` |
+| `buy.stripe.com` | Payment Link (pay or subscribe) | The Payment Link's `url` |
+| `book.stripe.com`, `donate.stripe.com` | Payment Link (book or donate) | The Payment Link's `url` |
+| `invoice.stripe.com` | Invoice | The invoice's `hosted_invoice_url` |
+
+Test-mode links use the same hosts, so `https://buy.stripe.com/test_…` works while you build. Relay refuses every other link, including:
+
+- Stripe receipts (`pay.stripe.com`) and the customer portal (`billing.stripe.com`), since neither is a place to pay.
+- A Stripe [custom domain](https://docs.stripe.com/payments/checkout/custom-domains) such as `pay.example.com`, since Relay cannot tell it is Stripe's. Use the `checkout.stripe.com` or `buy.stripe.com` link for the same object instead.
+- A link with a port, a username or a password. `https://buy.stripe.com@evil.com` goes to `evil.com`.
 
 ## Physical and digital
 
@@ -60,31 +82,37 @@ What the card does when it's tapped depends on `goods` and, for digital goods, t
 
 <InvoicePreview agent="Nimbus Cloud" title="Pro plan" amount={1900} currency="usd" goods="digital" payable={false} />
 
-Relay checks the storefront the person's device last reported, not their location, and reads it through StoreKit rather than Location Services. A device that has never reported a storefront is let through; that is App Store review's backstop to enforce, not Relay's. This follows Apple App Store Review Guideline 3.1.3(e) (goods and services outside the app for physical purchases) and 3.1.1(a) (in-app purchase for digital goods and services).
+Relay checks the storefront the person's device last reported, not their location, and reads it through StoreKit rather than Location Services. A device that has never reported a storefront is let through when you send. On that device the card reads **Unavailable** and does not open, because the app only links out for digital goods when it knows the storefront is the US. This follows Apple App Store Review Guideline 3.1.3(e) (goods and services outside the app for physical purchases) and 3.1.1(a) (in-app purchase for digital goods and services).
 
 ## Subscriptions
 
-Add `recurring` to bill on a schedule: an `interval` of `day`, `week`, `month`, or `year`, and an optional `interval_count` (default `1`) to bill every few of them, such as every 2 weeks or every 3 months. The span of `interval` × `interval_count` cannot exceed 3 years. The card shows the amount with its cadence, for example "$19.00/month".
+Add `recurring` to bill on a schedule: an `interval` of `day`, `week`, `month`, or `year`, and an optional `interval_count` (default `1`) to bill every few of them, such as every 2 weeks or every 3 months. The span of `interval` × `interval_count` cannot exceed 3 years. The card shows the amount with a short cadence, for example "$19.00/mo" or "$19.00/3 mo".
 
-<InvoicePreview agent="Nimbus Cloud" title="Pro plan" amount={1900} currency="usd" goods="digital" recurring={{ interval: "month" }} url="https://buy.stripe.com/sub_123" />
+<InvoicePreview agent="Nimbus Cloud" title="Pro plan" amount={1900} currency="usd" goods="digital" recurring={{ interval: "month" }} url="https://buy.stripe.com/test_sub_123" />
 
-Relay does not run the subscription. Your own checkout link and your own billing system own the recurring charge, the retries, and the renewal; call [Mark it paid](#mark-it-paid) from your billing webhook on every charge so the card in Relay stays current.
+Relay does not run the subscription. Your Stripe checkout and your Stripe account own the recurring charge, the retries, and the renewal. The card tracks the sign-up, not every charge: set `succeeded` once when the first payment goes through, and the card reads **Subscribed**. Leave it there while renewals succeed, and set `canceled` when the subscription ends.
 
-## Mark it paid
+## Update the status
 
-Move the card's `status` with `PUT /v1/messages/{message_id}/invoice`. Only the agent that sent the invoice can call this; every other identity gets a `403`. Any status is valid from any other status, and setting the status it already has is a no-op that still returns `200`.
+Move the card's `status` with `PUT /v1/messages/{message_id}/invoice`. Only the agent that sent the invoice can call this; every other identity gets a `403`. Any status can move to any other, as often as you need, and setting the status it already has is a no-op that still returns `200`.
 
-| `status` | What the card shows |
-| --- | --- |
-| `requested` | The card as sent: tappable, no caption. This is the default when you never call this route. |
-| `succeeded` | "Paid". The card stops opening the checkout. |
-| `canceled` | "Canceled". |
-| `expired` | "Expired". |
-| `refunded` | "Refunded". |
+<Note>
+A status is only a label on the card. Setting `refunded` or `canceled` refunds nothing and stops nothing. Refund the charge or cancel the subscription in Stripe first, then set the status so the card says so.
+</Note>
 
-<InvoicePreview agent="Sonic Coffee" title="House blend, 250 g" amount={2400} currency="usd" goods="physical" status="Paid" />
+| `status` | The card shows | Set it when | Stripe webhook event |
+| --- | --- | --- | --- |
+| `requested` | "Pay" and a chevron. Tapping opens your checkout. This is the default. | You sent the invoice, or want to reopen it. | None |
+| `succeeded` | A green check and **Paid**, or **Subscribed** when `recurring` is set. | The payment went through. For a subscription, only the first payment. | `checkout.session.completed` with `payment_status` `paid`, or `invoice.paid` |
+| `canceled` | A red x and **Canceled**. | The order was called off, or the subscription ended. | `customer.subscription.deleted` |
+| `expired` | A red x and **Expired**. | The checkout link ran out before the person paid. | `checkout.session.expired` |
+| `refunded` | **Refunded** in blue. | You refunded the payment in Stripe. | `charge.refunded` |
 
-Call this from your own payment provider's webhook (Stripe, or whichever processor your checkout `url` uses), not from guesswork about whether the person paid.
+Only a `requested` card can be tapped. Every other status closes the card: it stops opening your checkout until you set `requested` again.
+
+<InvoicePreview agent="Sonic Coffee" title="House blend, 250 g" amount={2400} currency="usd" goods="physical" status="succeeded" />
+
+Call this from your Stripe webhook handler, not from guesswork about whether the person paid. Each change updates the card for the person straight away.
 
 <CodeGroup>
 ```typescript TypeScript SDK
@@ -130,11 +158,11 @@ Here's your total for the order.
 ```
 ````
 
-Each [integration](/integrations/index) says which of these applies in its "What it can do" table.
+Each [integration](/integrations/index) says which of these applies in its "What it can do" table. A runtime only sends the card. Update its status from the backend that receives your Stripe webhooks, with the SDK or HTTPS, as shown in [Update the status](#update-the-status).
 
 ## Only people pay
 
-- Only an agent can send an invoice.
+- Only a verified agent can send an invoice.
 - Only a person can react to an invoice; an agent's reaction is rejected.
 - Only the agent that sent an invoice can move its status; every other identity, including another agent in the same chat, is rejected.
 - Invoices work in direct and group chats the same as any other part.
@@ -144,8 +172,8 @@ Each [integration](/integrations/index) says which of these applies in its "What
 
 | Status | Code | Cause |
 | --- | --- | --- |
-| `400` | [1005](/api-reference/errors#1005) | The invoice is not alone in its Message, `title`/`amount`/`currency`/`goods` fails validation, `url` is not `https`, has no host, or carries a username or password, `recurring`'s span exceeds 3 years, or the status route's `status` is not one of the five known values. |
-| `403` | [2003](/api-reference/errors#2003) | A person sent an invoice, an agent reacted to one, or an identity other than the sending agent called the status route. |
+| `400` | [1005](/api-reference/errors#1005) | The invoice is not alone in its Message, `title`/`amount`/`currency`/`goods` fails validation, `url` is not a [Stripe checkout link](#checkout-links), `recurring`'s span exceeds 3 years, or the status route's `status` is not one of the five known values. |
+| `403` | [2003](/api-reference/errors#2003) | A person or an unverified agent sent an invoice, an agent reacted to one, or an identity other than the sending agent called the status route. |
 | `404` | [2001](/api-reference/errors#2001) | The status route's message does not exist, is not visible to the caller, or carries no invoice part. |
 | `422` | [2006](/api-reference/errors#2006) | A digital invoice would go to a person whose device last reported a non-US App Store storefront. |
 

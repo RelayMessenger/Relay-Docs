@@ -17,15 +17,15 @@ ROOT = Path(__file__).resolve().parents[1]
 # Canonical request lifecycle, scoped lookup, and fixed agent admission Server source.
 # Retains the merged activity and live call-marker shapes. The selection
 # descriptions now carry the shipped sheet flow; the wire shapes are untouched.
-# Adds the invoice part and PUT /v1/messages/{id}/invoice (branch invoice-interaction).
-UPSTREAM_COMMIT = "979fa43e72abf033442805b112897d0b5fed0533"
+# Adds the invoice part and PUT /v1/messages/{id}/invoice; invoices come only from verified agents and open only Stripe-hosted checkout pages.
+UPSTREAM_COMMIT = "3b7425e5bafcf25cdc8ceff009715e4f06877d18"
 UPSTREAM_STAGING_COMMIT = "3bde6d9d4bc3ff69c8c0024ea3a0037122e6f888"
-UPSTREAM_SIZE = 210265
-UPSTREAM_SHA256 = "f99d32bc85d81ac7ba25c626f61608b08c6d0de4e3f9e6c44c6b05c8e67fff46"
+UPSTREAM_SIZE = 210664
+UPSTREAM_SHA256 = "3fb4873a3c09b7dade09012ecfc57acfef8cfb983b6b35fff9d320cf62bb3b00"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
-    "commit": "bb78ab96651ea0d40abb78c47af969a85efe1f48",
+    "commit": "fa869724ae89128074388c4c0f130e1d063024b2",
     "path": "contracts/relay-v1-openapi.yaml",
     "sha256": UPSTREAM_SHA256,
     "note": "Fixture: a committed local candidate carrying the released bytes.",

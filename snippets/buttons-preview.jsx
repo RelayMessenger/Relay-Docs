@@ -440,32 +440,45 @@ export const SelectionPreview = ({ text, options, received, bubble }) => {
   );
 };
 
-// Local-only interaction. No API, analytics, or credentials. The invoice is
-// Relay's own surface, not a chat bubble (owner, 2026-09-22: no logo tile,
-// just the business name, the amount, and the title): it never reuses
-// MessageBubble's tail geometry above. It shares only the .buttons-preview
-// frame that stages every interaction preview as a simulated phone, and the
-// same in-app browser chrome a `buttons` URL item opens (Relay-iOS
-// ChatView relayButtonsActions), since a payable card opens the agent's own
-// checkout the same way. A card that cannot be paid here — resolved, or
-// outside the region that can buy digital goods — stays inert and the grey
-// line under it says why.
-export const InvoicePreview = ({ agent, title, amount, currency = "usd", goods = "physical", recurring, payable = true, status, url = "https://buy.stripe.com/example" }) => {
+// Local-only interaction. No API, analytics, or credentials. Mirrors the
+// Relay-iOS invoice card (RelayInvoiceRow.swift): a near-black balloon with
+// the incoming tail, the Relay mark and "Pay" top-left, a chevron top-right
+// while it can be paid, the amount large in silver with a short cadence
+// ("/mo"), and the title under it. A closed card, or a digital one this
+// storefront can't pay, drops the chevron for its state word in the same
+// corner: Paid or Subscribed in green with a check, Canceled or Expired in
+// red with an x, Refunded in Relay Blue, Unavailable in the chevron's grey.
+// Only an open, payable card opens anything, in the same in-app browser
+// chrome a `buttons` URL item opens.
+const INVOICE_CADENCE = { day: "day", week: "wk", month: "mo", year: "yr" };
+const INVOICE_STATES = {
+  succeeded: { mark: "check", tone: "is-paid" },
+  canceled: { word: "Canceled", mark: "x", tone: "is-closed" },
+  expired: { word: "Expired", mark: "x", tone: "is-closed" },
+  refunded: { word: "Refunded", tone: "is-refunded" },
+};
+export const InvoicePreview = ({ agent, title, amount, currency = "usd", goods = "physical", recurring, payable = true, status = "requested", url = "https://buy.stripe.com/example" }) => {
   const [openedURL, setOpenedURL] = useState(null);
   const formatted = (() => {
     try {
-      return new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() }).format(amount / 100);
+      const formatter = new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() });
+      return formatter.format(amount / 10 ** formatter.resolvedOptions().maximumFractionDigits);
     } catch (error) {
       return `${(amount / 100).toFixed(2)} ${currency.toUpperCase()}`;
     }
   })();
+  const count = recurring && recurring.interval_count > 1 ? recurring.interval_count : 1;
   const cadence = recurring
-    ? (recurring.interval_count && recurring.interval_count > 1
-      ? `every ${recurring.interval_count} ${recurring.interval}s`
-      : `/${recurring.interval}`)
+    ? `/${count > 1 ? `${count} ` : ""}${INVOICE_CADENCE[recurring.interval]}`
     : null;
-  const caption = status || (payable ? null : "Not available in your region");
-  const tappable = payable && !status;
+  const spokenCadence = recurring
+    ? (count > 1 ? `, every ${count} ${recurring.interval}s` : `, per ${recurring.interval}`)
+    : "";
+  const closed = INVOICE_STATES[status];
+  const state = closed
+    ? { ...closed, word: closed.word || (recurring ? "Subscribed" : "Paid") }
+    : payable ? null : { word: "Unavailable", tone: "is-unavailable" };
+  const tappable = !state;
   const hostOf = (value) => {
     try { return new URL(value).host; } catch (error) { return value; }
   };
@@ -477,21 +490,42 @@ export const InvoicePreview = ({ agent, title, amount, currency = "usd", goods =
   };
   return (
     <div className={"buttons-preview invoice-preview" + (openedURL ? " is-browser-open" : "")}
-      role="group" aria-label={`Invoice from ${agent}: ${title}, ${formatted}${cadence ? " " + cadence : ""}${caption ? `. ${caption}` : ""}`}>
+      role="group" aria-label={`Invoice from ${agent}. ${title}. ${formatted}${spokenCadence}.${state ? ` ${state.word}.` : ""}`}>
       <div className="buttons-preview-frame">
         <div className="buttons-preview-stage">
           <div className="buttons-preview-message invoice-preview-message">
             <button type="button" className={"invoice-card" + (tappable ? "" : " is-inert")}
               disabled={!tappable} tabIndex={openedURL ? -1 : 0}
               onClick={() => { if (tappable) setOpenedURL(url); }}>
-              <span className="invoice-card-agent">{agent}</span>
+              <span className="invoice-card-top">
+                <span className="invoice-card-pay">
+                  <svg className="invoice-card-mark" viewBox="210 185 644 698" aria-hidden="true" focusable="false">
+                    <path fillRule="evenodd" d="M512 185C701 185 854 314 854 475C854 656 695 827 523 827C493 827 467 824 446 815C369 861 302 883 284 865C268 848 300 773 317 720C246 665 210 582 210 484C210 319 344 185 512 185Z M384 538C373 538 364 527 364 514C364 456 403 410 452 410C501 410 540 456 540 514C540 527 531 538 520 538C509 538 499 527 499 514C499 483 478 458 452 458C426 458 405 483 405 514C405 527 395 538 384 538Z M612 538C601 538 592 527 592 514C592 456 631 410 680 410C729 410 768 456 768 514C768 527 759 538 748 538C737 538 727 527 727 514C727 483 706 458 680 458C654 458 633 483 633 514C633 527 623 538 612 538Z" />
+                  </svg>
+                  Pay
+                </span>
+                {state ? (
+                  <span className={"invoice-card-state " + state.tone}>
+                    {state.mark === "check" ? (
+                      <svg viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M2.5 6.5l2.5 2.5 4.5-6" /></svg>
+                    ) : state.mark === "x" ? (
+                      <svg viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M3 3l6 6M9 3l-6 6" /></svg>
+                    ) : null}
+                    {state.word}
+                  </span>
+                ) : (
+                  <svg className="invoice-card-chevron" viewBox="0 0 8 13" aria-hidden="true" focusable="false"><path d="M1.5 1.5l5 5-5 5" /></svg>
+                )}
+              </span>
               <span className="invoice-card-amount">
                 {formatted}
                 {cadence ? <span className="invoice-card-cadence">{cadence}</span> : null}
               </span>
               <span className="invoice-card-title">{title}</span>
+              <svg className="invoice-card-tail" width="23" height="24" viewBox="0 0 23 24" aria-hidden="true" focusable="false">
+                <path d="M 0 0 C 0 0.306 1.415 4.498 4.028 7.924 C 5.087 9.312 6.309 10.536 7.660 11.577 C 9.585 13.078 10.418 14.644 10.418 16.404 C 10.418 17.587 10.209 18.756 8.510 20.988 C 7.695 22.058 8.513 23.150 9.787 22.666 C 12.407 21.671 15.391 19.860 18.005 17.927 C 20.347 16.195 20.971 16.020 22.070 16.013 L 22.070 0 Z" />
+              </svg>
             </button>
-            {caption ? <span className="invoice-card-caption">{caption}</span> : null}
           </div>
         </div>
         {openedURL ? (
@@ -517,8 +551,8 @@ export const InvoicePreview = ({ agent, title, amount, currency = "usd", goods =
               <span className="buttons-url-address">{openedURL}</span>
               <span className="buttons-browser-note">
                 {goods === "physical"
-                  ? "A physical invoice opens the agent's checkout here, in the app's own in-app browser. The demo loads nothing."
-                  : "A digital invoice opens the agent's checkout in Safari, outside the app. The demo loads nothing."}
+                  ? "A physical invoice opens the agent's Stripe checkout here, in the app's own in-app browser. The demo loads nothing."
+                  : "A digital invoice opens the agent's Stripe checkout in Safari, outside the app. The demo loads nothing."}
               </span>
             </div>
             <div className="buttons-browser-toolbar" aria-hidden="true">

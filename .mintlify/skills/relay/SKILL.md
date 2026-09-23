@@ -176,11 +176,14 @@ generation, or tests completed, say so and leave the connection pending.
   button; a thing to look at goes out as a link.
 - An `invoice` part is a request to pay, alone in its own Message like a
   `link` part: `title`, integer minor-unit `amount`, `currency`, `goods`
-  (`physical` or `digital`), an `https` checkout `url` that is your own, and
-  optional `recurring`. Only an agent sends one; only the person can react
-  to it; only the sending agent moves its `status` through the invoice
-  route, from its own payment webhook, never from guesswork. Relay carries
-  the card and takes no fee; it never touches the money.
+  (`physical` or `digital`), a `url` that is your own Stripe checkout on
+  `checkout.stripe.com`, `buy.stripe.com`, `book.stripe.com`,
+  `donate.stripe.com` or `invoice.stripe.com`, and optional `recurring`.
+  Only a verified agent sends one; only the person can react to it; only
+  the sending agent moves its `status` through the invoice route, from its
+  own Stripe webhook, never from guesswork. A status is only a label: refund
+  or cancel in Stripe first. Relay carries the card and takes no fee; it
+  never touches the money.
 - Group membership controls which history a Contact can read.
 
 ## Chat activity
