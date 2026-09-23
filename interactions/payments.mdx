@@ -14,14 +14,60 @@ Every payment is a direct charge on your own Stripe account. You are the merchan
 
 ## Create a payment request
 
-Send this body to [`POST /v1/payment_requests`](/api-reference/payments/create-a-payment-request) with your Agent Token. It sets the amount in the currency's minor units, a `description` of 1 to 32 characters for the card's title, and a [`category`](#category).
+Call [`POST /v1/payment_requests`](/api-reference/payments/create-a-payment-request) with your Agent Token. The body sets the amount in the currency's minor units, a `description` of 1 to 32 characters for the card's title, and a [`category`](#category). Send an `Idempotency-Key`, so a retry returns the same request:
+
+<CodeGroup>
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+  baseURL: "https://api.staging.relayapp.im",
+});
+
+const request = await relay.paymentRequests.create(
+  {
+    amount: 2400,
+    currency: "usd",
+    description: "House blend, 250 g",
+    category: "physical_goods",
+  },
+  { idempotencyKey: "order-1042" },
+);
+```
+
+```bash cURL
+curl -sS https://api.staging.relayapp.im/v1/payment_requests \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: order-1042" \
+  -d '{
+    "amount": 2400,
+    "currency": "usd",
+    "description": "House blend, 250 g",
+    "category": "physical_goods"
+  }'
+```
+</CodeGroup>
+
+Relay answers `201` with the request:
 
 ```json
 {
+  "id": "01a0d1c4-7e2b-7a41-9d3f-2b8e5c6a9f10",
+  "object": "payment_request",
+  "status": "requested",
+  "mode": "payment",
   "amount": 2400,
   "currency": "usd",
   "description": "House blend, 250 g",
-  "category": "physical_goods"
+  "category": "physical_goods",
+  "checkout_url": "https://pay.staging.relayapp.im/7hWrteOFtZzNfZG10XV1a4z5GPHrwmio0ZEd-mliRnM",
+  "expires_at": "2026-09-24T20:14:03.512Z",
+  "metadata": {},
+  "stripe": {"payment_intent_id": "pi_3SBx4kQ2eZvjeHpo0mT9aLcN"},
+  "created_at": "2026-09-23T21:14:03.512Z",
+  "updated_at": "2026-09-23T21:14:03.512Z"
 }
 ```
 
@@ -36,18 +82,59 @@ To start a subscription, set `mode` to `subscription` and pass the `price_id` of
 }
 ```
 
-The response carries `checkout_url`, Relay's pay page for the request, and the ids of the Stripe objects under `stripe`. The request is payable for 23 hours, until `expires_at`. Optional fields add a `customer_id`, a `discount`, an `image_url` for the card and your own `metadata`.
+`checkout_url` is Relay's pay page for the request, and `stripe` holds the ids of the Stripe objects. The request is payable for 23 hours, until `expires_at`. Optional fields add a `customer_id`, a `discount`, an `image_url` for the card and your own `metadata`.
 
 ## Send it
 
-Send the request's `checkout_url`, unchanged, as a `payment` part. It must be the only part in its Message, and only the agent that created the request can send it while it is `requested`.
+Send the request's `checkout_url`, unchanged, as a `payment` part. It must be the only part in its Message, and only the agent that created the request can send it while it is `requested`. Send any words first, as their own Message:
+
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.chats.messages.send("CHAT_ID", {
+  message: {
+    parts: [{ type: "payment", checkout_url: request.checkout_url }],
+    idempotency_key: "order-1042-card",
+  },
+});
+```
+
+```bash cURL
+curl -sS "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": {
+      "parts": [
+        {"type":"payment","checkout_url":"https://pay.staging.relayapp.im/7hWrteOFtZzNfZG10XV1a4z5GPHrwmio0ZEd-mliRnM"}
+      ],
+      "idempotency_key": "order-1042-card"
+    }
+  }'
+```
+</CodeGroup>
+
+Relay answers `202` with the stored Message. The card's part carries the request's amount, title and `status`:
 
 ```json
 {
+  "chat_id": "01a0d1b9-3c5e-7d20-8f41-6a2c9e7b0d58",
   "message": {
+    "id": "01a0d1c5-1f8a-7c63-b2e4-5d9a0f3c7e21",
     "parts": [
-      {"type":"payment","checkout_url":"https://pay.staging.relayapp.im/7hWrteOFtZzNfZG10XV1a4z5GPHrwmio0ZEd-mliRnM"}
-    ]
+      {
+        "type": "payment",
+        "payment_request_id": "01a0d1c4-7e2b-7a41-9d3f-2b8e5c6a9f10",
+        "checkout_url": "https://pay.staging.relayapp.im/7hWrteOFtZzNfZG10XV1a4z5GPHrwmio0ZEd-mliRnM",
+        "amount": 2400,
+        "currency": "usd",
+        "description": "House blend, 250 g",
+        "category": "physical_goods",
+        "mode": "payment",
+        "status": "requested",
+        "reactions": null
+      }
+    ],
+    "created_at": "2026-09-23T21:14:04.207Z"
   }
 }
 ```
@@ -62,6 +149,10 @@ Every card that carries the request changes in place when its status moves. Only
 - `digital_goods` is anything used in an app or online, including a tip to an agent (3.1.1). The card opens the pay page in Safari on the United States storefront only (3.1.1(a)). On any other storefront the card reads **Unavailable**.
 - `donation` is money for a charity or a fundraiser. The card opens the pay page in Safari, on any storefront (3.2.2(iv)).
 
+## Pay page
+
+The `checkout_url` opens Relay's pay page. It formats the price in the payer's language, read from their browser, and Stripe's card fields follow the same language. When the browser names no usable language, the page uses US English.
+
 ## Status
 
 A request starts as `requested` and moves exactly once, to `succeeded`, `canceled` or `expired`. It moves only on Stripe's word or your cancel, and each move sends your agent one event:
@@ -74,9 +165,47 @@ Each event carries the full payment request. Add them to a [webhook subscription
 
 When a request succeeds, Relay adds the payer's receipt at the bottom of the chat: a Message from the person who paid, replying to the card, with one `payment_receipt` part. Your agent receives it as `message.received`. A group chat where Relay does not know who paid gets no receipt.
 
+```json
+{"type":"payment_receipt","payment_request_id":"01a0d1c4-7e2b-7a41-9d3f-2b8e5c6a9f10","description":"House blend, 250 g","amount":2400,"currency":"usd","mode":"payment","reactions":null}
+```
+
 ## Cancel
 
 Cancel a request that has not been paid with [`POST /v1/payment_requests/{paymentRequestId}/cancel`](/api-reference/payments/cancel-a-payment-request). Its status moves to `canceled`, every card that carries it changes in place, and your agent gets `payment.canceled`. A request that is no longer `requested`, or that was paid before the cancel reached Stripe, returns `409`.
+
+<CodeGroup>
+```typescript TypeScript SDK
+const canceled = await relay.paymentRequests.cancel(request.id);
+```
+
+```bash cURL
+curl -sS -X POST "https://api.staging.relayapp.im/v1/payment_requests/$PAYMENT_REQUEST_ID/cancel" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+</CodeGroup>
+
+Relay answers `200` with the canceled request:
+
+```json
+{
+  "id": "01a0d1c4-7e2b-7a41-9d3f-2b8e5c6a9f10",
+  "object": "payment_request",
+  "status": "canceled",
+  "mode": "payment",
+  "amount": 2400,
+  "currency": "usd",
+  "description": "House blend, 250 g",
+  "category": "physical_goods",
+  "checkout_url": "https://pay.staging.relayapp.im/7hWrteOFtZzNfZG10XV1a4z5GPHrwmio0ZEd-mliRnM",
+  "expires_at": "2026-09-24T20:14:03.512Z",
+  "metadata": {},
+  "stripe": {"payment_intent_id": "pi_3SBx4kQ2eZvjeHpo0mT9aLcN"},
+  "created_at": "2026-09-23T21:14:03.512Z",
+  "updated_at": "2026-09-23T21:31:47.090Z"
+}
+```
+
+`relay.paymentRequests.list` reads your agent's requests, newest first, and filters by `status`. `relay.paymentRequests.retrieve` reads one by its id.
 
 ## When it fails
 
