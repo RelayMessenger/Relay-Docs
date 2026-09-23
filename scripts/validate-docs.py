@@ -526,8 +526,9 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server a2511152; call status copies Twilio's words, end_reason and connected removed, September 20, 2026.
 # Source authority: Relay-Server 3bde6d9d; selection parts carry the viewer's selected_values, September 22, 2026.
 # Source authority: Relay-Server 51bc3ecd; payment requests on the organization's connected Stripe account, September 23, 2026.
+# Source authority: Relay-Server 26e0ceac (branch location-sharing-20260923); agent location requests and reads, location.sharing.* events, September 23, 2026.
 expected_openapi_sha256 = (
-    "7b41c21bebd99d28d103da1c3fe380642542e5b6243bb4319e501d7609d8ab0f"
+    "02c61e10ee5e2834a77baf01a215a511f3bce219ac72a5f66ba15f5e1b02ee7d"
 )
 # Local candidate provenance is shared with the guide and contract gates;
 # it does not relabel the historical Server release as selection-capable.
@@ -731,6 +732,8 @@ expected_operation_ids = {
     "listPaymentRequests",
     "getPaymentRequest",
     "cancelPaymentRequest",
+    "requestLocation",
+    "getLocation",
 }
 if len(operation_ids) != len(expected_operation_ids) or set(operation_ids) != expected_operation_ids:
     raise SystemExit(
@@ -800,7 +803,7 @@ contract_events = {
 event_catalog_text = webhook_events_text
 documented_events = set(
     re.findall(
-        r"`((?:message|reaction|participant|chat|contact|call|payment)\.[a-z_.]+)`",
+        r"`((?:message|reaction|participant|chat|contact|call|payment|location)\.[a-z_.]+)`",
         event_catalog_text,
     )
 )
