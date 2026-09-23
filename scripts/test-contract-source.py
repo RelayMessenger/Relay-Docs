@@ -17,11 +17,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # Canonical request lifecycle, scoped lookup, and fixed agent admission Server source.
 # Retains the merged activity and live call-marker shapes. The selection
 # descriptions now carry the shipped sheet flow; the wire shapes are untouched.
-# Payments: POST /v1/payment_requests on the organization's connected Stripe account, the payment and payment_receipt parts, payment.* webhooks.
-UPSTREAM_COMMIT = "51bc3ecd9b203a3fc75fe0ab7a105b6751080678"
-UPSTREAM_STAGING_COMMIT = "51bc3ecd9b203a3fc75fe0ab7a105b6751080678"
-UPSTREAM_SIZE = 229792
-UPSTREAM_SHA256 = "7b41c21bebd99d28d103da1c3fe380642542e5b6243bb4319e501d7609d8ab0f"
+# Location sharing: POST /v1/chats/{chatId}/location/request, GET /v1/chats/{chatId}/location, the location_request and location parts, location.sharing.* webhooks.
+UPSTREAM_COMMIT = "26e0ceac6bacb217f36af4033811e0c4b6b90f1e"
+UPSTREAM_STAGING_COMMIT = "26e0ceac6bacb217f36af4033811e0c4b6b90f1e"
+UPSTREAM_SIZE = 242250
+UPSTREAM_SHA256 = "02c61e10ee5e2834a77baf01a215a511f3bce219ac72a5f66ba15f5e1b02ee7d"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",

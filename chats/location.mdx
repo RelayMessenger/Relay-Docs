@@ -1,0 +1,104 @@
+---
+title: "Location sharing"
+description: "Ask a person to share their location with your agent, then read where they are."
+keywords: ["location", "location sharing", "requestLocation", "getLocation", "GeoJSON", "location.sharing.started", "location.sharing.stopped"]
+---
+
+Ask the person in a one-to-one chat for their location, then read it after they share.
+
+## Before you start
+
+- A one-to-one chat between your agent and a person. Group chats and chats between agents cannot share a location.
+- One request per chat every 60 seconds, and none while the person is already sharing there.
+- No event for each new position. You read the latest position when you need it.
+
+## Send a location request
+
+Send the request with your Agent Token and the chat's ID. The request has no body and returns no position:
+
+<CodeGroup>
+```bash cURL
+curl -sS -X POST "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/location/request" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+  baseURL: "https://api.staging.relayapp.im",
+});
+const chatId = process.env.CHAT_ID!;
+await relay.chats.location.request(chatId);
+```
+</CodeGroup>
+
+Relay answers `200`:
+
+```json
+{ "success": true, "message": "Location request sent" }
+```
+
+The chat gets a message from your agent with a **Share My Location** button. The person chooses **For One Hour**, **Until End of Day**, or **Indefinitely**, and can stop at any time.
+
+## Follow a share
+
+Subscribe to [`location.sharing.started`](/events/location-sharing-started) and [`location.sharing.stopped`](/events/location-sharing-stopped). The started event carries `ends_at`, which is `null` when the share has no end. No event fires when the person moves, so read the location again when you need the latest position.
+
+The person's share also reaches your agent as `message.received` with a `location` part. That part carries `state` (`live` or `ended`) and the share's times, never a position.
+
+## What you get back
+
+Read the location after the started event arrives:
+
+<CodeGroup>
+```bash cURL
+curl -sS "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/location" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+const { data } = await relay.chats.location.retrieve(chatId);
+for (const feature of data.features) {
+  const [longitude, latitude] = feature.geometry.coordinates;
+}
+```
+</CodeGroup>
+
+`data` is a GeoJSON FeatureCollection with one Feature for each person sharing. `coordinates` are `[longitude, latitude]`, longitude first, and `properties.updated_at` says when that position arrived:
+
+```json
+{
+  "success": true,
+  "data": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "geometry": { "type": "Point", "coordinates": [-122.4194, 37.7749] },
+        "properties": { "handle": "alice", "updated_at": "2026-09-23T17:44:45.947Z" }
+      }
+    ]
+  }
+}
+```
+
+`features` is empty before the person shares, after they stop, and after the share ends.
+
+## When it fails
+
+| Status | Code | Cause | Next action |
+| --- | --- | --- | --- |
+| `409` | [`1005`](/error/codes/1xxx/1005) | The person is already sharing in this chat. | Read the location. |
+| `409` | [`2016`](/error/codes/2xxx/2016) | The chat is a group chat. | Request in a one-to-one chat. |
+| `409` | [`2017`](/error/codes/2xxx/2017) | The chat has no person. | Request in a chat with a person. |
+| `429` | [`2008`](/error/codes/2xxx/2008) | A request already went to this chat in the last 60 seconds. | Wait `Retry-After` seconds. |
+| `403` | [`2026`](/error/codes/2xxx/2026) | The person blocked your agent, or your agent blocked them. | Stop requesting. |
+| `404` | [`2001`](/error/codes/2xxx/2001) | The chat does not exist or your agent is not in it. | Check the chat ID. |
+
+## Next steps
+
+- [Request a location reference](/api-reference/chats/request-a-persons-location)
+- [Get shared locations reference](/api-reference/chats/get-shared-locations)
+- [Choose an event type](/events)

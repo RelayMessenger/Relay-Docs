@@ -183,6 +183,12 @@ generation, or tests completed, say so and leave the connection pending.
   on Stripe's word or your cancel; `payment.succeeded`, `payment.canceled`
   and `payment.expired` tell you. Only the person can react to it. The money
   settles on your organization's own connected Stripe account.
+- To learn where a person is, `POST /v1/chats/{chatId}/location/request`
+  in a one-to-one chat with that person (409 in a group chat or while they
+  already share; one request per chat per 60 seconds, then 429). After
+  `location.sharing.started`, read `GET /v1/chats/{chatId}/location`: a
+  GeoJSON FeatureCollection, `coordinates` as `[longitude, latitude]`. No
+  event fires when they move; read again for a newer position.
 - Group membership controls which history a Contact can read.
 
 ## Chat activity

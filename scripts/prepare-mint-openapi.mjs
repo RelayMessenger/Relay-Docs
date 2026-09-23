@@ -28,6 +28,8 @@ const sidebarTitles = {
   getActivity: "Get activity",
   setActivity: "Set activity",
   clearActivity: "Clear activity",
+  requestLocation: "Request location",
+  getLocation: "Get location",
   startTyping: "Start",
   stopTyping: "Stop",
   markChatAsRead: "Mark read",
