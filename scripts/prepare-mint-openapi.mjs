@@ -39,7 +39,6 @@ const sidebarTitles = {
   sendVoiceMemoToChat: "Send voice memo",
   getMessage: "Retrieve",
   sendReaction: "Update",
-  updateInvoiceStatus: "Update status",
   requestUpload: "Create",
   getAttachment: "Retrieve",
   deleteAttachment: "Delete",
@@ -66,6 +65,10 @@ const sidebarTitles = {
   getCall: "Retrieve",
   connectCallRoom: "Join room",
   endCall: "End",
+  createPaymentRequest: "Create",
+  listPaymentRequests: "List",
+  getPaymentRequest: "Retrieve",
+  cancelPaymentRequest: "Cancel",
 };
 
 for (const [operationId, sidebarTitle] of Object.entries(sidebarTitles)) {

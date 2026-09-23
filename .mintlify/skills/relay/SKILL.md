@@ -174,16 +174,15 @@ generation, or tests completed, say so and leave the connection pending.
   video, a place, a product page) as a `link` part alone in its own Message,
   drawn as a card; never as a bare URL in text. A task goes on a `url`
   button; a thing to look at goes out as a link.
-- An `invoice` part is a request to pay, alone in its own Message like a
-  `link` part: `title`, integer minor-unit `amount`, `currency`, `goods`
-  (`physical` or `digital`), a `url` that is your own Stripe checkout on
-  `checkout.stripe.com`, `buy.stripe.com`, `book.stripe.com`,
-  `donate.stripe.com` or `invoice.stripe.com`, and optional `recurring`.
-  Only a verified agent sends one; only the person can react to it; only
-  the sending agent moves its `status` through the invoice route, from its
-  own Stripe webhook, never from guesswork. A status is only a label: refund
-  or cancel in Stripe first. Relay carries the card and takes no fee; it
-  never touches the money.
+- To ask a person to pay, create a payment request with
+  `POST /v1/payment_requests` (`amount` in minor units, `currency`,
+  `description`, `category`: `physical_goods`, `digital_goods` or
+  `donation`; or `mode: subscription` with a `price_id`), then send its
+  `checkout_url` unchanged as a `payment` part alone in its own Message.
+  The card reads amount and title from the request. Its status moves only
+  on Stripe's word or your cancel; `payment.succeeded`, `payment.canceled`
+  and `payment.expired` tell you. Only the person can react to it. The money
+  settles on your organization's own connected Stripe account.
 - Group membership controls which history a Contact can read.
 
 ## Chat activity

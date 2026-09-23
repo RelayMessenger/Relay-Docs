@@ -525,9 +525,9 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server 8b608647; request membership, scoped lookup, and removed agent admission fields.
 # Source authority: Relay-Server a2511152; call status copies Twilio's words, end_reason and connected removed, September 20, 2026.
 # Source authority: Relay-Server 3bde6d9d; selection parts carry the viewer's selected_values, September 22, 2026.
-# Source authority: Relay-Server 3b7425e5; invoices from verified agents only, on Stripe-hosted checkout pages, September 22, 2026.
+# Source authority: Relay-Server 51bc3ecd; payment requests on the organization's connected Stripe account, September 23, 2026.
 expected_openapi_sha256 = (
-    "3fb4873a3c09b7dade09012ecfc57acfef8cfb983b6b35fff9d320cf62bb3b00"
+    "7b41c21bebd99d28d103da1c3fe380642542e5b6243bb4319e501d7609d8ab0f"
 )
 # Local candidate provenance is shared with the guide and contract gates;
 # it does not relabel the historical Server release as selection-capable.
@@ -721,13 +721,16 @@ expected_operation_ids = {
     "unblockHandle",
     "updateChat",
     "updateContactCard",
-    "updateInvoiceStatus",
     "updateWebhookSubscription",
     "createCall",
     "listCalls",
     "getCall",
     "connectCallRoom",
     "endCall",
+    "createPaymentRequest",
+    "listPaymentRequests",
+    "getPaymentRequest",
+    "cancelPaymentRequest",
 }
 if len(operation_ids) != len(expected_operation_ids) or set(operation_ids) != expected_operation_ids:
     raise SystemExit(
@@ -797,7 +800,7 @@ contract_events = {
 event_catalog_text = webhook_events_text
 documented_events = set(
     re.findall(
-        r"`((?:message|reaction|participant|chat|contact|call)\.[a-z_.]+)`",
+        r"`((?:message|reaction|participant|chat|contact|call|payment)\.[a-z_.]+)`",
         event_catalog_text,
     )
 )
@@ -859,6 +862,9 @@ def product_prose(path):
 
 handwritten_text = "\n".join(product_prose(path) for path in handwritten_paths)
 all_contract_text = handwritten_text + "\n" + openapi_text
+# The contract cites PayPal Orders v2 for the payment categories; that is
+# PayPal's route, not Relay's, so route-version checks read around it.
+PAYPAL_ORDERS_CITATION = "developer.paypal.com/docs/api/orders/v2/"
 if target() == "production" and STAGING_INSTRUCTION_REFERENCE.search(handwritten_text):
     raise SystemExit("staging installation or credential guidance returned to production")
 generated_paths = [root / "llms.txt", root / "llms-full.txt"]
@@ -890,7 +896,10 @@ for field, expected in [
             raise SystemExit(
                 f"public {field} must be {expected}, found {value}"
             )
-route_versions = set(re.findall(r"/v([0-9]+)/", published_contract_text))
+route_versions = set(re.findall(
+    r"/v([0-9]+)/",
+    published_contract_text.replace(PAYPAL_ORDERS_CITATION, ""),
+))
 if route_versions != {"1"}:
     raise SystemExit(
         f"public product docs must use only /v1: {sorted(route_versions)}"
@@ -1008,12 +1017,12 @@ for name, pattern in {
     "received delivery status": r"`sent`,\s*`received`,\s*`delivered`",
     "deprecated compatibility field": r"[\"'](?:compatibility_source|service|from_number|to_number)[\"']\s*:",
 }.items():
-    if re.search(pattern, all_contract_text, re.I):
+    if re.search(pattern, all_contract_text.replace(PAYPAL_ORDERS_CITATION, ""), re.I):
         raise SystemExit(f"stale {name}")
 
 # Mintlify carries only a snippet's exports into the page that imports it; a
 # top-level helper is undefined at render time and blanks the component
-# (the invoice preview, 2026-09-23). Everything a component reads lives inside it.
+# (a card preview, 2026-09-23). Everything a component reads lives inside it.
 for snippet in sorted((root / "snippets").glob("*.jsx")):
     for number, line in enumerate(snippet.read_text().splitlines(), 1):
         if re.match(r"(const|let|var|function|class)\s", line):
