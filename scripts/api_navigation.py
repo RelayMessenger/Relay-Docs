@@ -7,8 +7,10 @@ ROOT = Path(__file__).resolve().parents[1]
 # Owner ruling 2026-09-12: the webhook event pages are their own top tab,
 # "Webhook Events", next to API Reference. Their files never
 # moved, so every /events path still resolves.
-RESOURCE_GROUPS = ["Chats", "Messages", "Attachments", "Contacts", "Webhooks", "WebSocket", "Agents", "Calls"]
-RESOURCE_OBJECTS = {"Chats": "Chat", "Messages": "Message", "Attachments": "Attachment", "Contacts": "Contact", "Webhooks": "Webhook", "WebSocket": "WebSocket", "Agents": "Agent", "Calls": "Call"}
+RESOURCE_GROUPS = ["Chats", "Messages", "Attachments", "Contacts", "Webhooks", "WebSocket", "Agents", "Calls", "Payments"]
+# Resources whose group holds only generated endpoint pages, with no overview.
+ENDPOINT_ONLY_GROUPS = {"Calls", "Payments"}
+RESOURCE_OBJECTS = {"Chats": "Chat", "Messages": "Message", "Attachments": "Attachment", "Contacts": "Contact", "Webhooks": "Webhook", "WebSocket": "WebSocket", "Agents": "Agent", "Calls": "Call", "Payments": "Payment"}
 EVENT_GROUP = "Webhook Events"
 EVENT_PAGES = [
     "events/index", "events/chat-created", "events/chat-group-icon-updated",
@@ -20,6 +22,7 @@ EVENT_PAGES = [
     "events/participant-added", "events/participant-removed",
     "events/reaction-added", "events/reaction-removed",
     "events/call-created", "events/call-updated", "events/call-ended",
+    "events/payment-succeeded", "events/payment-canceled", "events/payment-expired",
 ]
 # The tab groups events by subject, in the API reference's resource order.
 EVENT_TAB_GROUPS = [
@@ -30,6 +33,7 @@ EVENT_TAB_GROUPS = [
     ("Contacts", ["events/contact-added", "events/contact-removed"]),
     ("Reactions", ["events/reaction-added", "events/reaction-removed"]),
     ("Calls", ["events/call-created", "events/call-updated", "events/call-ended"]),
+    ("Payments", ["events/payment-succeeded", "events/payment-canceled", "events/payment-expired"]),
 ]
 assert sorted(page for _, pages in EVENT_TAB_GROUPS for page in pages) == sorted(EVENT_PAGES)
 
@@ -61,7 +65,7 @@ def validate_api_navigation(config):
         raise ValueError("Webhook Events must be its own tab")
     events_groups = events_tab.get("groups", [])
     if [g["group"] for g in events_groups] != [name for name, _ in EVENT_TAB_GROUPS]:
-        raise ValueError("The Webhook Events tab groups events by subject: Overview, Messages, Chats, Participants, Contacts, Reactions, Calls")
+        raise ValueError("The Webhook Events tab groups events by subject: Overview, Messages, Chats, Participants, Contacts, Reactions, Calls, Payments")
     for (name, expected_pages), group in zip(EVENT_TAB_GROUPS, events_groups):
         if group["pages"] != expected_pages:
             raise ValueError(f"Webhook Events group {name} must list exactly its event pages in order")
@@ -89,7 +93,7 @@ def validate_api_navigation(config):
                 continue
             pages = item["pages"]
             if item["group"] in set(RESOURCE_GROUPS):
-                if item["group"] != "Calls" and (not pages or not isinstance(pages[0], str) or not pages[0].endswith("/overview")):
+                if item["group"] not in ENDPOINT_ONLY_GROUPS and (not pages or not isinstance(pages[0], str) or not pages[0].endswith("/overview")):
                     raise ValueError(f"{item['group']} must start with its overview")
                 if item.get("expanded") is not False:
                     raise ValueError(f"{item['group']} must collapse when inactive")
@@ -98,11 +102,11 @@ def validate_api_navigation(config):
     check_overviews(groups)
     resources = [g for g in groups if g["group"] in set(RESOURCE_GROUPS)]
     for group in resources:
-        if any(not page.startswith(methods) for page in (group["pages"] if group["group"] == "Calls" else group["pages"][1:])):
+        if any(not page.startswith(methods) for page in (group["pages"] if group["group"] in ENDPOINT_ONLY_GROUPS else group["pages"][1:])):
             raise ValueError("Only generated endpoints may follow a resource overview")
     import re
     for group in resources:
-        if group["group"] == "Calls":
+        if group["group"] in ENDPOINT_ONLY_GROUPS:
             continue
         path = ROOT / (group["pages"][0] + ".mdx")
         headings = re.findall(r"^## (.+)$", path.read_text(), re.M)

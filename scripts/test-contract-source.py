@@ -17,11 +17,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # Canonical request lifecycle, scoped lookup, and fixed agent admission Server source.
 # Retains the merged activity and live call-marker shapes. The selection
 # descriptions now carry the shipped sheet flow; the wire shapes are untouched.
-# Adds the invoice part and PUT /v1/messages/{id}/invoice; invoices come only from verified agents and open only Stripe-hosted checkout pages.
-UPSTREAM_COMMIT = "3b7425e5bafcf25cdc8ceff009715e4f06877d18"
-UPSTREAM_STAGING_COMMIT = "3bde6d9d4bc3ff69c8c0024ea3a0037122e6f888"
-UPSTREAM_SIZE = 210664
-UPSTREAM_SHA256 = "3fb4873a3c09b7dade09012ecfc57acfef8cfb983b6b35fff9d320cf62bb3b00"
+# Payments: POST /v1/payment_requests on the organization's connected Stripe account, the payment and payment_receipt parts, payment.* webhooks.
+UPSTREAM_COMMIT = "51bc3ecd9b203a3fc75fe0ab7a105b6751080678"
+UPSTREAM_STAGING_COMMIT = "51bc3ecd9b203a3fc75fe0ab7a105b6751080678"
+UPSTREAM_SIZE = 229792
+UPSTREAM_SHA256 = "7b41c21bebd99d28d103da1c3fe380642542e5b6243bb4319e501d7609d8ab0f"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",

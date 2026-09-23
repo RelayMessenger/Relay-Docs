@@ -1,0 +1,97 @@
+---
+title: "Payments"
+description: "Ask a person to pay with a Pay card, on your organization's own Stripe account."
+keywords: ["payments", "pay", "stripe", "checkout", "subscriptions", "interactions"]
+---
+
+A `payment` part draws a Pay card in the chat. Create a payment request first, then send its `checkout_url` as the part. The card reads its title and amount from the request, so it never shows a figure the checkout will not charge.
+
+## Connect Stripe
+
+The organization's owner opens **Settings → Payments** in the [Console](/console/organization#payments) and clicks **Connect Stripe**. Stripe asks for your business details, then sends you back to the Console.
+
+Every payment is a direct charge on your own Stripe account. You are the merchant of record, and Relay holds no money and takes no fee. Refunds and disputes stay in your Stripe Dashboard.
+
+## Create a payment request
+
+Send this body to [`POST /v1/payment_requests`](/api-reference/payments/create-a-payment-request) with your Agent Token. It sets the amount in the currency's minor units, a `description` of 1 to 32 characters for the card's title, and a [`category`](#category).
+
+```json
+{
+  "amount": 2400,
+  "currency": "usd",
+  "description": "House blend, 250 g",
+  "category": "physical_goods"
+}
+```
+
+To start a subscription, set `mode` to `subscription` and pass the `price_id` of a recurring Price on your Stripe account instead of `amount` and `currency`. The person pays the first period at checkout, and Stripe renews it from then on.
+
+```json
+{
+  "mode": "subscription",
+  "price_id": "price_1QmOnthlyPro",
+  "description": "Pro plan",
+  "category": "digital_goods"
+}
+```
+
+The response carries `checkout_url`, Relay's pay page for the request, and the ids of the Stripe objects under `stripe`. The request is payable for 23 hours, until `expires_at`. Optional fields add a `customer_id`, a `discount`, an `image_url` for the card and your own `metadata`.
+
+## Send it
+
+Send the request's `checkout_url`, unchanged, as a `payment` part. It must be the only part in its Message, and only the agent that created the request can send it while it is `requested`.
+
+```json
+{
+  "message": {
+    "parts": [
+      {"type":"payment","checkout_url":"https://pay.staging.relayapp.im/7hWrteOFtZzNfZG10XV1a4z5GPHrwmio0ZEd-mliRnM"}
+    ]
+  }
+}
+```
+
+Every card that carries the request changes in place when its status moves. Only a person can react to a Pay card.
+
+## Category
+
+`category` tells Relay what the person pays for, and the App Store Review Guidelines decide where each one can be paid:
+
+- `physical_goods` is a physical product, or a service used in the real world such as a haircut or a ride. The person pays in the app, on any storefront (3.1.3(e)).
+- `digital_goods` is anything used in an app or online, including a tip to an agent (3.1.1). The card opens the pay page in Safari on the United States storefront only (3.1.1(a)). On any other storefront the card reads **Unavailable**.
+- `donation` is money for a charity or a fundraiser. The card opens the pay page in Safari, on any storefront (3.2.2(iv)).
+
+## Status
+
+A request starts as `requested` and moves exactly once, to `succeeded`, `canceled` or `expired`. It moves only on Stripe's word or your cancel, and each move sends your agent one event:
+
+- `payment.succeeded`: the person paid. For a subscription, the first period is paid; renewals are events on your own Stripe account.
+- `payment.canceled`: you canceled the request before it was paid.
+- `payment.expired`: the request reached `expires_at` unpaid.
+
+Each event carries the full payment request. Add them to a [webhook subscription](/webhooks/subscriptions) like any other event.
+
+When a request succeeds, Relay adds the payer's receipt at the bottom of the chat: a Message from the person who paid, replying to the card, with one `payment_receipt` part. Your agent receives it as `message.received`. A group chat where Relay does not know who paid gets no receipt.
+
+## Cancel
+
+Cancel a request that has not been paid with [`POST /v1/payment_requests/{paymentRequestId}/cancel`](/api-reference/payments/cancel-a-payment-request). Its status moves to `canceled`, every card that carries it changes in place, and your agent gets `payment.canceled`. A request that is no longer `requested`, or that was paid before the cancel reached Stripe, returns `409`.
+
+## When it fails
+
+| Status | Code | Cause |
+| --- | --- | --- |
+| `400` | [1005](/api-reference/errors#1005) | A field fails validation, or Stripe refused it; `error.message` carries Stripe's words. A `payment` part is not alone in its Message. |
+| `403` | [2003](/api-reference/errors#2003) | Your organization has not connected a Stripe account that can accept charges, a person sent a `payment` part, or an agent reacted to a Pay card. |
+| `404` | [2001](/api-reference/errors#2001) | The `checkout_url` or the payment request id is not one of your agent's requests. |
+| `409` | [1005](/api-reference/errors#1005) | The request is no longer `requested`, or an `Idempotency-Key` was reused with a different body. |
+| `422` | [2006](/api-reference/errors#2006) | A `digital_goods` request went to a person whose devices report only storefronts outside the United States. |
+| `503` | [3006](/api-reference/errors#3006) | Payments are not available right now, or Stripe could not be reached. Nothing was created or changed. |
+
+## Next steps
+
+- [Interactions](/interactions/index)
+- [Buttons](/interactions/buttons)
+- [Selection](/interactions/selection)
+- [Send a message](/messages/send)
