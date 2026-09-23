@@ -1011,6 +1011,17 @@ for name, pattern in {
     if re.search(pattern, all_contract_text, re.I):
         raise SystemExit(f"stale {name}")
 
+# Mintlify carries only a snippet's exports into the page that imports it; a
+# top-level helper is undefined at render time and blanks the component
+# (the invoice preview, 2026-09-23). Everything a component reads lives inside it.
+for snippet in sorted((root / "snippets").glob("*.jsx")):
+    for number, line in enumerate(snippet.read_text().splitlines(), 1):
+        if re.match(r"(const|let|var|function|class)\s", line):
+            raise SystemExit(
+                f"{snippet.relative_to(root)}:{number}: top-level {line.split()[0]} is not exported "
+                "to the page; move it inside the component that uses it"
+            )
+
 print(
     f"validated {len(files)} Relay public pages, six tabs, "
     "Console CTA, Copy agent prompt action, logo destination, Quickstart sidebar placement, "

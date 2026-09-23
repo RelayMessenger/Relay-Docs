@@ -450,14 +450,16 @@ export const SelectionPreview = ({ text, options, received, bubble }) => {
 // red with an x, Refunded in Relay Blue, Unavailable in the chevron's grey.
 // Only an open, payable card opens anything, in the same in-app browser
 // chrome a `buttons` URL item opens.
-const INVOICE_CADENCE = { day: "day", week: "wk", month: "mo", year: "yr" };
-const INVOICE_STATES = {
-  succeeded: { mark: "check", tone: "is-paid" },
-  canceled: { word: "Canceled", mark: "x", tone: "is-closed" },
-  expired: { word: "Expired", mark: "x", tone: "is-closed" },
-  refunded: { word: "Refunded", tone: "is-refunded" },
-};
 export const InvoicePreview = ({ agent, title, amount, currency = "usd", goods = "physical", recurring, payable = true, status = "requested", url = "https://buy.stripe.com/example" }) => {
+  // Mintlify carries only a snippet's exports into the page, so everything
+  // the component reads lives inside it.
+  const INVOICE_CADENCE = { day: "day", week: "wk", month: "mo", year: "yr" };
+  const INVOICE_STATES = {
+    succeeded: { mark: "check", tone: "is-paid" },
+    canceled: { word: "Canceled", mark: "x", tone: "is-closed" },
+    expired: { word: "Expired", mark: "x", tone: "is-closed" },
+    refunded: { word: "Refunded", tone: "is-refunded" },
+  };
   const [openedURL, setOpenedURL] = useState(null);
   const formatted = (() => {
     try {
