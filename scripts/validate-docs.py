@@ -527,8 +527,9 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server 3bde6d9d; selection parts carry the viewer's selected_values, September 22, 2026.
 # Source authority: Relay-Server 51bc3ecd; payment requests on the organization's connected Stripe account, September 23, 2026.
 # Source authority: Relay-Server 26e0ceac (branch location-sharing-20260923); agent location requests and reads, location.sharing.* events, September 23, 2026.
+# Source authority: Relay-Server b1e534c0 (PR 370); is_verified on contact cards, creator on agent contact resources, September 24, 2026.
 expected_openapi_sha256 = (
-    "02c61e10ee5e2834a77baf01a215a511f3bce219ac72a5f66ba15f5e1b02ee7d"
+    "1a145cd9dbf977de1d4f40191ec861825a19f1c7ab637f60fd507eeea0007402"
 )
 # Local candidate provenance is shared with the guide and contract gates;
 # it does not relabel the historical Server release as selection-capable.

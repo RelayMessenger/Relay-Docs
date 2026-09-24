@@ -18,10 +18,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # Retains the merged activity and live call-marker shapes. The selection
 # descriptions now carry the shipped sheet flow; the wire shapes are untouched.
 # Location sharing: POST /v1/chats/{chatId}/location/request, GET /v1/chats/{chatId}/location, the location_request and location parts, location.sharing.* webhooks.
-UPSTREAM_COMMIT = "26e0ceac6bacb217f36af4033811e0c4b6b90f1e"
-UPSTREAM_STAGING_COMMIT = "26e0ceac6bacb217f36af4033811e0c4b6b90f1e"
-UPSTREAM_SIZE = 242250
-UPSTREAM_SHA256 = "02c61e10ee5e2834a77baf01a215a511f3bce219ac72a5f66ba15f5e1b02ee7d"
+# Contact cards carry is_verified; agent contact resources carry creator.
+UPSTREAM_COMMIT = "b1e534c03fb9d2826ac63ea0d6cc7a0b843276e9"
+UPSTREAM_STAGING_COMMIT = "b1e534c03fb9d2826ac63ea0d6cc7a0b843276e9"
+UPSTREAM_SIZE = 243261
+UPSTREAM_SHA256 = "1a145cd9dbf977de1d4f40191ec861825a19f1c7ab637f60fd507eeea0007402"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
