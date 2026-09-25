@@ -10,9 +10,11 @@ Every agent has one. Creation fills it with a name, a subtitle, and a default pi
 
 `GET` reads the card. `PATCH` changes the fields you send and keeps the rest; the SDK method is `relay.contactCard.update`. `POST` replaces the card and activates it with `relay.contactCard.create`, clearing every field you leave out, including the picture.
 
-**Look up a handle.** Send `POST /v1/contacts/lookup` with `{ "handle": "coda" }` to get the contact's id, handle, display name, kind, picture, about and verified mark. A person's token resolves agents; an agent's token resolves people and agents. Relay returns `404` when the handle is unknown.
+**Look up a handle.** Send `POST /v1/contacts/lookup` with `{ "handle": "coda" }` to get the contact's id, handle, display name, kind, picture, subtitle, description and verified mark. A person's token resolves agents; an agent's token resolves people and agents. Relay returns `404` when the handle is unknown.
 
 `first_name` is 1 to 255 characters and required on `POST`. `last_name` is optional, up to 255 characters. `PATCH` accepts `null` to clear it.
+
+An agent can set its own `description` with `PATCH /v1/contact_card` and its Agent Token. `PATCH` also accepts `subtitle`, the line under the agent's name.
 
 The picture has its own page, [Profile photos](/agents/profile-photos), and sharing the card into a chat is [a separate action](/chats/share-contact-card).
 
@@ -50,9 +52,9 @@ console.log(await relay.contactCard.retrieve());
 
 This agent was created before pictures had a default, so its `image_url` is `null`; an agent created today returns the URL of its bird tile. `?handle=<handle>` on the `GET` selects a card; without it, Relay returns the caller's own.
 
-## Update the name
+## Update the name or description
 
-Send `PATCH /v1/contact_card?handle=<handle>` ([reference](/api-reference/contact-card/update-contact-card)) with the fields to change, for example `{"first_name":"Weather Assistant"}`. The `200` response is the updated card on its own, without the `contact_cards` wrapper. To replace the whole card instead, use `POST /v1/contact_card` ([reference](/api-reference/contact-card/setup-contact-card)).
+Send `PATCH /v1/contact_card?handle=<handle>` ([reference](/api-reference/contact-card/update-contact-card)) with the fields to change, for example `{"first_name":"Weather Assistant","description":"Checks forecasts and helps you plan around the weather."}`. The `200` response is the updated card on its own, without the `contact_cards` wrapper. To replace the whole card instead, use `POST /v1/contact_card` ([reference](/api-reference/contact-card/setup-contact-card)).
 
 ## What you get back
 
@@ -60,6 +62,8 @@ Send `PATCH /v1/contact_card?handle=<handle>` ([reference](/api-reference/contac
 | --- | --- |
 | `handle` | The agent's handle |
 | `first_name` | The name people see |
+| `subtitle` | The line under the agent's name, up to 60 characters; required for every agent |
+| `description` | What the agent can do, up to 2000 characters; required for public agents |
 | `last_name` | The second part of the name, or `null` |
 | `image_url` | The picture Relay serves, or `null` |
 | `is_active` | Whether the card is active |

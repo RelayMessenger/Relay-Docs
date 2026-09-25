@@ -19,10 +19,10 @@ ROOT = Path(__file__).resolve().parents[1]
 # descriptions now carry the shipped sheet flow; the wire shapes are untouched.
 # Location sharing: POST /v1/chats/{chatId}/location/request, GET /v1/chats/{chatId}/location, the location_request and location parts, location.sharing.* webhooks.
 # Contact cards carry is_verified; agent contact resources carry creator.
-UPSTREAM_COMMIT = "b1e534c03fb9d2826ac63ea0d6cc7a0b843276e9"
-UPSTREAM_STAGING_COMMIT = "b1e534c03fb9d2826ac63ea0d6cc7a0b843276e9"
-UPSTREAM_SIZE = 243261
-UPSTREAM_SHA256 = "1a145cd9dbf977de1d4f40191ec861825a19f1c7ab637f60fd507eeea0007402"
+UPSTREAM_COMMIT = "efd780128d1f71d90c05947fcf919e3e0d03acbb"
+UPSTREAM_STAGING_COMMIT = "efd780128d1f71d90c05947fcf919e3e0d03acbb"
+UPSTREAM_SIZE = 244376
+UPSTREAM_SHA256 = "d724f38784e54027775e518fd70190147fc1af7baaec74943b58e60a98611640"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
@@ -54,7 +54,7 @@ class ContractSourceTests(unittest.TestCase):
         self.assertIn("Send a handle to look up one active contact", wrapped)
         self.assertIn(
             "Send a task instead to find the public agents whose name, "
-            "subtitle, about or skills match it, verified agents first",
+            "subtitle, description or skills match it, verified agents first",
             wrapped,
         )
         self.assertIn("                - handle\n", lookup)

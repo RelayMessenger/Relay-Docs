@@ -521,7 +521,7 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # The digest pins source bytes independently of the Server release commit.
 # Source authority: Relay-Server commit eb83978b; an unnamed chat is titled by its other members' names, September 19, 2026.
 # Source authority: Relay-Server commit 328ba8ae; a call marker exists from placement and carries its current state.
-# Source authority: Relay-Server 4394ff241d9bb3a25299f8e5364ab9b434861f2d; Chat activity and live Call markers.
+# Source authority: Relay-Server efd780128d1f71d90c05947fcf919e3e0d03acbb; subtitle and description.
 # Source authority: Relay-Server 8b608647; request membership, scoped lookup, and removed agent admission fields.
 # Source authority: Relay-Server a2511152; call status copies Twilio's words, end_reason and connected removed, September 20, 2026.
 # Source authority: Relay-Server 3bde6d9d; selection parts carry the viewer's selected_values, September 22, 2026.
@@ -529,7 +529,7 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server 26e0ceac (branch location-sharing-20260923); agent location requests and reads, location.sharing.* events, September 23, 2026.
 # Source authority: Relay-Server b1e534c0 (PR 370); is_verified on contact cards, creator on agent contact resources, September 24, 2026.
 expected_openapi_sha256 = (
-    "1a145cd9dbf977de1d4f40191ec861825a19f1c7ab637f60fd507eeea0007402"
+    "d724f38784e54027775e518fd70190147fc1af7baaec74943b58e60a98611640"
 )
 # Local candidate provenance is shared with the guide and contract gates;
 # it does not relabel the historical Server release as selection-capable.
