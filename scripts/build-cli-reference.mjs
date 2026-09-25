@@ -131,6 +131,9 @@ const TITLES = {
   "chats-participants-remove": "Remove a participant",
   "chats-typing-start": "Start typing",
   "chats-typing-stop": "Stop typing",
+  "chats-activity-get": "Get activity",
+  "chats-activity-set": "Start a task activity",
+  "chats-activity-clear": "Clear activity",
   "messages-send": "Send to handles",
   "messages-get": "Show a message",
   "messages-thread": "List replies",
@@ -229,7 +232,10 @@ const CLI_GROUPS = [
           "cli/reference/chats-typing-start",
           "cli/reference/chats-typing-stop"
         ]
-      }
+      },
+      "cli/reference/chats-activity-get",
+      "cli/reference/chats-activity-set",
+      "cli/reference/chats-activity-clear"
     ]
   },
   {
