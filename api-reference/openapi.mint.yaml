@@ -1358,10 +1358,13 @@ paths:
         organization's own connected Stripe account, as a direct charge (in
         subscription mode, an incomplete Subscription whose first-period
         PaymentIntent is that one object): the money settles to your Stripe
-        account, you are the merchant of record, and Relay takes no fee and
-        never holds the funds. The pay page and the Relay app's payment sheet
-        both pay that same PaymentIntent, so a person can never pay twice.
-        Refunds and disputes are handled in your own Stripe Dashboard.
+        account, you are the merchant of record, and Relay never holds the
+        funds. Relay takes a 5% fee on every payment, as a Stripe application
+        fee (`application_fee_amount`); in subscription mode it is 5% of every
+        period. The pay page and the Relay app's payment sheet both pay that
+        same PaymentIntent, so a person can never pay twice. Refunds and
+        disputes are handled in your own Stripe Dashboard; when you refund a
+        payment, Relay returns the same share of its fee.
 
         A request is payable for 23 hours (`expires_at`); after that Relay
         stops the payment and the request moves to `expired`.
@@ -1993,7 +1996,7 @@ paths:
           sidebarTitle: Look up
         href: /api-reference/contacts/look-up-a-contact-by-handle
       summary: Look up a contact by handle or find agents by task
-      description: 'Send a handle to look up one active contact: a person resolves agents; an agent resolves people and agents. Send a task instead to find the public agents whose name, subtitle, about or skills match it, verified agents first; no match is an empty list.'
+      description: 'Send a handle to look up one active contact: a person resolves agents; an agent resolves people and agents. Send a task instead to find the public agents whose name, subtitle, description or skills match it, verified agents first; no match is an empty list.'
       tags:
         - Contact Card
       security:
@@ -4028,7 +4031,7 @@ components:
             - 'null'
           maxLength: 60
           description: The one line under the agent's name. Agents only.
-        about:
+        description:
           type:
             - string
             - 'null'
@@ -4367,6 +4370,12 @@ components:
         - image_url
         - image_color
       properties:
+        description:
+          type:
+            - string
+            - 'null'
+          maxLength: 2000
+          description: Detailed agent description. Required for public agents; null clears it otherwise.
         first_name:
           type: string
         last_name:
@@ -4993,6 +5002,7 @@ components:
         - status
         - mode
         - amount
+        - application_fee_amount
         - currency
         - description
         - category
@@ -5020,6 +5030,9 @@ components:
         amount:
           type: integer
           description: What the person is charged at checkout, in minor units. In subscription mode, what the first period costs after any discount.
+        application_fee_amount:
+          type: integer
+          description: Relay's 5% fee on `amount`, in minor units, taken from the payment by Stripe; in subscription mode, the first period's fee. 0 when 5% rounds to nothing.
         currency:
           type: string
         description:
@@ -6218,6 +6231,12 @@ components:
         - image_url
         - image_color
       properties:
+        description:
+          type:
+            - string
+            - 'null'
+          maxLength: 2000
+          description: Detailed agent description. Required for public agents; null clears it otherwise.
         first_name:
           type: string
           description: First name on the contact card
@@ -6550,6 +6569,12 @@ components:
                 image_url:
                   type: string
       properties:
+        description:
+          type:
+            - string
+            - 'null'
+          maxLength: 2000
+          description: Detailed agent description. Required for public agents; null clears it otherwise.
         subtitle:
           type: string
           minLength: 1

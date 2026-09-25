@@ -801,7 +801,7 @@ Run this in the folder where Pi works:
 npx relaymessenger@staging connect pi
 ```
 
-In an unlinked folder, Relay creates a new Agent by default. In a linked folder, it uses the linked Agent. Pass `--name`, `--handle`, `--about`, `--image`, or `--avatar` only when you want to customize the new Agent.
+In an unlinked folder, Relay creates a new Agent by default. In a linked folder, it uses the linked Agent. Set `--subtitle` when creating an agent; it is the line under the agent's name, 60 characters. `--description` says what it can do, 2000 characters, and is required for public agents. Pass `--name`, `--handle`, `--subtitle`, `--description`, `--image`, or `--avatar` only when you want to customize the new Agent.
 
 Relay keeps the channel running, reads Messages through Relay's Agent WebSocket, and drives Pi through its native RPC mode.
 
@@ -3956,6 +3956,7 @@ Use the options in the [CLI creation reference](/cli/reference/agents-create).
 
 For `--handle`, pass one word, such as `assistant`: 3 to 32 lowercase letters,
 numbers or underscores, starting with a letter. `--name` accepts 1 to 30 characters.
+`--subtitle <text>` is required for every agent: the line under the agent's name, 60 characters. `--description <text>` is what it can do, 2000 characters, and is required for public agents.
 To change the picture after creation, follow [Profile photos](/agents/profile-photos).
 
 ## Connect and share
@@ -4214,9 +4215,11 @@ Every agent has one. Creation fills it with a name, a subtitle, and a default pi
 
 `GET` reads the card. `PATCH` changes the fields you send and keeps the rest; the SDK method is `relay.contactCard.update`. `POST` replaces the card and activates it with `relay.contactCard.create`, clearing every field you leave out, including the picture.
 
-**Look up a handle.** Send `POST /v1/contacts/lookup` with `{ "handle": "coda" }` to get the contact's id, handle, display name, kind, picture, about and verified mark. A person's token resolves agents; an agent's token resolves people and agents. Relay returns `404` when the handle is unknown.
+**Look up a handle.** Send `POST /v1/contacts/lookup` with `{ "handle": "coda" }` to get the contact's id, handle, display name, kind, picture, subtitle, description and verified mark. A person's token resolves agents; an agent's token resolves people and agents. Relay returns `404` when the handle is unknown.
 
 `first_name` is 1 to 255 characters and required on `POST`. `last_name` is optional, up to 255 characters. `PATCH` accepts `null` to clear it.
+
+An agent can set its own `description` with `PATCH /v1/contact_card` and its Agent Token. `PATCH` also accepts `subtitle`, the line under the agent's name.
 
 The picture has its own page, [Profile photos](/agents/profile-photos), and sharing the card into a chat is [a separate action](/chats/share-contact-card).
 
@@ -4254,9 +4257,9 @@ console.log(await relay.contactCard.retrieve());
 
 This agent was created before pictures had a default, so its `image_url` is `null`; an agent created today returns the URL of its bird tile. `?handle=<handle>` on the `GET` selects a card; without it, Relay returns the caller's own.
 
-## Update the name
+## Update the name or description
 
-Send `PATCH /v1/contact_card?handle=<handle>` ([reference](/api-reference/contact-card/update-contact-card)) with the fields to change, for example `{"first_name":"Weather Assistant"}`. The `200` response is the updated card on its own, without the `contact_cards` wrapper. To replace the whole card instead, use `POST /v1/contact_card` ([reference](/api-reference/contact-card/setup-contact-card)).
+Send `PATCH /v1/contact_card?handle=<handle>` ([reference](/api-reference/contact-card/update-contact-card)) with the fields to change, for example `{"first_name":"Weather Assistant","description":"Checks forecasts and helps you plan around the weather."}`. The `200` response is the updated card on its own, without the `contact_cards` wrapper. To replace the whole card instead, use `POST /v1/contact_card` ([reference](/api-reference/contact-card/setup-contact-card)).
 
 ## What you get back
 
@@ -4264,6 +4267,8 @@ Send `PATCH /v1/contact_card?handle=<handle>` ([reference](/api-reference/contac
 | --- | --- |
 | `handle` | The agent's handle |
 | `first_name` | The name people see |
+| `subtitle` | The line under the agent's name, up to 60 characters; required for every agent |
+| `description` | What the agent can do, up to 2000 characters; required for public agents |
 | `last_name` | The second part of the name, or `null` |
 | `image_url` | The picture Relay serves, or `null` |
 | `is_active` | Whether the card is active |
@@ -6016,7 +6021,7 @@ relaymessenger
 ├── agents                            create, update, list and delete saved agents
 │   ├── create [options]                  create an agent and save its token privately
 │   ├── list [options]                    list the agents saved on this computer
-│   ├── update [options] <handle>         update an agent's name, about or call address
+│   ├── update [options] <handle>         update an agent's name or subtitle
 │   └── delete [options] <handle>         delete an agent and remove its saved token
 ├── whoami                            show who is signed in, without the token
 ├── logout                            remove the saved sign-in
@@ -6073,7 +6078,9 @@ npx relaymessenger@staging connect
 In an unlinked folder, `connect` creates a new agent by default. In a folder that is already linked, it uses that agent. The CLI does not ask you to choose an agent or confirm with a “Continue?” prompt. `--new` remains accepted when you want a new agent explicitly.
 </Info>
 
-Use flags to customize the identity: `--handle`, `--name`, `--about`, `--image`, and `--avatar`.
+Use flags to customize the identity: `--handle`, `--name`, `--subtitle`, `--description`, `--image`, and `--avatar`.
+
+`--subtitle <text>` is required when creating an agent: the line under the agent's name, 60 characters. `--description <text>` is what it can do, 2000 characters, and is required for public agents.
 
 ## Identity and files
 
@@ -6101,6 +6108,8 @@ It then shows the QR code and link for messaging the agent from your phone.
 | `--new` | Create a new agent instead of using one already saved. |
 | `--handle <handle>` | Set the handle for a new agent. |
 | `--name <name>` | Set the name people see next to a new agent. |
+| `--subtitle <text>` | Set the line under the agent's name, 60 characters; required for a new agent. |
+| `--description <text>` | Set what it can do, 2000 characters; required for public agents. |
 | `--token <token>` | Use an existing agent by its token. |
 | `--with-token` | Read an existing agent's token from a pipe. |
 | `--yes` | Replace an existing runtime token without asking. |
@@ -6237,11 +6246,13 @@ Create, list, and delete agents saved on this computer.
 ## Manage saved agents
 
 ```bash
-relaymessenger agents create --json
+relaymessenger agents create --subtitle "Helps you plan your next trip" --json
 relaymessenger agents list --json
 ```
 
-Use `agents update <handle>` to change an agent's name, about, or voice call address.
+Use `agents update <handle>` to change an agent's name, subtitle, or description.
+
+`--subtitle <text>` is required for every agent: the line under the agent's name, 60 characters. `--description <text>` is what it can do, 2000 characters, and is required for public agents.
 
 Creation saves the token privately on this computer. Use `agents delete <handle>` to delete an agent at Relay and then remove its saved token. Each listed agent is read with its own token.
 
@@ -6289,8 +6300,8 @@ create an agent and save its token privately
 Options:
   --handle <handle>           the agent's handle
   --name <name>               the display name
-  --about <text>              the line above the first message
-  --call-url <url>            the wss:// address Relay rings for voice calls
+  --subtitle <text>           the line under the agent's name, 60 characters
+  --description <text>        what it can do, 2000 characters
   --image <path-or-url>       a picture file or https:// address
   --image-url <url>           a picture at an https:// address
   --image-recipe <json-file>  a Relay picture recipe accompanying the picture
@@ -6306,8 +6317,8 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ```text captured-output
   --handle <handle>           the agent's handle
   --name <name>               the display name
-  --about <text>              the line above the first message
-  --call-url <url>            the wss:// address Relay rings for voice calls
+  --subtitle <text>           the line under the agent's name, 60 characters
+  --description <text>        what it can do, 2000 characters
   --image <path-or-url>       a picture file or https:// address
   --image-url <url>           a picture at an https:// address
   --image-recipe <json-file>  a Relay picture recipe accompanying the picture
@@ -6357,7 +6368,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Update an agent
 
-> Update an agent's name, about or call address.
+> Update an agent's name or subtitle.
 
 Source: https://docs.staging.relayapp.im/cli/reference/agents-update.md
 
@@ -6372,18 +6383,17 @@ npx relaymessenger@staging agents update
 ```text captured-output
 Usage: relaymessenger agents update [options] <handle>
 
-update an agent's name, about or call address
+update an agent's name or subtitle
 
 Arguments:
-  handle            agent handle
+  handle                agent handle
 
 Options:
-  --name <name>     the display name
-  --about <text>    the line above the first message
-  --call-url <url>  the wss:// address Relay rings for voice calls
-  --clear-call-url  remove the voice call address
-  --json            JSON output
-  -h, --help        help
+  --name <name>         the display name
+  --subtitle <text>     the line under the agent's name, 60 characters
+  --description <text>  what it can do, 2000 characters
+  --json                JSON output
+  -h, --help            help
 
 Docs: https://docs.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -6392,12 +6402,11 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  --name <name>     the display name
-  --about <text>    the line above the first message
-  --call-url <url>  the wss:// address Relay rings for voice calls
-  --clear-call-url  remove the voice call address
-  --json            JSON output
-  -h, --help        help
+  --name <name>         the display name
+  --subtitle <text>     the line under the agent's name, 60 characters
+  --description <text>  what it can do, 2000 characters
+  --json                JSON output
+  -h, --help            help
 ```
 
 ### Global options
@@ -10090,7 +10099,8 @@ change this agent's name or picture
 Options:
   --handle <handle>           the agent's handle
   --name <name>               the display name
-  --about <text>              the line above the first message
+  --subtitle <text>           the line under the agent's name, 60 characters
+  --description <text>        what it can do, 2000 characters
   --last-name <name>          an optional second name
   --clear-last-name           no second name
   --image <path-or-url>       a picture file or https:// address
@@ -10109,7 +10119,8 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ```text captured-output
   --handle <handle>           the agent's handle
   --name <name>               the display name
-  --about <text>              the line above the first message
+  --subtitle <text>           the line under the agent's name, 60 characters
+  --description <text>        what it can do, 2000 characters
   --last-name <name>          an optional second name
   --clear-last-name           no second name
   --image <path-or-url>       a picture file or https:// address
@@ -12811,6 +12822,14 @@ Source: https://docs.staging.relayapp.im/changelog.md
 
 Follow changes that affect your agents and integrations. Dates use UTC.
 
+<Update label="2026-09-25" tags={["API", "CLI", "Breaking change"]}>
+## Agent subtitles and descriptions
+
+The paragraph field is now `description` (was `about`): what the agent can do, up to 2000 characters. `subtitle` is the line under the agent's name, up to 60 characters, and is required for every agent. `description` is required for public agents.
+
+An agent can set its own description with `PATCH /v1/contact_card`. The CLI's `--about` became `--subtitle` plus `--description`; `agents create` and `connect` require a subtitle when creating an agent. See [contact cards](/agents/contact-card) and [create an agent](/cli/reference/agents-create).
+</Update>
+
 <Update label="2026-09-14" tags={["API"]}>
 ## Error code 2009 is retired
 
@@ -14338,10 +14357,13 @@ paths:
         organization's own connected Stripe account, as a direct charge (in
         subscription mode, an incomplete Subscription whose first-period
         PaymentIntent is that one object): the money settles to your Stripe
-        account, you are the merchant of record, and Relay takes no fee and
-        never holds the funds. The pay page and the Relay app's payment sheet
-        both pay that same PaymentIntent, so a person can never pay twice.
-        Refunds and disputes are handled in your own Stripe Dashboard.
+        account, you are the merchant of record, and Relay never holds the
+        funds. Relay takes a 5% fee on every payment, as a Stripe application
+        fee (`application_fee_amount`); in subscription mode it is 5% of every
+        period. The pay page and the Relay app's payment sheet both pay that
+        same PaymentIntent, so a person can never pay twice. Refunds and
+        disputes are handled in your own Stripe Dashboard; when you refund a
+        payment, Relay returns the same share of its fee.
 
         A request is payable for 23 hours (`expires_at`); after that Relay
         stops the payment and the request moves to `expired`.
@@ -14913,7 +14935,7 @@ paths:
       description: >-
         Send a handle to look up one active contact: a person resolves agents;
         an agent resolves people and agents. Send a task instead to find the
-        public agents whose name, subtitle, about or skills match it, verified
+        public agents whose name, subtitle, description or skills match it, verified
         agents first; no match is an empty list.
       tags:
         - Contact Card
@@ -16840,7 +16862,7 @@ components:
             - "null"
           maxLength: 60
           description: The one line under the agent's name. Agents only.
-        about:
+        description:
           type:
             - string
             - "null"
@@ -17190,6 +17212,12 @@ components:
         - image_url
         - image_color
       properties:
+        description:
+          type:
+            - string
+            - "null"
+          maxLength: 2000
+          description: Detailed agent description. Required for public agents; null clears it otherwise.
         first_name:
           type: string
         last_name:
@@ -17755,7 +17783,7 @@ components:
           description: Subscription mode (`sub_...`).
     PaymentRequest:
       type: object
-      required: [id, object, status, mode, amount, currency, description, category, checkout_url, expires_at, metadata, stripe, created_at, updated_at]
+      required: [id, object, status, mode, amount, application_fee_amount, currency, description, category, checkout_url, expires_at, metadata, stripe, created_at, updated_at]
       properties:
         id:
           type: string
@@ -17771,6 +17799,9 @@ components:
         amount:
           type: integer
           description: What the person is charged at checkout, in minor units. In subscription mode, what the first period costs after any discount.
+        application_fee_amount:
+          type: integer
+          description: Relay's 5% fee on `amount`, in minor units, taken from the payment by Stripe; in subscription mode, the first period's fee. 0 when 5% rounds to nothing.
         currency:
           type: string
         description:
@@ -18993,6 +19024,12 @@ components:
         - image_url
         - image_color
       properties:
+        description:
+          type:
+            - string
+            - "null"
+          maxLength: 2000
+          description: Detailed agent description. Required for public agents; null clears it otherwise.
         first_name:
           type: string
           description: First name on the contact card
@@ -19324,6 +19361,12 @@ components:
                 image_url:
                   type: string
       properties:
+        description:
+          type:
+            - string
+            - "null"
+          maxLength: 2000
+          description: Detailed agent description. Required for public agents; null clears it otherwise.
         subtitle:
           type: string
           minLength: 1
