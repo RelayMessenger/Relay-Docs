@@ -244,6 +244,33 @@ and the current OpenAPI before implementing it.
   agents; the durable response claim spans that user's devices and
   idempotency keys. A different-key second submission conflicts with 409/1005.
 
+## Cards
+
+Read the [cards guide](https://docs.staging.relayapp.im/interactions/cards)
+and the current OpenAPI before implementing it.
+
+- A card is an A2UI v0.9.1 surface in a `data` part:
+  `{"type":"data","media_type":"application/a2ui+json","data":[...]}`. Send it
+  with `sendA2uiSurface` (TypeScript) or `send_a2ui_surface` (Python):
+  `createSurface`, then `updateComponents` whose first list holds the
+  component with id `root`, then an optional `updateDataModel`.
+- `catalogId` is `https://relayapp.im/a2ui/catalog/v1` (the basic catalog plus
+  `PaymentRequest`) or the A2UI basic catalog; `message.received` lists both in
+  `metadata.a2uiClientCapabilities`.
+- A tap is a `message.received` holding a `data` part with the A2UI `action`;
+  read it with `readA2uiAction` or `read_a2ui_action`. The tap, and the data
+  model when the surface set `sendDataModel`, reach only the person who tapped
+  and the agent that created the surface.
+- Answer a tap with `updateA2uiSurface` / `update_a2ui_surface`: it changes the
+  same card in place and adds no Message. `deleteA2uiSurface` retracts it.
+- Messages Relay could not apply come back in `a2ui_errors` as
+  `{part_index, data_index, a2ui_message}`; a send that applies nothing fails
+  with 404, 409 or 422 and the same list.
+- At most two actions per card, one primary; the primary button names the
+  action and the price. No tap commits without its own review step. Show a
+  result by updating the same card; no tabs, no scrolling areas, and no card
+  that holds only text.
+
 ## Webhook events
 
 | Path | Configuration | Transport acknowledgement |

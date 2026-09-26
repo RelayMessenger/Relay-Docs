@@ -65,7 +65,8 @@ def requests(text):
             code = re.sub(r'\b(?:async\s+)?fetch\s*\([^)]*\)\s*\{', '', code)
             if re.search(r'\bcurl\s+(?:[^\n]*|\\\n)', code) and lang.split(' ')[0] in {'bash', 'sh', 'shell', 'console'}:
                 variants.append('curl')
-            if lang.split(' ')[0] in {'typescript', 'ts', 'javascript', 'js'} and re.search(r'\b(?:(?:relay|client)\.(?!(?:webhooks\.(?:verify|unwrap)|events\.(?:on|off))\b)[\w.]+|Relay\.createAgent|\w+\.getNextPage|fetch)\s*\(', code):
+            # The SDK's A2UI helpers (sendA2uiSurface and its siblings) send a Message too.
+            if lang.split(' ')[0] in {'typescript', 'ts', 'javascript', 'js'} and re.search(r'\b(?:(?:relay|client)\.(?!(?:webhooks\.(?:verify|unwrap)|events\.(?:on|off))\b)[\w.]+|Relay\.createAgent|\w+\.getNextPage|(?:send|update|delete)A2uiSurface|fetch)\s*\(', code):
                 variants.append('typescript')
         if variants:
             result.append((block.start(), block.end(), set(variants)))

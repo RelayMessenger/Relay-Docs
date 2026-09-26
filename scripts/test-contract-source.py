@@ -19,10 +19,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # descriptions now carry the shipped sheet flow; the wire shapes are untouched.
 # Location sharing: POST /v1/chats/{chatId}/location/request, GET /v1/chats/{chatId}/location, the location_request and location parts, location.sharing.* webhooks.
 # Contact cards carry is_verified; agent contact resources carry creator.
-UPSTREAM_COMMIT = "efd780128d1f71d90c05947fcf919e3e0d03acbb"
-UPSTREAM_STAGING_COMMIT = "efd780128d1f71d90c05947fcf919e3e0d03acbb"
-UPSTREAM_SIZE = 244376
-UPSTREAM_SHA256 = "d724f38784e54027775e518fd70190147fc1af7baaec74943b58e60a98611640"
+# A2UI cards: the data part, a2ui_errors, targeted taps; the place part; GET /v1/me.
+UPSTREAM_COMMIT = "935deb143fb1de79f3bfe9d6137d2e20aef65b90"
+UPSTREAM_STAGING_COMMIT = "935deb143fb1de79f3bfe9d6137d2e20aef65b90"
+UPSTREAM_SIZE = 264764
+UPSTREAM_SHA256 = "dead1d94bcbe7e002955ac17efc23c7f7eb9c343470876459548b86410158597"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
@@ -39,7 +40,8 @@ class ContractSourceTests(unittest.TestCase):
         canonical = (ROOT / "api-reference/openapi.yaml").read_text()
         # Person-setting descriptions remain; the reverted public field does not.
         self.assertNotRegex(canonical, r"(?m)^\s+message_requests_from:")
-        self.assertNotIn("  /v1/me:\n", canonical)
+        # Server #379 brought back GET /v1/me as the agent's owner, not an admission field.
+        self.assertIn("      operationId: getMe\n", canonical)
 
     def test_public_contact_lookup_uses_only_the_approved_post_route(self):
         canonical = (ROOT / "api-reference/openapi.yaml").read_text()

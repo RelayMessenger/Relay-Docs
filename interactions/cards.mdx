@@ -1,0 +1,308 @@
+---
+title: "Cards"
+description: "Send a card built from A2UI components, read the person's taps, and change the card in place."
+keywords: ["cards", "A2UI", "a2ui", "data part", "surface", "ChoicePicker", "Button", "interactions"]
+---
+
+A card is an [A2UI](https://a2ui.org) v0.9.1 surface sent as a `data` part: `{"type":"data","media_type":"application/a2ui+json","data":[…]}`. The `data` array holds A2UI messages in order. Relay draws the card in the chat, and each tap on one of its buttons comes back to your agent as a Message.
+
+<Frame caption="A card with a title, a ChoicePicker and a primary Button.">
+  <img src="/images/cards/choice-picker-card.jpg" alt="A Relay card titled Rides to SFO, Terminal 2, with three ride options, UberX selected, and a blue button that reads Request UberX for $42." width="360" />
+</Frame>
+
+## Send a card
+
+A new card is one `createSurface`, one `updateComponents` and, optionally, one `updateDataModel`. The first `updateComponents` must hold the component with the id `root`. `catalogId` names a catalog Relay draws: Relay's catalog (the A2UI basic catalog plus `PaymentRequest`) or the A2UI basic catalog.
+
+This card offers two rides and a button that sends the choice back:
+
+<CodeGroup>
+```typescript TypeScript SDK
+import Relay, { RELAY_A2UI_CATALOG_ID, sendA2uiSurface } from "@relaymessenger/sdk";
+
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+  baseURL: "https://api.staging.relayapp.im",
+});
+
+await sendA2uiSurface(relay, "CHAT_ID", {
+  surfaceId: "ride-1042",
+  catalogId: RELAY_A2UI_CATALOG_ID,
+  components: [
+    { id: "root", component: "Card", child: "body" },
+    { id: "body", component: "Column", children: ["title", "rides", "review"] },
+    { id: "title", component: "Text", text: "Rides to SFO, Terminal 2", variant: "h3" },
+    {
+      id: "rides",
+      component: "ChoicePicker",
+      label: "Ride",
+      variant: "mutuallyExclusive",
+      options: [
+        { label: "UberX, $42, 4 min away", value: "uberx" },
+        { label: "Comfort, $51, 6 min away", value: "comfort" },
+      ],
+      value: { path: "/ride" },
+    },
+    { id: "review_label", component: "Text", text: "Review ride" },
+    {
+      id: "review",
+      component: "Button",
+      child: "review_label",
+      variant: "primary",
+      action: { event: { name: "review_ride", context: { ride: { path: "/ride" } } } },
+    },
+  ],
+  dataModel: { ride: ["uberx"] },
+}, { idempotency_key: "ride-1042-card" });
+```
+
+```python Python SDK
+import asyncio
+import os
+
+from relaymessenger import Relay
+from relaymessenger.a2ui import send_a2ui_surface
+
+relay = Relay(os.environ["RELAY_AGENT_TOKEN"], base_url="https://api.staging.relayapp.im")
+
+RIDE_CARD = [
+    {"id": "root", "component": "Card", "child": "body"},
+    {"id": "body", "component": "Column", "children": ["title", "rides", "review"]},
+    {"id": "title", "component": "Text", "text": "Rides to SFO, Terminal 2", "variant": "h3"},
+    {
+        "id": "rides",
+        "component": "ChoicePicker",
+        "label": "Ride",
+        "variant": "mutuallyExclusive",
+        "options": [
+            {"label": "UberX, $42, 4 min away", "value": "uberx"},
+            {"label": "Comfort, $51, 6 min away", "value": "comfort"},
+        ],
+        "value": {"path": "/ride"},
+    },
+    {"id": "review_label", "component": "Text", "text": "Review ride"},
+    {
+        "id": "review",
+        "component": "Button",
+        "child": "review_label",
+        "variant": "primary",
+        "action": {"event": {"name": "review_ride", "context": {"ride": {"path": "/ride"}}}},
+    },
+]
+
+asyncio.run(
+    send_a2ui_surface(
+        relay,
+        "CHAT_ID",
+        "ride-1042",
+        RIDE_CARD,
+        data_model={"ride": ["uberx"]},
+        idempotency_key="ride-1042-card",
+    )
+)
+```
+
+```bash HTTPS
+curl -sS "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": {
+      "parts": [{
+        "type": "data",
+        "media_type": "application/a2ui+json",
+        "data": [
+          {"version":"v0.9.1","createSurface":{"surfaceId":"ride-1042","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
+          {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[
+            {"id":"root","component":"Card","child":"body"},
+            {"id":"body","component":"Column","children":["title","rides","review"]},
+            {"id":"title","component":"Text","text":"Rides to SFO, Terminal 2","variant":"h3"},
+            {"id":"rides","component":"ChoicePicker","label":"Ride","variant":"mutuallyExclusive",
+             "options":[{"label":"UberX, $42, 4 min away","value":"uberx"},{"label":"Comfort, $51, 6 min away","value":"comfort"}],
+             "value":{"path":"/ride"}},
+            {"id":"review_label","component":"Text","text":"Review ride"},
+            {"id":"review","component":"Button","child":"review_label","variant":"primary",
+             "action":{"event":{"name":"review_ride","context":{"ride":{"path":"/ride"}}}}}
+          ]}},
+          {"version":"v0.9.1","updateDataModel":{"surfaceId":"ride-1042","value":{"ride":["uberx"]}}}
+        ]
+      }],
+      "idempotency_key": "ride-1042-card"
+    }
+  }'
+```
+</CodeGroup>
+
+The send returns `202` with the card's Message:
+
+```http
+HTTP/1.1 202 Accepted
+```
+
+Keep the `surfaceId`: every later change to the card names it. The Python SDK installs from the Relay SDK repository with `pip install "git+https://github.com/RelayMessenger/Relay-SDK@staging#subdirectory=python/relaymessenger"` and needs Python 3.10 or newer.
+
+## Receive a tap
+
+A tap reaches your agent as [`message.received`](/events/message-received), through its webhook or the Agent WebSocket. The Message holds a `data` part with the A2UI `action`: the Button's event name, the surface, and the context with every binding resolved.
+
+```json
+{
+  "event_type": "message.received",
+  "data": {
+    "parts": [
+      {"type":"data","media_type":"application/a2ui+json","data":[
+        {"version":"v0.9.1","action":{"name":"review_ride","surfaceId":"ride-1042","sourceComponentId":"review","timestamp":"2026-09-26T00:45:07.452Z","context":{"ride":["comfort"]}}}
+      ],"reactions":null}
+    ]
+  }
+}
+```
+
+Read the tap with `readA2uiAction` or `read_a2ui_action`; each returns nothing for a Message without one:
+
+<CodeGroup>
+```typescript TypeScript SDK
+import { readA2uiAction, type RelayWebhookEvent } from "@relaymessenger/sdk";
+
+export async function onEvent(event: RelayWebhookEvent) {
+  if (event.event_type !== "message.received") return;
+  const tap = readA2uiAction(event);
+  if (tap?.action.name !== "review_ride") return;
+  const [ride] = tap.action.context.ride as string[];
+  // ride is "comfort"; update the card, as shown below.
+}
+```
+
+```python Python SDK
+from relaymessenger.a2ui import read_a2ui_action
+
+
+async def on_event(event: dict) -> None:
+    tap = read_a2ui_action(event)
+    if tap is None or tap.name != "review_ride":
+        return
+    ride = tap.context["ride"][0]
+    # ride is "comfort"; update the card, as shown below.
+```
+</CodeGroup>
+
+A tap reaches only the person who tapped and the agent that created the card. When the card's `createSurface` sets `sendDataModel: true`, each tap also carries the card's data model, and it goes only to that same agent. `readA2uiAction` returns it as `dataModel`; in Python it is `tap.data_model`.
+
+## Update or remove a card
+
+`updateA2uiSurface` changes the same card in place for everyone in the chat and adds no Message. Components replace their namesakes by `id`. Inside the tap handler, this update turns the choice into a review step with one button that commits:
+
+<CodeGroup>
+```typescript TypeScript SDK
+import { updateA2uiSurface } from "@relaymessenger/sdk";
+
+await updateA2uiSurface(relay, event.data.chat.id, tap.action.surfaceId, {
+  components: [
+    { id: "body", component: "Column", children: ["title", "request"] },
+    { id: "request_label", component: "Text", text: "Request Comfort for $51" },
+    {
+      id: "request",
+      component: "Button",
+      child: "request_label",
+      variant: "primary",
+      action: { event: { name: "request_ride", context: { ride: "comfort" } } },
+    },
+  ],
+});
+```
+
+```python Python SDK
+from relaymessenger.a2ui import update_a2ui_surface
+
+await update_a2ui_surface(
+    relay,
+    tap.chat_id,
+    tap.surface_id,
+    components=[
+        {"id": "body", "component": "Column", "children": ["title", "request"]},
+        {"id": "request_label", "component": "Text", "text": "Request Comfort for $51"},
+        {
+            "id": "request",
+            "component": "Button",
+            "child": "request_label",
+            "variant": "primary",
+            "action": {"event": {"name": "request_ride", "context": {"ride": "comfort"}}},
+        },
+    ],
+)
+```
+
+```bash HTTPS
+curl -sS "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": {
+      "parts": [{
+        "type": "data",
+        "media_type": "application/a2ui+json",
+        "data": [
+          {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[
+            {"id":"body","component":"Column","children":["title","request"]},
+            {"id":"request_label","component":"Text","text":"Request Comfort for $51"},
+            {"id":"request","component":"Button","child":"request_label","variant":"primary",
+             "action":{"event":{"name":"request_ride","context":{"ride":"comfort"}}}}
+          ]}}
+        ]
+      }]
+    }
+  }'
+```
+</CodeGroup>
+
+The update returns `202` with the card's own Message, its `data` now ending in the update:
+
+```http
+HTTP/1.1 202 Accepted
+```
+
+`deleteA2uiSurface(relay, chatId, "ride-1042")`, or `delete_a2ui_surface` in Python, retracts the card for everyone. When every card in a Message is deleted, the Message reads back with no parts and a non-null `unsent_at`, and its `surfaceId` can be created again. Any agent in the chat can update or delete any card in it. A person who sends `createSurface`, `updateComponents`, `updateDataModel` or `deleteSurface` gets `403` ([2003](/api-reference/errors#2003)).
+
+## Errors
+
+Relay applies each A2UI message on its own and checks it against A2UI's schemas and the card's catalog. Each message it could not apply comes back in the response's `a2ui_errors`, with `part_index` and `data_index` for its place in your request and `a2ui_message`, A2UI's own `error` message. Its `path` points inside the failing message's body.
+
+<CodeGroup>
+```json Button with no action
+{"part_index":0,"data_index":1,"a2ui_message":{"version":"v0.9.1","error":{"code":"VALIDATION_FAILED","surfaceId":"bad-484756","path":"/components/1/action","message":"Instance does not have required property \"action\"."}}}
+```
+
+```json Missing root
+{"part_index":0,"data_index":1,"a2ui_message":{"version":"v0.9.1","error":{"code":"VALIDATION_FAILED","surfaceId":"noroot-484756","path":"/components","message":"A surface's first updateComponents must hold the component with id \"root\", the root of its tree."}}}
+```
+</CodeGroup>
+
+The rest of the send is still applied and returns `202`. A send that applies nothing is refused with the first failure's status, and the error body's `a2ui_errors` lists each message:
+
+| Status | Cause |
+| --- | --- |
+| `404` | The first failure names an unknown or deleted `surfaceId`. |
+| `409` | The first failure is a `createSurface` for a `surfaceId` already live in the chat. |
+| `422` | Anything else, for example a component, property or value the catalog does not define ([2006](/api-reference/errors#2006)). |
+
+## Design guidelines
+
+- Put at most two actions in a card, and make one of them primary.
+- Name the action and the price on the primary button, for example "Book JetBlue 916 for $168".
+- Give every commit its own step: show a review, then commit on the next tap.
+- Show a result by updating the same card in place, and send a new card only for new content.
+- Keep tabs and deep navigation out of a card.
+- Keep scrolling areas out of a card.
+- Send a normal message when a card would hold only text.
+- Put several photos of one thing in a horizontal List of Images, which Relay draws as a swipeable carousel.
+- Put several different items in a Row of Images, each with weight 1.
+- Use the mediumFeature variant for a big photo at the top of a card.
+- Expect Relay to ignore the A2UI theme and draw every card in Relay's own style.
+
+## Next steps
+
+- [Interactions](/interactions/index)
+- [Buttons](/interactions/buttons)
+- [Payments](/interactions/payments)
+- [Receive `message.received`](/events/message-received)
+- [A2UI specification](https://a2ui.org)

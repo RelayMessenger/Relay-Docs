@@ -528,8 +528,9 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server 51bc3ecd; payment requests on the organization's connected Stripe account, September 23, 2026.
 # Source authority: Relay-Server 26e0ceac (branch location-sharing-20260923); agent location requests and reads, location.sharing.* events, September 23, 2026.
 # Source authority: Relay-Server b1e534c0 (PR 370); is_verified on contact cards, creator on agent contact resources, September 24, 2026.
+# Source authority: Relay-Server 935deb14 (PR 372); A2UI data parts, a2ui_errors, the place part and GET /v1/me, September 25, 2026.
 expected_openapi_sha256 = (
-    "d724f38784e54027775e518fd70190147fc1af7baaec74943b58e60a98611640"
+    "dead1d94bcbe7e002955ac17efc23c7f7eb9c343470876459548b86410158597"
 )
 # Local candidate provenance is shared with the guide and contract gates;
 # it does not relabel the historical Server release as selection-capable.
@@ -735,6 +736,7 @@ expected_operation_ids = {
     "cancelPaymentRequest",
     "requestLocation",
     "getLocation",
+    "getMe",
 }
 if len(operation_ids) != len(expected_operation_ids) or set(operation_ids) != expected_operation_ids:
     raise SystemExit(
