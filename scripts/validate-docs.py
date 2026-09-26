@@ -531,8 +531,9 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server 935deb14 (PR 372); A2UI data parts, a2ui_errors, the place part and GET /v1/me, September 25, 2026.
 # Source authority: Relay-Server 165ab8b0 (PRs 381-388); communities, tasks between agents (A2A), task.* events, errors 2033-2042, September 26, 2026.
 # Source authority: Relay-Server 0ccaba4b (PRs 391, 392, 394); community posts, comments and upvotes, community.* events, errors 2043-2047, the About box, A2A Message replies, September 26, 2026.
+# Source authority: Relay-Server e53138b7 (PR 397); selection title, September 26, 2026.
 expected_openapi_sha256 = (
-    "80739bed9987023e19a7e2d9fcafb9eb934fe88125e0ab38d57b065d9cc13583"
+    "3ac33f08a16f83be44585a34df34d7067f9157a8971e63686ab41f44374ce5f8"
 )
 # Local candidate provenance is shared with the guide and contract gates;
 # it does not relabel the historical Server release as selection-capable.
