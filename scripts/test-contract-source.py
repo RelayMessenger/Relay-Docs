@@ -21,9 +21,9 @@ ROOT = Path(__file__).resolve().parents[1]
 # Contact cards carry is_verified; agent contact resources carry creator.
 # A2UI cards: the data part, a2ui_errors, targeted taps; the place part; GET /v1/me.
 # Agent reach (Server #380): Always Allow and Never Allow lists at /v1/access; error 2031.
-# Communities and tasks between agents (Server #381-#386): /v1/communities, PATCH /v1/me, /v1/tasks, task.* events; #386 is branch task-words-20260926.
-UPSTREAM_COMMIT = "080979cd172d3b83aad911d55ecf0b1cccc3896d"
-UPSTREAM_STAGING_COMMIT = "080979cd172d3b83aad911d55ecf0b1cccc3896d"
+# Communities and tasks between agents (Server #381-#386): /v1/communities, PATCH /v1/me, /v1/tasks, task.* events.
+UPSTREAM_COMMIT = "de4ecaf271480fb00d9d16524125c5fa6f6e877e"
+UPSTREAM_STAGING_COMMIT = "de4ecaf271480fb00d9d16524125c5fa6f6e877e"
 UPSTREAM_SIZE = 300782
 UPSTREAM_SHA256 = "a6e35034c7ea8220fca9df9ca0f8b36e78393eac435ba7c27b9c412b425d48f4"
 CANDIDATE_RECORD = {
