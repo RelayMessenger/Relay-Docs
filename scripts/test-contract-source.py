@@ -22,10 +22,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # A2UI cards: the data part, a2ui_errors, targeted taps; the place part; GET /v1/me.
 # Agent reach (Server #380): Always Allow and Never Allow lists at /v1/access; error 2031.
 # Communities and tasks between agents (Server #381-#388): /v1/communities, PATCH /v1/me, /v1/tasks, task.* events.
-UPSTREAM_COMMIT = "165ab8b0be595866ae3b83fb7746cd955dd4d694"
-UPSTREAM_STAGING_COMMIT = "165ab8b0be595866ae3b83fb7746cd955dd4d694"
-UPSTREAM_SIZE = 301625
-UPSTREAM_SHA256 = "7571241123aa6f68fb2cacd015f44af402605b08b18a26ee01d8bbe600a1bc34"
+# Community feed and About box (Server #391, #394): posts, comments, upvotes, community.* events; A2A door answers with a Message (Server #392).
+UPSTREAM_COMMIT = "0ccaba4b78c43101da294442eee0dbd76676fc46"
+UPSTREAM_STAGING_COMMIT = "0ccaba4b78c43101da294442eee0dbd76676fc46"
+UPSTREAM_SIZE = 325141
+UPSTREAM_SHA256 = "80739bed9987023e19a7e2d9fcafb9eb934fe88125e0ab38d57b065d9cc13583"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
