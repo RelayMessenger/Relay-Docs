@@ -24,9 +24,8 @@ export const PaymentPreview = ({ part, label, controls = true, receipt = false, 
   const MIN_CAPTION = 48.5;
   const PICTURE_HEIGHT = 170;
   const LEADING = 14;
-  // The transcript row on a 402pt iPhone: the agent's card at its leading
-  // edge, the payer's receipt at its trailing edge (measured, 369pt).
-  const ROW_WIDTH = 369;
+  // The agent's card sits at the transcript's leading edge and the payer's
+  // receipt at its trailing edge, across the frame's full width.
 
   const [status, setStatus] = useState(part.status || "requested");
   const [storefront, setStorefront] = useState(initialStorefront);
@@ -283,8 +282,9 @@ export const PaymentPreview = ({ part, label, controls = true, receipt = false, 
       <style>{`
         .pay-preview { --pay-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif; }
         .pay-preview.is-cover-open .buttons-preview-frame { min-height: 560px; }
-        .pay-stage { display: flex; justify-content: center; padding: 36px 24px; }
-        .pay-column { display: flex; flex-direction: column; gap: 12px; width: ${ROW_WIDTH}px; max-width: 100%; }
+        .pay-stage { display: flex; box-sizing: border-box; max-width: 402px; margin: 0 auto; padding: 16px; }
+        .pay-preview .relay-preview-bar { padding-top: 0; }
+        .pay-column { display: flex; flex-direction: column; gap: 12px; width: 100%; }
         .pay-card { position: relative; display: block; width: ${CARD_WIDTH}px; margin: 0; padding: 0; border: 0;
           background: none; color: inherit; font: inherit; text-align: left; -webkit-tap-highlight-color: transparent; }
         button.pay-card { cursor: pointer; }

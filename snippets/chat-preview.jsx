@@ -63,20 +63,24 @@ export const ChatPreview = ({ scene, json, label }) => {
 .chatp-phone { position: relative; width: 100%; max-width: 402px; margin: 0 auto; color: #000000; }
 .dark .chatp-phone { color: #ffffff; }
 .chatp-phone.has-overlay { min-height: 440px; }
-.chatp-transcript { position: relative; padding: 36px 16px 32px; }
+.chatp-transcript { position: relative; padding: 16px; }
+.chatp-transcript.has-bar { padding-bottom: 12px; }
 .chatp-transcript.is-group { padding-left: 12px; padding-right: 12px; }
-.chatp-transcript.is-scroll { height: 330px; overflow-y: auto; scroll-behavior: smooth; }
 .chatp-row { position: relative; display: flex; align-items: flex-end; }
 .chatp-row.out { justify-content: flex-end; }
 .chatp-col { display: flex; flex-direction: column; min-width: 0; }
 .chatp-row.out .chatp-col { align-items: flex-end; }
 .chatp-row.in .chatp-col { align-items: flex-start; }
-.chatp-bubble { position: relative; box-sizing: border-box; max-width: ${BALLOON_MAX}px; padding: 10px ${INSET_X}px; border-radius: 20px; font-size: 17px; line-height: 20px; letter-spacing: -0.43px; white-space: pre-wrap; overflow-wrap: anywhere; --fill: #E9E9E9; background: var(--fill); color: #000000; }
+.chatp-bubble { position: relative; box-sizing: border-box; max-width: ${BALLOON_MAX}px; padding: 10px ${INSET_X}px; border-radius: 20px; font-size: 17px; line-height: 22px; letter-spacing: -0.43px; white-space: pre-wrap; isolation: isolate; overflow-wrap: anywhere; --fill: #E9E9E9; background: var(--fill); color: #000000; }
 .dark .chatp-bubble { --fill: #2C2C2E; color: #ffffff; }
 .chatp-bubble.out { --fill: #0B75FF; color: #ffffff; }
 .dark .chatp-bubble.out { --fill: #007EFF; color: #E9E9E9; }
 .chatp-bubble.has-tail { margin-bottom: ${TAIL_DEPTH}px; }
-.chatp-tail { position: absolute; top: calc(100% - 16px); width: 23px; height: 24px; fill: var(--fill); pointer-events: none; }
+/* The tail paints UNDER the bubble's text, as in the app: every carrier is
+   its own stacking context and the tail sits at z-index -1 inside it, so it
+   can never cover a descender on the last line. */
+.chatp-tail { position: absolute; top: calc(100% - 16px); width: 23px; height: 24px; fill: var(--fill); pointer-events: none; z-index: -1; }
+.chatp-audio, .chatp-link, .chatp-place, .chatp-doc, .chatp-locstop, .chatp-tailed { isolation: isolate; }
 .chatp-tail.in { left: 0; }
 .chatp-tail.out { right: 0; transform: scaleX(-1); }
 .chatp-bubble code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 16px; }
@@ -103,24 +107,19 @@ export const ChatPreview = ({ scene, json, label }) => {
 .dark .chatp-quote.is-own { border-color: rgba(0,126,255,.42); color: rgba(0,126,255,.80); }
 .chatp-quote.is-media { padding: 0; overflow: hidden; }
 .chatp-quote.is-media img { display: block; height: 48px; width: auto; opacity: .55; }
-.chatp-replyline { position: absolute; left: 30px; width: 22px; border: 4px solid rgba(0,0,0,.08); border-right: 0; border-radius: 13px 0 0 13px; pointer-events: none; }
-.dark .chatp-replyline { border-color: rgba(254,255,255,.16); border-right: 0; }
+.chatp-replyline { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; fill: none; stroke: rgba(0,0,0,.08); stroke-width: 4; stroke-linecap: round; }
+.dark .chatp-replyline { stroke: rgba(254,255,255,.16); }
 /* Tapbacks: RelayTapbackBalloon.swift:52-116. */
 .chatp-tapback { position: absolute; pointer-events: none; }
-.chatp-tb { position: absolute; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 19px; line-height: 1; box-shadow: 0 0 0 1.33px #ffffff; background: #E9E9E9; }
-.dark .chatp-tb { box-shadow: 0 0 0 1.33px #000000; background: #2C2C2E; }
-.chatp-tb.mine { background: #0B75FF; }
-.dark .chatp-tb.mine { background: #007EFF; }
-.chatp-tbdot { position: absolute; border-radius: 50%; background: #E9E9E9; box-shadow: 0 0 0 1.33px #ffffff; }
-.dark .chatp-tbdot { background: #2C2C2E; box-shadow: 0 0 0 1.33px #000000; }
-.chatp-tbdot.mine { background: #0B75FF; }
-.dark .chatp-tbdot.mine { background: #007EFF; }
+.chatp-tapback { position: absolute; overflow: visible; pointer-events: none; }
+.chatp-tb-seam { fill: #ffffff; }
+.dark .chatp-tb-seam { fill: #000000; }
+.chatp-tb-fill { fill: #E9E9E9; }
+.dark .chatp-tb-fill { fill: #2C2C2E; }
+.chatp-tb-fill.mine { fill: #0B75FF; }
+.dark .chatp-tb-fill.mine { fill: #007EFF; }
+.chatp-tb-glyph { font-size: 21px; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
 /* Reaction bar: MessageReactionPicker.swift:53-69, 1343-1349. */
-.chatp-bar { position: absolute; z-index: 3; display: flex; padding: 7.5px; height: 64px; box-sizing: border-box; border-radius: 32px; background: #ffffff; box-shadow: 0 6px 24px rgba(0,0,0,.18); animation: chatp-arrive .2s ease-out; }
-.dark .chatp-bar { background: #262629; box-shadow: 0 6px 24px rgba(0,0,0,.6); }
-.chatp-bar button { width: 49px; height: 49px; border: 0; border-radius: 50%; background: transparent; font-size: 25px; line-height: 1; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; }
-.chatp-bar button[aria-pressed="true"] { background: radial-gradient(circle, #0B75FF 21.5px, transparent 22px); }
-.chatp-dim { opacity: .3; transition: opacity .2s; }
 /* Typing: TypingIndicator.swift:79-95. */
 .chatp-typing { position: relative; width: 57.5px; height: 35px; border-radius: 17.5px; background: #E9E9E9; display: flex; align-items: center; justify-content: center; gap: 4px; margin-bottom: 6.71px; }
 .dark .chatp-typing, .dark .chatp-typing-trail { background: #2C2C2E; }
@@ -238,17 +237,15 @@ export const ChatPreview = ({ scene, json, label }) => {
 .chatp-doc-clip { position: relative; border-radius: 20px; overflow: hidden; background: var(--fill); }
 .chatp-doc-clip::after { content: ""; position: absolute; inset: 0; border-radius: 20px; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.1); pointer-events: none; }
 .dark .chatp-doc-clip::after { box-shadow: inset 0 0 0 .5px rgba(255,255,255,.1); }
-.chatp-doc-thumb { height: 128px; background: #ffffff; padding: 18px 22px 0; box-sizing: border-box; overflow: hidden; }
-.chatp-doc-thumb i { display: block; height: 5px; border-radius: 2.5px; background: #d1d1d6; margin-bottom: 9px; }
-.chatp-doc-thumb i.is-head { height: 9px; width: 58%; background: #3a3a3c; margin-bottom: 14px; }
+.chatp-doc-thumb { height: 128px; background: #ffffff; overflow: hidden; line-height: 0; }
+.chatp-doc-thumb img { display: block; width: 100% !important; height: auto; }
 .chatp-doc-cap { padding: 11px 16px; font-size: 17px; line-height: 20px; font-weight: 600; letter-spacing: -0.43px; }
 .chatp-doc-cap span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chatp-ql { position: absolute; inset: 0; z-index: 4; background: #f2f2f7; display: flex; flex-direction: column; animation: chatp-arrive .2s ease-out; }
 .dark .chatp-ql { background: #000000; }
 .chatp-ql-bar { position: relative; padding: 18px 56px 12px; text-align: center; font-size: 17px; font-weight: 600; letter-spacing: -0.43px; }
-.chatp-ql-page { flex: 1; margin: 4px 28px 28px; background: #ffffff; box-shadow: 0 2px 12px rgba(0,0,0,.12); padding: 28px 26px; box-sizing: border-box; }
-.chatp-ql-page i { display: block; height: 6px; border-radius: 3px; background: #d1d1d6; margin-bottom: 12px; }
-.chatp-ql-page i.is-head { height: 12px; width: 58%; background: #3a3a3c; margin-bottom: 20px; }
+.chatp-ql-page { flex: 1; min-height: 0; margin: 4px 28px 28px; overflow: hidden; line-height: 0; }
+.chatp-ql-page img { display: block; width: 100% !important; height: auto; box-shadow: 0 2px 12px rgba(0,0,0,.12); }
 @media (prefers-reduced-motion: reduce) {
   .chatp *, .chatp *::before, .chatp *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   .chatp-typing i { opacity: .325; }
@@ -256,9 +253,6 @@ export const ChatPreview = ({ scene, json, label }) => {
 `;
 
   // ---------- State ----------
-  const [tick, setTick] = useState(0);
-  const [picker, setPicker] = useState(false);
-  const [mine, setMine] = useState(null);
   const [read, setRead] = useState(false);
   const [flash, setFlash] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -303,12 +297,6 @@ export const ChatPreview = ({ scene, json, label }) => {
     const [word, ...rest] = text.split(" ");
     return <div className="chatp-receipt" role="status"><b>{word}</b>{rest.length ? " " + rest.join(" ") : ""}</div>;
   };
-  // A transcript opens on its newest row, the way the app does.
-  const pinToBottom = (e) => {
-    const t = e.currentTarget.closest(".chatp-transcript");
-    if (t && !t.dataset.jumped) t.scrollTop = t.scrollHeight;
-  };
-
   // Inline Markdown, the six formats messages/send.mdx lists. The app hides
   // the delimiters on text it receives (RelayMessageBodyText,
   // MessageBubble.swift:196-290).
@@ -332,29 +320,44 @@ export const ChatPreview = ({ scene, json, label }) => {
     return out;
   };
 
-  // Tapback pile over a bubble's top corner (RelayTapbackBalloon.swift:
-  // 52-116, 488-520, 629-660). `reactions` runs back to front.
+  // Tapback pile over a bubble's top corner, copied from Relay-iOS
+  // origin/staging 1ef73e93 Views/Transcript/RelayTapbackBalloon.swift
+  // (RelayTapbackGeometry and layoutSubviews): one balloon per reactor, Ø34,
+  // centred 2.83pt inside the corner edge and 10.33pt above the top edge;
+  // older balloons step 19.985419pt toward the screen centre; only the front
+  // balloon carries the trail, a Ø10 dot 18.75pt out on a 36° ray and a Ø5
+  // dot 10.5pt further on a 38° ray, descending on the outer side. The front
+  // balloon and its dots are ONE silhouette, and a 1.33pt seam in the
+  // transcript colour sits behind each silhouette, never between its parts.
+  // `reactions` runs back to front.
   const tapbacks = (reactions, isOutgoing) => {
     if (!reactions.length) return null;
     const R = 17;
-    const step = 19.985419;
-    const inset = 2.83;
-    const rise = 10.33;
+    const STEP = 19.985419;
+    const INSET = 2.83;
+    const RISE = 10.33;
+    const SEAM = 4 / 3;
     const n = reactions.length;
+    const dir = isOutgoing ? -1 : 1;
     const md = { x: 18.75 * Math.sin(36 * Math.PI / 180), y: 18.75 * Math.cos(36 * Math.PI / 180) };
     const sd = { x: md.x + 10.5 * Math.sin(38 * Math.PI / 180), y: md.y + 10.5 * Math.cos(38 * Math.PI / 180) };
-    const dir = isOutgoing ? -1 : 1;
-    const front = reactions[n - 1];
-    const style = { top: -rise, [isOutgoing ? "left" : "right"]: inset, width: 0, height: 0 };
+    const centre = (i) => -dir * STEP * (n - 1 - i);
+    const style = { top: -RISE, [isOutgoing ? "left" : "right"]: INSET };
     return (
-      <div className="chatp-tapback" style={style} aria-hidden="true">
-        <span className={"chatp-tbdot" + (front.mine ? " mine" : "")} style={{ width: 5, height: 5, left: dir * sd.x - 2.5, top: sd.y - 2.5 }} />
-        <span className={"chatp-tbdot" + (front.mine ? " mine" : "")} style={{ width: 10, height: 10, left: dir * md.x - 5, top: md.y - 5 }} />
-        {reactions.map((r, i) => (
-          <span key={i} className={"chatp-tb" + (r.mine ? " mine" : "")}
-            style={{ left: -R - dir * step * (n - 1 - i), top: -R }}>{r.glyph}</span>
-        ))}
-      </div>
+      <svg className="chatp-tapback" style={style} width="1" height="1" aria-hidden="true" focusable="false">
+        {reactions.map((r, i) => {
+          const circles = i === n - 1
+            ? [[0, 0, R], [dir * md.x, md.y, 5], [dir * sd.x, sd.y, 2.5]]
+            : [[centre(i), 0, R]];
+          return (
+            <g key={i}>
+              <g className="chatp-tb-seam">{circles.map(([x, y, radius], k) => <circle key={k} cx={x} cy={y} r={radius + SEAM} />)}</g>
+              <g className={"chatp-tb-fill" + (r.mine ? " mine" : "")}>{circles.map(([x, y, radius], k) => <circle key={k} cx={x} cy={y} r={radius} />)}</g>
+              <text className="chatp-tb-glyph" x={centre(i)} y={0} textAnchor="middle" dominantBaseline="central">{r.glyph}</text>
+            </g>
+          );
+        })}
+      </svg>
     );
   };
 
@@ -444,7 +447,6 @@ export const ChatPreview = ({ scene, json, label }) => {
   // ---------- Scenes ----------
   let title = "Echo";
   let isGroup = false;
-  let scroll = false;
   let body = null;
   let controls = null;
   let overlay = null;
@@ -463,73 +465,91 @@ export const ChatPreview = ({ scene, json, label }) => {
 
   if (scene === "send" || scene === "markdown") {
     const text = parts[0].value;
-    body = row("in", bubble("in", scene === "markdown" ? markdown(text) : text), { className: tick ? "chatp-arrive" : "" });
-    corner = { label: "Replay", run: () => setTick((t) => t + 1) };
-    body = <div key={tick}>{body}</div>;
+    body = row("in", bubble("in", scene === "markdown" ? markdown(text) : text));
   } else if (scene === "replies") {
     // The person sent a caption and a photo; the agent replies to part 1.
     // Quote on the original author's side in the viewer's blue family
     // (MessageReplyPreview.swift:556-579, 632-657), 8.5pt above the reply.
-    scroll = true;
     const target = json.message.reply_to.part_index;
     const original = [
       <div key="t">{bubble("out", "Does the chart look right?", { tail: false })}</div>,
       <div key="p" style={{ marginTop: 4 }}>
-        <button type="button" className={"chatp-photo" + (flash ? " chatp-flash" : "")} id="chatp-original" tabIndex={-1} aria-label="Photo, part 1">
-          <img src="/images/chat/photo-hotel.jpg" alt="" onLoad={pinToBottom} />
+        <button type="button" className={"chatp-photo" + (flash ? " chatp-flash" : "")} id="chatp-original" tabIndex={-1} aria-label="Chart, part 1">
+          {/* The chart the words ask about, generated 2026-09-26 with Google's
+              gemini-3-pro-image through the Gemini API (aspect 4:3), prompt:
+              "A clean, photographic close-up of a laptop screen showing a
+              simple quarterly sales bar chart: four blue bars labelled Q1, Q2,
+              Q3, Q4 rising left to right, a short title 'Quarterly sales',
+              light background, soft daylight, shallow depth of field,
+              product-photography quality, no people, no logos." */}
+          <img src="/images/chat/chart-quarterly-sales.jpg" alt="" />
         </button>
       </div>,
     ];
     const jump = (e) => {
-      const root = e.currentTarget.closest(".chatp-transcript");
-      const photo = root && root.querySelector("#chatp-original");
-      if (root && photo) { root.dataset.jumped = "1"; root.scrollTop = Math.max(0, photo.offsetTop - 60); }
       setFlash(false);
       requestAnimationFrame(() => setFlash(true));
       setTimeout(() => setFlash(false), 1200);
     };
+    // The reply answers ONE part of a two-part message, so the app does not
+    // take the adjacent-row shortcut (ReplyLinePlanner.swift, "An exact-part
+    // reply may not bracket a whole multipart row"): it shows the quote of
+    // that part and joins it to the reply with the reply line. The line is
+    // ReplyLineShape (MessageReplyPreview.swift): a 4pt round-capped stroke
+    // on the leading centreline 32pt in, black 8% (white 16% in dark); an
+    // arm at the quote's vertical centre reaching 32pt past the centreline
+    // on ReplyBracketCurve's three cubics, and a reduced cap 2pt + half a
+    // stroke above the reply (capAboveBubbleReduced).
+    const QUOTE_H = 50;
+    const REPLY_GAP = 8.5;
+    const X = 16;
+    const topY = QUOTE_H / 2;
+    const bottomY = QUOTE_H + REPLY_GAP - (2 + 2);
+    const fullExtent = 21 * 1.52866;
+    const used = Math.min(fullExtent, bottomY - topY);
+    const k = used / fullExtent;
+    const r = 21 * k;
+    const armX = X + 32 * k;
+    const f = (n) => n.toFixed(2);
+    const linePath = [
+      `M ${f(armX)} ${f(topY)}`,
+      `C ${f(X + r * 1.08849)} ${f(topY)} ${f(X + r * 0.868407)} ${f(topY)} ${f(X + r * 0.631494)} ${f(topY + r * 0.0749114)}`,
+      `C ${f(X + r * 0.372824)} ${f(topY + r * 0.16906)} ${f(X + r * 0.16906)} ${f(topY + r * 0.372824)} ${f(X + r * 0.0749114)} ${f(topY + r * 0.631494)}`,
+      `C ${f(X + r * 0.0749114)} ${f(topY + r * 0.868407)} ${f(X)} ${f(topY + r * 1.08849)} ${f(X)} ${f(topY + used)}`,
+      `L ${f(X)} ${f(bottomY)}`,
+    ].join(" ");
     body = (
       <div style={{ position: "relative" }}>
         {row("out", <div className="chatp-col" style={{ alignItems: "flex-end" }}>{original}</div>)}
-        <div style={{ height: 150 }} aria-hidden="true" />
-        {row("out", (
-          <button type="button" className="chatp-quote is-own is-media" onClick={jump}
-            aria-label={`Replying to you: photo, part ${target}. Jumps to the photo`}>
-            <img src="/images/chat/photo-hotel.jpg" alt="" onLoad={pinToBottom} />
-          </button>
-        ))}
-        <div className="chatp-replyline" style={{ bottom: 20, height: 52 }} aria-hidden="true" />
-        {row("in", bubble("in", parts[0].value))}
+        <div style={{ height: 12 }} aria-hidden="true" />
+        <div style={{ position: "relative" }}>
+          {row("out", (
+            <button type="button" className="chatp-quote is-own is-media" onClick={jump}
+              style={{ height: QUOTE_H, marginBottom: REPLY_GAP }}
+              aria-label={`Replying to you: chart, part ${target}. Jumps to the chart`}>
+              <img src="/images/chat/chart-quarterly-sales.jpg" alt="" />
+            </button>
+          ))}
+          <svg className="chatp-replyline" width="1" height="1" aria-hidden="true" focusable="false"><path d={linePath} /></svg>
+          {row("in", bubble("in", parts[0].value))}
+        </div>
       </div>
     );
-    caption = "Tap the quote to jump to the photo";
+    caption = "Tap the quote to jump to the chart";
   } else if (scene === "reactions") {
+    // The agent's reaction, as the person's app draws a reaction from
+    // someone else on their own blue bubble: one grey balloon on the
+    // bubble's top-leading corner (TranscriptReactionPile.swift,
+    // RelayTapbackBalloon.swift). The glyph is the JSON's own type.
     const agentGlyph = GLYPHS[json.type] || json.custom_emoji;
-    const pile = [{ glyph: agentGlyph, mine: false }];
-    if (mine) pile.push({ glyph: GLYPHS[mine], mine: true });
-    body = (
-      <div style={{ position: "relative", paddingTop: 84 }}>
-        {picker ? (
-          <div className="chatp-bar" role="toolbar" aria-label="Reactions" style={{ right: 0, top: 0 }}>
-            {Object.keys(GLYPHS).map((type) => (
-              <button type="button" key={type} aria-label={type} aria-pressed={mine === type}
-                onClick={() => { setMine(mine === type ? null : type); setPicker(false); }}>{GLYPHS[type]}</button>
-            ))}
-          </div>
-        ) : null}
-        {row("out", (
-          <div style={{ position: "relative" }}>
-            {bubble("out", "Can you send the report by Friday?", {
-              onClick: () => setPicker((p) => !p),
-              className: "chatp-tapable",
-              ariaLabel: "Your message. Tap to react",
-            })}
-            {tapbacks(pile, true)}
-          </div>
-        ), { className: picker ? "" : "" })}
+    // The balloon rises 27.33pt over the bubble; 28px more on top keeps
+    // 16px of frame above the badge, the same as below the bubble.
+    body = row("out", (
+      <div style={{ position: "relative", marginTop: 28 }}>
+        {bubble("out", "Can you send the report by Friday?")}
+        {tapbacks([{ glyph: agentGlyph, mine: false }], true)}
       </div>
-    );
-    corner = mine ? { label: "Reset demo", run: () => setMine(null) } : null;
+    ));
   } else if (scene === "mentions") {
     // Group: sender caption, avatar beside the tailed balloon, the mention
     // semibold (MessageBubble.swift:381-395, MentionRangeMapping.swift:44-61).
@@ -595,7 +615,12 @@ export const ChatPreview = ({ scene, json, label }) => {
     const typed = typeof media.mime_type === "string";
     const isVideo = typed ? media.mime_type.startsWith("video/") : video;
     // A part as it arrives came from a person: their own screen draws it on
-    // the right.
+    // the right. The photo (images/chat/photo-tartine.jpg, 786 x 474, the
+    // size the JSON states) was generated 2026-09-26 with gemini-3-pro-image
+    // through the Gemini API, prompt: "Overhead bakery photography on a light
+    // wooden table: a golden sourdough loaf, two croissants, a morning bun and
+    // a cappuccino, bright natural daylight, clean and appetizing, magazine
+    // quality, no people, no text, no logos."
     body = row(typed ? "out" : "in", (
       <button type="button" className="chatp-photo" onClick={() => setViewer(true)} aria-label={isVideo ? "Video. Tap to open" : "Photo. Tap to open"}>
         <img src="/images/chat/photo-tartine.jpg" alt="" />
@@ -662,7 +687,7 @@ export const ChatPreview = ({ scene, json, label }) => {
             <span className="chatp-locdot" aria-hidden="true" style={{ marginBottom: 8 }} />You stopped sharing location
           </div>
         ), { gap: 12 }) : chosen ? row("out", [
-          <div key="m" style={{ position: "relative", marginBottom: TAIL_DEPTH, "--fill": "rgba(120,120,128,.16)" }}>
+          <div key="m" className="chatp-tailed" style={{ position: "relative", marginBottom: TAIL_DEPTH, "--fill": "rgba(120,120,128,.16)" }}>
           <div className="chatp-map" style={{ marginBottom: 0 }} role="img" aria-label={"Your location" + (badge ? ", " + badge : "")}>
             <img src="/images/chat/location-map.png" alt="" />
             {badge ? <span className="chatp-badge"><svg viewBox="0 0 14 14" aria-hidden="true" focusable="false"><circle cx="7" cy="7.8" r="5.2" /><path d="M7 5v3M5.4 1h3.2" /></svg>{badge}</span> : null}
@@ -685,16 +710,21 @@ export const ChatPreview = ({ scene, json, label }) => {
     )));
     overlay = maps ? mapsOverlay(maps) : null;
   } else if (scene === "document") {
-    // Text, then the document card. The filename and size are the file's
-    // own, set when it was uploaded; the words above it come from the JSON.
-    const file = ["signed-report.pdf", "248 KB"];
-    const lines = [100, 92, 96, 70, 94, 88, 60];
+    // Text, then the document card. The file is real: Claude Shannon, "A
+    // Mathematical Theory of Communication" (1948), downloaded 2026-09-26 from
+    // https://people.math.harvard.edu/~ctm/home/text/others/shannon/entropy/entropy.pdf
+    // (366,296 bytes, which ByteCountFormatter's .file style shows as
+    // "366 KB", RelayFileMessageRow.swift:107-108). The thumbnail is its
+    // real first page, rendered with qlmanage. The words above it come from
+    // the JSON.
+    const file = ["shannon-mathematical-theory-of-communication.pdf", "366 KB"];
+    const page = <img src="/images/chat/shannon-page-1.jpg" alt="" />;
     body = stack("in", json.message.parts.map((part) => (last) => (
       part.type === "media" ? (
         <div className="chatp-doc" role="button" tabIndex={0} onClick={() => setViewer(true)} aria-label={file.join(", ") + ". Tap to open"}
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setViewer(true); } }}>
           <div className="chatp-doc-clip">
-            <div className="chatp-doc-thumb" aria-hidden="true"><i className="is-head" />{lines.map((w, i) => <i key={i} style={{ width: w + "%" }} />)}</div>
+            <div className="chatp-doc-thumb" aria-hidden="true">{page}</div>
             <div className="chatp-doc-cap"><span>{file[0]}</span><span>{file[1]}</span></div>
           </div>
           {last ? tail("in") : null}
@@ -706,7 +736,7 @@ export const ChatPreview = ({ scene, json, label }) => {
       <div className="chatp-ql" role="dialog" aria-modal="true" aria-label={"Quick Look: " + file[0]}
         onKeyDown={(e) => { if (e.key === "Escape") setViewer(false); }}>
         <div className="chatp-ql-bar">{file[0]}<button type="button" className="chatp-close" autoFocus aria-label="Close" onClick={() => setViewer(false)}>✕</button></div>
-        <div className="chatp-ql-page" aria-hidden="true"><i className="is-head" />{lines.concat(lines).map((w, i) => <i key={i} style={{ width: w + "%" }} />)}</div>
+        <div className="chatp-ql-page" aria-hidden="true">{page}</div>
       </div>
     ) : null;
   } else if (scene === "contact-card") {
@@ -757,11 +787,6 @@ export const ChatPreview = ({ scene, json, label }) => {
     );
   }
 
-  useEffect(() => {
-    if (!scroll || !root.current) return;
-    const t = root.current.querySelector(".chatp-transcript");
-    if (t) t.scrollTop = t.scrollHeight;
-  }, []);
   useEffect(() => () => { if (root.current && root.current.__raf) cancelAnimationFrame(root.current.__raf); }, []);
 
   return (
@@ -769,8 +794,8 @@ export const ChatPreview = ({ scene, json, label }) => {
     <div className="chatp" ref={root} role="group" aria-label={label}>
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <div className={"chatp-phone" + (overlay ? " has-overlay" : "")}>
-        <div className={"chatp-transcript" + (isGroup ? " is-group" : "") + (scroll ? " is-scroll" : "")}
-          onClick={(e) => { if (picker && !e.target.closest(".chatp-bar, .chatp-bubble")) setPicker(false); }}>
+        <div className={"chatp-transcript" + (isGroup ? " is-group" : "") + (controls ? " has-bar" : "")}
+>
           {body}
         </div>
         {overlay}

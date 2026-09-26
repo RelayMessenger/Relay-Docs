@@ -221,8 +221,10 @@ export const ButtonsPreview = ({ text, items, tapped, label, bubble }) => {
       <div className="buttons-preview-frame">
       <div className="buttons-preview-stage">
         {tapped ? (
-          bubble({ text: tapped })
+          <div className="buttons-preview-own">{bubble({ text: tapped })}</div>
         ) : (
+          <>
+          {text || reply === null ? (
           <div className="buttons-preview-message">
             {/* The agent's balloon is the last in its run once a plain tap
                 hides the buttons, so it takes the incoming tail then: the
@@ -239,11 +241,7 @@ export const ButtonsPreview = ({ text, items, tapped, label, bubble }) => {
                 ) : null}
               </div>
             ) : null}
-            {reply !== null ? (
-              <div className="buttons-reply" role="status" aria-label={`Reply: ${reply}`}>
-                {bubble({ text: reply })}
-              </div>
-            ) : (
+            {reply !== null ? null : (
               <div className="buttons-preview-stack">
                 {items.map((item, index) => (
                   <button type="button" key={index} tabIndex={openedURL ? -1 : 0}
@@ -264,6 +262,15 @@ export const ButtonsPreview = ({ text, items, tapped, label, bubble }) => {
               </div>
             )}
           </div>
+          ) : null}
+          {/* The person's reply is their own bubble, on the trailing side of
+              the transcript, not inside the agent's balloon column. */}
+          {reply !== null ? (
+            <div className="buttons-reply" role="status" aria-label={`Reply: ${reply}`}>
+              {bubble({ text: reply })}
+            </div>
+          ) : null}
+          </>
         )}
       </div>
       {openedURL ? (

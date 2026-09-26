@@ -399,8 +399,33 @@ class ContractSourceTests(unittest.TestCase):
             previews.append((data, prop(preview, "reply")))
         self.assertGreaterEqual(len(previews), 2)
         self.assertEqual(previews[0][0], https[0], "The first preview is the ride card that is sent")
-        self.assertEqual(previews[0][1], https[1], "The ride preview's reply is the documented update")
+        # The ride preview answers the pick the reader made: its Comfort reply
+        # is the documented update, and its UberX reply is that same update
+        # with only the ride, its label, and its price changed.
+        replies = previews[0][1]
+        self.assertEqual(sorted(replies), ["comfort", "uberx"])
+        self.assertEqual(replies["comfort"], https[1], "The ride preview's reply is the documented update")
+        uberx = json.loads(json.dumps(https[1]).replace("Request Comfort for $51", "Request UberX for $42")
+                           .replace('"ride": "comfort"', '"ride": "uberx"'))
+        self.assertNotEqual(uberx, https[1])
+        self.assertEqual(replies["uberx"], uberx, "The UberX reply mirrors the documented update")
         self.assertIn((https[1], None), previews, "The update has its own preview")
+        # The ride card's JSON tab also shows the tap the preview produces for
+        # the default pick, and the Preview tab shows no JSON at all.
+        ride_group = [g for g in re.findall(r"<Tabs\b[^>]*>(.*?)</Tabs>", source, re.S) if "<A2uiPreview" in g][0]
+        ride_tabs = dict(re.findall(r'<Tab title="([^"]+)">\s*(.*?)</Tab>', ride_group, re.S))
+        self.assertNotIn("```", ride_tabs["Preview"])
+        received = re.search(r"```json Your agent receives\s*\n(.*?)```", ride_tabs["JSON"], re.S)
+        self.assertIsNotNone(received, "The ride card's JSON tab shows what the agent receives")
+        action = json.loads(received[1])[0]["action"]
+        comps = {c["id"]: c for m in https[0] if "updateComponents" in m for c in m["updateComponents"]["components"]}
+        model = [m["updateDataModel"]["value"] for m in https[0] if "updateDataModel" in m][0]
+        event = comps[action["sourceComponentId"]]["action"]["event"]
+        self.assertEqual(action["name"], event["name"])
+        self.assertEqual(action["surfaceId"], https[0][0]["createSurface"]["surfaceId"])
+        self.assertEqual(action["context"], {k: model[v["path"].lstrip("/")] for k, v in event["context"].items()})
+        snippet = (ROOT / "snippets/a2ui-preview.jsx").read_text()
+        self.assertNotIn("<pre", snippet, "A Preview tab never shows code")
         self.assertFalse((ROOT / "images/cards/choice-picker-card.jpg").exists())
 
     def test_payment_preview_draws_the_adjacent_json(self):
