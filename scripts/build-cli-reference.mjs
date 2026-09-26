@@ -87,6 +87,7 @@ const GUIDE_LINKS = {
   login: ['Authentication', '/live/authentication'],
   logout: ['Authentication', '/live/authentication'],
   whoami: ['Authentication', '/live/authentication'],
+  phone: ['Connect an agent', '/cli/connect'],
   profiles: ['Authentication', '/live/authentication'],
   organization: ['Relay Console', '/console/organization'],
   chats: ['Direct and group chats', '/chats'],
@@ -106,6 +107,14 @@ const TITLES = {
   "agents-update": "Update an agent",
   "agents-list": "List agents",
   "agents-delete": "Delete an agent",
+  "agents-access-show": "Show who can message an agent",
+  "agents-access-update": "Change who can message an agent",
+  "agents-access-private": "Make an agent private",
+  "agents-access-open": "Open an agent to everyone",
+  "agents-access-allow": "Always allow a contact",
+  "agents-access-deny": "Never allow a contact",
+  "agents-access-remove": "Take a contact off both lists",
+  "phone-link": "Link your phone",
   "auth-login": "Save a token",
   "auth-status": "Check the token",
   "auth-logout": "Remove the token",
@@ -178,7 +187,19 @@ const CLI_GROUPS = [
       "cli/reference/agents-create",
       "cli/reference/agents-update",
       "cli/reference/agents-list",
-      "cli/reference/agents-delete"
+      "cli/reference/agents-delete",
+      {
+        "group": "Who can message",
+        "pages": [
+          "cli/reference/agents-access-show",
+          "cli/reference/agents-access-update",
+          "cli/reference/agents-access-private",
+          "cli/reference/agents-access-open",
+          "cli/reference/agents-access-allow",
+          "cli/reference/agents-access-deny",
+          "cli/reference/agents-access-remove"
+        ]
+      }
     ]
   },
   {
@@ -191,6 +212,7 @@ const CLI_GROUPS = [
       "cli/reference/login",
       "cli/reference/logout",
       "cli/reference/whoami",
+      "cli/reference/phone-link",
       {
         "group": "Profiles",
         "pages": [
