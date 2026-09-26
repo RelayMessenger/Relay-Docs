@@ -364,6 +364,19 @@ class ContractSourceTests(unittest.TestCase):
                 seen.add(scene)
         self.assertEqual(seen, scenes, "Every chat scene is used on a page")
 
+    def test_reply_preview_answers_a_photo_sent_alone(self):
+        # The example reply names part 0 of a message that holds only the
+        # chart, so the app draws the photo once, joined by its reply line,
+        # with no quote (ReplyLinePlanner.swift: adjacent rows join).
+        source = (ROOT / "messages/replies.mdx").read_text()
+        request = json.loads(re.search(r"```json\s*\n(.*?)```", source, re.S)[1])
+        self.assertEqual(request["message"]["reply_to"]["part_index"], 0)
+        snippet = (ROOT / "snippets/chat-preview.jsx").read_text()
+        scene = snippet.split('scene === "replies"', 1)[1].split("} else if (scene ===", 1)[0]
+        self.assertNotIn("chatp-quote", scene)
+        self.assertEqual(scene.count("<img"), 1, "The photo is drawn once")
+        self.assertIn("chatp-replyline", scene)
+
     def test_cards_previews_draw_the_adjacent_json(self):
         # Each live card preview draws exactly the messages in its JSON tab. An
         # update preview replays the page's first card, then the update; the

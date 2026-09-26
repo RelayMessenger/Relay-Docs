@@ -96,17 +96,8 @@ export const ChatPreview = ({ scene, json, label }) => {
 .chatp-receipt b { font-weight: 600; }
 .chatp-tapable { cursor: pointer; }
 .chatp-tapable:focus-visible { outline: 2px solid #0B75FF; outline-offset: 3px; }
-.chatp-flash { animation: chatp-flash 1.2s linear; }
-@keyframes chatp-flash { 0% { filter: brightness(1); } 33% { filter: brightness(.6); } 67% { filter: brightness(.6); } 100% { filter: brightness(1); } }
 .chatp-arrive { animation: chatp-arrive .3s ease-out; }
 @keyframes chatp-arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-/* Reply quote: MessageReplyPreview.swift:71-117, ReplyQuotePalette 632-667. */
-.chatp-quote { box-sizing: border-box; position: relative; max-width: ${BALLOON_MAX}px; min-height: 26px; border: 1px solid rgba(0,0,0,.20); border-radius: 18px; padding: 6.5px 10px; font-size: 11px; line-height: 13px; color: rgba(0,0,0,.44); background: transparent; margin-bottom: 8.5px; font-family: inherit; text-align: left; }
-.dark .chatp-quote { border-color: rgba(255,255,255,.22); color: rgba(255,255,255,.44); }
-.chatp-quote.is-own { border-color: rgba(11,117,255,.40); color: rgba(11,117,255,.80); }
-.dark .chatp-quote.is-own { border-color: rgba(0,126,255,.42); color: rgba(0,126,255,.80); }
-.chatp-quote.is-media { padding: 0; overflow: hidden; }
-.chatp-quote.is-media img { display: block; height: 48px; width: auto; opacity: .55; }
 .chatp-replyline { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; fill: none; stroke: rgba(0,0,0,.08); stroke-width: 4; stroke-linecap: round; }
 .dark .chatp-replyline { stroke: rgba(254,255,255,.16); }
 /* Tapbacks: RelayTapbackBalloon.swift:52-116. */
@@ -191,7 +182,6 @@ export const ChatPreview = ({ scene, json, label }) => {
 .chatp-menu svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; flex: none; }
 .chatp-map { position: relative; width: 256px; height: 226px; border-radius: 20px; overflow: hidden; margin-bottom: ${TAIL_DEPTH}px; }
 .chatp-map img { display: block; width: 256px; height: 226px; }
-.chatp-quote.is-media img { border-radius: 17px !important; }
 .chatp-badge { position: absolute; left: 8px; top: 8px; height: 25px; border-radius: 12.5px; background: #FF9500; color: #fff; display: flex; align-items: center; gap: 4px; padding: 0 9px 0 7px; font-size: 15px; font-weight: 600; }
 .chatp-badge svg { width: 14px; height: 14px; fill: none; stroke: #fff; stroke-width: 2; }
 .chatp-locstop { box-sizing: border-box; width: 176px; height: 131px; border-radius: 20px; background: rgba(0,122,255,.14); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 16px; color: #007AFF; font-size: 17px; line-height: 20px; letter-spacing: -0.43px; margin-bottom: ${TAIL_DEPTH}px; }
@@ -254,7 +244,6 @@ export const ChatPreview = ({ scene, json, label }) => {
 
   // ---------- State ----------
   const [read, setRead] = useState(false);
-  const [flash, setFlash] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [typing, setTyping] = useState(true);
@@ -467,44 +456,21 @@ export const ChatPreview = ({ scene, json, label }) => {
     const text = parts[0].value;
     body = row("in", bubble("in", scene === "markdown" ? markdown(text) : text));
   } else if (scene === "replies") {
-    // The person sent a caption and a photo; the agent replies to part 1.
-    // Quote on the original author's side in the viewer's blue family
-    // (MessageReplyPreview.swift:556-579, 632-657), 8.5pt above the reply.
-    const target = json.message.reply_to.part_index;
-    const original = [
-      <div key="t">{bubble("out", "Does the chart look right?", { tail: false })}</div>,
-      <div key="p" style={{ marginTop: 4 }}>
-        <button type="button" className={"chatp-photo" + (flash ? " chatp-flash" : "")} id="chatp-original" tabIndex={-1} aria-label="Chart, part 1">
-          {/* The chart the words ask about, generated 2026-09-26 with Google's
-              gemini-3-pro-image through the Gemini API (aspect 4:3), prompt:
-              "A clean, photographic close-up of a laptop screen showing a
-              simple quarterly sales bar chart: four blue bars labelled Q1, Q2,
-              Q3, Q4 rising left to right, a short title 'Quarterly sales',
-              light background, soft daylight, shallow depth of field,
-              product-photography quality, no people, no logos." */}
-          <img src="/images/chat/chart-quarterly-sales.jpg" alt="" />
-        </button>
-      </div>,
-    ];
-    const jump = (e) => {
-      setFlash(false);
-      requestAnimationFrame(() => setFlash(true));
-      setTimeout(() => setFlash(false), 1200);
-    };
-    // The reply answers ONE part of a two-part message, so the app does not
-    // take the adjacent-row shortcut (ReplyLinePlanner.swift, "An exact-part
-    // reply may not bracket a whole multipart row"): it shows the quote of
-    // that part and joins it to the reply with the reply line. The line is
-    // ReplyLineShape (MessageReplyPreview.swift): a 4pt round-capped stroke
-    // on the leading centreline 32pt in, black 8% (white 16% in dark); an
-    // arm at the quote's vertical centre reaching 32pt past the centreline
-    // on ReplyBracketCurve's three cubics, and a reduced cap 2pt + half a
-    // stroke above the reply (capAboveBubbleReduced).
-    const QUOTE_H = 50;
-    const REPLY_GAP = 8.5;
+    // The person sent the chart as a message of its own, and the agent's
+    // reply names its part 0. The reply sits right under the message it
+    // answers, so the app draws no quote (ReplyLinePlanner.swift: a row
+    // that answers the row above joins it). The photo shows once, and the
+    // reply line joins the two: an arm into the photo's vertical centre
+    // that runs down to a round cap 5pt above the reply (armAtBubble,
+    // seamBelow, then seamAbove, capAboveBubble). ReplyLineShape
+    // (MessageReplyPreview.swift): a 4pt round-capped stroke on the leading
+    // centreline 32pt in, black 8% (white 16% in dark), the arm reaching
+    // 32pt past the centreline on ReplyBracketCurve's three cubics.
+    const PHOTO_H = PHOTO_WIDTH * 567 / 760;
+    const GAP = 12;
     const X = 16;
-    const topY = QUOTE_H / 2;
-    const bottomY = QUOTE_H + REPLY_GAP - (2 + 2);
+    const topY = PHOTO_H / 2;
+    const bottomY = PHOTO_H + GAP - (5 + 2);
     const fullExtent = 21 * 1.52866;
     const used = Math.min(fullExtent, bottomY - topY);
     const k = used / fullExtent;
@@ -520,22 +486,23 @@ export const ChatPreview = ({ scene, json, label }) => {
     ].join(" ");
     body = (
       <div style={{ position: "relative" }}>
-        {row("out", <div className="chatp-col" style={{ alignItems: "flex-end" }}>{original}</div>)}
-        <div style={{ height: 12 }} aria-hidden="true" />
-        <div style={{ position: "relative" }}>
-          {row("out", (
-            <button type="button" className="chatp-quote is-own is-media" onClick={jump}
-              style={{ height: QUOTE_H, marginBottom: REPLY_GAP }}
-              aria-label={`Replying to you: chart, part ${target}. Jumps to the chart`}>
-              <img src="/images/chat/chart-quarterly-sales.jpg" alt="" />
-            </button>
-          ))}
-          <svg className="chatp-replyline" width="1" height="1" aria-hidden="true" focusable="false"><path d={linePath} /></svg>
-          {row("in", bubble("in", parts[0].value))}
-        </div>
+        {row("out", (
+          <div className="chatp-photo" role="img" aria-label="The person's chart" style={{ height: PHOTO_H, cursor: "default" }}>
+            {/* The chart the reply talks about, generated 2026-09-26 with
+                Google's gemini-3-pro-image through the Gemini API (aspect
+                4:3), prompt: "A clean, photographic close-up of a laptop
+                screen showing a simple quarterly sales bar chart: four blue
+                bars labelled Q1, Q2, Q3, Q4 rising left to right, a short
+                title 'Quarterly sales', light background, soft daylight,
+                shallow depth of field, product-photography quality, no
+                people, no logos." */}
+            <img src="/images/chat/chart-quarterly-sales.jpg" alt="" />
+          </div>
+        ))}
+        <svg className="chatp-replyline" width="1" height="1" aria-hidden="true" focusable="false"><path d={linePath} /></svg>
+        {row("in", bubble("in", parts[0].value), { gap: GAP })}
       </div>
     );
-    caption = "Tap the quote to jump to the chart";
   } else if (scene === "reactions") {
     // The agent's reaction, as the person's app draws a reaction from
     // someone else on their own blue bubble: one grey balloon on the
@@ -562,7 +529,14 @@ export const ChatPreview = ({ scene, json, label }) => {
       <div key="s" className="chatp-sender">Planner</div>,
       <div key="b">{bubble("in", content)}</div>,
     ], { avatar: avatar("Planner", "teal", true) });
-    controls = toggle(ranged, () => setRanged((r) => !r), ranged ? "mention_range [0, 4]" : "No mention_range");
+    // The JSON's range covers the name; without a range the mention covers
+    // the whole part (messages/mentions.mdx). Plain words, no code.
+    controls = (
+      <div className="relay-preview-seg" role="group" aria-label="What the mention covers">
+        <button type="button" aria-pressed={ranged} onClick={() => setRanged(true)}>Name only</button>
+        <button type="button" aria-pressed={!ranged} onClick={() => setRanged(false)}>Whole message</button>
+      </div>
+    );
   } else if (scene === "receipts") {
     body = row("out", [
       <div key="b">{bubble("out", "Can you check the draft?")}</div>,
@@ -601,6 +575,9 @@ export const ChatPreview = ({ scene, json, label }) => {
       </div>
     ));
   } else if (scene === "link") {
+    // The card is the app's LPLinkView for https://relayapp.im, whose page
+    // (fetched 2026-09-26) carries og:title "Relay | All your agents. One
+    // app." and the blue logo og:image the crop shows.
     const host = (() => { try { return new URL(parts[0].value).host; } catch (e) { return parts[0].value; } })();
     body = row("in", (
       <div className="chatp-link" role="img" aria-label={`Link preview: All your agents. One app. ${host}`}>
