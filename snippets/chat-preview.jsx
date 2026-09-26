@@ -48,6 +48,9 @@ export const ChatPreview = ({ scene, json, label }) => {
   const GLYPHS = { love: "❤️", like: "👍", dislike: "👎", laugh: "😂", emphasize: "‼️", question: "❓" };
   // RelayDefaultAvatarColor.swift pairs (top, base); the app seeds the pick
   // from the contact id, so the preview fixes one ground per name.
+  // Each agent's picture is one emoji on a soft ground (owner, 2026-09-26),
+  // the same emoji for the same agent everywhere, keyed by handle.
+  const EMOJI = { echo: "\u{1F99C}", planner: "\u{1F5D3}\u{FE0F}", example_agent: "\u{1F916}" };
   const GROUNDS = {
     rose: ["#E0567A", "#AD2A52"], blue: ["#5B9BFA", "#0B52C0"], teal: ["#2596A6", "#116A79"],
     green: ["#2FA46A", "#137347"], violet: ["#8F6CF2", "#5F38CF"], orange: ["#EC8A3C", "#C85F1C"],
@@ -92,6 +95,8 @@ export const ChatPreview = ({ scene, json, label }) => {
 .chatp-avatar { flex: none; width: ${AVATAR}px; height: ${AVATAR}px; margin-right: ${AVATAR_GAP}px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: ${Math.round(AVATAR * 0.38 * 10) / 10}px; }
 .chatp-avatar.is-agent { border-radius: ${AVATAR * 0.225}px; }
 .chatp-avatar.is-spacer { visibility: hidden; }
+.chatp-avatar.is-emoji { font-size: ${Math.round(AVATAR * 0.6)}px; font-weight: 400; line-height: 1; }
+.chatp-card-avatar.is-emoji { font-size: 23px; font-weight: 400; line-height: 1; }
 .chatp-receipt { align-self: flex-end; margin: 0 ${RECEIPT_INSET}px 0 0; font-size: 11px; line-height: 13px; letter-spacing: 0.06px; color: rgba(60,60,67,.6); font-variant-numeric: tabular-nums; }
 .chatp-receipt b { font-weight: 600; }
 .chatp-tapable { cursor: pointer; }
@@ -260,11 +265,16 @@ export const ChatPreview = ({ scene, json, label }) => {
   const tail = (side) => (
     <svg className={"chatp-tail " + side} viewBox="0 0 23 24" aria-hidden="true" focusable="false"><path d={TAIL} /></svg>
   );
-  const avatar = (name, ground, isAgent, spacer) => (
-    <div className={"chatp-avatar" + (isAgent ? " is-agent" : "") + (spacer ? " is-spacer" : "")}
-      style={{ background: `linear-gradient(${GROUNDS[ground][0]}, ${GROUNDS[ground][1]})`, borderRadius: isAgent ? undefined : "50%" }}
-      aria-hidden="true">{name.slice(0, 1).toUpperCase()}</div>
-  );
+  // The app's agent shape (RelayGroupParticipantAvatar: a rounded square,
+  // radius 0.225 of the side) with the agent's emoji on a soft ground.
+  const avatar = (name, ground, isAgent, spacer) => {
+    const emoji = EMOJI[name.toLowerCase()];
+    return (
+      <div className={"chatp-avatar" + (isAgent ? " is-agent" : "") + (spacer ? " is-spacer" : "") + (emoji ? " is-emoji" : "")}
+        style={{ background: emoji ? `${GROUNDS[ground][0]}33` : `linear-gradient(${GROUNDS[ground][0]}, ${GROUNDS[ground][1]})`, borderRadius: isAgent ? undefined : "50%" }}
+        aria-hidden="true">{emoji || name.slice(0, 1).toUpperCase()}</div>
+    );
+  };
   const bubble = (side, content, opts = {}) => (
     <div className={"chatp-bubble " + side + (opts.tail !== false ? " has-tail" : "") + (opts.className ? " " + opts.className : "")}
       style={opts.style} onClick={opts.onClick} role={opts.onClick ? "button" : undefined}
@@ -456,7 +466,7 @@ export const ChatPreview = ({ scene, json, label }) => {
     const text = parts[0].value;
     body = row("in", bubble("in", scene === "markdown" ? markdown(text) : text));
   } else if (scene === "replies") {
-    // The person sent the chart as a message of its own, and the agent's
+    // The person sent the photo as a message of its own, and the agent's
     // reply names its part 0. The reply sits right under the message it
     // answers, so the app draws no quote (ReplyLinePlanner.swift: a row
     // that answers the row above joins it). The photo shows once, and the
@@ -487,16 +497,15 @@ export const ChatPreview = ({ scene, json, label }) => {
     body = (
       <div style={{ position: "relative" }}>
         {row("out", (
-          <div className="chatp-photo" role="img" aria-label="The person's chart" style={{ height: PHOTO_H, cursor: "default" }}>
-            {/* The chart the reply talks about, generated 2026-09-26 with
-                Google's gemini-3-pro-image through the Gemini API (aspect
-                4:3), prompt: "A clean, photographic close-up of a laptop
-                screen showing a simple quarterly sales bar chart: four blue
-                bars labelled Q1, Q2, Q3, Q4 rising left to right, a short
-                title 'Quarterly sales', light background, soft daylight,
-                shallow depth of field, product-photography quality, no
-                people, no logos." */}
-            <img src="/images/chat/chart-quarterly-sales.jpg" alt="" />
+          <div className="chatp-photo" role="img" aria-label="The person's photo" style={{ height: PHOTO_H, cursor: "default" }}>
+            {/* The person's photo, generated 2026-09-26 with Google's
+                gemini-3-pro-image through the Gemini API (aspect 4:3),
+                prompt: "Landscape photography at golden hour: a calm alpine
+                lake reflecting jagged snow-capped mountains, warm sunlight
+                on the peaks, pine trees along the shore, crisp and sharp,
+                vivid but natural colours, bright, magazine quality, no
+                people, no text." */}
+            <img src="/images/chat/photo-mountain-lake.jpg" alt="" />
           </div>
         ))}
         <svg className="chatp-replyline" width="1" height="1" aria-hidden="true" focusable="false"><path d={linePath} /></svg>
@@ -720,11 +729,12 @@ export const ChatPreview = ({ scene, json, label }) => {
     const card = json;
     const name = [card.first_name, card.last_name].filter(Boolean).join(" ");
     const initials = name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+    const emoji = EMOJI[card.handle];
     title = name;
     body = row("in", bubble("in", (
       <div className="chatp-card">
         <span className="chatp-card-name">{name}</span>
-        <span className="chatp-card-avatar" style={{ background: `linear-gradient(${GROUNDS.green[0]}, ${GROUNDS.green[1]})` }} aria-hidden="true">{initials}</span>
+        <span className={"chatp-card-avatar" + (emoji ? " is-emoji" : "")} style={{ background: emoji ? `${GROUNDS.green[0]}33` : `linear-gradient(${GROUNDS.green[0]}, ${GROUNDS.green[1]})` }} aria-hidden="true">{emoji || initials}</span>
         {chevron}
       </div>
     ), { style: { padding: 0 } }));

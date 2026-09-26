@@ -366,11 +366,12 @@ class ContractSourceTests(unittest.TestCase):
 
     def test_reply_preview_answers_a_photo_sent_alone(self):
         # The example reply names part 0 of a message that holds only the
-        # chart, so the app draws the photo once, joined by its reply line,
+        # photo, so the app draws the photo once, joined by its reply line,
         # with no quote (ReplyLinePlanner.swift: adjacent rows join).
         source = (ROOT / "messages/replies.mdx").read_text()
         request = json.loads(re.search(r"```json\s*\n(.*?)```", source, re.S)[1])
         self.assertEqual(request["message"]["reply_to"]["part_index"], 0)
+        self.assertEqual(request["message"]["parts"], [{"type": "text", "value": "Where was this taken?"}])
         snippet = (ROOT / "snippets/chat-preview.jsx").read_text()
         scene = snippet.split('scene === "replies"', 1)[1].split("} else if (scene ===", 1)[0]
         self.assertNotIn("chatp-quote", scene)
