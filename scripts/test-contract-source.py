@@ -334,6 +334,34 @@ class ContractSourceTests(unittest.TestCase):
         self.assert_buttons_previews_match_requests(
             (ROOT / "interactions/buttons.mdx").read_text())
 
+    def test_chat_previews_draw_the_adjacent_json(self):
+        # Each chat preview reads its words from the payload in its own JSON
+        # tab, and every picture it draws ships in the repository.
+        snippet = (ROOT / "snippets/chat-preview.jsx").read_text()
+        scenes = set(re.findall(r'scene === "([a-z-]+)"', snippet))
+        for path in re.findall(r'"/(images/chat/[^"]+)"', snippet):
+            self.assertTrue((ROOT / path).is_file(), path)
+        seen = set()
+        for page in sorted(ROOT.glob("*/*.mdx")):
+            source = page.read_text()
+            if "<ChatPreview" not in source:
+                continue
+            self.assertIn('import { ChatPreview } from "/snippets/chat-preview.jsx";', source, page)
+            groups = [g for g in re.findall(r"<Tabs\b[^>]*>(.*?)</Tabs>", source, re.S) if "<ChatPreview" in g]
+            self.assertEqual(len(groups), source.count("<ChatPreview"), page)
+            for group in groups:
+                tabs = dict(re.findall(r'<Tab title="([^"]+)">\s*(.*?)</Tab>', group, re.S))
+                self.assertEqual(list(tabs), ["Preview", "JSON"], page)
+                blocks = re.findall(r"```json\s*\n(.*?)```", tabs["JSON"], re.S)
+                self.assertEqual(len(blocks), 1, page)
+                scene = re.search(r'scene="([a-z-]+)"', tabs["Preview"])[1]
+                self.assertIn(scene, scenes, page)
+                start = re.search(r"\bjson=\{", tabs["Preview"]).end()
+                drawn, _ = json.JSONDecoder().raw_decode(tabs["Preview"][start:].lstrip())
+                self.assertEqual(drawn, json.loads(blocks[0]), f"{page}: preview differs from its JSON tab")
+                seen.add(scene)
+        self.assertEqual(seen, scenes, "Every chat scene is used on a page")
+
     def test_cards_previews_draw_the_adjacent_json(self):
         # Each live card preview draws exactly the messages in its JSON tab. An
         # update preview replays the page's first card, then the update; the

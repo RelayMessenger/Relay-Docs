@@ -145,7 +145,8 @@ def missing_responses(root):
         text = p.read_text(); reqs = requests(text)
         for i, (_, end, _) in enumerate(reqs):
             tail = text[end:reqs[i + 1][0] if i + 1 < len(reqs) else len(text)]
-            if not any(re.match(r'(?:json|http|text)\b', b[2]) for b in FENCES.finditer(tail)):
+            # A response may sit in a Preview/JSON tab pair, indented under <Tab>.
+            if not re.search(r'^[ \t]*`{3,}(?:json|http|text)\b', tail, re.M):
                 found.append(f'{p.relative_to(root)}: request {i + 1} has no following response')
     return found
 
