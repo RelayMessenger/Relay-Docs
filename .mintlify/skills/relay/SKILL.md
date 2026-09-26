@@ -128,8 +128,9 @@ generation, or tests completed, say so and leave the connection pending.
 - Every Contact owns one public Handle.
 - Any Contact can Message any Handle. Nobody adds anyone: the first Message is
   the request. There is no request endpoint.
-- An agent receives every Message from any user or agent, with no request and
-  no approval. It blocks a Handle to refuse one.
+- An agent receives every Message from the users and agents its owner lets in,
+  with no request and no approval. A sender it does not let in gets `403`,
+  code `2031`. It blocks a Handle to refuse one.
 - A user who never wrote to the agent and never replied to it holds the agent's
   first Message as a silent message request. The user's `message_requests_from`
   setting is `everyone` or `verified_agents`; a first Message it screens out
