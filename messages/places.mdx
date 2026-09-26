@@ -1,0 +1,156 @@
+---
+title: "Places"
+description: "Send a place to a person, and read the places people send your agent."
+keywords: ["place", "place part", "Dropped Pin", "latitude", "longitude", "Apple Maps", "Send Pin"]
+---
+
+import { ChatPreview } from "/snippets/chat-preview.jsx";
+
+A place is one point on the map, sent once, with an optional name and address. Your agent sends a place to show where something is, and a person sends one to show where they are or where they dropped a pin.
+
+A place does not move. To follow a person while they move, use [location sharing](/chats/location).
+
+## Send a place
+
+Add a `place` part to the message. It can be the only part, or sit beside text:
+
+<Tabs>
+  <Tab title="Preview">
+    <ChatPreview scene="place" label="An agent's place as the person sees it; tap the card" json={{"message": {"parts": [{"type": "text", "value": "Here is the coffee shop."}, {"type": "place", "latitude": 37.44216251868683, "longitude": -122.16153582049394, "name": "Philz Coffee", "address": "101 Forest Ave, Palo Alto, CA 94301"}]}}} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    {
+      "message": {
+        "parts": [
+          {"type":"text","value":"Here is the coffee shop."},
+          {
+            "type": "place",
+            "latitude": 37.44216251868683,
+            "longitude": -122.16153582049394,
+            "name": "Philz Coffee",
+            "address": "101 Forest Ave, Palo Alto, CA 94301"
+          }
+        ]
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+| Field | Rule |
+| --- | --- |
+| `latitude` | Required number from -90 to 90, in degrees (WGS 84) |
+| `longitude` | Required number from -180 to 180, in degrees (WGS 84) |
+| `name` | Optional. 1 to 256 characters after Relay trims it |
+| `address` | Optional. 1 to 256 characters after Relay trims it |
+
+The app draws the place as a map card with the name, the address, and **Maps**. With no name, the card says **Dropped Pin**. A tap opens Apple Maps at the point.
+
+Send the body to `POST /v1/chats/{chatId}/messages` ([reference](/api-reference/messages/send-a-message-to-an-existing-chat)). The TypeScript SDK's part types do not list `place` yet, so the TypeScript example calls the API with `fetch`:
+
+<CodeGroup>
+```bash cURL
+curl -sS -X POST "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: place-philz-1" \
+  -d '{
+    "message": {
+      "parts": [
+        {"type": "text", "value": "Here is the coffee shop."},
+        {"type": "place", "latitude": 37.44216251868683, "longitude": -122.16153582049394, "name": "Philz Coffee", "address": "101 Forest Ave, Palo Alto, CA 94301"}
+      ]
+    }
+  }'
+```
+
+```typescript TypeScript
+const response = await fetch(
+  `https://api.staging.relayapp.im/v1/chats/${process.env.CHAT_ID}/messages`,
+  {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.RELAY_AGENT_TOKEN}`,
+      "Content-Type": "application/json",
+      "Idempotency-Key": "place-philz-1",
+    },
+    body: JSON.stringify({
+      message: {
+        parts: [
+          { type: "text", value: "Here is the coffee shop." },
+          {
+            type: "place",
+            latitude: 37.44216251868683,
+            longitude: -122.16153582049394,
+            name: "Philz Coffee",
+            address: "101 Forest Ave, Palo Alto, CA 94301",
+          },
+        ],
+      },
+    }),
+  },
+);
+console.log(response.status, await response.json());
+```
+</CodeGroup>
+
+Reuse the same `Idempotency-Key` and body after an uncertain send.
+
+## Receive a place
+
+A person sends a place from the app in two ways:
+
+- **Once**, in the **Share My Location** menu of your agent's [location request](/chats/location), sends where the person is now. No share starts.
+- **Location** in the **+** menu of a one-to-one chat with your agent opens a map. The person drops a pin and taps **Send Pin**.
+
+Both arrive as [`message.received`](/events/message-received) with a `place` part. The app adds the address the phone finds for the point, and no name:
+
+<Tabs>
+  <Tab title="Preview">
+    <ChatPreview scene="place" label="A person's dropped pin on their own screen; tap the card" json={{"type": "place", "latitude": 37.44692, "longitude": -122.16126, "address": "461 Florence St, Palo Alto, CA  94301", "reactions": null}} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    {
+      "type": "place",
+      "latitude": 37.44692,
+      "longitude": -122.16126,
+      "address": "461 Florence St, Palo Alto, CA  94301",
+      "reactions": null
+    }
+    ```
+  </Tab>
+</Tabs>
+
+The address is Apple's own for the point, as the phone received it. It is absent when the phone finds none, so read `name` and `address` only when they are present.
+
+## What you get back
+
+Relay answers `202` with the stored message. Its `place` part comes back as you sent it, with `reactions`:
+
+```json
+{
+  "type": "place",
+  "latitude": 37.44216251868683,
+  "longitude": -122.16153582049394,
+  "name": "Philz Coffee",
+  "address": "101 Forest Ave, Palo Alto, CA 94301",
+  "reactions": null
+}
+```
+
+A reader that does not draw places, and the push notification, show the place's name, else its address, else `Dropped Pin`. Beside text, those words go on their own line.
+
+## When it fails
+
+| Status | Code | Cause | Next action |
+| --- | --- | --- | --- |
+| `400` | [`1005`](/error/codes/1xxx/1005) | `latitude` or `longitude` is missing or out of range, `name` or `address` is empty after trimming or over 256 characters, or the part has another field. | Correct the part. |
+
+## Next steps
+
+- [Share a live location](/chats/location)
+- [Read the message parts](/messages/parts)
+- [Receive the message.received event](/events/message-received)
+- [Send a message](/messages/send)

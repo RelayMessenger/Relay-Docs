@@ -66,7 +66,7 @@ def scalar(raw: str, continuation: list[str]) -> str:
     return value
 
 
-def operation_field(block: str, name: str) -> str:
+def operation_field(block: str, name: str, default: str | None = None) -> str:
     lines = block.splitlines()
     prefix = f"      {name}:"
     for index, line in enumerate(lines):
@@ -81,6 +81,8 @@ def operation_field(block: str, name: str) -> str:
                 break
             continuation.append(following)
         return scalar(raw, continuation)
+    if default is not None:
+        return default
     raise SystemExit(f"OpenAPI operation is missing {name}")
 
 
@@ -113,9 +115,12 @@ def openapi_operations(text: str) -> dict[str, dict[str, str]]:
             )
             block = path_block[method_match.end():method_end]
             endpoint = f"{method_match.group(1).upper()} {path}"
+            summary = operation_field(block, "summary")
+            # OpenAPI makes an operation's description optional; one without
+            # it (Server #380's removeAgentAccess) reads as its summary.
             operations[endpoint] = {
-                "summary": operation_field(block, "summary"),
-                "description": operation_field(block, "description"),
+                "summary": summary,
+                "description": operation_field(block, "description", summary),
             }
     return operations
 

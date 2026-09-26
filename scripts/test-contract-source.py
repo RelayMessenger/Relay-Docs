@@ -20,10 +20,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # Location sharing: POST /v1/chats/{chatId}/location/request, GET /v1/chats/{chatId}/location, the location_request and location parts, location.sharing.* webhooks.
 # Contact cards carry is_verified; agent contact resources carry creator.
 # A2UI cards: the data part, a2ui_errors, targeted taps; the place part; GET /v1/me.
-UPSTREAM_COMMIT = "935deb143fb1de79f3bfe9d6137d2e20aef65b90"
-UPSTREAM_STAGING_COMMIT = "935deb143fb1de79f3bfe9d6137d2e20aef65b90"
-UPSTREAM_SIZE = 264764
-UPSTREAM_SHA256 = "dead1d94bcbe7e002955ac17efc23c7f7eb9c343470876459548b86410158597"
+# Agent reach (Server #380): Always Allow and Never Allow lists at /v1/access; error 2031.
+UPSTREAM_COMMIT = "0009356458738e77ee6a8a62687c38846382796a"
+UPSTREAM_STAGING_COMMIT = "0009356458738e77ee6a8a62687c38846382796a"
+UPSTREAM_SIZE = 271846
+UPSTREAM_SHA256 = "bfd74f934fad40bb1279e9cdc86300985f5ff6251e9be8bea5d7fcfa4a5a0d4f"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
