@@ -882,6 +882,10 @@ def relay_vocabulary(text):
 def product_prose(path):
     # Verbatim payload text is user content, not product vocabulary.
     text = re.sub(r"^```json captured-output\n.*?^```\s*$", "", path.read_text(), flags=re.M | re.S)
+    # A generated CLI reference page's help is the installed CLI's own words,
+    # proved byte-equal by build-cli-reference.mjs --check; it is not docs prose.
+    if path.is_relative_to(root / "cli/reference"):
+        text = re.sub(r"^```text captured-output\n.*?^```\s*$", "", text, flags=re.M | re.S)
     if not path.match("resources/migrate-from-*.mdx"):
         return text
     # Owner decision 2026-09-11: a migration guide names the product the reader

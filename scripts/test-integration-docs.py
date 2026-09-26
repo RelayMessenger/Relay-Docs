@@ -363,7 +363,15 @@ class IntegrationDocsTests(unittest.TestCase):
         for pattern in (r"allowfrom", r"contact uuids", r"stable.id", r"session scope"):
             self.assertConcept(openclaw, pattern, "Keep account-specific admission and session boundaries")
         self.assertIn("Leave the command running: it answers each message with Claude Code from the folder you ran it in. Control-C stops it.", claude)
-        self.assertIn("Claude Code runs without permission prompts in that folder", claude)
+        # 2026-09-26, Relay-SDK PR 375: connect no longer approves tools by
+        # itself. The coding agent asks with its own settings and the question
+        # goes to the agent's owners as a card; no page may say otherwise.
+        self.assertNotIn("without permission prompts", claude)
+        self.assertIn("/cli/connect#approve-tools-from-your-phone", claude)
+        connect = read("cli/connect.mdx")
+        for marker in ("## Approve tools from your phone", "Not authorized.", "600 seconds",
+                       "Timed out, not approved.", "owner_people", "relay phone link"):
+            self.assertIn(marker, connect)
         self.assertIn("each chat keeps its own Claude Code session.", claude)
         for marker in ("RELAY_ALLOWED_CONTACTS", "RELAY_STATE_DIR"):
             self.assertIn(marker, hermes)

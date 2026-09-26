@@ -221,7 +221,12 @@ class AgentOnboardingTests(unittest.TestCase):
                                  "--runtime-stopped", "--acknowledge-events"):
                     self.assertNotIn(obsolete, commands)
                 self.assertNotRegex(commands, r"\btoken (?:import|status|clear)\b|\bevents\s+listen\b")
-                self.assertNotRegex(commands, r"(?m)^\s*relay (?:agents|profiles|doctor|events|connect|watch)\b")
+                # A `text captured-output` fence is the installed CLI's own help,
+                # proved byte-equal by build-cli-reference.mjs --check; since
+                # Relay-SDK PR 370 its examples use the CLI's real `relay` bin.
+                authored = command_examples(re.sub(
+                    r"^```text captured-output\n.*?^```[ \t]*$", "", text, flags=re.M | re.S))
+                self.assertNotRegex(authored, r"(?m)^\s*relay (?:agents|profiles|doctor|events|connect|watch)\b")
 
     def test_agent_management_router_is_short_and_links_to_tasks(self):
         router = self.page("agents/lifecycle")
