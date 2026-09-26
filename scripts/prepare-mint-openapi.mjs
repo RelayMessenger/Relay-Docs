@@ -17,6 +17,7 @@ if (webhooks >= 0) {
 }
 
 const sidebarTitles = {
+  getMe: "Get owner",
   deleteAgent: "Delete",
   createChat: "Create",
   listChats: "List",
