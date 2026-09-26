@@ -373,6 +373,28 @@ class ContractSourceTests(unittest.TestCase):
         self.assertIn((https[1], None), previews, "The update has its own preview")
         self.assertFalse((ROOT / "images/cards/choice-picker-card.jpg").exists())
 
+    def test_payment_preview_draws_the_adjacent_json(self):
+        # The live Pay card draws exactly the part in its JSON tab, and that
+        # part is the one the page's 202 response stores.
+        source = (ROOT / "interactions/payments.mdx").read_text()
+        previews = 0
+        for group in re.findall(r"<Tabs\b[^>]*>(.*?)</Tabs>", source, re.S):
+            tabs = dict(re.findall(r'<Tab title="([^"]+)">\s*(.*?)</Tab>', group, re.S))
+            if "<PaymentPreview" not in tabs.get("Preview", ""):
+                continue
+            previews += 1
+            self.assertIn("JSON", tabs, "The payment preview needs its JSON tab")
+            blocks = re.findall(r"```json\s*\n(.*?)```", tabs["JSON"], re.S)
+            self.assertEqual(len(blocks), 1)
+            preview = tabs["Preview"]
+            match = re.search(r"\bpart=\{", preview)
+            self.assertIsNotNone(match)
+            part, _ = json.JSONDecoder().raw_decode(preview[match.end():].lstrip())
+            self.assertEqual(part, json.loads(blocks[0]), "Preview differs from its JSON tab")
+            stored = re.search(r"Relay answers `202` with the stored Message.*?```json\s*\n(.*?)```", source, re.S)
+            self.assertEqual(part, json.loads(stored[1])["message"]["parts"][0])
+        self.assertEqual(previews, 1)
+
     def test_buttons_preview_has_local_native_controls_and_accessible_feedback(self):
         source = (ROOT / "snippets/buttons-preview.jsx").read_text()
         buttons = source.split("export const ButtonsPreview =", 1)[1].split(
