@@ -2745,15 +2745,15 @@ Source: https://docs.staging.relayapp.im/interactions/selection.md
 
 import { SelectionPreview, MessageBubble } from "/snippets/buttons-preview.jsx";
 
-Send a question with a `selection` part containing 1 to 25 options. Each option has a readable `label` and a stable `value`. The app draws the question as one balloon that opens a sheet holding the whole option list, and the person checks several options there and submits them in one reply.
+Send a `selection` part with a short `title` and 1 to 25 options. Each option has a readable `label` and a stable `value`. The app draws the selection as one card that opens a sheet holding the whole option list, and the person checks several options there and submits them in one reply.
 
 ## Send a selection
 
-This request contains a required nonblank `text` part followed by a `selection` part. The text becomes the balloon's title, a second line reads "Pick options", and a chevron marks the balloon as something to open. Open the prompt below, check options in the sheet, then press **Send**; this demo stays in your browser and sends no request.
+This request contains an optional `text` part followed by a `selection` part. The text shows as a normal message above the card. The selection's `title` is the card's title and the sheet's title; a second line reads "Pick options", and a chevron marks the card as something to open. Open the prompt below, check options in the sheet, then press **Send**; this demo stays in your browser and sends no request.
 
 <Tabs>
   <Tab title="Preview">
-    <SelectionPreview bubble={MessageBubble} text="Which topics interest you?" options={[{ "value": "research", "label": "Research" }, { "value": "design", "label": "Design" }]} />
+    <SelectionPreview bubble={MessageBubble} title="Topics" options={[{ "value": "research", "label": "Research" }, { "value": "design", "label": "Design" }]} />
   </Tab>
   <Tab title="JSON">
     ```json
@@ -2761,7 +2761,7 @@ This request contains a required nonblank `text` part followed by a `selection` 
       "message": {
         "parts": [
           {"type":"text","value":"Which topics interest you?"},
-          {"type":"selection","options":[
+          {"type":"selection","title":"Topics","options":[
             {"value":"research","label":"Research"},
             {"value":"design","label":"Design"}
           ]}
@@ -2778,7 +2778,8 @@ Checking a row sends nothing. The sheet lists every option in source order with 
 ### Rules for the prompt
 
 - Only an agent can send a selection.
-- A Message carries at most one `selection` part, and it needs a nonblank `text` part in the same Message. That text is the prompt's title.
+- A Message carries at most one `selection` part. A `text` part is optional; when present it shows as a normal message above the card.
+- `title` is required: 1 to 60 characters after surrounding whitespace is trimmed, a few words such as "Pizza toppings". It is the card's title and the sheet's title.
 - A selection cannot share a Message with a `buttons` part.
 - `options` holds 1 to 25 options.
 - Each `value` is 1 to 100 characters, matches `^[A-Za-z0-9][A-Za-z0-9._:-]*$`, is case-sensitive, and is unique within the selection. Your application keys on it, so keep it stable.
@@ -2800,6 +2801,7 @@ await relay.chats.messages.send("CHAT_ID", {
   message: {
     parts: partsWithSelection("Which topics interest you?", {
       type: "selection",
+      title: "Topics",
       options: [
         { value: "research", label: "Research" },
         { value: "design", label: "Design" },
@@ -2818,7 +2820,7 @@ curl -sS "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
     "message": {
       "parts": [
         {"type":"text","value":"Which topics interest you?"},
-        {"type":"selection","options":[
+        {"type":"selection","title":"Topics","options":[
           {"value":"research","label":"Research"},
           {"value":"design","label":"Design"}
         ]}
@@ -2841,7 +2843,7 @@ The user's submission contains exactly two ordered parts: readable text, then st
 
 <Tabs>
   <Tab title="Preview">
-    <SelectionPreview bubble={MessageBubble} text="Which topics interest you?" options={[{ "value": "research", "label": "Research" }, { "value": "design", "label": "Design" }]} received={"• Research\n• Design"} />
+    <SelectionPreview bubble={MessageBubble} title="Topics" options={[{ "value": "research", "label": "Research" }, { "value": "design", "label": "Design" }]} received={"• Research\n• Design"} />
   </Tab>
   <Tab title="What you receive">
     ```json
@@ -2862,9 +2864,9 @@ The user's submission contains exactly two ordered parts: readable text, then st
   </Tab>
 </Tabs>
 
-The event example shows the response fields used by your handler. The preview draws the reply as the question's title over one line per chosen label; metadata adds no visible text.
+The event example shows the response fields used by your handler. The preview draws the reply as the selection's title over one line per chosen label; metadata adds no visible text.
 
-New text equals literal `• ` + each selected source label joined with `\n`, in source-option order. It supplies portable bubble, notification, and copy text; iOS may draw a checkmark in place of each bullet, and repeat the prompt's title above the lines, as presentation only. The `selection_response` part carries metadata only.
+New text equals literal `• ` + each selected source label joined with `\n`, in source-option order. It supplies portable bubble, notification, and copy text; iOS may draw a checkmark in place of each bullet, and repeat the selection's `title` above the lines, as presentation only. The `selection_response` part carries metadata only.
 
 A person answers a given selection once. Opening the answered prompt again, or opening the reply, presents the same sheet read only: the chosen rows are checked, no row is tappable, and the sheet carries no Send. Try it in the preview above.
 
@@ -2873,7 +2875,7 @@ A person answers a given selection once. Opening the answered prompt again, or o
 When you read a Message back, its `selection` part carries `has_responded` and `selected_values`, and its `reactions` is always `null`:
 
 ```json
-{"type":"selection","options":[{"value":"research","label":"Research"},{"value":"design","label":"Design"}],"has_responded":false,"selected_values":null,"reactions":null}
+{"type":"selection","title":"Topics","options":[{"value":"research","label":"Research"},{"value":"design","label":"Design"}],"has_responded":false,"selected_values":null,"reactions":null}
 ```
 
 Both fields belong to whoever is reading. `has_responded` is `true` once that person has answered this selection, and `selected_values` holds the values they chose, in option order, so every one of their devices shows the same answer even when it has not loaded the answer Message. `selected_values` is `null` until they answer, and also if their answer Message no longer exists. For an agent, `has_responded` is always `false` and `selected_values` always `null`, so an agent learns about answers from the `selection_response` Messages it receives, not from these fields. When a person answers, their own devices receive a `message.upserted` for the prompt with both fields set.
@@ -2902,7 +2904,7 @@ Dispatch your own application handler using the source message ID, part index, a
 
 ## Send from a runtime
 
-Selections use the runtime's existing send path: a backend includes a `selection` part beside question text in `parts`; a runtime with a send tool takes a `selection` argument; and a runtime that answers in text ends its answer with a fenced code block tagged `selection` containing the options array. Responses carry `selected_values` and `reply_to` alongside the readable text. Each [integration](/integrations/index) describes its send and receive format.
+Selections use the runtime's existing send path: a backend includes a `selection` part, with optional text before it, in `parts`; a runtime with a send tool takes a `selection` argument; and a runtime that answers in text ends its answer with a fenced code block tagged `selection` containing the selection's `title` and `options`. Responses carry `selected_values` and `reply_to` alongside the readable text. Each [integration](/integrations/index) describes its send and receive format.
 
 ## When it fails
 
@@ -2910,7 +2912,7 @@ The server checks an answer against the prompt it names: the reply must come fro
 
 | Status | Code | Cause |
 | --- | --- | --- |
-| `400` | [1005](/api-reference/errors#1005) | An option is malformed, has an unknown field, or repeats a value; the Message has two selections, no nonblank text, or buttons beside the selection. An answer is not exactly a text part then a `selection_response` part, its text carries a mention, or `reply_to.part_index` is missing. |
+| `400` | [1005](/api-reference/errors#1005) | An option is malformed, has an unknown field, or repeats a value; the title is missing or longer than 60 characters, or the Message has two selections or buttons beside the selection. An answer is not exactly a text part then a `selection_response` part, its text carries a mention, or `reply_to.part_index` is missing. |
 | `403` | [2003](/api-reference/errors#2003) | Someone other than an agent sent a selection, or someone other than a person answered one. |
 | `404` | [2001](/api-reference/errors#2001) | The answer's `reply_to.message_id` is not a Message the person can see in this chat. |
 | `409` | [1005](/api-reference/errors#1005) | The person already answered this selection with a different idempotency key. A retry with the same key and body returns the original answer instead. |
@@ -21830,12 +21832,17 @@ components:
     SelectionPart:
       type: object
       additionalProperties: false
-      description: Agent-only multiselect prompt. One selection per Message, with nonblank text and no buttons. The text is the prompt's title. The person opens the prompt, checks any number of options and submits them once; checking sends nothing and only the submit does. A person answers a given selection once, and reopening it afterwards shows what they chose without letting them change it.
-      required: [type, options]
+      description: Agent-only multiselect prompt. One selection per Message, never with buttons. `title` is the card's title in the chat and the sheet's title. A text part is optional; when present it shows as an ordinary message above the card. Preview text is the text part if the Message has one, else the title. The person opens the prompt, checks any number of options and submits them once; checking sends nothing and only the submit does. A person answers a given selection once, and reopening it afterwards shows what they chose without letting them change it.
+      required: [type, title, options]
       properties:
         type:
           type: string
           enum: [selection]
+        title:
+          type: string
+          minLength: 1
+          maxLength: 60
+          description: Card and sheet title, a few words such as "Pizza toppings". Trimmed before storage.
         options:
           type: array
           minItems: 1
@@ -21844,11 +21851,14 @@ components:
             $ref: "#/components/schemas/SelectionOption"
     SelectionPartResponse:
       type: object
-      required: [type, options, has_responded, selected_values, reactions]
+      required: [type, title, options, has_responded, selected_values, reactions]
       properties:
         type:
           type: string
           enum: [selection]
+        title:
+          type: string
+          description: Card and sheet title.
         options:
           type: array
           items:

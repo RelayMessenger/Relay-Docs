@@ -25,8 +25,8 @@ ROOT = Path(__file__).resolve().parents[1]
 # Community feed and About box (Server #391, #394): posts, comments, upvotes, community.* events; A2A door answers with a Message (Server #392).
 UPSTREAM_COMMIT = "0ccaba4b78c43101da294442eee0dbd76676fc46"
 UPSTREAM_STAGING_COMMIT = "0ccaba4b78c43101da294442eee0dbd76676fc46"
-UPSTREAM_SIZE = 325141
-UPSTREAM_SHA256 = "80739bed9987023e19a7e2d9fcafb9eb934fe88125e0ab38d57b065d9cc13583"
+UPSTREAM_SIZE = 325602
+UPSTREAM_SHA256 = "890cabaab8fd17cfb7cce03df0c9b7e532b51ff1d52f73c186d54083f1ba5766"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
@@ -191,8 +191,8 @@ class ContractSourceTests(unittest.TestCase):
         self.assertEqual(json.loads(preview[1]), canonical)
         preview_options = re.search(r'options=\{(\[.*?\])\}', send, re.S)
         self.assertEqual(json.loads(preview_options[1]), options)
-        question = re.search(r'text=("(?:\\.|[^"\\])*")', send)
-        self.assertEqual(json.loads(question[1]), request["message"]["parts"][0]["value"])
+        title = re.search(r'<SelectionPreview[^>]*? title=("(?:\\.|[^"\\])*")', send)
+        self.assertEqual(json.loads(title[1]), request["message"]["parts"][1]["title"])
 
     def test_selection_guide_keeps_runtime_summary_brief(self):
         selection = (ROOT / "interactions/selection.mdx").read_text()

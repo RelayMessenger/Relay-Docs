@@ -225,11 +225,13 @@ generation, or tests completed, say so and leave the connection pending.
 Read the [selection guide](https://docs.staging.relayapp.im/interactions/selection)
 and the current OpenAPI before implementing it.
 
-- Author one `selection` part beside a nonblank text question, with 1 to 25
+- Author one `selection` part with a required `title` (1 to 60 characters
+  after trimming, a few words such as "Pizza toppings") and 1 to 25
   options. Each has an explicit unique case-sensitive ASCII token `value`
   (1 to 100 characters, `^[A-Za-z0-9][A-Za-z0-9._:-]*$`) and trimmed readable
   `label` (1 to 80 characters). Do not combine it with buttons.
-- The app draws the text as a balloon that opens a sheet of options. The person
+- The `title` is the card and sheet title. A text part is optional and shows
+  as a normal message above the card. The card opens a sheet of options. The person
   checks any number and submits once; checking sends nothing. A person answers
   a given selection once, and reopening it shows the answer read only.
 - New human replies contain text built as literal `• ` + each selected source

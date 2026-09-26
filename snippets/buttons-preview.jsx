@@ -321,8 +321,7 @@ export const ButtonsPreview = ({ text, items, tapped, label, bubble }) => {
 // RelaySelectionSheet.swift): nothing is picked in the transcript. The prompt
 // balloon opens a sheet carrying the whole option list, Send posts once, and
 // the answered prompt or its reply reopens the same sheet read-only.
-export const SelectionPreview = ({ text, options, received, bubble }) => {
-  const title = text || "Multi-select";
+export const SelectionPreview = ({ title, options, received, bubble }) => {
   // The received fixture is the canonical wire text; its labels name the
   // chosen options, so the same sheet can reopen over a static reply.
   const receivedValues = received

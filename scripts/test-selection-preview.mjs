@@ -33,7 +33,7 @@ try {
   await page.goto(new URL('/interactions/selection', origin).href, { waitUntil: 'networkidle0', timeout: 120000 });
   await page.waitForSelector('.selection-prompt', { timeout: 20000 });
 
-  const QUESTION = 'Which topics interest you?';
+  const QUESTION = 'Topics';
   const rowsOf = (card, selector) => card.$$eval(`${selector} .selection-card text`, nodes => nodes.map(e => e.textContent));
   const sheetOf = async (card) => {
     const sheet = await card.$('.selection-sheet');
