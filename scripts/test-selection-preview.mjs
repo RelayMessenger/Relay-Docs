@@ -222,7 +222,7 @@ try {
 
       // 8. The received preview is the reply alone, and it reopens read-only.
       assert.equal(await receivedCard.$('.selection-prompt'), null);
-      assert.equal(await receivedCard.$('.selection-reset'), null);
+      assert.equal(await receivedCard.$('.relay-preview-reset'), null);
       assert.deepEqual(await rowsOf(receivedCard, '.selection-answer'), [QUESTION, 'Research', 'Design']);
       await click(await receivedCard.$('.selection-answer'));
       const staticSheet = await sheetOf(receivedCard);
@@ -234,7 +234,7 @@ try {
       assert.equal(await receivedCard.$('.selection-sheet'), null);
 
       // 9. Reset returns the live demo to the unanswered prompt.
-      await click(await live.$('.selection-reset'));
+      await click(await live.$('.relay-preview-reset'));
       assert.equal(await live.$('.selection-answer'), null);
       assert.equal(await live.$('.selection-sheet'), null);
       assert.deepEqual(await rowsOf(live, '.selection-prompt'), [QUESTION, 'Pick options']);
@@ -263,7 +263,7 @@ try {
   assert.equal(await live.$('.selection-send'), null);
   await page.keyboard.press('Escape');
   await new Promise(resolve => setTimeout(resolve, 150));
-  await click(await live.$('.selection-reset'));
+  await click(await live.$('.relay-preview-reset'));
   assert.equal(await live.$('.selection-answer'), null);
   console.log('PASS selection keyboard');
 
@@ -285,7 +285,7 @@ try {
   })), { transform: 'none', opacity: '1', transition: '0s' });
   await page.mouse.up();
   await page.waitForSelector('.selection-answer');
-  await click(await live.$('.selection-reset'));
+  await click(await live.$('.relay-preview-reset'));
   console.log('PASS selection reduced motion');
   await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
 
@@ -372,7 +372,7 @@ try {
           assert.equal(await reply.evaluate(e => e.getAttribute('role')), 'status');
           assert.equal(await reply.evaluate(e => e.getAttribute('aria-label')), `Reply: ${fixture.plain}`);
           assert.equal(await reply.$eval('svg text', e => e.textContent), fixture.plain);
-          await click(await card.$('.buttons-reset'));
+          await click(await card.$('.relay-preview-reset'));
           assert.equal(await card.$('.buttons-reply'), null);
           await assertLabels(card, fixture.labels);
         }
@@ -391,13 +391,13 @@ try {
   assert.notEqual(pressed.transform, 'none');
   assert.equal(pressed.opacity, '1', 'Press changes scale, never opacity');
   await page.mouse.up();
-  await page.waitForSelector('.buttons-reset');
-  await click('.buttons-reset');
+  await page.waitForSelector('.relay-preview-reset');
+  await click('.relay-preview-reset');
   const keyboardAction = await page.$('.buttons-preview-action');
   await keyboardAction.focus();
   await page.keyboard.press('Enter');
   await page.waitForSelector('.buttons-reply[aria-label="Reply: Jupiter"]');
-  await click('.buttons-reset');
+  await click('.relay-preview-reset');
   // Reduced motion changes only presentation; the same controls remain usable.
   await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }, { name: 'prefers-reduced-motion', value: 'reduce' }]);
   const action = await page.$('.buttons-preview-action');

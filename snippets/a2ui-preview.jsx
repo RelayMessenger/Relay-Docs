@@ -9,12 +9,17 @@
 // Button tap shows the A2UI `action` message Relay would send, and `reply`
 // (a follow-up message array, for example updateComponents on the same
 // surface) is applied once after the first tap, as an agent's update would be.
+// An agent answers the pick it receives, so `reply` can instead be an object
+// keyed by the tap's first context value (the chosen option's value); the
+// preview applies the update for the option the reader actually picked.
 // Nothing is sent anywhere.
 //
 // Snippet rules (see buttons-preview.jsx): Mintlify compiles this file as
 // MDX, so only exports stay in scope and every helper lives inside the
 // component, and a capitalised tag would be read as an MDX component, so the
 // renderer calls lowercase functions and draws only lowercase HTML tags.
+// The two capitalised tags it does use, Frame and Icon, are Mintlify's own
+// components, resolved that way on purpose.
 export const A2uiPreview = ({ messages, reply, media, label, icons = "/images/cards/icons" }) => {
   const V = "v0.9.1";
   const HEAD = ["h1", "h2", "h3", "h4", "h5"];
@@ -532,10 +537,12 @@ export const A2uiPreview = ({ messages, reply, media, label, icons = "/images/ca
       timestamp: new Date().toISOString(), context } }];
     setTaps((current) => [...current, message]);
     setOpen(null);
-    if (reply && !replied) {
+    const first = [].concat(Object.values(context)[0])[0];
+    const update = Array.isArray(reply) ? reply : (reply && reply[first]);
+    if (update && !replied) {
       setReplied(true);
-      setShown((current) => [...current, ...reply]);
-      setData((model) => applyData(model, reply));
+      setShown((current) => [...current, ...update]);
+      setData((model) => applyData(model, update));
     }
   };
   // ViewThatFits needs a width: the 16pt medium label, estimated per character.
@@ -738,7 +745,21 @@ export const A2uiPreview = ({ messages, reply, media, label, icons = "/images/ca
     setReplied(false);
   };
 
+  // A Preview tab shows only the UI (owner, 2026-09-26): the tap your agent
+  // receives is one plain sentence in the Frame's caption, and its exact
+  // A2UI message lives in the page's JSON tab.
+  const lastTap = taps.length ? taps[taps.length - 1][0].action : null;
+  const said = (v) => (Array.isArray(v) ? v.join(", ") : typeof v === "object" && v !== null ? JSON.stringify(v) : String(v));
+  const caption = lastTap
+    ? "Your agent receives " + lastTap.name
+      + (Object.keys(lastTap.context || {}).length
+        ? " with " + Object.entries(lastTap.context).map(([k, v]) => k + " " + said(v)).join(", ")
+        : "")
+      + "."
+    : undefined;
+
   return (
+    <Frame className="relay-preview" caption={caption}>
     <div className="a2" role="group" aria-label={label || "Interactive card preview"}>
       <div className={("a2-frame" + (modal ? " is-sheet-open" : ""))}>
         <div className="a2-stage" aria-hidden={modal ? "true" : undefined}>
@@ -751,6 +772,11 @@ export const A2uiPreview = ({ messages, reply, media, label, icons = "/images/ca
             ) : null}
           </div>
         </div>
+        {taps.length > 0 && !modal ? (
+          <button type="button" className="relay-preview-reset" aria-label="Reset demo" title="Reset demo" onClick={reset}>
+            <Icon icon="rotate-left" size={16} />
+          </button>
+        ) : null}
         {modal ? (
           <div className="a2-sheet-layer">
             <div className="a2-dimmer" onClick={closeSheet} />
@@ -766,19 +792,7 @@ export const A2uiPreview = ({ messages, reply, media, label, icons = "/images/ca
           </div>
         ) : null}
       </div>
-      {taps.length ? (
-        <div className="a2-taps" role="status">
-          {taps.map((message, index) => (
-            <div key={index} className="a2-tap">
-              <div className="a2-tap-label">{("Tap " + (index + 1) + ": your agent receives this A2UI message")}</div>
-              <pre><code>{JSON.stringify(message, null, 2)}</code></pre>
-            </div>
-          ))}
-          <div className="buttons-preview-controls">
-            <button type="button" className="buttons-reset" onClick={reset}>Reset demo</button>
-          </div>
-        </div>
-      ) : null}
     </div>
+    </Frame>
   );
 };

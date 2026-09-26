@@ -215,13 +215,16 @@ export const ButtonsPreview = ({ text, items, tapped, label, bubble }) => {
     if (opener) opener.focus();
   };
   return (
+    <Frame className="relay-preview">
     <div className={"buttons-preview" + (openedURL ? " is-browser-open" : "")}
       role={tapped ? "img" : "group"} aria-label={text ? `${text} ${label}` : label}>
       <div className="buttons-preview-frame">
       <div className="buttons-preview-stage">
         {tapped ? (
-          bubble({ text: tapped })
+          <div className="buttons-preview-own">{bubble({ text: tapped })}</div>
         ) : (
+          <>
+          {text || reply === null ? (
           <div className="buttons-preview-message">
             {/* The agent's balloon is the last in its run once a plain tap
                 hides the buttons, so it takes the incoming tail then: the
@@ -238,11 +241,7 @@ export const ButtonsPreview = ({ text, items, tapped, label, bubble }) => {
                 ) : null}
               </div>
             ) : null}
-            {reply !== null ? (
-              <div className="buttons-reply" role="status" aria-label={`Reply: ${reply}`}>
-                {bubble({ text: reply })}
-              </div>
-            ) : (
+            {reply !== null ? null : (
               <div className="buttons-preview-stack">
                 {items.map((item, index) => (
                   <button type="button" key={index} tabIndex={openedURL ? -1 : 0}
@@ -263,6 +262,15 @@ export const ButtonsPreview = ({ text, items, tapped, label, bubble }) => {
               </div>
             )}
           </div>
+          ) : null}
+          {/* The person's reply is their own bubble, on the trailing side of
+              the transcript, not inside the agent's balloon column. */}
+          {reply !== null ? (
+            <div className="buttons-reply" role="status" aria-label={`Reply: ${reply}`}>
+              {bubble({ text: reply })}
+            </div>
+          ) : null}
+          </>
         )}
       </div>
       {openedURL ? (
@@ -296,13 +304,14 @@ export const ButtonsPreview = ({ text, items, tapped, label, bubble }) => {
           </div>
         </div>
       ) : null}
-      </div>
       {reply !== null ? (
-        <div className="buttons-preview-controls">
-          <button type="button" className="buttons-reset" onClick={() => { setReply(null); setOpenedURL(null); }}>Reset demo</button>
-        </div>
+        <button type="button" className="relay-preview-reset" aria-label="Reset demo" title="Reset demo" onClick={() => { setReply(null); setOpenedURL(null); }}>
+          <Icon icon="rotate-left" size={16} />
+        </button>
       ) : null}
+      </div>
     </div>
+    </Frame>
   );
 };
 
@@ -366,6 +375,7 @@ export const SelectionPreview = ({ text, options, received, bubble }) => {
   ];
 
   return (
+    <Frame className="relay-preview">
     <div className={"buttons-preview selection-preview" + (open ? " is-sheet-open" : "")}
       role="group" aria-label={isStatic ? "Selection reply preview" : "Interactive selection preview"}>
       <div className="buttons-preview-frame">
@@ -429,13 +439,14 @@ export const SelectionPreview = ({ text, options, received, bubble }) => {
           </div>
         </div>
       ) : null}
-      </div>
-      {isAnswered && !isStatic ? (
-        <div className="buttons-preview-controls">
-          <button type="button" className="selection-reset" tabIndex={open ? -1 : 0}
-            onClick={reset}>Reset demo</button>
-        </div>
+      {isAnswered && !isStatic && !open ? (
+        <button type="button" className="relay-preview-reset" aria-label="Reset demo" title="Reset demo"
+          onClick={reset}>
+          <Icon icon="rotate-left" size={16} />
+        </button>
       ) : null}
+      </div>
     </div>
+    </Frame>
   );
 };
