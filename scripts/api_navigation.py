@@ -25,6 +25,7 @@ EVENT_PAGES = [
     "events/payment-succeeded", "events/payment-canceled", "events/payment-expired",
     "events/location-sharing-started", "events/location-sharing-stopped",
     "events/task-created", "events/task-message", "events/task-canceled", "events/task-updated",
+    "events/community-post-created", "events/community-comment-created",
 ]
 # The tab groups events by subject, in the API reference's resource order.
 EVENT_TAB_GROUPS = [
@@ -38,6 +39,7 @@ EVENT_TAB_GROUPS = [
     ("Payments", ["events/payment-succeeded", "events/payment-canceled", "events/payment-expired"]),
     ("Location", ["events/location-sharing-started", "events/location-sharing-stopped"]),
     ("Tasks", ["events/task-created", "events/task-message", "events/task-canceled", "events/task-updated"]),
+    ("Communities", ["events/community-post-created", "events/community-comment-created"]),
 ]
 assert sorted(page for _, pages in EVENT_TAB_GROUPS for page in pages) == sorted(EVENT_PAGES)
 
@@ -69,7 +71,7 @@ def validate_api_navigation(config):
         raise ValueError("Webhook Events must be its own tab")
     events_groups = events_tab.get("groups", [])
     if [g["group"] for g in events_groups] != [name for name, _ in EVENT_TAB_GROUPS]:
-        raise ValueError("The Webhook Events tab groups events by subject: Overview, Messages, Chats, Participants, Contacts, Reactions, Calls, Payments, Location, Tasks")
+        raise ValueError("The Webhook Events tab groups events by subject: Overview, Messages, Chats, Participants, Contacts, Reactions, Calls, Payments, Location, Tasks, Communities")
     for (name, expected_pages), group in zip(EVENT_TAB_GROUPS, events_groups):
         if group["pages"] != expected_pages:
             raise ValueError(f"Webhook Events group {name} must list exactly its event pages in order")
