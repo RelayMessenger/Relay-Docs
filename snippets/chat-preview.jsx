@@ -9,9 +9,19 @@
 //
 // The preview shows only the messages and their parts, in Mintlify's own
 // <Frame> on the app's chat background (style.css .relay-preview): no chat
-// header, composer, or status bar (owner, 2026-09-26). The map and the link
-// card are crops of Relay-iOS .context/forensics recordings
-// (location-sharing-20260923, link-preview-lp-20260924).
+// header, composer, or status bar (owner, 2026-09-26). The map is a crop of
+// a Relay-iOS .context/forensics recording (location-sharing-20260923). The
+// link card is drawn the way the app's LPLinkView draws an incoming link
+// (RelayTextMessageCell.swift:1351-1356, RelayFileMessageRow.swift:29-36):
+// the page's og:image on top, then the neutral caption with the title and
+// domain, masked to the tailed bubble with no outline.
+//
+// A single photo or video wears the bubble tail (RelayMediaRowLayout.swift
+// :147-151, "individual photos and videos wear the bubble tail"): the
+// picture keeps its fitted box and the tailed silhouette is carved out of
+// its bottom edge, with the 0.5pt hairline stroked along the same path
+// (RelayMediaRowView.swift:99-113, 336-371). Several photos in a row carry
+// no tail.
 //
 // The place card and the document card follow Relay-iOS origin/staging
 // 1ef73e93 (Views/Transcript/RelayLocationRows.swift,
@@ -59,6 +69,59 @@ export const ChatPreview = ({ scene, json, label }) => {
   // snippets/buttons-preview.jsx (.buttons-preview-text-tail). Body bottom
   // sits at y 16.
   const TAIL = "M 0 0 C 0 0.306 1.415 4.498 4.028 7.924 C 5.087 9.312 6.309 10.536 7.660 11.577 C 9.585 13.078 10.418 14.644 10.418 16.404 C 10.418 17.587 10.209 18.756 8.510 20.988 C 7.695 22.058 8.513 23.150 9.787 22.666 C 12.407 21.671 15.391 19.860 18.005 17.927 C 20.347 16.195 20.971 16.020 22.070 16.013 L 22.070 0 Z";
+
+  // The whole tailed silhouette as one contour, for a picture carved into
+  // it: snippets/buttons-preview.jsx bubblePath (RelayBubbleGeometry
+  // .trailingRoundTailedPath, MessageBubbleShape.swift) at radius 20. Every
+  // media body is taller and wider than 61.1466pt, so both axes take the
+  // saturated corner profile, the last of that file's iOS 26.5 samples.
+  // `mirror` draws the incoming (leading) tail.
+  const bubblePath = (w, h, mirror) => {
+    const P = (x, y) => ({ x, y });
+    const swap = (p) => P(p.y, p.x);
+    const c = {
+      start: P(0, 30.5733), c1: P(0, 21.7698), c2: P(0, 17.36814), p1: P(1.498228, 12.62988), c3: P(3.3812, 7.45648),
+      c4: P(7.45648, 3.3812), p2: P(12.62988, 1.498228), c5: P(17.36814, 0), c6: P(21.7698, 0), end: P(30.5733, 0),
+    };
+    const lower = { start: c.end, c1: c.c6, c2: c.c5, p1: c.p2, c3: c.c4, c4: c.c3, p2: c.p1, c5: c.c2, c6: c.c1, end: c.start };
+    const upper = { start: c.start, c1: c.c1, c2: c.c2, p1: c.p1, c3: c.c3, c4: P(c.c3.y, c.c3.x), p2: swap(c.p1), c5: swap(c.c2), c6: swap(c.c1), end: swap(c.start) };
+    const lo = { start: swap(lower.end), c1: swap(lower.c6), c2: swap(lower.c5), p1: swap(lower.p2), c3: swap(lower.c4), c4: lower.c4, p2: lower.p2, c5: lower.c5, c6: lower.c6, end: lower.end };
+    const f = (n) => n.toFixed(3);
+    const X = (p) => (mirror ? w - p.x : p.x);
+    const up = (p, m) => P(m ? w - p.x : p.x, p.y);
+    const low = (p) => P(p.x, h - p.y);
+    const tail = (xFromRight, yFromBottom) => P(w - xFromRight, h + yFromBottom);
+    const d = [];
+    const move = (p) => d.push(`M ${f(X(p))} ${f(p.y)}`);
+    const curve = (c1, c2, to) => d.push(`C ${f(X(c1))} ${f(c1.y)} ${f(X(c2))} ${f(c2.y)} ${f(X(to))} ${f(to.y)}`);
+    move(up(upper.start));
+    curve(up(upper.c1), up(upper.c2), up(upper.p1));
+    curve(up(upper.c3), up(upper.c4), up(upper.p2));
+    curve(up(upper.c5), up(upper.c6), up(upper.end));
+    const topRightStart = up(lo.start, true);
+    curve(up(upper.end), topRightStart, topRightStart);
+    curve(up(lo.c1, true), up(lo.c2, true), up(lo.p1, true));
+    curve(up(lo.c3, true), up(lo.c4, true), up(lo.p2, true));
+    curve(up(lo.c5, true), up(lo.c6, true), up(lo.end, true));
+    const tailSideStart = up(lo.end, true);
+    const tailFlowStart = P(tailSideStart.x, Math.max(tailSideStart.y, low(lo.end).y));
+    curve(tailSideStart, tailFlowStart, tailFlowStart);
+    curve(tail(0, -15.6938174), tail(1.4149, -11.5018174), tail(4.0279, -8.0758174));
+    curve(tail(5.0867, -6.687757), tail(6.3092, -5.4643142), tail(7.66, -4.4234174));
+    curve(tail(9.585, -2.9224174), tail(10.418, -1.3564174), tail(10.418, 0.4035826));
+    curve(tail(10.418, 1.5865826), tail(10.209, 2.7555826), tail(8.51, 4.9875826));
+    curve(tail(7.695, 6.0575826), tail(8.513, 7.1495826), tail(9.787, 6.6655826));
+    curve(tail(12.407, 5.6705826), tail(15.391, 3.8595826), tail(18.005, 1.9265826));
+    const rejoin = tail(22.07, 0.0125826);
+    curve(tail(20.347, 0.1945826), tail(20.971, 0.0195826), rejoin);
+    const bottomLeftStart = low(lo.start);
+    curve(rejoin, bottomLeftStart, bottomLeftStart);
+    curve(low(lo.c1), low(lo.c2), low(lo.p1));
+    curve(low(lo.c3), low(lo.c4), low(lo.p2));
+    curve(low(lo.c5), low(lo.c6), low(lo.end));
+    d.push("Z");
+    return d.join(" ");
+  };
 
   const CSS = `
 .chatp { position: relative; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
@@ -138,21 +201,43 @@ export const ChatPreview = ({ scene, json, label }) => {
 .dark .chatp-wave span.played { background: #007EFF; }
 .chatp-duration { flex: none; font-size: 11.5px; font-variant-numeric: tabular-nums; color: rgba(60,60,67,.6); }
 .dark .chatp-duration { color: rgba(235,235,245,.6); }
-/* Photo: MessageBubble.swift:30, 42-43; RelayMediaRowView.swift:143-144. */
-.chatp-photo { position: relative; display: block; flex: none; border: 0; padding: 0; margin: 0; width: ${PHOTO_WIDTH}px; line-height: 0; font-size: 0; border-radius: 20px; overflow: hidden; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.1); background: #f2f2f7; cursor: pointer; }
-.dark .chatp-photo { box-shadow: inset 0 0 0 .5px rgba(255,255,255,.1); background: #1c1c1e; }
-.chatp-photo img { display: block; width: 100%; height: auto; }
+/* Photo viewer and video badge: MessageBubble.swift:30, 42-43; RelayMediaRowView.swift:143-144. */
 .chatp-playbadge { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 26px; background: rgba(0,0,0,.56); display: flex; align-items: center; justify-content: center; }
 .chatp-playbadge svg { width: 20px; height: 22px; fill: #fff; margin-left: 3px; }
 .chatp-viewer { position: absolute; inset: 0; z-index: 4; background: #000; display: flex; align-items: center; justify-content: center; animation: chatp-arrive .2s ease-out; }
 .chatp-viewer img { width: 100%; height: auto; }
 .chatp-viewer button { position: absolute; top: 12px; left: 12px; width: 36px; height: 36px; border-radius: 50%; border: 0; background: rgba(255,255,255,.18); color: #fff; font-size: 18px; cursor: pointer; }
-/* Link card: a crop of the app's LPLinkView for relayapp.im. */
-.chatp-link { position: relative; flex: none; width: 280px; margin-bottom: ${TAIL_DEPTH}px; --fill: rgb(8,103,228); }
-.chatp-link img { display: block; width: 100%; height: auto; border-radius: 20px !important; }
-/* Contact card: RelayContactCardRow.swift:122-133, 462-492. */
-.chatp-card { box-sizing: border-box; min-width: 187px; min-height: 58px; padding: 10px 14px; display: flex; align-items: center; gap: 8px; }
-.chatp-card-name { flex: 1; font-size: 17px; line-height: 22px; font-weight: 600; letter-spacing: -0.43px; }
+/* Link card: LPLinkView for relayapp.im, 280 wide (MessageBubble.swift:19
+   richAttachmentWidth). The picture is the page's og:image; the caption's
+   blue, the white title and the domain's white at 65% are read off the app's
+   own capture (link-preview-lp-20260924): band (8,103,228), title 15pt
+   semibold 16pt in, domain core (166,200,248). No hairline: the bubble IS
+   the LPLinkView, masked to the tailed path (RelayTextMessageCell.swift
+   :1351-1356). */
+.chatp-link { position: relative; flex: none; display: block; width: 280px; margin-bottom: ${TAIL_DEPTH}px; --fill: rgb(8,103,228); }
+.chatp-link-clip { position: relative; border-radius: 20px; overflow: hidden; background: var(--fill); }
+.chatp-link-clip img { display: block; width: 280px !important; height: 145px; object-fit: cover; }
+.chatp-link-cap { padding: 7px 16px 10px; color: #ffffff; font-size: 15px; line-height: 18px; letter-spacing: -0.23px; }
+.chatp-link-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chatp-link-host { color: rgba(255,255,255,.65); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A photo or video carved into the tailed silhouette. */
+.chatp-tmedia { position: relative; flex: none; display: block; border: 0; padding: 0; margin: 0; background: none; line-height: 0; font-size: 0; cursor: pointer; }
+.chatp-tmedia-clip { position: absolute; inset: 0; background: #f2f2f7; }
+.dark .chatp-tmedia-clip { background: #1c1c1e; }
+.chatp-tmedia-clip img { display: block; width: 100% !important; height: 100% !important; object-fit: cover; }
+.chatp-tmedia-edge { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; fill: none; stroke: rgba(0,0,0,.1); stroke-width: .5; }
+.dark .chatp-tmedia-edge { stroke: rgba(255,255,255,.1); }
+.chatp-tmedia:focus-visible { outline: none; }
+.chatp-tmedia:focus-visible .chatp-tmedia-edge { stroke: #0B75FF; stroke-width: 2; }
+/* Contact card: RelayContactCardRow.swift:122-133, 462-492, with the
+   picture on the leading edge (owner ruling, 2026-09-26; Relay-iOS branch
+   contact-avatar-left-20260926 acfce65c): 38pt picture, 8pt, the name, 4pt,
+   the 14pt seal, flexible space of at least 8pt, then the chevron. */
+.chatp-card { box-sizing: border-box; min-width: 187px; min-height: 58px; padding: 10px 14px; display: flex; align-items: center; }
+.chatp-card-name { flex: 0 1 auto; min-width: 0; margin-left: 8px; font-size: 17px; line-height: 22px; font-weight: 600; letter-spacing: -0.43px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chatp-card-seal { flex: none; width: 14px; height: 14px; margin-left: 4px; }
+.chatp-card-space { flex: 1 0 0; }
+.chatp-card .chatp-chevron { margin-left: 8px; }
 .chatp-card-avatar { flex: none; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 14.4px; border-radius: 8.55px; }
 .chatp-chevron { flex: none; width: 8px; height: 13px; fill: none; stroke: rgba(60,60,67,.33); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .dark .chatp-chevron { stroke: rgba(235,235,245,.33); }
@@ -225,13 +310,13 @@ export const ChatPreview = ({ scene, json, label }) => {
 /* Document card: RelayFileMessageRow.swift:29-36 (LPLinkView's neutral
    E9E9EB / 262629), MessageBubble.swift:21 (246 wide), RelayFileMessageRow
    .swift:858-870 (the file's name and size as LPLinkView's title). The page
-   thumbnail fills the top the way the relayapp.im link card's image does. */
+   thumbnail fills the top the way the relayapp.im link card's image does.
+   The row masks the body and its tail as one path and strokes no hairline
+   (RelayFileMessageRow.swift:725-730), so the card has no outline. */
 .chatp-doc { position: relative; flex: none; display: block; width: 246px; margin-bottom: ${TAIL_DEPTH}px; --fill: #E9E9EB; border: 0; padding: 0; background: none; text-align: left; font-family: inherit; color: inherit; cursor: pointer; }
 .dark .chatp-doc { --fill: #262629; }
 .chatp-doc:focus-visible { outline: 2px solid #0B75FF; outline-offset: 3px; border-radius: 20px; }
 .chatp-doc-clip { position: relative; border-radius: 20px; overflow: hidden; background: var(--fill); }
-.chatp-doc-clip::after { content: ""; position: absolute; inset: 0; border-radius: 20px; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.1); pointer-events: none; }
-.dark .chatp-doc-clip::after { box-shadow: inset 0 0 0 .5px rgba(255,255,255,.1); }
 .chatp-doc-thumb { height: 128px; background: #ffffff; overflow: hidden; line-height: 0; }
 .chatp-doc-thumb img { display: block; width: 100% !important; height: auto; }
 .chatp-doc-cap { padding: 11px 16px; font-size: 17px; line-height: 20px; font-weight: 600; letter-spacing: -0.43px; }
@@ -265,6 +350,22 @@ export const ChatPreview = ({ scene, json, label }) => {
   const tail = (side) => (
     <svg className={"chatp-tail " + side} viewBox="0 0 23 24" aria-hidden="true" focusable="false"><path d={TAIL} /></svg>
   );
+  // A single photo or video: the picture fills its fitted w x h box and the
+  // tailed silhouette is carved out of it, the body ending the tail's depth
+  // above the box's bottom (RelayBubbleGeometry.carvedBodyRect), so the tail
+  // costs the row no height. The hairline follows the same path.
+  const tailedMedia = (side, w, h, content, opts = {}) => {
+    const d = bubblePath(w, h - TAIL_DEPTH, side === "in");
+    const tap = opts.onClick;
+    return (
+      <div className="chatp-tmedia" style={{ width: w, height: h, cursor: tap ? "pointer" : "default" }}
+        role={tap ? "button" : "img"} tabIndex={tap ? 0 : undefined} aria-label={opts.ariaLabel} onClick={tap}
+        onKeyDown={tap ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tap(); } } : undefined}>
+        <div className="chatp-tmedia-clip" style={{ clipPath: `path("${d}")`, WebkitClipPath: `path("${d}")` }}>{content}</div>
+        <svg className="chatp-tmedia-edge" width={w} height={h} aria-hidden="true" focusable="false"><path d={d} /></svg>
+      </div>
+    );
+  };
   // The app's agent shape (RelayGroupParticipantAvatar: a rounded square,
   // radius 0.225 of the side) with the agent's emoji on a soft ground.
   const avatar = (name, ground, isAgent, spacer) => {
@@ -383,6 +484,9 @@ export const ChatPreview = ({ scene, json, label }) => {
   const phoneGlyph = (
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6.6 10.8a15.2 15.2 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z" /></svg>
   );
+  // The verified seal beside a name (SF Symbols checkmark.seal.fill), drawn
+  // only when the card says is_verified.
+  const seal = <svg className="chatp-card-seal" viewBox="0 0 14 14" aria-label="Verified" role="img"><path fill="#0B75FF" d="M7 .6l1.6 1.2 2-.1.6 1.9 1.6 1.2-.6 1.9.6 1.9-1.6 1.2-.6 1.9-2-.1L7 13.4l-1.6-1.2-2 .1-.6-1.9L1.2 9.2l.6-1.9-.6-1.9 1.6-1.2.6-1.9 2 .1z" /><path d="M4.6 7.1l1.7 1.7 3.2-3.4" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>;
   const chevron = <svg className="chatp-chevron" viewBox="0 0 8 13" aria-hidden="true" focusable="false"><path d="M1.5 1.5l5 5-5 5" /></svg>;
 
   // A place's words (PlaceComponent, Models/LocationSharing.swift): the card's
@@ -496,18 +600,14 @@ export const ChatPreview = ({ scene, json, label }) => {
     ].join(" ");
     body = (
       <div style={{ position: "relative" }}>
-        {row("out", (
-          <div className="chatp-photo" role="img" aria-label="The person's photo" style={{ height: PHOTO_H, cursor: "default" }}>
-            {/* The person's photo, generated 2026-09-26 with Google's
-                gemini-3-pro-image through the Gemini API (aspect 4:3),
-                prompt: "Landscape photography at golden hour: a calm alpine
-                lake reflecting jagged snow-capped mountains, warm sunlight
-                on the peaks, pine trees along the shore, crisp and sharp,
-                vivid but natural colours, bright, magazine quality, no
-                people, no text." */}
-            <img src="/images/chat/photo-mountain-lake.jpg" alt="" />
-          </div>
-        ))}
+        {/* The person's photo, generated 2026-09-26 with Google's
+            gemini-3-pro-image through the Gemini API (aspect 4:3), prompt:
+            "Landscape photography at golden hour: a calm alpine lake
+            reflecting jagged snow-capped mountains, warm sunlight on the
+            peaks, pine trees along the shore, crisp and sharp, vivid but
+            natural colours, bright, magazine quality, no people, no text."
+            It is a message of its own, so it wears the outgoing tail. */}
+        {row("out", tailedMedia("out", PHOTO_WIDTH, PHOTO_H, <img src="/images/chat/photo-mountain-lake.jpg" alt="" />, { ariaLabel: "The person's photo" }))}
         <svg className="chatp-replyline" width="1" height="1" aria-hidden="true" focusable="false"><path d={linePath} /></svg>
         {row("in", bubble("in", parts[0].value), { gap: GAP })}
       </div>
@@ -587,12 +687,20 @@ export const ChatPreview = ({ scene, json, label }) => {
     // The card is the app's LPLinkView for https://relayapp.im, whose page
     // (fetched 2026-09-26) carries og:title "Relay | All your agents. One
     // app." and the blue logo og:image the crop shows.
+    // The picture is Relay-Website public/brand/og/blue.png, the og:image
+    // src/pages/index.astro:18 gives the home page. The agent sent the link,
+    // so the balloon and its tail are incoming, on the left.
     const host = (() => { try { return new URL(parts[0].value).host; } catch (e) { return parts[0].value; } })();
     body = row("in", (
       <div className="chatp-link" role="img" aria-label={`Link preview: All your agents. One app. ${host}`}>
-        <img src="/images/chat/link-relayapp.png" alt="" />
-        {/* Only the lobe: the card's caption runs to the corner. */}
-        <svg className="chatp-tail in" viewBox="0 12 23 12" style={{ top: "calc(100% - 4px)", height: 12 }} aria-hidden="true" focusable="false"><path d={TAIL} /></svg>
+        <div className="chatp-link-clip">
+          <img src="/images/chat/link-relayapp-og.png" alt="" />
+          <div className="chatp-link-cap" aria-hidden="true">
+            <div className="chatp-link-title">All your agents. One app.</div>
+            <div className="chatp-link-host">{host}</div>
+          </div>
+        </div>
+        {tail("in")}
       </div>
     ));
   } else if (scene === "attachment") {
@@ -607,12 +715,14 @@ export const ChatPreview = ({ scene, json, label }) => {
     // wooden table: a golden sourdough loaf, two croissants, a morning bun and
     // a cappuccino, bright natural daylight, clean and appetizing, magazine
     // quality, no people, no text, no logos."
-    body = row(typed ? "out" : "in", (
-      <button type="button" className="chatp-photo" onClick={() => setViewer(true)} aria-label={isVideo ? "Video. Tap to open" : "Photo. Tap to open"}>
-        <img src="/images/chat/photo-tartine.jpg" alt="" />
-        {isVideo ? <span className="chatp-playbadge"><svg viewBox="0 0 20 22" aria-hidden="true" focusable="false"><path d="M1 1.6v18.8c0 1.1 1.2 1.8 2.2 1.2l15.6-9.4c.9-.6.9-1.9 0-2.4L3.2.4C2.2-.2 1 .5 1 1.6z" /></svg></span> : null}
-      </button>
-    ));
+    // One photo or video alone wears the tail on its sender's side.
+    const side = typed ? "out" : "in";
+    const photoH = PHOTO_WIDTH * 474 / 786;
+    body = row(side, tailedMedia(side, PHOTO_WIDTH, photoH, [
+        <img key="i" src="/images/chat/photo-tartine.jpg" alt="" />,
+        // The badge centres on the body, above the carved tail.
+        isVideo ? <span key="b" className="chatp-playbadge" style={{ top: (photoH - TAIL_DEPTH) / 2 }}><svg viewBox="0 0 20 22" aria-hidden="true" focusable="false"><path d="M1 1.6v18.8c0 1.1 1.2 1.8 2.2 1.2l15.6-9.4c.9-.6.9-1.9 0-2.4L3.2.4C2.2-.2 1 .5 1 1.6z" /></svg></span> : null,
+    ], { onClick: () => setViewer(true), ariaLabel: isVideo ? "Video. Tap to open" : "Photo. Tap to open" }));
     overlay = viewer ? (
       <div className="chatp-viewer" role="dialog" aria-modal="true" aria-label={isVideo ? "Video viewer" : "Photo viewer"}
         onKeyDown={(e) => { if (e.key === "Escape") setViewer(false); }}>
@@ -733,8 +843,10 @@ export const ChatPreview = ({ scene, json, label }) => {
     title = name;
     body = row("in", bubble("in", (
       <div className="chatp-card">
-        <span className="chatp-card-name">{name}</span>
         <span className={"chatp-card-avatar" + (emoji ? " is-emoji" : "")} style={{ background: emoji ? `${GROUNDS.green[0]}33` : `linear-gradient(${GROUNDS.green[0]}, ${GROUNDS.green[1]})` }} aria-hidden="true">{emoji || initials}</span>
+        <span className="chatp-card-name">{name}</span>
+        {card.is_verified ? seal : null}
+        <span className="chatp-card-space" aria-hidden="true" />
         {chevron}
       </div>
     ), { style: { padding: 0 } }));

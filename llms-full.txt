@@ -2885,23 +2885,33 @@ import { A2uiPreview } from "/snippets/a2ui-preview.jsx";
 
 A card is an [A2UI](https://a2ui.org) v0.9.1 surface sent as a `data` part: `{"type":"data","media_type":"application/a2ui+json","data":[…]}`. The `data` array holds A2UI messages in order. Relay draws the card in the chat, and each tap on one of its buttons comes back to your agent as a Message.
 
-Pick a ride, then tap **Review ride**. The preview shows the tap your agent receives and applies the [update](#update-or-remove-a-card) for that ride in place. It stays in your browser and sends no request.
+Pick a ride, tap **Review ride**, then tap the new button to book it. Under the card, the preview names each tap your agent receives, and it applies each [update](#update-or-remove-a-card) in place. It stays in your browser and sends no request.
 
 <Tabs>
   <Tab title="Preview">
-    <A2uiPreview label="A ride card: pick a ride, then tap Review ride"
+    <A2uiPreview label="A ride card: pick a ride, tap Review ride, then book it"
       messages={[
         {"version":"v0.9.1","createSurface":{"surfaceId":"ride-1042","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
         {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[{"id":"root","component":"Card","child":"body"},{"id":"body","component":"Column","children":["title","rides","review"]},{"id":"title","component":"Text","text":"Rides to SFO, Terminal 2","variant":"h3"},{"id":"rides","component":"ChoicePicker","label":"Ride","variant":"mutuallyExclusive","options":[{"label":"UberX, $42, 4 min away","value":"uberx"},{"label":"Comfort, $51, 6 min away","value":"comfort"}],"value":{"path":"/ride"}},{"id":"review_label","component":"Text","text":"Review ride"},{"id":"review","component":"Button","child":"review_label","variant":"primary","action":{"event":{"name":"review_ride","context":{"ride":{"path":"/ride"}}}}}]}},
         {"version":"v0.9.1","updateDataModel":{"surfaceId":"ride-1042","value":{"ride":["uberx"]}}}
       ]}
       reply={{
-        "comfort": [
-          {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[{"id":"body","component":"Column","children":["title","request"]},{"id":"request_label","component":"Text","text":"Request Comfort for $51"},{"id":"request","component":"Button","child":"request_label","variant":"primary","action":{"event":{"name":"request_ride","context":{"ride":"comfort"}}}}]}}
-        ],
-        "uberx": [
-          {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[{"id":"body","component":"Column","children":["title","request"]},{"id":"request_label","component":"Text","text":"Request UberX for $42"},{"id":"request","component":"Button","child":"request_label","variant":"primary","action":{"event":{"name":"request_ride","context":{"ride":"uberx"}}}}]}}
-        ]
+        "review_ride": {
+          "comfort": [
+            {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[{"id":"body","component":"Column","children":["title","request"]},{"id":"request_label","component":"Text","text":"Request Comfort for $51"},{"id":"request","component":"Button","child":"request_label","variant":"primary","action":{"event":{"name":"request_ride","context":{"ride":"comfort"}}}}]}}
+          ],
+          "uberx": [
+            {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[{"id":"body","component":"Column","children":["title","request"]},{"id":"request_label","component":"Text","text":"Request UberX for $42"},{"id":"request","component":"Button","child":"request_label","variant":"primary","action":{"event":{"name":"request_ride","context":{"ride":"uberx"}}}}]}}
+          ]
+        },
+        "request_ride": {
+          "comfort": [
+            {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[{"id":"body","component":"Column","children":["title","booked"]},{"id":"booked","component":"Text","text":"Your Comfort ride is booked. Marco arrives in 6 minutes."}]}}
+          ],
+          "uberx": [
+            {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[{"id":"body","component":"Column","children":["title","booked"]},{"id":"booked","component":"Text","text":"Your UberX ride is booked. Marco arrives in 4 minutes."}]}}
+          ]
+        }
       }} />
   </Tab>
   <Tab title="JSON">
@@ -3117,17 +3127,22 @@ A tap reaches only the person who tapped and the agent that created the card. Wh
 
 ## Update or remove a card
 
-`updateA2uiSurface` changes the same card in place for everyone in the chat and adds no Message. Components replace their namesakes by `id`. Inside the tap handler, this update turns the choice into a review step with one button that commits:
+`updateA2uiSurface` changes the same card in place for everyone in the chat and adds no Message. Components replace their namesakes by `id`. Inside the tap handler, this update turns the choice into a review step with one button that commits. The JSON tab also shows the next update, which answers that button's `request_ride` tap: it books the ride and removes the button.
 
 <Tabs>
   <Tab title="Preview">
-    <A2uiPreview label="The ride card after the update: tap Request Comfort for $51"
+    <A2uiPreview label="The ride card after the update: tap Request Comfort for $51 to book it"
       messages={[
         {"version":"v0.9.1","createSurface":{"surfaceId":"ride-1042","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
         {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[{"id":"root","component":"Card","child":"body"},{"id":"body","component":"Column","children":["title","rides","review"]},{"id":"title","component":"Text","text":"Rides to SFO, Terminal 2","variant":"h3"},{"id":"rides","component":"ChoicePicker","label":"Ride","variant":"mutuallyExclusive","options":[{"label":"UberX, $42, 4 min away","value":"uberx"},{"label":"Comfort, $51, 6 min away","value":"comfort"}],"value":{"path":"/ride"}},{"id":"review_label","component":"Text","text":"Review ride"},{"id":"review","component":"Button","child":"review_label","variant":"primary","action":{"event":{"name":"review_ride","context":{"ride":{"path":"/ride"}}}}}]}},
         {"version":"v0.9.1","updateDataModel":{"surfaceId":"ride-1042","value":{"ride":["uberx"]}}},
         {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[{"id":"body","component":"Column","children":["title","request"]},{"id":"request_label","component":"Text","text":"Request Comfort for $51"},{"id":"request","component":"Button","child":"request_label","variant":"primary","action":{"event":{"name":"request_ride","context":{"ride":"comfort"}}}}]}}
-      ]} />
+      ]}
+      reply={{
+        "request_ride": [
+          {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[{"id":"body","component":"Column","children":["title","booked"]},{"id":"booked","component":"Text","text":"Your Comfort ride is booked. Marco arrives in 6 minutes."}]}}
+        ]
+      }} />
   </Tab>
   <Tab title="JSON">
     ```json
@@ -3141,6 +3156,23 @@ A tap reaches only the person who tapped and the agent that created the card. Wh
               {"id":"body","component":"Column","children":["title","request"]},
               {"id":"request_label","component":"Text","text":"Request Comfort for $51"},
               {"id":"request","component":"Button","child":"request_label","variant":"primary","action":{"event":{"name":"request_ride","context":{"ride":"comfort"}}}}
+            ]}}
+          ]
+        }]
+      }
+    }
+    ```
+
+    ```json The next update, after request_ride
+    {
+      "message": {
+        "parts": [{
+          "type": "data",
+          "media_type": "application/a2ui+json",
+          "data": [
+            {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[
+              {"id":"body","component":"Column","children":["title","booked"]},
+              {"id":"booked","component":"Text","text":"Your Comfort ride is booked. Marco arrives in 6 minutes."}
             ]}}
           ]
         }]

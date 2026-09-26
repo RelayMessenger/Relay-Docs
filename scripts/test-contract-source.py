@@ -378,6 +378,28 @@ class ContractSourceTests(unittest.TestCase):
         self.assertEqual(scene.count("<img"), 1, "The photo is drawn once")
         self.assertIn("chatp-replyline", scene)
 
+    def test_chat_preview_balloons_wear_the_apps_tails(self):
+        # A photo, video or document alone wears the tail on its sender's
+        # side (RelayMediaRowLayout.swift: "individual photos and videos wear
+        # the bubble tail"); the agent's link is incoming, with no outline;
+        # the contact card's picture leads (owner ruling, 2026-09-26).
+        snippet = (ROOT / "snippets/chat-preview.jsx").read_text()
+        def scene(name):
+            return snippet.split(f'scene === "{name}"', 1)[1].split("} else if (scene ===", 1)[0]
+        self.assertIn('tailedMedia("out", PHOTO_WIDTH, PHOTO_H', scene("replies"))
+        self.assertIn("tailedMedia(side, PHOTO_WIDTH, photoH", scene("attachment"))
+        self.assertIn('const side = typed ? "out" : "in";', scene("attachment"))
+        self.assertIn('{last ? tail("in") : null}', scene("document"))
+        link = scene("link")
+        self.assertIn('row("in"', link)
+        self.assertIn('{tail("in")}', link)
+        self.assertIn("/images/chat/link-relayapp-og.png", link)
+        self.assertTrue((ROOT / "images/chat/link-relayapp-og.png").is_file())
+        self.assertNotIn("chatp-doc-clip::after", snippet, "No hairline ring on a tailed card")
+        card = scene("contact-card")
+        self.assertLess(card.index("chatp-card-avatar"), card.index("chatp-card-name"))
+        self.assertLess(card.index("chatp-card-name"), card.index("{chevron}"))
+
     def test_cards_previews_draw_the_adjacent_json(self):
         # Each live card preview draws exactly the messages in its JSON tab. An
         # update preview replays the page's first card, then the update; the
@@ -413,17 +435,49 @@ class ContractSourceTests(unittest.TestCase):
             previews.append((data, prop(preview, "reply")))
         self.assertGreaterEqual(len(previews), 2)
         self.assertEqual(previews[0][0], https[0], "The first preview is the ride card that is sent")
+        # A preview's replies are keyed by the tapped action's name, and each
+        # answers a Button the card really draws.
+        def events(messages):
+            return {c["action"]["event"]["name"] for m in messages if "updateComponents" in m
+                    for c in m["updateComponents"]["components"] if "action" in c}
         # The ride preview answers the pick the reader made: its Comfort reply
-        # is the documented update, and its UberX reply is that same update
-        # with only the ride, its label, and its price changed.
+        # to review_ride is the documented update, and its UberX reply is that
+        # same update with only the ride, its label, and its price changed.
         replies = previews[0][1]
-        self.assertEqual(sorted(replies), ["comfort", "uberx"])
-        self.assertEqual(replies["comfort"], https[1], "The ride preview's reply is the documented update")
+        self.assertEqual(sorted(replies), ["request_ride", "review_ride"])
+        self.assertIn("review_ride", events(https[0]))
+        self.assertIn("request_ride", events(https[1]))
+        review = replies["review_ride"]
+        self.assertEqual(sorted(review), ["comfort", "uberx"])
+        self.assertEqual(review["comfort"], https[1], "The ride preview's reply is the documented update")
         uberx = json.loads(json.dumps(https[1]).replace("Request Comfort for $51", "Request UberX for $42")
                            .replace('"ride": "comfort"', '"ride": "uberx"'))
         self.assertNotEqual(uberx, https[1])
-        self.assertEqual(replies["uberx"], uberx, "The UberX reply mirrors the documented update")
-        self.assertIn((https[1], None), previews, "The update has its own preview")
+        self.assertEqual(review["uberx"], uberx, "The UberX reply mirrors the documented update")
+        # The commit's tap, request_ride, gets the next update the update's
+        # JSON tab documents: the ride is booked and the Button is gone.
+        update_group = [g for g in re.findall(r"<Tabs\b[^>]*>(.*?)</Tabs>", source, re.S)
+                        if "<A2uiPreview" in g and "Request Comfort for $51 to book it" in g][0]
+        update_tabs = dict(re.findall(r'<Tab title="([^"]+)">\s*(.*?)</Tab>', update_group, re.S))
+        following = re.search(r"```json The next update, after request_ride\s*\n(.*?)```", update_tabs["JSON"], re.S)
+        self.assertIsNotNone(following, "The update's JSON tab shows the next update")
+        booked = json.loads(following[1])["message"]["parts"][0]["data"]
+        self.assertEqual(events(booked), set(), "The booked card has no Button left")
+        self.assertEqual(replies["request_ride"]["comfort"], booked, "The ride preview books with the documented update")
+        booked_uberx = json.loads(json.dumps(booked).replace("Your Comfort ride", "Your UberX ride")
+                                  .replace("in 6 minutes", "in 4 minutes"))
+        self.assertNotEqual(booked_uberx, booked)
+        self.assertEqual(replies["request_ride"]["uberx"], booked_uberx, "The UberX booking mirrors it")
+        self.assertIn((https[1], {"request_ride": booked}), previews,
+                      "The update has its own preview, and its Button books the ride")
+        # Every Button tap does something visible, as in the app: the Button
+        # spins and the card locks until the agent answers.
+        a2ui = (ROOT / "snippets/a2ui-preview.jsx").read_text()
+        tap = a2ui.split("const tap = (cid, scope) => {", 1)[1].split("\n  };", 1)[0]
+        self.assertIn("setPending(key);", tap)
+        self.assertLess(tap.index("setPending(key);"), tap.index("const answer = reply && reply[event.name];"))
+        self.assertIn("{spins ? spinner : null}", a2ui)
+        self.assertIn('"a2-card" + (pending ? " is-locked" : "")', a2ui)
         # The ride card's JSON tab also shows the tap the preview produces for
         # the default pick, and the Preview tab shows no JSON at all.
         ride_group = [g for g in re.findall(r"<Tabs\b[^>]*>(.*?)</Tabs>", source, re.S) if "<A2uiPreview" in g][0]
