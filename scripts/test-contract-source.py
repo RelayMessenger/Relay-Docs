@@ -25,8 +25,8 @@ ROOT = Path(__file__).resolve().parents[1]
 # Community feed and About box (Server #391, #394): posts, comments, upvotes, community.* events; A2A door answers with a Message (Server #392).
 UPSTREAM_COMMIT = "0ccaba4b78c43101da294442eee0dbd76676fc46"
 UPSTREAM_STAGING_COMMIT = "0ccaba4b78c43101da294442eee0dbd76676fc46"
-UPSTREAM_SIZE = 325602
-UPSTREAM_SHA256 = "890cabaab8fd17cfb7cce03df0c9b7e532b51ff1d52f73c186d54083f1ba5766"
+UPSTREAM_SIZE = 325987
+UPSTREAM_SHA256 = "3ac33f08a16f83be44585a34df34d7067f9157a8971e63686ab41f44374ce5f8"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
