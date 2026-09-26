@@ -174,7 +174,7 @@ class ContractSourceTests(unittest.TestCase):
     def test_selection_preview_and_response_share_canonical_bullet_text(self):
         source = (ROOT / "interactions/selection.mdx").read_text()
         groups = re.findall(r"<Tabs\b[^>]*>(.*?)</Tabs>", source, re.S)
-        send = next(group for group in groups if '<Tab title="Request">' in group)
+        send = next(group for group in groups if '<Tab title="JSON">' in group)
         received = next(group for group in groups if '<Tab title="What you receive">' in group)
         request = json.loads(re.search(r"```json\s*\n(.*?)```", send, re.S)[1])
         response = json.loads(re.search(r"```json\s*\n(.*?)```", received, re.S)[1])["data"]
@@ -297,10 +297,10 @@ class ContractSourceTests(unittest.TestCase):
         with_text = 0
         for group in re.findall(r"<Tabs\b[^>]*>(.*?)</Tabs>", source, re.S):
             tabs = dict(re.findall(r'<Tab title="([^"]+)">\s*(.*?)</Tab>', group, re.S))
-            if "Request" not in tabs:
+            if "JSON" not in tabs:
                 continue
             requests += 1
-            blocks = re.findall(r"```json\s*\n(.*?)```", tabs["Request"], re.S)
+            blocks = re.findall(r"```json\s*\n(.*?)```", tabs["JSON"], re.S)
             self.assertEqual(len(blocks), 1, "Each request needs one JSON payload")
             parts = json.loads(blocks[0])["message"]["parts"]
             buttons = [part for part in parts if part["type"] == "buttons"]
@@ -333,6 +333,45 @@ class ContractSourceTests(unittest.TestCase):
     def test_buttons_previews_match_adjacent_requests(self):
         self.assert_buttons_previews_match_requests(
             (ROOT / "interactions/buttons.mdx").read_text())
+
+    def test_cards_previews_draw_the_adjacent_json(self):
+        # Each live card preview draws exactly the messages in its JSON tab. An
+        # update preview replays the page's first card, then the update; the
+        # ride preview's reply is that same update, applied after the tap.
+        source = (ROOT / "interactions/cards.mdx").read_text()
+        https = [json.loads(body)["message"]["parts"][0]["data"]
+                 for body in re.findall(r"-d '(\{.*?\})'\n```", source, re.S)]
+        self.assertEqual(len(https), 2, "Keep the send and update HTTPS samples")
+
+        def prop(preview, name):
+            match = re.search(r"\b" + name + r"=\{", preview)
+            if match is None:
+                return None
+            value, _ = json.JSONDecoder().raw_decode(preview[match.end():].lstrip())
+            return value
+
+        previews = []
+        for group in re.findall(r"<Tabs\b[^>]*>(.*?)</Tabs>", source, re.S):
+            tabs = dict(re.findall(r'<Tab title="([^"]+)">\s*(.*?)</Tab>', group, re.S))
+            if "<A2uiPreview" not in tabs.get("Preview", ""):
+                continue
+            self.assertIn("JSON", tabs, "Each card preview needs its JSON tab")
+            blocks = re.findall(r"```json\s*\n(.*?)```", tabs["JSON"], re.S)
+            self.assertEqual(len(blocks), 1)
+            data = json.loads(blocks[0])["message"]["parts"][0]["data"]
+            preview = tabs["Preview"]
+            messages = prop(preview, "messages")
+            self.assertEqual(messages[-len(data):], data, "Preview differs from its JSON tab")
+            if messages != data:
+                self.assertEqual(messages[:-len(data)], https[0], "An update preview starts from the sent card")
+            for local in (prop(preview, "media") or {}).values():
+                self.assertTrue((ROOT / local.lstrip("/")).is_file(), local)
+            previews.append((data, prop(preview, "reply")))
+        self.assertGreaterEqual(len(previews), 2)
+        self.assertEqual(previews[0][0], https[0], "The first preview is the ride card that is sent")
+        self.assertEqual(previews[0][1], https[1], "The ride preview's reply is the documented update")
+        self.assertIn((https[1], None), previews, "The update has its own preview")
+        self.assertFalse((ROOT / "images/cards/choice-picker-card.jpg").exists())
 
     def test_buttons_preview_has_local_native_controls_and_accessible_feedback(self):
         source = (ROOT / "snippets/buttons-preview.jsx").read_text()
@@ -556,7 +595,7 @@ assert.equal(openedURL, null);
             with self.assertRaises(AssertionError):
                 self.assert_buttons_previews_match_requests(changed)
         for group in re.findall(r"<Tabs\b[^>]*>.*?</Tabs>", source, re.S):
-            if '<Tab title="Request">' not in group:
+            if '<Tab title="JSON">' not in group:
                 continue
             preview = re.search(r"<ButtonsPreview\b(.*?)/>", group, re.S)
             if preview and not re.search(r"\btext\s*=", preview[1]):

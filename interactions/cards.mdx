@@ -4,11 +4,50 @@ description: "Send a card built from A2UI components, read the person's taps, an
 keywords: ["cards", "A2UI", "a2ui", "data part", "surface", "ChoicePicker", "Button", "interactions"]
 ---
 
+import { A2uiPreview } from "/snippets/a2ui-preview.jsx";
+
 A card is an [A2UI](https://a2ui.org) v0.9.1 surface sent as a `data` part: `{"type":"data","media_type":"application/a2ui+json","data":[…]}`. The `data` array holds A2UI messages in order. Relay draws the card in the chat, and each tap on one of its buttons comes back to your agent as a Message.
 
-<Frame caption="A card with a title, a ChoicePicker and a primary Button.">
-  <img src="/images/cards/choice-picker-card.jpg" alt="A Relay card titled Rides to SFO, Terminal 2, with three ride options, UberX selected, and a blue button that reads Request UberX for $42." width="360" />
-</Frame>
+Pick Comfort, then tap **Review ride**. The preview shows the tap your agent receives and applies the [update](#update-or-remove-a-card) in place. It stays in your browser and sends no request.
+
+<Tabs>
+  <Tab title="Preview">
+    <A2uiPreview label="A ride card: pick a ride, then tap Review ride"
+      messages={[
+        {"version":"v0.9.1","createSurface":{"surfaceId":"ride-1042","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
+        {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[{"id":"root","component":"Card","child":"body"},{"id":"body","component":"Column","children":["title","rides","review"]},{"id":"title","component":"Text","text":"Rides to SFO, Terminal 2","variant":"h3"},{"id":"rides","component":"ChoicePicker","label":"Ride","variant":"mutuallyExclusive","options":[{"label":"UberX, $42, 4 min away","value":"uberx"},{"label":"Comfort, $51, 6 min away","value":"comfort"}],"value":{"path":"/ride"}},{"id":"review_label","component":"Text","text":"Review ride"},{"id":"review","component":"Button","child":"review_label","variant":"primary","action":{"event":{"name":"review_ride","context":{"ride":{"path":"/ride"}}}}}]}},
+        {"version":"v0.9.1","updateDataModel":{"surfaceId":"ride-1042","value":{"ride":["uberx"]}}}
+      ]}
+      reply={[
+        {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[{"id":"body","component":"Column","children":["title","request"]},{"id":"request_label","component":"Text","text":"Request Comfort for $51"},{"id":"request","component":"Button","child":"request_label","variant":"primary","action":{"event":{"name":"request_ride","context":{"ride":"comfort"}}}}]}}
+      ]} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    {
+      "message": {
+        "parts": [{
+          "type": "data",
+          "media_type": "application/a2ui+json",
+          "data": [
+            {"version":"v0.9.1","createSurface":{"surfaceId":"ride-1042","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
+            {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[
+              {"id":"root","component":"Card","child":"body"},
+              {"id":"body","component":"Column","children":["title","rides","review"]},
+              {"id":"title","component":"Text","text":"Rides to SFO, Terminal 2","variant":"h3"},
+              {"id":"rides","component":"ChoicePicker","label":"Ride","variant":"mutuallyExclusive","options":[{"label":"UberX, $42, 4 min away","value":"uberx"},{"label":"Comfort, $51, 6 min away","value":"comfort"}],"value":{"path":"/ride"}},
+              {"id":"review_label","component":"Text","text":"Review ride"},
+              {"id":"review","component":"Button","child":"review_label","variant":"primary","action":{"event":{"name":"review_ride","context":{"ride":{"path":"/ride"}}}}}
+            ]}},
+            {"version":"v0.9.1","updateDataModel":{"surfaceId":"ride-1042","value":{"ride":["uberx"]}}}
+          ]
+        }],
+        "idempotency_key": "ride-1042-card"
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
 
 ## Send a card
 
@@ -192,6 +231,37 @@ A tap reaches only the person who tapped and the agent that created the card. Wh
 
 `updateA2uiSurface` changes the same card in place for everyone in the chat and adds no Message. Components replace their namesakes by `id`. Inside the tap handler, this update turns the choice into a review step with one button that commits:
 
+<Tabs>
+  <Tab title="Preview">
+    <A2uiPreview label="The ride card after the update: tap Request Comfort for $51"
+      messages={[
+        {"version":"v0.9.1","createSurface":{"surfaceId":"ride-1042","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
+        {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[{"id":"root","component":"Card","child":"body"},{"id":"body","component":"Column","children":["title","rides","review"]},{"id":"title","component":"Text","text":"Rides to SFO, Terminal 2","variant":"h3"},{"id":"rides","component":"ChoicePicker","label":"Ride","variant":"mutuallyExclusive","options":[{"label":"UberX, $42, 4 min away","value":"uberx"},{"label":"Comfort, $51, 6 min away","value":"comfort"}],"value":{"path":"/ride"}},{"id":"review_label","component":"Text","text":"Review ride"},{"id":"review","component":"Button","child":"review_label","variant":"primary","action":{"event":{"name":"review_ride","context":{"ride":{"path":"/ride"}}}}}]}},
+        {"version":"v0.9.1","updateDataModel":{"surfaceId":"ride-1042","value":{"ride":["uberx"]}}},
+        {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[{"id":"body","component":"Column","children":["title","request"]},{"id":"request_label","component":"Text","text":"Request Comfort for $51"},{"id":"request","component":"Button","child":"request_label","variant":"primary","action":{"event":{"name":"request_ride","context":{"ride":"comfort"}}}}]}}
+      ]} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    {
+      "message": {
+        "parts": [{
+          "type": "data",
+          "media_type": "application/a2ui+json",
+          "data": [
+            {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[
+              {"id":"body","component":"Column","children":["title","request"]},
+              {"id":"request_label","component":"Text","text":"Request Comfort for $51"},
+              {"id":"request","component":"Button","child":"request_label","variant":"primary","action":{"event":{"name":"request_ride","context":{"ride":"comfort"}}}}
+            ]}}
+          ]
+        }]
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
 <CodeGroup>
 ```typescript TypeScript SDK
 import { updateA2uiSurface } from "@relaymessenger/sdk";
@@ -289,14 +359,163 @@ The rest of the send is still applied and returns `202`. A send that applies not
 
 - Put at most two actions in a card, and make one of them primary.
 - Name the action and the price on the primary button, for example "Book JetBlue 916 for $168".
+
+<Tabs>
+  <Tab title="Preview">
+    <A2uiPreview label="Two actions stacked, the primary first"
+      messages={[
+        {"version":"v0.9.1","createSurface":{"surfaceId":"flight-916","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
+        {"version":"v0.9.1","updateComponents":{"surfaceId":"flight-916","components":[{"id":"root","component":"Card","child":"body"},{"id":"body","component":"Column","children":["title","when","actions"]},{"id":"title","component":"Text","text":"JetBlue 916, SFO to JFK","variant":"h4"},{"id":"when","component":"Text","text":"Thu, Oct 2, 7:05 AM, nonstop","variant":"caption"},{"id":"actions","component":"Row","children":["book","others"]},{"id":"book_label","component":"Text","text":"Book JetBlue 916 for $168"},{"id":"book","component":"Button","child":"book_label","variant":"primary","action":{"event":{"name":"book_flight","context":{"flight":"B6 916"}}}},{"id":"others_label","component":"Text","text":"See other flights"},{"id":"others","component":"Button","child":"others_label","action":{"event":{"name":"see_other_flights"}}}]}}
+      ]} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    {
+      "message": {
+        "parts": [{
+          "type": "data",
+          "media_type": "application/a2ui+json",
+          "data": [
+            {"version":"v0.9.1","createSurface":{"surfaceId":"flight-916","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
+            {"version":"v0.9.1","updateComponents":{"surfaceId":"flight-916","components":[
+              {"id":"root","component":"Card","child":"body"},
+              {"id":"body","component":"Column","children":["title","when","actions"]},
+              {"id":"title","component":"Text","text":"JetBlue 916, SFO to JFK","variant":"h4"},
+              {"id":"when","component":"Text","text":"Thu, Oct 2, 7:05 AM, nonstop","variant":"caption"},
+              {"id":"actions","component":"Row","children":["book","others"]},
+              {"id":"book_label","component":"Text","text":"Book JetBlue 916 for $168"},
+              {"id":"book","component":"Button","child":"book_label","variant":"primary","action":{"event":{"name":"book_flight","context":{"flight":"B6 916"}}}},
+              {"id":"others_label","component":"Text","text":"See other flights"},
+              {"id":"others","component":"Button","child":"others_label","action":{"event":{"name":"see_other_flights"}}}
+            ]}}
+          ]
+        }]
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
 - Give every commit its own step: show a review, then commit on the next tap.
 - Show a result by updating the same card in place, and send a new card only for new content.
 - Keep tabs and deep navigation out of a card.
 - Keep scrolling areas out of a card.
 - Send a normal message when a card would hold only text.
 - Put several photos of one thing in a horizontal List of Images, which Relay draws as a swipeable carousel.
+
+<Tabs>
+  <Tab title="Preview">
+    <A2uiPreview label="A photo carousel: swipe or use the page dots"
+      messages={[
+        {"version":"v0.9.1","createSurface":{"surfaceId":"cabin-77","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
+        {"version":"v0.9.1","updateComponents":{"surfaceId":"cabin-77","components":[{"id":"root","component":"Card","child":"body"},{"id":"body","component":"Column","children":["photos","title","about","dates"]},{"id":"photos","component":"List","direction":"horizontal","children":["porch","living","nook"]},{"id":"porch","component":"Image","url":"https://example.com/cabin/porch.jpg","description":"The cabin's front porch"},{"id":"living","component":"Image","url":"https://example.com/cabin/living-room.jpg","description":"The living room"},{"id":"nook","component":"Image","url":"https://example.com/cabin/reading-nook.jpg","description":"A reading nook with plants"},{"id":"title","component":"Text","text":"Cabin in Big Sur","variant":"h4"},{"id":"about","component":"Text","text":"2 beds, 1 bath, $420 a night","variant":"caption"},{"id":"dates_label","component":"Text","text":"Check dates"},{"id":"dates","component":"Button","child":"dates_label","variant":"primary","action":{"event":{"name":"check_dates","context":{"listing":"cabin-77"}}}}]}}
+      ]}
+      media={{"https://example.com/cabin/porch.jpg":"/images/cards/cabin-porch.jpg","https://example.com/cabin/living-room.jpg":"/images/cards/room.jpg","https://example.com/cabin/reading-nook.jpg":"/images/cards/room-plants.jpg"}} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    {
+      "message": {
+        "parts": [{
+          "type": "data",
+          "media_type": "application/a2ui+json",
+          "data": [
+            {"version":"v0.9.1","createSurface":{"surfaceId":"cabin-77","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
+            {"version":"v0.9.1","updateComponents":{"surfaceId":"cabin-77","components":[
+              {"id":"root","component":"Card","child":"body"},
+              {"id":"body","component":"Column","children":["photos","title","about","dates"]},
+              {"id":"photos","component":"List","direction":"horizontal","children":["porch","living","nook"]},
+              {"id":"porch","component":"Image","url":"https://example.com/cabin/porch.jpg","description":"The cabin's front porch"},
+              {"id":"living","component":"Image","url":"https://example.com/cabin/living-room.jpg","description":"The living room"},
+              {"id":"nook","component":"Image","url":"https://example.com/cabin/reading-nook.jpg","description":"A reading nook with plants"},
+              {"id":"title","component":"Text","text":"Cabin in Big Sur","variant":"h4"},
+              {"id":"about","component":"Text","text":"2 beds, 1 bath, $420 a night","variant":"caption"},
+              {"id":"dates_label","component":"Text","text":"Check dates"},
+              {"id":"dates","component":"Button","child":"dates_label","variant":"primary","action":{"event":{"name":"check_dates","context":{"listing":"cabin-77"}}}}
+            ]}}
+          ]
+        }]
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
 - Put several different items in a Row of Images, each with weight 1.
+
+<Tabs>
+  <Tab title="Preview">
+    <A2uiPreview label="Three different places in a Row of Images"
+      messages={[
+        {"version":"v0.9.1","createSurface":{"surfaceId":"stays-12","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
+        {"version":"v0.9.1","updateComponents":{"surfaceId":"stays-12","components":[{"id":"root","component":"Card","child":"body"},{"id":"body","component":"Column","children":["title","places","names"]},{"id":"title","component":"Text","text":"Three places open this weekend","variant":"h4"},{"id":"places","component":"Row","children":["loft","studio","cabin"]},{"id":"loft","component":"Image","url":"https://example.com/stays/loft.jpg","description":"Mission loft","weight":1},{"id":"studio","component":"Image","url":"https://example.com/stays/studio.jpg","description":"Noe Valley studio","weight":1},{"id":"cabin","component":"Image","url":"https://example.com/stays/cabin.jpg","description":"Big Sur cabin","weight":1},{"id":"names","component":"Text","text":"Mission loft, Noe Valley studio, Big Sur cabin","variant":"caption"}]}}
+      ]}
+      media={{"https://example.com/stays/loft.jpg":"/images/cards/room.jpg","https://example.com/stays/studio.jpg":"/images/cards/room-plants.jpg","https://example.com/stays/cabin.jpg":"/images/cards/cabin-porch.jpg"}} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    {
+      "message": {
+        "parts": [{
+          "type": "data",
+          "media_type": "application/a2ui+json",
+          "data": [
+            {"version":"v0.9.1","createSurface":{"surfaceId":"stays-12","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
+            {"version":"v0.9.1","updateComponents":{"surfaceId":"stays-12","components":[
+              {"id":"root","component":"Card","child":"body"},
+              {"id":"body","component":"Column","children":["title","places","names"]},
+              {"id":"title","component":"Text","text":"Three places open this weekend","variant":"h4"},
+              {"id":"places","component":"Row","children":["loft","studio","cabin"]},
+              {"id":"loft","component":"Image","url":"https://example.com/stays/loft.jpg","description":"Mission loft","weight":1},
+              {"id":"studio","component":"Image","url":"https://example.com/stays/studio.jpg","description":"Noe Valley studio","weight":1},
+              {"id":"cabin","component":"Image","url":"https://example.com/stays/cabin.jpg","description":"Big Sur cabin","weight":1},
+              {"id":"names","component":"Text","text":"Mission loft, Noe Valley studio, Big Sur cabin","variant":"caption"}
+            ]}}
+          ]
+        }]
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
 - Use the mediumFeature variant for a big photo at the top of a card.
+
+<Tabs>
+  <Tab title="Preview">
+    <A2uiPreview label="A mediumFeature photo at the top of a card"
+      messages={[
+        {"version":"v0.9.1","createSurface":{"surfaceId":"nopa-730","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
+        {"version":"v0.9.1","updateComponents":{"surfaceId":"nopa-730","components":[{"id":"root","component":"Card","child":"body"},{"id":"body","component":"Column","children":["photo","title","when","book"]},{"id":"photo","component":"Image","url":"https://example.com/nopa/dinner.jpg","description":"A dinner plate at Nopa","variant":"mediumFeature"},{"id":"title","component":"Text","text":"Nopa","variant":"h4"},{"id":"when","component":"Text","text":"Tonight at 7:30 PM, party of 2","variant":"caption"},{"id":"book_label","component":"Text","text":"Book a table for 2"},{"id":"book","component":"Button","child":"book_label","variant":"primary","action":{"event":{"name":"book_table","context":{"time":"19:30","party":2}}}}]}}
+      ]}
+      media={{"https://example.com/nopa/dinner.jpg":"/images/cards/food.jpg"}} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    {
+      "message": {
+        "parts": [{
+          "type": "data",
+          "media_type": "application/a2ui+json",
+          "data": [
+            {"version":"v0.9.1","createSurface":{"surfaceId":"nopa-730","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
+            {"version":"v0.9.1","updateComponents":{"surfaceId":"nopa-730","components":[
+              {"id":"root","component":"Card","child":"body"},
+              {"id":"body","component":"Column","children":["photo","title","when","book"]},
+              {"id":"photo","component":"Image","url":"https://example.com/nopa/dinner.jpg","description":"A dinner plate at Nopa","variant":"mediumFeature"},
+              {"id":"title","component":"Text","text":"Nopa","variant":"h4"},
+              {"id":"when","component":"Text","text":"Tonight at 7:30 PM, party of 2","variant":"caption"},
+              {"id":"book_label","component":"Text","text":"Book a table for 2"},
+              {"id":"book","component":"Button","child":"book_label","variant":"primary","action":{"event":{"name":"book_table","context":{"time":"19:30","party":2}}}}
+            ]}}
+          ]
+        }]
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
 - Expect Relay to ignore the A2UI theme and draw every card in Relay's own style.
 
 ## Next steps
