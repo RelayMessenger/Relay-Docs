@@ -488,7 +488,7 @@ class AgentOnboardingTests(unittest.TestCase):
     def test_released_agent_admission_keeps_authorization_and_session_caveats(self):
         openclaw = self.page("integrations/openclaw")
         claude = self.page("integrations/claude-code")
-        self.assert_identifiers(openclaw, ">=2026.8.1 <2026.9.0", "allowFrom")
+        self.assert_identifiers(openclaw, "2026.8.1 through 2026.9.6", "allowFrom")
         self.assert_concept(openclaw, r"Contact UUID")
         self.assert_concept(openclaw, r"stable.ID")
         self.assert_concept(openclaw, r"dmScope|DM session scope")
