@@ -229,12 +229,19 @@ class IntegrationDocsTests(unittest.TestCase):
             CLI: "npm install --global relaymessenger@staging",
             MCP: "claude mcp add --transport http relay https://mcp.staging.relayapp.im",
             "integrations/openclaw.mdx": "openclaw plugins install @relaymessenger/openclaw-plugin@staging",
-            "integrations/hermes.mdx": "hermes plugins install RelayMessenger/Relay-Hermes --enable",
+            "integrations/hermes.mdx": "hermes plugins install RelayMessenger/Relay-Hermes --no-enable",
             "integrations/claude-code.mdx": "npx relaymessenger@staging connect claude-code",
             "integrations/codex.mdx": "codex plugin add relay@relay-plugin-marketplace",
         }
         for page, command in installs.items():
             self.assertIn(expected(command), commands(read(page)), page)
+        # A script cannot answer OpenClaw's trust and capability questions, and
+        # Hermes's `install --enable` skips dependencies without a terminal.
+        self.assertIn(
+            expected("openclaw plugins install @relaymessenger/openclaw-plugin@staging --force --accept-capabilities"),
+            commands(read("integrations/openclaw.mdx")),
+        )
+        self.assertIn("hermes plugins enable relay-hermes", commands(read("integrations/hermes.mdx")))
         self.assertIn(
             expected("npx relaymessenger@staging --help"),
             commands(read(CLI)),
@@ -269,9 +276,8 @@ class IntegrationDocsTests(unittest.TestCase):
             self.assertIn("22.22.3", read(page), "Keep the supported Node minimum at the install task")
         for page in ("integrations/claude-code.mdx", "integrations/codex.mdx", "integrations/cursor.mdx", "integrations/opencode.mdx", "integrations/cline.mdx", "integrations/vs-code.mdx", "integrations/gemini-cli.mdx", "integrations/hermes.mdx", "integrations/openclaw.mdx", "start/quickstart.mdx"):
             self.assertNotIn("RELAY_API_URL", read(page), page)
-        self.assertIn(">=2026.8.1 <2026.9.0", read("integrations/openclaw.mdx"))
-        for version in ("3.11", "3.13"):
-            self.assertIn(version, read("integrations/hermes.mdx"))
+        self.assertIn("2026.8.1 through 2026.9.6", read("integrations/openclaw.mdx"))
+        self.assertIn("Python 3.11 or newer", read("integrations/hermes.mdx"))
         self.assertIn("installed and signed in.", read("integrations/claude-code.mdx"))
         self.assertLink(MCP, "/cli/auth")
         self.assertNotIn("RELAY_API_URL", read(MCP))
