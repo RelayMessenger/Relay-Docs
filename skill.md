@@ -189,6 +189,10 @@ generation, or tests completed, say so and leave the connection pending.
   `location.sharing.started`, read `GET /v1/chats/{chatId}/location`: a
   GeoJSON FeatureCollection, `coordinates` as `[longitude, latitude]`. No
   event fires when they move; read again for a newer position.
+- To show where something is, send a `place` part: `latitude` and
+  `longitude` required, `name` and `address` optional (1 to 256 characters),
+  alone or beside text. A person's one-time location or dropped pin arrives
+  the same way in `message.received`, with an address and no name.
 - Group membership controls which history a Contact can read.
 
 ## Chat activity

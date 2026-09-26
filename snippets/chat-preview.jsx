@@ -13,6 +13,13 @@
 // Relay-iOS .context/forensics recordings (location-sharing-20260923,
 // link-preview-lp-20260924).
 //
+// The place card and the document card follow Relay-iOS origin/staging
+// 1ef73e93 (Views/Transcript/RelayLocationRows.swift,
+// Views/Transcript/RelayFileMessageRow.swift). The place map is a crop of
+// the app's own map, marker included, from Relay-iOS .context/forensics/
+// location-pin-20260925 (b-panel-pin-button-dragged-pin-send-pin.png); the
+// words under it come from the JSON.
+//
 // Text balloons use a CSS radius of 20 and the same BubbleKit round tail
 // contour that snippets/buttons-preview.jsx draws (Relay-iOS
 // Views/MessageBubbleShape.swift:39-42). The exported MessageBubble draws a
@@ -207,6 +214,58 @@ export const ChatPreview = ({ scene, json, label }) => {
 .chatp-badge svg { width: 14px; height: 14px; fill: none; stroke: #fff; stroke-width: 2; }
 .chatp-locstop { box-sizing: border-box; width: 176px; height: 131px; border-radius: 20px; background: rgba(0,122,255,.14); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 16px; color: #007AFF; font-size: 17px; line-height: 20px; letter-spacing: -0.43px; margin-bottom: ${TAIL_DEPTH}px; }
 .dark .chatp-locstop { color: #0A84FF; background: rgba(10,132,255,.14); }
+/* Place card: RelayLocationRows.swift:1047-1069 (210 wide, 210 map, insets
+   17.5/14, title 17 semibold, detail 15), 1212 (systemThickMaterial band),
+   1176-1188 (the marker's title, 11 semibold systemRed, white edge, 4pt under
+   the point). Band colour read off d-received-agent-place.png: (247,246,241). */
+.chatp-place { position: relative; flex: none; width: 210px; margin-bottom: ${TAIL_DEPTH}px; --fill: #F7F6F1; cursor: pointer; border: 0; padding: 0; background: none; text-align: left; font-family: inherit; color: inherit; display: block; }
+.dark .chatp-place { --fill: #404042; }
+.chatp-place:focus-visible { outline: 2px solid #0B75FF; outline-offset: 3px; border-radius: 20px; }
+.chatp-place-clip { position: relative; border-radius: 20px; overflow: hidden; background: var(--fill); }
+.chatp-place-map { position: relative; width: 210px; height: 210px; line-height: 0; }
+.chatp-place-map img { width: 210px; height: 210px; display: block; }
+.chatp-place-label { position: absolute; left: 12px; right: 12px; top: 109px; text-align: center; font-size: 11px; line-height: 13px; font-weight: 600; color: #FF3B30; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 0 1px #fff, 0 0 1px #fff, 0 0 2px #fff; }
+.chatp-place-band { position: relative; overflow: hidden; }
+.chatp-place-under { position: absolute; left: -12px; top: -12px; width: 234px !important; height: 234px; transform: scaleY(-1); filter: blur(14px) saturate(1.3); opacity: .9; }
+.chatp-place-text { position: relative; padding: 7.5px 14px 8.8px 17.5px; background: rgba(250,250,247,.8); }
+.dark .chatp-place-text { background: rgba(37,37,39,.86); }
+.chatp-place-title { font-size: 17px; line-height: 20px; font-weight: 600; letter-spacing: -0.43px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.chatp-place-detail { font-size: 15px; line-height: 18px; letter-spacing: -0.23px; color: rgba(60,60,67,.6); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.dark .chatp-place-detail { color: rgba(235,235,245,.6); }
+.chatp-place-detail svg { display: inline-block; width: 12px; height: 14px; fill: currentColor; vertical-align: -1px; margin-right: 1px; }
+/* Maps, which the card's tap opens (RelayLocationRows.swift:1267-1275). */
+.chatp-maps { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column; background: #f2f2f7; animation: chatp-arrive .2s ease-out; }
+.dark .chatp-maps { background: #1c1c1e; }
+.chatp-maps-map { position: relative; flex: 1; overflow: hidden; line-height: 0; }
+.chatp-maps-map img { position: absolute; left: 50%; top: 50%; width: 420px; height: 420px; transform: translate(-50%, -50%); }
+.chatp-maps-sheet { padding: 16px 20px 20px; border-radius: 22px 22px 0 0; background: #ffffff; box-shadow: 0 -4px 20px rgba(0,0,0,.12); }
+.dark .chatp-maps-sheet { background: #2c2c2e; }
+.chatp-maps-app { font-size: 13px; color: rgba(60,60,67,.6); margin-bottom: 4px; }
+.dark .chatp-maps-app { color: rgba(235,235,245,.6); }
+.chatp-maps-title { font-size: 22px; line-height: 28px; font-weight: 700; letter-spacing: .35px; }
+.chatp-maps-sheet a { display: inline-block; margin-top: 12px; padding: 10px 16px; border-radius: 20px; background: #0B75FF; color: #fff !important; font-size: 15px; font-weight: 600; text-decoration: none; border: 0; }
+.chatp-close { position: absolute; top: 12px; right: 12px; z-index: 1; width: 32px; height: 32px; border-radius: 50%; border: 0; background: rgba(120,120,128,.24); color: inherit; font-size: 15px; cursor: pointer; }
+/* Document card: RelayFileMessageRow.swift:29-36 (LPLinkView's neutral
+   E9E9EB / 262629), MessageBubble.swift:21 (246 wide), RelayFileMessageRow
+   .swift:858-870 (the file's name and size as LPLinkView's title). The page
+   thumbnail fills the top the way the relayapp.im link card's image does. */
+.chatp-doc { position: relative; flex: none; display: block; width: 246px; margin-bottom: ${TAIL_DEPTH}px; --fill: #E9E9EB; border: 0; padding: 0; background: none; text-align: left; font-family: inherit; color: inherit; cursor: pointer; }
+.dark .chatp-doc { --fill: #262629; }
+.chatp-doc:focus-visible { outline: 2px solid #0B75FF; outline-offset: 3px; border-radius: 20px; }
+.chatp-doc-clip { position: relative; border-radius: 20px; overflow: hidden; background: var(--fill); }
+.chatp-doc-clip::after { content: ""; position: absolute; inset: 0; border-radius: 20px; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.1); pointer-events: none; }
+.dark .chatp-doc-clip::after { box-shadow: inset 0 0 0 .5px rgba(255,255,255,.1); }
+.chatp-doc-thumb { height: 128px; background: #ffffff; padding: 18px 22px 0; box-sizing: border-box; overflow: hidden; }
+.chatp-doc-thumb i { display: block; height: 5px; border-radius: 2.5px; background: #d1d1d6; margin-bottom: 9px; }
+.chatp-doc-thumb i.is-head { height: 9px; width: 58%; background: #3a3a3c; margin-bottom: 14px; }
+.chatp-doc-cap { padding: 11px 16px; font-size: 17px; line-height: 20px; font-weight: 600; letter-spacing: -0.43px; }
+.chatp-doc-cap span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chatp-ql { position: absolute; inset: 0; z-index: 4; background: #f2f2f7; display: flex; flex-direction: column; animation: chatp-arrive .2s ease-out; }
+.dark .chatp-ql { background: #000000; }
+.chatp-ql-bar { position: relative; padding: 18px 56px 12px; text-align: center; font-size: 17px; font-weight: 600; letter-spacing: -0.43px; }
+.chatp-ql-page { flex: 1; margin: 4px 28px 28px; background: #ffffff; box-shadow: 0 2px 12px rgba(0,0,0,.12); padding: 28px 26px; box-sizing: border-box; }
+.chatp-ql-page i { display: block; height: 6px; border-radius: 3px; background: #d1d1d6; margin-bottom: 12px; }
+.chatp-ql-page i.is-head { height: 12px; width: 58%; background: #3a3a3c; margin-bottom: 20px; }
 @media (prefers-reduced-motion: reduce) {
   .chatp *, .chatp *::before, .chatp *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   .chatp-typing i { opacity: .325; }
@@ -228,6 +287,7 @@ export const ChatPreview = ({ scene, json, label }) => {
   const [share, setShare] = useState(null);
   const [status, setStatus] = useState("completed");
   const [ranged, setRanged] = useState(true);
+  const [maps, setMaps] = useState(null);
   const root = useRef(null);
 
   // ---------- Pieces ----------
@@ -365,6 +425,64 @@ export const ChatPreview = ({ scene, json, label }) => {
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6.6 10.8a15.2 15.2 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z" /></svg>
   );
   const chevron = <svg className="chatp-chevron" viewBox="0 0 8 13" aria-hidden="true" focusable="false"><path d="M1.5 1.5l5 5-5 5" /></svg>;
+
+  // A place's words (PlaceComponent, Models/LocationSharing.swift): the card's
+  // title is the name, else "Dropped Pin"; Maps names the point with the
+  // name, else the address, else "Dropped Pin". Blank counts as absent.
+  const present = (v) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  // The Apple logo (simple-icons "apple", CC0) for the " Maps" line; the app
+  // draws SF Symbols "apple.logo" (RelayLocationRows.swift:1077-1088).
+  const appleLogo = <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701" /></svg>;
+  // The Dropped Pin card (RelayLocationRows.swift:1005-1400). A tap opens
+  // Maps at the point, named (RelayPlaceRowView.openInMaps).
+  const placeCard = (place, side, withTail) => {
+    const title = present(place.name) || "Dropped Pin";
+    const address = present(place.address);
+    return (
+      <div className="chatp-place" role="button" tabIndex={0} onClick={() => setMaps(place)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setMaps(place); } }}
+        aria-label={[title, address, "Maps"].filter(Boolean).join(", ") + ". Opens Apple Maps"}>
+        <div className="chatp-place-clip">
+          <div className="chatp-place-map">
+            <img src="/images/chat/place-map.png" alt="" />
+            <span className="chatp-place-label" aria-hidden="true">{title}</span>
+          </div>
+          <div className="chatp-place-band">
+            <img className="chatp-place-under" src="/images/chat/place-map.png" alt="" />
+            <div className="chatp-place-text">
+              <div className="chatp-place-title">{title}</div>
+              {address ? <div className="chatp-place-detail">{address}</div> : null}
+              <div className="chatp-place-detail">{appleLogo}Maps</div>
+            </div>
+          </div>
+        </div>
+        {withTail ? tail(side) : null}
+      </div>
+    );
+  };
+  const mapsOverlay = (place) => {
+    const name = present(place.name) || present(place.address) || "Dropped Pin";
+    const href = `https://maps.apple.com/?ll=${place.latitude},${place.longitude}&q=${encodeURIComponent(name)}`;
+    return (
+      <div className="chatp-maps" role="dialog" aria-modal="true" aria-label="Apple Maps"
+        onKeyDown={(e) => { if (e.key === "Escape") setMaps(null); }}>
+        <button type="button" className="chatp-close" autoFocus aria-label="Close" onClick={() => setMaps(null)}>✕</button>
+        <div className="chatp-maps-map"><img src="/images/chat/place-map.png" alt="" /></div>
+        <div className="chatp-maps-sheet">
+          <div className="chatp-maps-app">The app opens Apple Maps here</div>
+          <div className="chatp-maps-title">{name}</div>
+          {present(place.address) && name !== present(place.address) ? <div className="chatp-place-detail">{present(place.address)}</div> : null}
+          <a href={href} target="_blank" rel="noopener noreferrer">Open in Apple Maps</a>
+        </div>
+      </div>
+    );
+  };
+  // A text part and the balloon that follows it: the composite row's
+  // grammar (RelayCompositeRow.swift:14-22), the lobe on the last part only,
+  // 5pt between parts of different kinds.
+  const stack = (side, items) => row(side, items.map((item, i) => (
+    <div key={i} style={{ marginTop: i ? 5 : 0 }}>{item(i === items.length - 1)}</div>
+  )));
 
   // ---------- Scenes ----------
   let title = "Echo";
@@ -517,20 +635,26 @@ export const ChatPreview = ({ scene, json, label }) => {
       </div>
     ));
   } else if (scene === "attachment") {
-    body = row("in", (
-      <button type="button" className="chatp-photo" onClick={() => setViewer(true)} aria-label={video ? "Video. Tap to open" : "Photo. Tap to open"}>
+    // A media part to send, or one as it arrives, which names its type.
+    const media = json.message ? json.message.parts[0] : json;
+    const typed = typeof media.mime_type === "string";
+    const isVideo = typed ? media.mime_type.startsWith("video/") : video;
+    // A part as it arrives came from a person: their own screen draws it on
+    // the right.
+    body = row(typed ? "out" : "in", (
+      <button type="button" className="chatp-photo" onClick={() => setViewer(true)} aria-label={isVideo ? "Video. Tap to open" : "Photo. Tap to open"}>
         <img src="/images/chat/photo-tartine.jpg" alt="" />
-        {video ? <span className="chatp-playbadge"><svg viewBox="0 0 20 22" aria-hidden="true" focusable="false"><path d="M1 1.6v18.8c0 1.1 1.2 1.8 2.2 1.2l15.6-9.4c.9-.6.9-1.9 0-2.4L3.2.4C2.2-.2 1 .5 1 1.6z" /></svg></span> : null}
+        {isVideo ? <span className="chatp-playbadge"><svg viewBox="0 0 20 22" aria-hidden="true" focusable="false"><path d="M1 1.6v18.8c0 1.1 1.2 1.8 2.2 1.2l15.6-9.4c.9-.6.9-1.9 0-2.4L3.2.4C2.2-.2 1 .5 1 1.6z" /></svg></span> : null}
       </button>
     ));
     overlay = viewer ? (
-      <div className="chatp-viewer" role="dialog" aria-modal="true" aria-label={video ? "Video viewer" : "Photo viewer"}
+      <div className="chatp-viewer" role="dialog" aria-modal="true" aria-label={isVideo ? "Video viewer" : "Photo viewer"}
         onKeyDown={(e) => { if (e.key === "Escape") setViewer(false); }}>
         <button type="button" autoFocus aria-label="Close" onClick={() => setViewer(false)}>✕</button>
         <img src="/images/chat/photo-tartine.jpg" alt="" />
       </div>
     ) : null;
-    controls = (
+    controls = typed ? null : (
       <button type="button" className="chatp-control" aria-pressed={video} onClick={() => setVideo((v) => !v)}>
         {video ? "Show as a photo" : "Show as a video"}
       </button>
@@ -553,16 +677,18 @@ export const ChatPreview = ({ scene, json, label }) => {
     );
   } else if (scene === "location") {
     // Request card, the Share My Location menu, then the person's card.
-    const durations = [["hour", "For One Hour", "1 hr"], ["day", "Until End of Day", null], ["forever", "Indefinitely", null]];
-    const chosen = durations.find((d) => d[0] === share);
+    // Models/LocationSharing.swift:141-163: Once first, then the three
+    // durations, word for word. Once sends one place and starts no share.
+    const durations = [["once", "Once", null], ["hour", "For One Hour", "1 hr"], ["day", "Until End of Day", null], ["forever", "Indefinitely", null]];
+    const chosen = share === "once" ? null : durations.find((d) => d[0] === share);
     const badge = chosen ? (chosen[0] === "hour" ? "1 hr" : chosen[0] === "day" ? "9 hr" : null) : null;
     body = (
-      <div style={{ position: "relative", minHeight: menu ? 330 : undefined }}>
+      <div style={{ position: "relative", minHeight: menu ? 376 : undefined }}>
         {row("in", bubble("in", (
-          <div className="chatp-locreq" style={{ minHeight: share ? 190 : 204 }}>
+          <div className="chatp-locreq" style={{ minHeight: share && share !== "once" ? 190 : 204 }}>
             <span className="chatp-locdot" aria-hidden="true" />
             <div className="chatp-loctext">{title} requested your location</div>
-            {share ? null : (
+            {share && share !== "once" ? null : (
               <button type="button" className="chatp-capsule" aria-haspopup="menu" aria-expanded={menu}
                 onClick={() => setMenu((m) => !m)}>Share My Location</button>
             )}
@@ -575,6 +701,7 @@ export const ChatPreview = ({ scene, json, label }) => {
             {durations.map((d) => (
               <button type="button" role="menuitem" key={d[0]} onClick={() => { setShare(d[0]); setMenu(false); }}>
                 <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+                  {d[0] === "once" ? <g><circle cx="9" cy="5.6" r="3.6" /><path d="M9 9.2v7.3" /></g> : null}
                   {d[0] === "hour" ? <g><circle cx="9" cy="9" r="7.2" /><path d="M9 4.8V9l2.8 1.7" /></g> : null}
                   {d[0] === "day" ? <g><rect x="2" y="3" width="14" height="13" rx="2.4" /><path d="M2 7h14M5.5 1.5v3M12.5 1.5v3" /></g> : null}
                   {d[0] === "forever" ? <path d="M9 9c-1.6-2-3-3-4.4-3a3 3 0 0 0 0 6C6 12 7.4 11 9 9zm0 0c1.6 2 3 3 4.4 3a3 3 0 0 0 0-6C12 6 10.6 7 9 9z" /> : null}
@@ -584,7 +711,7 @@ export const ChatPreview = ({ scene, json, label }) => {
             ))}
           </div>
         ) : null}
-        {share === "stopped" ? row("out", (
+        {share === "once" ? row("out", placeCard({}, "out", true), { gap: 12 }) : share === "stopped" ? row("out", (
           <div className="chatp-locstop" style={{ position: "relative", "--fill": "rgba(0,122,255,.14)" }}>
             <span className="chatp-locdot" aria-hidden="true" style={{ marginBottom: 8 }} />You stopped sharing location
           </div>
@@ -602,9 +729,43 @@ export const ChatPreview = ({ scene, json, label }) => {
     );
     controls = share ? (
       <span style={{ display: "contents" }}>
-        {share !== "stopped" ? <button type="button" className="chatp-control" onClick={() => setShare("stopped")}>Stop sharing</button> : null}
+        {share !== "stopped" && share !== "once" ? <button type="button" className="chatp-control" onClick={() => setShare("stopped")}>Stop sharing</button> : null}
         <button type="button" className="chatp-control" onClick={() => { setShare(null); setMenu(false); }}>Reset demo</button>
       </span>
+    ) : null;
+  } else if (scene === "place") {
+    // An agent's message draws on the left; a person's own place, as the
+    // agent receives it, draws on the person's screen on the right.
+    const side = json.message ? "in" : "out";
+    const list = json.message ? json.message.parts : [json];
+    body = stack(side, list.map((part) => (last) => (
+      part.type === "place" ? placeCard(part, side, last) : bubble(side, part.value, { tail: last })
+    )));
+    overlay = maps ? mapsOverlay(maps) : null;
+  } else if (scene === "document") {
+    // Text, then the document card. The filename and size are the file's
+    // own, set when it was uploaded; the words above it come from the JSON.
+    const file = ["signed-report.pdf", "248 KB"];
+    const lines = [100, 92, 96, 70, 94, 88, 60];
+    body = stack("in", json.message.parts.map((part) => (last) => (
+      part.type === "media" ? (
+        <div className="chatp-doc" role="button" tabIndex={0} onClick={() => setViewer(true)} aria-label={file.join(", ") + ". Tap to open"}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setViewer(true); } }}>
+          <div className="chatp-doc-clip">
+            <div className="chatp-doc-thumb" aria-hidden="true"><i className="is-head" />{lines.map((w, i) => <i key={i} style={{ width: w + "%" }} />)}</div>
+            <div className="chatp-doc-cap"><span>{file[0]}</span><span>{file[1]}</span></div>
+          </div>
+          {last ? tail("in") : null}
+        </div>
+      ) : bubble("in", part.value, { tail: last })
+    )));
+    // The tap opens the file in Quick Look (RelayFileMessageRow.swift:455-475).
+    overlay = viewer ? (
+      <div className="chatp-ql" role="dialog" aria-modal="true" aria-label={"Quick Look: " + file[0]}
+        onKeyDown={(e) => { if (e.key === "Escape") setViewer(false); }}>
+        <div className="chatp-ql-bar">{file[0]}<button type="button" className="chatp-close" autoFocus aria-label="Close" onClick={() => setViewer(false)}>✕</button></div>
+        <div className="chatp-ql-page" aria-hidden="true"><i className="is-head" />{lines.concat(lines).map((w, i) => <i key={i} style={{ width: w + "%" }} />)}</div>
+      </div>
     ) : null;
   } else if (scene === "contact-card") {
     const card = json;
