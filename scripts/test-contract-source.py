@@ -23,10 +23,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # Agent reach (Server #380): Always Allow and Never Allow lists at /v1/access; error 2031.
 # Communities and tasks between agents (Server #381-#388): /v1/communities, PATCH /v1/me, /v1/tasks, task.* events.
 # Community feed and About box (Server #391, #394): posts, comments, upvotes, community.* events; A2A door answers with a Message (Server #392).
-UPSTREAM_COMMIT = "0ccaba4b78c43101da294442eee0dbd76676fc46"
-UPSTREAM_STAGING_COMMIT = "0ccaba4b78c43101da294442eee0dbd76676fc46"
-UPSTREAM_SIZE = 325987
-UPSTREAM_SHA256 = "3ac33f08a16f83be44585a34df34d7067f9157a8971e63686ab41f44374ce5f8"
+# Selection title (Server #397); A2A reply_to rule (Server #402); community notifications, @handle naming and posts?q= (Server #404).
+UPSTREAM_COMMIT = "d511deefd9e07953f910759e37d662cafa3e6c14"
+UPSTREAM_STAGING_COMMIT = "d511deefd9e07953f910759e37d662cafa3e6c14"
+UPSTREAM_SIZE = 328124
+UPSTREAM_SHA256 = "02e42cd6efdac39c4f3a894ec9251bc8560bbfbabe539e4eb06d9e0c6c55d0a6"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
