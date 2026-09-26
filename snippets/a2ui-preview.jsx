@@ -5,14 +5,17 @@
 // tail, 16pt padding, 44pt pills, left-circle choice rows, capsule fields,
 // inset boxes for nested Cards, and the paged photo carousel.
 //
-// Everything is local. Controls write the data model in this page only; a
-// Button tap shows the A2UI `action` message Relay would send, and `reply`
-// (a follow-up message array, for example updateComponents on the same
-// surface) is applied once after the first tap, as an agent's update would be.
-// An agent answers the pick it receives, so `reply` can instead be an object
-// keyed by the tap's first context value (the chosen option's value); the
-// preview applies the update for the option the reader actually picked.
-// Nothing is sent anywhere.
+// Everything is local. Controls write the data model in this page only. A
+// Button tap does what the app does (RelayA2UICatalog.swift RelayA2UIButton,
+// RelayA2UIRow.swift:237-238 and 507): the tapped Button spins and the card
+// locks until the agent answers, and the Frame's caption names the action
+// the agent receives. `reply` is the agent's answer, keyed by the tapped
+// action's name; each value is a follow-up message array (for example
+// updateComponents on the same surface), or an object keyed by the tap's
+// first context value when the answer depends on the pick (the chosen
+// option's value). The answer lands after a short wait, once per action
+// name, and unlocks the card. A tap with no answer keeps spinning, as it
+// does in the app while the agent has not answered. Nothing is sent anywhere.
 //
 // Snippet rules (see buttons-preview.jsx): Mintlify compiles this file as
 // MDX, so only exports stay in scope and every helper lives inside the
@@ -88,7 +91,10 @@ export const A2uiPreview = ({ messages, reply, media, label, icons = "/images/ca
   const [pages, setPages] = useState({});
   const [aspects, setAspects] = useState({});
   const [playing, setPlaying] = useState({});
-  const [replied, setReplied] = useState(false);
+  const [answered, setAnswered] = useState({});
+  const [pending, setPending] = useState(null);
+  const timer = useRef(null);
+  useEffect(() => () => clearTimeout(timer.current), []);
 
   const surface = surfaceOf(shown);
   const comps = surface.comps;
@@ -537,14 +543,29 @@ export const A2uiPreview = ({ messages, reply, media, label, icons = "/images/ca
       timestamp: new Date().toISOString(), context } }];
     setTaps((current) => [...current, message]);
     setOpen(null);
+    const key = cid + (scope || "");
+    setPending(key);
     const first = [].concat(Object.values(context)[0])[0];
-    const update = Array.isArray(reply) ? reply : (reply && reply[first]);
-    if (update && !replied) {
-      setReplied(true);
-      setShown((current) => [...current, ...update]);
-      setData((model) => applyData(model, update));
+    const answer = reply && reply[event.name];
+    const update = Array.isArray(answer) ? answer : (answer && answer[first]);
+    if (update && !answered[event.name]) {
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => {
+        setAnswered((current) => ({ ...current, [event.name]: true }));
+        setShown((current) => [...current, ...update]);
+        setData((model) => applyData(model, update));
+        setPending(null);
+      }, 700);
     }
   };
+  // The app's spinner (ProgressView) over the tapped Button's hidden label.
+  const spinner = (
+    <svg className="a2-spin" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+      {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+        <line key={i} x1="10" y1="2.5" x2="10" y2="6" transform={"rotate(" + (i * 45) + " 10 10)"} style={{ opacity: 0.25 + (i / 7) * 0.75 }} />
+      ))}
+    </svg>
+  );
   // ViewThatFits needs a width: the 16pt medium label, estimated per character.
   const labelWidth = (label) => String(label).length * 8.4;
   const btn = (cid, scope) => {
@@ -564,17 +585,19 @@ export const A2uiPreview = ({ messages, reply, media, label, icons = "/images/ca
     const v = c.variant || "default";
     const cls = { primary: "p", default: "", borderless: "bl" }[v] || "";
     const dis = failing(c, scope).length > 0;
+    const spins = pending === cid + (scope || "");
+    const busy = spins ? " is-pending" : "";
     if (child && child.component === "Icon") {
       const name = dyn(child.name, scope);
       return { el: (
-        <button type="button" className={("a2-btn icn " + (cls) + (dis ? " dis" : ""))} disabled={dis} aria-label={name}
-          onClick={() => tap(cid, scope)}>{icon(name, v === "primary" ? "w" : "k")}</button>
+        <button type="button" className={("a2-btn icn " + (cls) + (dis ? " dis" : "") + busy)} disabled={dis} aria-label={name} aria-busy={spins || undefined}
+          onClick={() => tap(cid, scope)}><span className="a2-lbl">{icon(name, v === "primary" ? "w" : "k")}</span>{spins ? spinner : null}</button>
       ), variant: v, w: 0 };
     }
     const labelText = child ? dyn(child.text, scope) ?? "" : "";
     return { el: (
-      <button type="button" className={("a2-btn " + (cls) + (dis ? " dis" : ""))} disabled={dis}
-        onClick={() => tap(cid, scope)}>{labelText}</button>
+      <button type="button" className={("a2-btn " + (cls) + (dis ? " dis" : "") + busy)} disabled={dis} aria-busy={spins || undefined}
+        onClick={() => tap(cid, scope)}><span className="a2-lbl">{labelText}</span>{spins ? spinner : null}</button>
     ), variant: v, w: labelWidth(labelText) };
   };
   const buttonGroup = (kids, isRow, justify) => {
@@ -742,7 +765,9 @@ export const A2uiPreview = ({ messages, reply, media, label, icons = "/images/ca
     setTabs({});
     setPages({});
     setPlaying({});
-    setReplied(false);
+    setAnswered({});
+    setPending(null);
+    clearTimeout(timer.current);
   };
 
   // A Preview tab shows only the UI (owner, 2026-09-26): the tap your agent
@@ -765,7 +790,7 @@ export const A2uiPreview = ({ messages, reply, media, label, icons = "/images/ca
         <div className="a2-stage" aria-hidden={modal ? "true" : undefined}>
           <div className="a2-column">
             {body ? (
-              <div className="a2-card">
+              <div className={"a2-card" + (pending ? " is-locked" : "")}>
                 {body}
                 <svg className="a2-tail" width="23" height="24" viewBox="0 0 23 24" aria-hidden="true" focusable="false"><path d={TAIL} /></svg>
               </div>
