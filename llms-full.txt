@@ -1534,6 +1534,8 @@ A send that conflicts with an earlier one under the same idempotency key returns
 
 Source: https://docs.staging.relayapp.im/messages/send.md
 
+import { ChatPreview } from "/snippets/chat-preview.jsx";
+
 When you hold the chat ID, call `POST /v1/chats/{chatId}/messages` ([reference](/api-reference/messages/send-a-message-to-an-existing-chat)); the SDK method is `relay.chats.messages.send`. When you hold only the recipient handles, [resolve or create the chat](#resolve-or-create-a-chat) instead. Authenticate requests as described in [Authentication](/live/authentication).
 
 Both paths take the same `message` body, shown below. Relay answers `202` as soon as it has stored the message. Who receives it was settled when the chat was created: active membership and [blocking](/agents/blocked-handles) decide which recipients get a copy, and a withheld copy raises no error.
@@ -1542,13 +1544,20 @@ Both paths take the same `message` body, shown below. Relay answers `202` as soo
 
 Send the body with an `Idempotency-Key` header:
 
-```json
-{
-  "message": {
-    "parts": [{"type":"text","value":"The report is ready."}]
-  }
-}
-```
+<Tabs>
+  <Tab title="Preview">
+    <ChatPreview scene="send" label="An agent message as the person sees it" json={{"message": {"parts": [{"type": "text", "value": "The report is ready."}]}}} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    {
+      "message": {
+        "parts": [{"type":"text","value":"The report is ready."}]
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
 
 The response is the stored message. Keep its `id` if you will reply to it or react to one part. Text and media parts can be mixed in any order, but two text parts may not sit next to each other. [Message parts](/messages/parts) has the rules for each part type.
 
@@ -1573,18 +1582,25 @@ Underline uses Relay's `<u>…</u>` extension. The Markdown renderer also combin
 
 This message body carries the source for all six formats:
 
-```json
-{
-  "message": {
-    "parts": [
-      {
-        "type": "text",
-        "value": "**Bold** *Italic* ~~Strikethrough~~ `code` [Relay](https://relayapp.im) <u>Underlined</u>"
+<Tabs>
+  <Tab title="Preview">
+    <ChatPreview scene="markdown" label="The six Markdown formats as the app draws them" json={{"message": {"parts": [{"type": "text", "value": "**Bold** *Italic* ~~Strikethrough~~ `code` [Relay](https://relayapp.im) <u>Underlined</u>"}]}}} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    {
+      "message": {
+        "parts": [
+          {
+            "type": "text",
+            "value": "**Bold** *Italic* ~~Strikethrough~~ `code` [Relay](https://relayapp.im) <u>Underlined</u>"
+          }
+        ]
       }
-    ]
-  }
-}
-```
+    }
+    ```
+  </Tab>
+</Tabs>
 
 The [Chat SDK adapter](/integrations/chat-sdk#what-it-can-do) converts a `{ markdown: "…" }` input to plain text before sending.
 
@@ -1716,6 +1732,8 @@ Relay also returns parts of `type: "system"` for visible chat events such as a p
 
 Source: https://docs.staging.relayapp.im/messages/attachments.md
 
+import { ChatPreview } from "/snippets/chat-preview.jsx";
+
 An Attachment is a file Relay stores for a message.
 
 Uploading takes four calls. You allocate an Attachment by describing the file, and Relay hands you a signed upload URL. You put the raw bytes there, then send the Attachment ID in a media part.
@@ -1758,13 +1776,20 @@ Call `GET /v1/attachments/{attachmentId}` ([reference](/api-reference/attachment
 
 Send a media part with the ID through either [send path](/messages/send):
 
-```json
-{
-  "message": {
-    "parts": [{"type":"media","attachment_id":"01993d50-d263-7d6b-87ce-90aba89b7815"}]
-  }
-}
-```
+<Tabs>
+  <Tab title="Preview">
+    <ChatPreview scene="attachment" label="A media part drawn as a photo; tap it to open" json={{"message": {"parts": [{"type": "media", "attachment_id": "01993d50-d263-7d6b-87ce-90aba89b7815"}]}}} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    {
+      "message": {
+        "parts": [{"type":"media","attachment_id":"01993d50-d263-7d6b-87ce-90aba89b7815"}]
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
 
 Relay returns `202` with the message. The media part in the response carries the Attachment ID and a signed download URL. Reuse the same idempotency key and body after an uncertain send.
 
@@ -1864,6 +1889,8 @@ Every download carries the same safety headers:
 
 Source: https://docs.staging.relayapp.im/messages/voice-memos.md
 
+import { ChatPreview } from "/snippets/chat-preview.jsx";
+
 Upload the audio first, as any [Attachment](/messages/attachments), giving `duration_ms` in the allocation so the app can show the length. Then call `POST /v1/chats/{chatId}/voicememo` ([reference](/api-reference/messages/send-a-voice-memo-to-a-chat)) with the completed `attachment_id`. The SDK method is `relay.chats.sendVoicememo`.
 
 Relay refuses anything that is not `audio/*` on this route. Instead of an upload, `voice_memo_url` accepts a public HTTPS audio URL up to 10 MiB (10,485,760 bytes), checked the same way as [other URL media](/messages/import-media#apply-the-url-safety-checks). Send one of the two fields, not both.
@@ -1872,11 +1899,18 @@ Relay refuses anything that is not `audio/*` on this route. Instead of an upload
 
 Send the body to the voice memo route:
 
-```json
-{
-  "attachment_id": "01993d50-d263-7d6b-87ce-90aba89b7815"
-}
-```
+<Tabs>
+  <Tab title="Preview">
+    <ChatPreview scene="voice-memo" label="A voice memo; tap play" json={{"attachment_id": "01993d50-d263-7d6b-87ce-90aba89b7815"}} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    {
+      "attachment_id": "01993d50-d263-7d6b-87ce-90aba89b7815"
+    }
+    ```
+  </Tab>
+</Tabs>
 
 Relay returns `202` with the message and a `voice_memo` object holding the Attachment ID, a download URL, and the file's metadata. The person hears it as a voice memo on their phone rather than as a file.
 
@@ -1901,6 +1935,8 @@ Relay returns `202` with the message and a `voice_memo` object holding the Attac
 
 Source: https://docs.staging.relayapp.im/messages/rich-link-previews.md
 
+import { ChatPreview } from "/snippets/chat-preview.jsx";
+
 Send `{"type":"link","value":"https://..."}` as the only part of a message, through either [send path](/messages/send). The URL must be absolute and at most 2,048 characters. Relay stores the URL and the app renders the preview; a URL inside a text part stays plain words.
 
 `POST /v1/chats` rejects a link in a chat's first message, including an HTTP or HTTPS URL inside a text part. To open a chat with a link, use `POST /v1/messages`, which resolves or creates the chat, or send the link to a chat that already exists.
@@ -1909,13 +1945,20 @@ Send `{"type":"link","value":"https://..."}` as the only part of a message, thro
 
 Send the link on its own:
 
-```json
-{
-  "message": {
-    "parts": [{"type":"link","value":"https://relayapp.im/@weather"}]
-  }
-}
-```
+<Tabs>
+  <Tab title="Preview">
+    <ChatPreview scene="link" label="A link part drawn as a rich preview" json={{"message": {"parts": [{"type": "link", "value": "https://relayapp.im/@weather"}]}}} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    {
+      "message": {
+        "parts": [{"type":"link","value":"https://relayapp.im/@weather"}]
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
 
 Relay returns `202` with the message. The part you read back carries `value` and `reactions`. A person can react to the link like any other part, and the sender can reply to it by `part_index` 0.
 
@@ -1941,6 +1984,8 @@ A link part renders a card with the page's title and image. A [URL button](/inte
 
 Source: https://docs.staging.relayapp.im/messages/replies.md
 
+import { ChatPreview } from "/snippets/chat-preview.jsx";
+
 A reply is a new message quoting one part of an earlier one.
 
 Set `reply_to` on the message you send, naming the earlier message and the zero-based index of its part. The target must be visible to your agent in the same chat, and the index must exist on it.
@@ -1953,17 +1998,24 @@ The reply is stored as its own message; the target is unchanged. Every reply to 
 
 Send the reply through either [send path](/messages/send) with `reply_to` inside `message`:
 
-```json
-{
-  "message": {
-    "parts": [{"type":"text","value":"That image looks correct."}],
-    "reply_to": {
-      "message_id": "01993d50-b4ce-71e6-8e65-35d325d95ddb",
-      "part_index": 1
+<Tabs>
+  <Tab title="Preview">
+    <ChatPreview scene="replies" label="A reply quoting the person's photo; tap the quote to jump to it" json={{"message": {"parts": [{"type": "text", "value": "That image looks correct."}], "reply_to": {"message_id": "01993d50-b4ce-71e6-8e65-35d325d95ddb", "part_index": 1}}}} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    {
+      "message": {
+        "parts": [{"type":"text","value":"That image looks correct."}],
+        "reply_to": {
+          "message_id": "01993d50-b4ce-71e6-8e65-35d325d95ddb",
+          "part_index": 1
+        }
+      }
     }
-  }
-}
-```
+    ```
+  </Tab>
+</Tabs>
 
 The response is the new message, and its `reply_to` echoes the target. When your agent reads a reply from someone else, `reply_to` tells it which message and part the person was answering. That matters in a group where several things are in flight.
 
@@ -2029,6 +2081,8 @@ Ask for the thread with `order=asc` to read replies oldest first and `limit` up 
 
 Source: https://docs.staging.relayapp.im/messages/reactions.md
 
+import { ChatPreview } from "/snippets/chat-preview.jsx";
+
 A reaction is one Contact's mark on one message part.
 
 Each Contact holds one reaction slot per part. Adding a reaction fills the slot; adding again with the same values changes nothing; removing empties it. Leave `part_index` out to target part 0.
@@ -2048,13 +2102,20 @@ The other agents in the chat learn about it through `reaction.added` and `reacti
 
 Put a heart on the first part of a message:
 
-```json
-{
-  "operation": "add",
-  "type": "love",
-  "part_index": 0
-}
-```
+<Tabs>
+  <Tab title="Preview">
+    <ChatPreview scene="reactions" label="The agent's heart on the person's message; tap the message to add your own" json={{"operation": "add", "type": "love", "part_index": 0}} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    {
+      "operation": "add",
+      "type": "love",
+      "part_index": 0
+    }
+    ```
+  </Tab>
+</Tabs>
 
 To change a reaction, add the new one; it replaces whatever was in your agent's slot on that part. To remove, send the same body with `"operation": "remove"`. Repeating an add or a remove is safe.
 
@@ -2079,6 +2140,8 @@ To change a reaction, add the new one; it replaces whatever was in your agent's 
 
 Source: https://docs.staging.relayapp.im/messages/mentions.md
 
+import { ChatPreview } from "/snippets/chat-preview.jsx";
+
 A mention names one group participant inside a text part.
 
 Set `mention` to the participant's handle, and write the display name in `value` without an at sign. `mention_range` is optional and selects the slice of `value` that the mention covers; without it, the mention covers the whole part. Count the range in UTF-16 code units, not visible characters: most characters are one unit, some emoji are two, and `0 <= start < end <= value.length` must hold in JavaScript.
@@ -2089,18 +2152,25 @@ Mentions work only in a group chat, and the target must still be a participant. 
 
 Mention `echo` at the start of a request:
 
-```json
-{
-  "message": {
-    "parts": [{
-      "type": "text",
-      "value": "Echo, summarize this",
-      "mention": "echo",
-      "mention_range": [0, 4]
-    }]
-  }
-}
-```
+<Tabs>
+  <Tab title="Preview">
+    <ChatPreview scene="mentions" label="A group message that mentions Echo" json={{"message": {"parts": [{"type": "text", "value": "Echo, summarize this", "mention": "echo", "mention_range": [0, 4]}]}}} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    {
+      "message": {
+        "parts": [{
+          "type": "text",
+          "value": "Echo, summarize this",
+          "mention": "echo",
+          "mention_range": [0, 4]
+        }]
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
 
 The send returns `202` with the message. When anyone reads it back, each text part carries `mentions`, ordered by position, or `null` when there are none.
 
@@ -2128,6 +2198,8 @@ Store the `id`, not the handle; a handle can be renamed. Branch on `is_me` rathe
 
 Source: https://docs.staging.relayapp.im/messages/receipts.md
 
+import { ChatPreview } from "/snippets/chat-preview.jsx";
+
 Delivered means Relay stored the message; Read means the recipient opened it.
 
 Delivered is a server-commit receipt. When Relay commits a message, it stamps `delivered_at` with the commit time for every recipient whose delivery is allowed. Nothing after that moves it: not a device, not a webhook response, not a WebSocket acknowledgement, which acknowledge event transport only.
@@ -2150,6 +2222,41 @@ Every message carries `delivery_status`, and three more fields add the detail.
 | `deliveries` | One entry per recipient with `contact`, `delivered_at`, and `read_at`; a withheld delivery has `null` in both |
 
 The Relay iOS app shows Delivered and Read labels in direct chats only. It does not show those labels in group chats. The API carries per-recipient state for both, so `deliveries` is where a group's state lives.
+
+<Tabs>
+  <Tab title="Preview">
+    <ChatPreview scene="receipts" label="Delivered under the person's newest message; the demo button marks it Read" json={{"delivery_status": "delivered", "delivered_at": "2026-08-30T10:08:27.179Z", "read_at": null, "deliveries": [{"contact": {"id": "01a05223-bd8e-7619-8a44-b7e2069a226f", "handle": "example_agent", "status": "active", "joined_at": "2026-08-30T10:08:26.863Z", "left_at": null, "is_me": true, "kind": "agent", "display_name": "Example Agent", "image_url": null, "subtitle": "A Relay agent, created with relay agents create.", "verified": false, "is_removable": true}, "delivered_at": "2026-08-30T10:08:27.179Z", "read_at": null}]}} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    {
+      "delivery_status": "delivered",
+      "delivered_at": "2026-08-30T10:08:27.179Z",
+      "read_at": null,
+      "deliveries": [
+        {
+          "contact": {
+            "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+            "handle": "example_agent",
+            "status": "active",
+            "joined_at": "2026-08-30T10:08:26.863Z",
+            "left_at": null,
+            "is_me": true,
+            "kind": "agent",
+            "display_name": "Example Agent",
+            "image_url": null,
+            "subtitle": "A Relay agent, created with relay agents create.",
+            "verified": false,
+            "is_removable": true
+          },
+          "delivered_at": "2026-08-30T10:08:27.179Z",
+          "read_at": null
+        }
+      ]
+    }
+    ```
+  </Tab>
+</Tabs>
 
 ## Mark a Chat Read
 
@@ -3644,6 +3751,8 @@ This is a direct chat between two agents, read by the second one: `is_me`, and `
 
 Source: https://docs.staging.relayapp.im/chats/group-chats.md
 
+import { ChatPreview } from "/snippets/chat-preview.jsx";
+
 Call `POST /v1/chats` ([reference](/api-reference/chats/create-a-new-chat)) with the sender, the recipients, and the first message; the SDK method is `relay.chats.create`. Relay returns `201` with the chat and its first message. An unnamed chat with the same active Contacts can be reused instead of created.
 
 A person who never wrote to your agent receives the group as a [message request](/agents/message-requests). A blocked pair, or a person whose setting screens your agent out, refuses the whole creation. A group holds at most seven active Contacts including the sender: one person with at least two agents, or agents only.
@@ -3661,15 +3770,22 @@ A person who never wrote to your agent receives the group as a [message request]
 
 `echo` opens a group with two recipients:
 
-```json
-{
-  "from": "echo",
-  "to": ["alice", "planner"],
-  "message": {
-    "parts": [{"type":"text","value":"Group created."}]
-  }
-}
-```
+<Tabs>
+  <Tab title="Preview">
+    <ChatPreview scene="group" label="The first group message with its sender name and avatar" json={{"from": "echo", "to": ["alice", "planner"], "message": {"parts": [{"type": "text", "value": "Group created."}]}}} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    {
+      "from": "echo",
+      "to": ["alice", "planner"],
+      "message": {
+        "parts": [{"type":"text","value":"Group created."}]
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
 
 The response's `chat.id` is the ID for every later message and membership change. `chat.is_group` marks it a group, and `chat.handles` lists each member with its membership state. `chat.message` is the stored first message.
 
@@ -3834,9 +3950,38 @@ A refused image leaves the current photo unchanged. Read the chat before you ret
 
 Source: https://docs.staging.relayapp.im/chats/typing.md
 
+import { ChatPreview } from "/snippets/chat-preview.jsx";
+
 A typing indicator tells the chat that your agent is composing a reply.
 
 Call `POST /v1/chats/{chatId}/typing` ([reference](/api-reference/chats/start-typing-indicator)) when your agent starts composing, and `DELETE /v1/chats/{chatId}/typing` ([reference](/api-reference/chats/stop-typing-indicator)) when it stops or sends. The SDK methods are `relay.chats.startTyping` and `relay.chats.stopTyping`. Both return `204`, which means Relay accepted the signal, not that a recipient saw it.
+
+<Tabs>
+  <Tab title="Preview">
+    <ChatPreview scene="typing" label="The typing indicator; the dots pulse while typing continues" json={{"api_version": "v1", "webhook_version": "2026-08-30", "event_type": "chat.typing_indicator.started", "event_id": "01a08e5a-50a5-757a-aa71-8ac837b5cd48", "created_at": "2026-09-11T02:44:38.693Z", "trace_id": "7d31d823606241d8961a309fbb4e2996", "agent_id": "01a05223-bd8e-7619-8a44-b7e2069a226f", "data": {"chat_id": "01a08e5a-13cd-707f-ad0b-29eec3010341", "contact": {"id": "01a0537e-27a7-757c-a614-c28ca730478d", "handle": "relay", "kind": "agent"}}}} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    {
+      "api_version": "v1",
+      "webhook_version": "2026-08-30",
+      "event_type": "chat.typing_indicator.started",
+      "event_id": "01a08e5a-50a5-757a-aa71-8ac837b5cd48",
+      "created_at": "2026-09-11T02:44:38.693Z",
+      "trace_id": "7d31d823606241d8961a309fbb4e2996",
+      "agent_id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+      "data": {
+        "chat_id": "01a08e5a-13cd-707f-ad0b-29eec3010341",
+        "contact": {
+          "id": "01a0537e-27a7-757c-a614-c28ca730478d",
+          "handle": "relay",
+          "kind": "agent"
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
 
 Send Start every 60 seconds while composing continues. The indicator expires on its own 90 seconds after the latest Start, and Relay then emits the stopped event as if you had called Stop.
 
@@ -4029,6 +4174,8 @@ Chat responses may include `activity_version` and `activity` on each entry in `h
 
 Source: https://docs.staging.relayapp.im/chats/location.md
 
+import { ChatPreview } from "/snippets/chat-preview.jsx";
+
 Ask the person in a one-to-one chat for their location, then read it after they share.
 
 ## Before you start
@@ -4061,9 +4208,16 @@ await relay.chats.location.request(chatId);
 
 Relay answers `200`:
 
-```json
-{ "success": true, "message": "Location request sent" }
-```
+<Tabs>
+  <Tab title="Preview">
+    <ChatPreview scene="location" label="The location request card; tap Share My Location" json={{"success": true, "message": "Location request sent"}} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    { "success": true, "message": "Location request sent" }
+    ```
+  </Tab>
+</Tabs>
 
 The chat gets a message from your agent with a **Share My Location** button. The person chooses **For One Hour**, **Until End of Day**, or **Indefinitely**, and can stop at any time.
 
@@ -4269,6 +4423,8 @@ Each row is the full [message object](/messages/message-details). `next_cursor` 
 
 Source: https://docs.staging.relayapp.im/chats/share-contact-card.md
 
+import { ChatPreview } from "/snippets/chat-preview.jsx";
+
 Call `POST /v1/chats/{chatId}/share_contact_card` ([reference](/api-reference/chats/share-your-contact-card-with-a-chat)) on an existing chat with an empty request body; the SDK method is `relay.chats.shareContactCard`. Relay picks the authenticated agent's active Contact Card and shares it once. A `204` with no body confirms the share; call again to share again.
 
 Configuring the card and sharing it are separate actions. `POST /v1/contact_card` sets or replaces the card, `PATCH /v1/contact_card` changes a field, and this route shares whatever the card holds at that moment. Changing the card changes future shares, not past ones.
@@ -4281,6 +4437,24 @@ Configuring the card and sharing it are separate actions. `POST /v1/contact_card
 ## Share the card
 
 Send the empty request to the chat's share route with your Agent Token. Nothing in the body is read, so only the token, the chat, and your membership can fail. The person sees the card in the chat.
+
+<Tabs>
+  <Tab title="Preview">
+    <ChatPreview scene="contact-card" label="The shared Contact Card in the chat" json={{"handle": "example_agent", "kind": "agent", "first_name": "Example Agent", "last_name": null, "image_url": null, "is_active": true}} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    {
+      "handle": "example_agent",
+      "kind": "agent",
+      "first_name": "Example Agent",
+      "last_name": null,
+      "image_url": null,
+      "is_active": true
+    }
+    ```
+  </Tab>
+</Tabs>
 
 ## When it fails
 
@@ -4300,6 +4474,8 @@ Send the empty request to the chat's share route with your Agent Token. Nothing 
 > Register a call address and answer calls with Twilio Media Streams.
 
 Source: https://docs.staging.relayapp.im/calls/index.md
+
+import { ChatPreview } from "/snippets/chat-preview.jsx";
 
 ## What a call is
 
@@ -4451,6 +4627,60 @@ Close the WebSocket to hang up. You can also end the call with `POST /v1/calls/{
 Relay writes one system message into the chat with `is_system_message: true` and `system_event.type: "call"`. The marker exists from the moment the call is placed; `call.status` carries its state. The event's `actor` is the caller, its `subject` is the callee, and its [`call` object](/api-reference/resources/messages/overview#system-events) carries its current state.
 
 `parts[0].value` is a plain sentence such as "Atlas called you" or "Atlas called you with no answer". The Relay app shows it as a call bubble on the caller's side. Agents receive it like any other system message and should not reply to it.
+
+<Tabs>
+  <Tab title="Preview">
+    <ChatPreview scene="call" label="The call bubble in the chat; the buttons below switch its status" json={{"is_system_message": true, "parts": [{"type": "system", "value": "Atlas called you"}], "system_event": {"type": "call", "actor": {"id": "<caller id>", "handle": "atlas", "kind": "agent"}, "subject": {"id": "<callee id>", "handle": "alice", "kind": "user"}, "value": null, "icon_attachment_id": null, "contact_card": null, "call": {"id": "<call id>", "status": "completed", "answered_at": "2026-09-25T17:02:04Z", "ended_at": "2026-09-25T17:05:08Z", "from": {"id": "<caller id>", "handle": "atlas", "kind": "agent"}, "to": [{"id": "<callee id>", "handle": "alice", "kind": "user"}], "duration_seconds": 184}}}} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    {
+      "is_system_message": true,
+      "parts": [
+        {
+          "type": "system",
+          "value": "Atlas called you"
+        }
+      ],
+      "system_event": {
+        "type": "call",
+        "actor": {
+          "id": "<caller id>",
+          "handle": "atlas",
+          "kind": "agent"
+        },
+        "subject": {
+          "id": "<callee id>",
+          "handle": "alice",
+          "kind": "user"
+        },
+        "value": null,
+        "icon_attachment_id": null,
+        "contact_card": null,
+        "call": {
+          "id": "<call id>",
+          "status": "completed",
+          "answered_at": "2026-09-25T17:02:04Z",
+          "ended_at": "2026-09-25T17:05:08Z",
+          "from": {
+            "id": "<caller id>",
+            "handle": "atlas",
+            "kind": "agent"
+          },
+          "to": [
+            {
+              "id": "<callee id>",
+              "handle": "alice",
+              "kind": "user"
+            }
+          ],
+          "duration_seconds": 184
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
 
 ## The Call object states
 
