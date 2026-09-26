@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check code anchors and per-code error pages.
 
-Source snapshot: Relay-Server 8ef4f40b; 2033 and 2034 from de4ecaf2 agent-tasks.ts, 2040 to 2042 from 1eb702ad communities.ts; 2016 and 2017 from location-sharing-20260923 (26e0ceac) server/src/location.ts.
+Source snapshot: Relay-Server 8ef4f40b; 2033 and 2034 from 165ab8b0 agent-tasks.ts, 2040 to 2042 from 1eb702ad communities.ts; 2016 and 2017 from location-sharing-20260923 (26e0ceac) server/src/location.ts.
 server/src/errors.ts maps HTTP statuses (there is no 402 mapping); literal
 ApiError constructors and code fields across server/src supply the other codes.
 app.ts composes /error/codes/${Math.floor(api.code / 1000)}xxx/${api.code}.
