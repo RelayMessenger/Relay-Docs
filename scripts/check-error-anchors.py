@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check code anchors and per-code error pages.
 
-Source snapshot: Relay-Server 8ef4f40b; 2016 and 2017 from location-sharing-20260923 (26e0ceac) server/src/location.ts.
+Source snapshot: Relay-Server 8ef4f40b; 2033 and 2034 from 165ab8b0 agent-tasks.ts, 2040 to 2042 from 1eb702ad communities.ts; 2016 and 2017 from location-sharing-20260923 (26e0ceac) server/src/location.ts.
 server/src/errors.ts maps HTTP statuses (there is no 402 mapping); literal
 ApiError constructors and code fields across server/src supply the other codes.
 app.ts composes /error/codes/${Math.floor(api.code / 1000)}xxx/${api.code}.
@@ -16,7 +16,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVER_CODES = {1004, 1005, 2001, 2003, 2004, 2005, 2006, 2007, 2008,
-                2015, 2016, 2017, 2023, 2025, 2026, 2028, 2029, 2030, 2031, 2032, 3006}
+                2015, 2016, 2017, 2023, 2025, 2026, 2028, 2029, 2030, 2031, 2032,
+                2033, 2034, 2040, 2041, 2042, 3006}
 
 
 def check(root=ROOT, server_repo=None):

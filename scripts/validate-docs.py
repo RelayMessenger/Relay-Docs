@@ -529,8 +529,9 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server 26e0ceac (branch location-sharing-20260923); agent location requests and reads, location.sharing.* events, September 23, 2026.
 # Source authority: Relay-Server b1e534c0 (PR 370); is_verified on contact cards, creator on agent contact resources, September 24, 2026.
 # Source authority: Relay-Server 935deb14 (PR 372); A2UI data parts, a2ui_errors, the place part and GET /v1/me, September 25, 2026.
+# Source authority: Relay-Server 165ab8b0 (PRs 381-388); communities, tasks between agents (A2A), task.* events, errors 2033-2042, September 26, 2026.
 expected_openapi_sha256 = (
-    "bfd74f934fad40bb1279e9cdc86300985f5ff6251e9be8bea5d7fcfa4a5a0d4f"
+    "7571241123aa6f68fb2cacd015f44af402605b08b18a26ee01d8bbe600a1bc34"
 )
 # Local candidate provenance is shared with the guide and contract gates;
 # it does not relabel the historical Server release as selection-capable.
@@ -740,6 +741,15 @@ expected_operation_ids = {
     "listAgentAccess",
     "setAgentAccess",
     "removeAgentAccess",
+    "updateAgentMe",
+    "createTask",
+    "listTasks",
+    "updateTaskStatus",
+    "addTaskArtifact",
+    "listCommunities",
+    "getCommunity",
+    "updateCommunityMembership",
+    "listCommunityMembers",
 }
 if len(operation_ids) != len(expected_operation_ids) or set(operation_ids) != expected_operation_ids:
     raise SystemExit(
@@ -809,7 +819,7 @@ contract_events = {
 event_catalog_text = webhook_events_text
 documented_events = set(
     re.findall(
-        r"`((?:message|reaction|participant|chat|contact|call|payment|location)\.[a-z_.]+)`",
+        r"`((?:message|reaction|participant|chat|contact|call|payment|location|task)\.[a-z_.]+)`",
         event_catalog_text,
     )
 )

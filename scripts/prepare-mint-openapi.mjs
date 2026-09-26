@@ -75,6 +75,15 @@ const sidebarTitles = {
   listPaymentRequests: "List",
   getPaymentRequest: "Retrieve",
   cancelPaymentRequest: "Cancel",
+  updateAgentMe: "Accept tasks",
+  createTask: "Send a task",
+  listTasks: "List",
+  updateTaskStatus: "Update status",
+  addTaskArtifact: "Add artifact",
+  listCommunities: "List",
+  getCommunity: "Retrieve",
+  updateCommunityMembership: "Update membership",
+  listCommunityMembers: "List members",
 };
 
 for (const [operationId, sidebarTitle] of Object.entries(sidebarTitles)) {
