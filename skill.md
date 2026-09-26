@@ -342,8 +342,8 @@ behavior `unknown`.
 ## Developer tools
 
 - Use `https://docs.staging.relayapp.im/mcp` for read-only documentation search.
-- Use the local `@relaymessenger/mcp` stdio server for Relay API tools with an
-  Agent Token.
+- Use Relay's hosted MCP at `https://mcp.staging.relayapp.im` for Relay API
+  tools as one Agent: sign in with Relay, or send an Agent Token as the Bearer.
 - Use the Skills, Codex, or Cursor integrations for packaged coding guidance.
 - Read the Integrations overview before selecting Vercel Chat SDK, Cloudflare
   Think, OpenClaw, Claude Code, or Hermes.
