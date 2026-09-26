@@ -215,6 +215,7 @@ export const ButtonsPreview = ({ text, items, tapped, label, bubble }) => {
     if (opener) opener.focus();
   };
   return (
+    <Frame className="relay-preview">
     <div className={"buttons-preview" + (openedURL ? " is-browser-open" : "")}
       role={tapped ? "img" : "group"} aria-label={text ? `${text} ${label}` : label}>
       <div className="buttons-preview-frame">
@@ -296,13 +297,14 @@ export const ButtonsPreview = ({ text, items, tapped, label, bubble }) => {
           </div>
         </div>
       ) : null}
-      </div>
       {reply !== null ? (
-        <div className="buttons-preview-controls">
-          <button type="button" className="buttons-reset" onClick={() => { setReply(null); setOpenedURL(null); }}>Reset demo</button>
-        </div>
+        <button type="button" className="relay-preview-reset" aria-label="Reset demo" title="Reset demo" onClick={() => { setReply(null); setOpenedURL(null); }}>
+          <Icon icon="rotate-left" size={16} />
+        </button>
       ) : null}
+      </div>
     </div>
+    </Frame>
   );
 };
 
@@ -366,6 +368,7 @@ export const SelectionPreview = ({ text, options, received, bubble }) => {
   ];
 
   return (
+    <Frame className="relay-preview">
     <div className={"buttons-preview selection-preview" + (open ? " is-sheet-open" : "")}
       role="group" aria-label={isStatic ? "Selection reply preview" : "Interactive selection preview"}>
       <div className="buttons-preview-frame">
@@ -429,13 +432,14 @@ export const SelectionPreview = ({ text, options, received, bubble }) => {
           </div>
         </div>
       ) : null}
-      </div>
-      {isAnswered && !isStatic ? (
-        <div className="buttons-preview-controls">
-          <button type="button" className="selection-reset" tabIndex={open ? -1 : 0}
-            onClick={reset}>Reset demo</button>
-        </div>
+      {isAnswered && !isStatic && !open ? (
+        <button type="button" className="relay-preview-reset" aria-label="Reset demo" title="Reset demo"
+          onClick={reset}>
+          <Icon icon="rotate-left" size={16} />
+        </button>
       ) : null}
+      </div>
     </div>
+    </Frame>
   );
 };

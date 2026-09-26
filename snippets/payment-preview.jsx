@@ -271,8 +271,13 @@ export const PaymentPreview = ({ part, label, controls = true, receipt = false, 
     { value: "expired", event: "payment.expired" },
   ];
   const current = statuses.find((s) => s.value === status);
+  // The one line under the preview is the Frame's own caption.
+  const changed = status !== (part.status || "requested") || storefront !== initialStorefront;
+  const reset = () => { setCover(null); setStatus(part.status || "requested"); setStorefront(initialStorefront); };
+  const note = current && current.event ? `Your agent gets ${current.event}.` : tappable ? "Tap the card to pay." : "The card cannot be paid on this storefront.";
 
   return (
+    <Frame className="relay-preview" caption={controls ? note : undefined}>
     <div className={"buttons-preview pay-preview" + (cover ? " is-cover-open" : "")}
       role="group" aria-label={label || spoken}>
       <style>{`
@@ -339,11 +344,6 @@ export const PaymentPreview = ({ part, label, controls = true, receipt = false, 
         .dark .pay-sheet-pay { background: #007eff; }
         .pay-sheet-pay:active { transform: scale(.98); }
         .pay-sheet-note { color: #8e8e93; font-size: 12px; text-align: center; }
-        .pay-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; padding: 8px 2px 0; }
-        .pay-controls .buttons-reset[aria-pressed="true"] { color: #0f172a; background: #e6ebf1; border-color: #cbd5e1; }
-        .dark .pay-controls .buttons-reset[aria-pressed="true"] { color: #f3f4f6; background: #1e293b; border-color: #334155; }
-        .pay-event { width: 100%; text-align: center; color: #68717e; font-size: 12px; }
-        .dark .pay-event { color: #a0a7b2; }
         @media (prefers-reduced-motion: reduce) {
           .pay-preview *, .pay-preview *::before { transition: none !important; animation: none !important; }
           button.pay-card:active .pay-pill, .pay-sheet-pay:active { transform: none; }
@@ -377,6 +377,29 @@ export const PaymentPreview = ({ part, label, controls = true, receipt = false, 
             ) : null}
           </div>
         </div>
+        {controls ? (
+          <div className="relay-preview-bar" role="group" aria-label="Payment request status">
+            <div className="relay-preview-seg">
+              {statuses.map((s) => (
+                <button type="button" key={s.value} aria-pressed={status === s.value}
+                  tabIndex={cover ? -1 : 0} onClick={() => { setCover(null); setStatus(s.value); }}>{s.value}</button>
+              ))}
+            </div>
+            {part.category === "digital_goods" ? (
+              <div className="relay-preview-seg">
+                {[["USA", "United States storefront"], ["CAN", "Other storefront"]].map(([code, words]) => (
+                  <button type="button" key={code} aria-pressed={storefront === code}
+                    tabIndex={cover ? -1 : 0} onClick={() => setStorefront(code)}>{words}</button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {controls && changed && !cover ? (
+          <button type="button" className="relay-preview-reset" aria-label="Reset demo" title="Reset demo" onClick={reset}>
+            <Icon icon="rotate-left" size={16} />
+          </button>
+        ) : null}
         {cover === "sheet" ? (
           // Stripe's PaymentSheet as RelayPaymentSheet configures it: Apple
           // Pay at 44pt and radius 12, card fields at radius 12, and a 52pt
@@ -430,23 +453,7 @@ export const PaymentPreview = ({ part, label, controls = true, receipt = false, 
           </div>
         ) : null}
       </div>
-      {controls ? (
-        <div className="pay-controls" role="group" aria-label="Payment request status">
-          {statuses.map((s) => (
-            <button type="button" key={s.value} className="buttons-reset" aria-pressed={status === s.value}
-              tabIndex={cover ? -1 : 0} onClick={() => { setCover(null); setStatus(s.value); }}>{s.value}</button>
-          ))}
-          {part.category === "digital_goods" ? (
-            <button type="button" className="buttons-reset" tabIndex={cover ? -1 : 0}
-              onClick={() => setStorefront(storefront === "USA" ? "CAN" : "USA")}>
-              {storefront === "USA" ? "United States storefront" : "Other storefront"}
-            </button>
-          ) : null}
-          <div className="pay-event" aria-live="polite">
-            {current && current.event ? `Your agent gets ${current.event}.` : tappable ? "Tap the card to pay." : "The card cannot be paid on this storefront."}
-          </div>
-        </div>
-      ) : null}
     </div>
+    </Frame>
   );
 };

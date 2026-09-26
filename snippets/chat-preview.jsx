@@ -7,11 +7,11 @@
 // (scripts/test-contract-source.py checks it). Everything runs in the
 // browser: no request leaves the page.
 //
-// Header and composer are crops of the real app on an iPhone 17 Pro
-// (images/chat/header-*.png, composer-*.png, from the custom-cards lab
-// captures of 2026-09-24). The map and the link card are crops of
-// Relay-iOS .context/forensics recordings (location-sharing-20260923,
-// link-preview-lp-20260924).
+// The preview shows only the messages and their parts, in Mintlify's own
+// <Frame> on the app's chat background (style.css .relay-preview): no chat
+// header, composer, or status bar (owner, 2026-09-26). The map and the link
+// card are crops of Relay-iOS .context/forensics recordings
+// (location-sharing-20260923, link-preview-lp-20260924).
 //
 // The place card and the document card follow Relay-iOS origin/staging
 // 1ef73e93 (Views/Transcript/RelayLocationRows.swift,
@@ -58,23 +58,12 @@ export const ChatPreview = ({ scene, json, label }) => {
   const TAIL = "M 0 0 C 0 0.306 1.415 4.498 4.028 7.924 C 5.087 9.312 6.309 10.536 7.660 11.577 C 9.585 13.078 10.418 14.644 10.418 16.404 C 10.418 17.587 10.209 18.756 8.510 20.988 C 7.695 22.058 8.513 23.150 9.787 22.666 C 12.407 21.671 15.391 19.860 18.005 17.927 C 20.347 16.195 20.971 16.020 22.070 16.013 L 22.070 0 Z";
 
   const CSS = `
-.chatp { margin: 12px 0 18px; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
+.chatp { position: relative; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
 .chatp img { margin: 0 !important; max-width: none; border-radius: 0; }
-.chatp-frame { position: relative; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff; }
-.dark .chatp-frame { border-color: #1f2937; background: #000000; }
-.chatp-phone { position: relative; width: 100%; max-width: 402px; margin: 0 auto; background: #ffffff; color: #000000; }
-.dark .chatp-phone { background: #000000; color: #ffffff; }
-.chatp-chrome { display: block; width: 100%; height: auto; }
-.chatp-chrome.is-dark, .dark .chatp-chrome.is-light { display: none; }
-.dark .chatp-chrome.is-dark { display: block; }
-.chatp-head { position: relative; }
-.chatp-head-id { position: absolute; left: 50%; top: 9px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; }
-.chatp-head-tile { width: 60px; height: 60px; border-radius: 13.5px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 23px; overflow: hidden; }
-.chatp-head-tile.is-group { background: #e5e5ea; position: relative; }
-.dark .chatp-head-tile.is-group { background: #2c2c2e; }
-.chatp-head-name { margin-top: -6px; padding: 4px 12px; border-radius: 999px; background: #ffffff; box-shadow: 0 1px 6px rgba(0,0,0,.12); font-size: 17px; font-weight: 600; letter-spacing: -0.43px; line-height: 22px; white-space: nowrap; position: relative; }
-.dark .chatp-head-name { background: #1c1c1e; box-shadow: 0 0 0 1px rgba(255,255,255,.12); }
-.chatp-transcript { position: relative; padding: 14px 16px 8px; min-height: 120px; }
+.chatp-phone { position: relative; width: 100%; max-width: 402px; margin: 0 auto; color: #000000; }
+.dark .chatp-phone { color: #ffffff; }
+.chatp-phone.has-overlay { min-height: 440px; }
+.chatp-transcript { position: relative; padding: 36px 16px 32px; }
 .chatp-transcript.is-group { padding-left: 12px; padding-right: 12px; }
 .chatp-transcript.is-scroll { height: 330px; overflow-y: auto; scroll-behavior: smooth; }
 .chatp-row { position: relative; display: flex; align-items: flex-end; }
@@ -107,12 +96,6 @@ export const ChatPreview = ({ scene, json, label }) => {
 @keyframes chatp-flash { 0% { filter: brightness(1); } 33% { filter: brightness(.6); } 67% { filter: brightness(.6); } 100% { filter: brightness(1); } }
 .chatp-arrive { animation: chatp-arrive .3s ease-out; }
 @keyframes chatp-arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-.chatp-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding: 8px 2px 0; }
-.chatp-control { display: inline-flex; align-items: center; min-height: 34px; padding: 7px 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f6f8fa; color: #68717e; font-size: 12px; cursor: pointer; font-family: inherit; }
-.chatp-control[aria-pressed="true"] { color: #0f172a; background: #e8eefc; border-color: #b9c8f5; }
-.dark .chatp-control { border-color: #1f2937; background: #111827; color: #a0a7b2; }
-.dark .chatp-control[aria-pressed="true"] { color: #f3f4f6; background: #172238; border-color: #2c4a80; }
-.chatp-control:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
 /* Reply quote: MessageReplyPreview.swift:71-117, ReplyQuotePalette 632-667. */
 .chatp-quote { box-sizing: border-box; position: relative; max-width: ${BALLOON_MAX}px; min-height: 26px; border: 1px solid rgba(0,0,0,.20); border-radius: 18px; padding: 6.5px 10px; font-size: 11px; line-height: 13px; color: rgba(0,0,0,.44); background: transparent; margin-bottom: 8.5px; font-family: inherit; text-align: left; }
 .dark .chatp-quote { border-color: rgba(255,255,255,.22); color: rgba(255,255,255,.44); }
@@ -320,32 +303,6 @@ export const ChatPreview = ({ scene, json, label }) => {
     const [word, ...rest] = text.split(" ");
     return <div className="chatp-receipt" role="status"><b>{word}</b>{rest.length ? " " + rest.join(" ") : ""}</div>;
   };
-  const head = (name, ground, group) => (
-    <div className="chatp-head">
-      <img className="chatp-chrome is-light" src="/images/chat/header-light.png" alt="" />
-      <img className="chatp-chrome is-dark" src="/images/chat/header-dark.png" alt="" />
-      <div className="chatp-head-id" aria-hidden="true">
-        {group ? (
-          <div className="chatp-head-tile is-group">
-            {group.map((g, i) => (
-              <span key={g[0]} style={{ position: "absolute", width: 24, height: 24, borderRadius: 5.4, left: [9, 27, 18][i], top: [10, 16, 32][i],
-                background: `linear-gradient(${GROUNDS[g[1]][0]}, ${GROUNDS[g[1]][1]})`, color: "#fff", fontSize: 10, fontWeight: 700,
-                display: "flex", alignItems: "center", justifyContent: "center" }}>{g[0].slice(0, 1)}</span>
-            ))}
-          </div>
-        ) : (
-          <div className="chatp-head-tile" style={{ background: `linear-gradient(${GROUNDS[ground][0]}, ${GROUNDS[ground][1]})` }}>{name.slice(0, 1)}</div>
-        )}
-        <div className="chatp-head-name">{name}</div>
-      </div>
-    </div>
-  );
-  const composer = (
-    <div>
-      <img className="chatp-chrome is-light" src="/images/chat/composer-light.png" alt="" />
-      <img className="chatp-chrome is-dark" src="/images/chat/composer-dark.png" alt="" />
-    </div>
-  );
   // A transcript opens on its newest row, the way the app does.
   const pinToBottom = (e) => {
     const t = e.currentTarget.closest(".chatp-transcript");
@@ -486,20 +443,28 @@ export const ChatPreview = ({ scene, json, label }) => {
 
   // ---------- Scenes ----------
   let title = "Echo";
-  let ground = "rose";
-  let group = null;
   let isGroup = false;
   let scroll = false;
   let body = null;
   let controls = null;
   let overlay = null;
+  // The corner icon: Reset demo once the reader has changed something, or
+  // Replay for a scene whose only motion is the message arriving.
+  let corner = null;
+  let caption;
+  // A state switcher at the frame's bottom edge (style.css .relay-preview-seg).
+  const toggle = (pressed, onClick, words) => (
+    <div className="relay-preview-seg">
+      <button type="button" aria-pressed={pressed} onClick={onClick}>{words}</button>
+    </div>
+  );
 
   const parts = json && json.message && json.message.parts;
 
   if (scene === "send" || scene === "markdown") {
     const text = parts[0].value;
     body = row("in", bubble("in", scene === "markdown" ? markdown(text) : text), { className: tick ? "chatp-arrive" : "" });
-    controls = <button type="button" className="chatp-control" onClick={() => setTick((t) => t + 1)}>Replay</button>;
+    corner = { label: "Replay", run: () => setTick((t) => t + 1) };
     body = <div key={tick}>{body}</div>;
   } else if (scene === "replies") {
     // The person sent a caption and a photo; the agent replies to part 1.
@@ -537,7 +502,7 @@ export const ChatPreview = ({ scene, json, label }) => {
         {row("in", bubble("in", parts[0].value))}
       </div>
     );
-    controls = <span className="chatp-control" aria-hidden="true" style={{ cursor: "default" }}>Tap the quote to jump to the photo</span>;
+    caption = "Tap the quote to jump to the photo";
   } else if (scene === "reactions") {
     const agentGlyph = GLYPHS[json.type] || json.custom_emoji;
     const pile = [{ glyph: agentGlyph, mine: false }];
@@ -564,13 +529,11 @@ export const ChatPreview = ({ scene, json, label }) => {
         ), { className: picker ? "" : "" })}
       </div>
     );
-    controls = mine ? <button type="button" className="chatp-control" onClick={() => setMine(null)}>Reset demo</button> : null;
+    corner = mine ? { label: "Reset demo", run: () => setMine(null) } : null;
   } else if (scene === "mentions") {
     // Group: sender caption, avatar beside the tailed balloon, the mention
     // semibold (MessageBubble.swift:381-395, MentionRangeMapping.swift:44-61).
     isGroup = true;
-    title = "Echo & Planner";
-    group = [["Echo", "rose"], ["Planner", "teal"], ["Alice", "violet"]];
     const part = parts[0];
     const value = part.value;
     const [start, end] = ranged && part.mention_range ? part.mention_range : [0, value.length];
@@ -579,21 +542,13 @@ export const ChatPreview = ({ scene, json, label }) => {
       <div key="s" className="chatp-sender">Planner</div>,
       <div key="b">{bubble("in", content)}</div>,
     ], { avatar: avatar("Planner", "teal", true) });
-    controls = (
-      <button type="button" className="chatp-control" aria-pressed={ranged} onClick={() => setRanged((r) => !r)}>
-        {ranged ? "mention_range [0, 4]" : "No mention_range"}
-      </button>
-    );
+    controls = toggle(ranged, () => setRanged((r) => !r), ranged ? "mention_range [0, 4]" : "No mention_range");
   } else if (scene === "receipts") {
     body = row("out", [
       <div key="b">{bubble("out", "Can you check the draft?")}</div>,
       <div key="r">{receipt(read ? "Read 9:41 AM" : "Delivered")}</div>,
     ]);
-    controls = (
-      <button type="button" className="chatp-control" aria-pressed={read} onClick={() => setRead((r) => !r)}>
-        {read ? "Back to Delivered" : "Agent marks the chat Read"}
-      </button>
-    );
+    controls = toggle(read, () => setRead((r) => !r), read ? "Back to Delivered" : "Agent marks the chat Read");
   } else if (scene === "voice-memo") {
     const seconds = 12;
     const bars = waveform(json.attachment_id, 48);
@@ -654,15 +609,10 @@ export const ChatPreview = ({ scene, json, label }) => {
         <img src="/images/chat/photo-tartine.jpg" alt="" />
       </div>
     ) : null;
-    controls = typed ? null : (
-      <button type="button" className="chatp-control" aria-pressed={video} onClick={() => setVideo((v) => !v)}>
-        {video ? "Show as a photo" : "Show as a video"}
-      </button>
-    );
+    controls = typed ? null : toggle(video, () => setVideo((v) => !v), video ? "Show as a photo" : "Show as a video");
   } else if (scene === "typing") {
     const handle = json.data.contact.handle;
     title = handle.charAt(0).toUpperCase() + handle.slice(1);
-    ground = "blue";
     body = typing ? row("in", (
       <div className="chatp-typing" role="status" aria-label={`${title} is typing`}>
         <span className="chatp-typing-trail" style={{ width: 11.5, height: 11.5, left: 5.64 - 5.75, top: 35 - 2.7 - 5.75 }} />
@@ -670,11 +620,7 @@ export const ChatPreview = ({ scene, json, label }) => {
         <i /><i /><i />
       </div>
     )) : <div role="status" aria-label="Not typing" style={{ height: 42 }} />;
-    controls = (
-      <button type="button" className="chatp-control" aria-pressed={typing} onClick={() => setTyping((t) => !t)}>
-        {typing ? "Stop typing" : "Start typing"}
-      </button>
-    );
+    controls = toggle(typing, () => setTyping((t) => !t), typing ? "Stop typing" : "Start typing");
   } else if (scene === "location") {
     // Request card, the Share My Location menu, then the person's card.
     // Models/LocationSharing.swift:141-163: Once first, then the three
@@ -727,12 +673,8 @@ export const ChatPreview = ({ scene, json, label }) => {
         ], { gap: 12 }) : null}
       </div>
     );
-    controls = share ? (
-      <span style={{ display: "contents" }}>
-        {share !== "stopped" && share !== "once" ? <button type="button" className="chatp-control" onClick={() => setShare("stopped")}>Stop sharing</button> : null}
-        <button type="button" className="chatp-control" onClick={() => { setShare(null); setMenu(false); }}>Reset demo</button>
-      </span>
-    ) : null;
+    controls = share && share !== "stopped" && share !== "once" ? toggle(false, () => setShare("stopped"), "Stop sharing") : null;
+    corner = share ? { label: "Reset demo", run: () => { setShare(null); setMenu(false); } } : null;
   } else if (scene === "place") {
     // An agent's message draws on the left; a person's own place, as the
     // agent receives it, draws on the person's screen on the right.
@@ -772,7 +714,6 @@ export const ChatPreview = ({ scene, json, label }) => {
     const name = [card.first_name, card.last_name].filter(Boolean).join(" ");
     const initials = name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
     title = name;
-    ground = "green";
     body = row("in", bubble("in", (
       <div className="chatp-card">
         <span className="chatp-card-name">{name}</span>
@@ -784,16 +725,12 @@ export const ChatPreview = ({ scene, json, label }) => {
     isGroup = true;
     const from = json.from;
     const sender = from.charAt(0).toUpperCase() + from.slice(1);
-    const others = json.to.filter((h) => h !== "alice").map((h) => h.charAt(0).toUpperCase() + h.slice(1));
-    title = [sender, ...others].join(" & ");
-    group = [[sender, "rose"], ...others.map((o) => [o, "teal"]), ["Alice", "violet"]].slice(0, 3);
     body = row("in", [
       <div key="s" className="chatp-sender">{sender}</div>,
       <div key="b">{bubble("in", parts[0].value)}</div>,
     ], { avatar: avatar(sender, "rose", true) });
   } else if (scene === "call") {
     title = "Atlas";
-    ground = "blue";
     // MessageComponent.swift:168-254: titles and subtitles by status.
     const states = {
       ringing: ["Incoming Call", "Ringing…", ""],
@@ -811,9 +748,13 @@ export const ChatPreview = ({ scene, json, label }) => {
         </span>
       </div>
     ), { style: { padding: 0 } }));
-    controls = Object.keys(states).map((s) => (
-      <button type="button" key={s} className="chatp-control" aria-pressed={status === s} onClick={() => setStatus(s)}>{s}</button>
-    ));
+    controls = (
+      <div className="relay-preview-seg">
+        {Object.keys(states).map((s) => (
+          <button type="button" key={s} aria-pressed={status === s} onClick={() => setStatus(s)}>{s}</button>
+        ))}
+      </div>
+    );
   }
 
   useEffect(() => {
@@ -824,20 +765,23 @@ export const ChatPreview = ({ scene, json, label }) => {
   useEffect(() => () => { if (root.current && root.current.__raf) cancelAnimationFrame(root.current.__raf); }, []);
 
   return (
+    <Frame className="relay-preview" caption={caption}>
     <div className="chatp" ref={root} role="group" aria-label={label}>
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
-      <div className="chatp-frame">
-        <div className="chatp-phone">
-          {head(title, ground, group)}
-          <div className={"chatp-transcript" + (isGroup ? " is-group" : "") + (scroll ? " is-scroll" : "")}
-            onClick={(e) => { if (picker && !e.target.closest(".chatp-bar, .chatp-bubble")) setPicker(false); }}>
-            {body}
-          </div>
-          {composer}
-          {overlay}
+      <div className={"chatp-phone" + (overlay ? " has-overlay" : "")}>
+        <div className={"chatp-transcript" + (isGroup ? " is-group" : "") + (scroll ? " is-scroll" : "")}
+          onClick={(e) => { if (picker && !e.target.closest(".chatp-bar, .chatp-bubble")) setPicker(false); }}>
+          {body}
         </div>
+        {overlay}
       </div>
-      {controls ? <div className="chatp-controls">{controls}</div> : null}
+      {controls ? <div className="relay-preview-bar">{controls}</div> : null}
+      {corner && !overlay ? (
+        <button type="button" className="relay-preview-reset" aria-label={corner.label} title={corner.label} onClick={corner.run}>
+          <Icon icon="rotate-left" size={16} />
+        </button>
+      ) : null}
     </div>
+    </Frame>
   );
 };

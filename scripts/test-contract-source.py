@@ -440,7 +440,7 @@ class ContractSourceTests(unittest.TestCase):
         self.assertRegex(buttons, r'className="buttons-url-preview"[^>]*role="dialog"[^>]*aria-modal="true"')
         self.assertIn('aria-label="URL action preview"', buttons)
         self.assertIn("buttons-url-close", buttons)
-        self.assertIn("buttons-reset", buttons)
+        self.assertIn("relay-preview-reset", buttons)
         self.assertIn("Reset demo", buttons)
         # URL actions must use local state, never navigation or a network send.
         self.assertRegex(buttons, r"setOpenedURL\(item\.url\)")
@@ -463,7 +463,7 @@ class ContractSourceTests(unittest.TestCase):
         buttons = source.split("export const ButtonsPreview =", 1)[1].split(
             "export const SelectionPreview =", 1)[0]
         click = re.search(r'onClick=\{\(\) => \{([\s\S]*?)\}\}', buttons)
-        reset = re.search(r'className="buttons-reset"[^>]*onClick=\{\(\) => \{([\s\S]*?)\}\}', buttons)
+        reset = re.search(r'className="relay-preview-reset"[^>]*onClick=\{\(\) => \{([\s\S]*?)\}\}', buttons)
         self.assertIsNotNone(click)
         self.assertIsNotNone(reset)
         program = r"""

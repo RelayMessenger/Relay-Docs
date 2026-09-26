@@ -15,6 +15,8 @@
 // MDX, so only exports stay in scope and every helper lives inside the
 // component, and a capitalised tag would be read as an MDX component, so the
 // renderer calls lowercase functions and draws only lowercase HTML tags.
+// The two capitalised tags it does use, Frame and Icon, are Mintlify's own
+// components, resolved that way on purpose.
 export const A2uiPreview = ({ messages, reply, media, label, icons = "/images/cards/icons" }) => {
   const V = "v0.9.1";
   const HEAD = ["h1", "h2", "h3", "h4", "h5"];
@@ -739,6 +741,7 @@ export const A2uiPreview = ({ messages, reply, media, label, icons = "/images/ca
   };
 
   return (
+    <Frame className="relay-preview">
     <div className="a2" role="group" aria-label={label || "Interactive card preview"}>
       <div className={("a2-frame" + (modal ? " is-sheet-open" : ""))}>
         <div className="a2-stage" aria-hidden={modal ? "true" : undefined}>
@@ -751,6 +754,21 @@ export const A2uiPreview = ({ messages, reply, media, label, icons = "/images/ca
             ) : null}
           </div>
         </div>
+        {taps.length ? (
+          <div className="a2-taps" role="status" aria-hidden={modal ? "true" : undefined}>
+            {taps.map((message, index) => (
+              <div key={index} className="a2-tap">
+                <div className="a2-tap-label">{("Tap " + (index + 1) + ": your agent receives this A2UI message")}</div>
+                <pre><code>{JSON.stringify(message, null, 2)}</code></pre>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {taps.length > 0 && !modal ? (
+          <button type="button" className="relay-preview-reset" aria-label="Reset demo" title="Reset demo" onClick={reset}>
+            <Icon icon="rotate-left" size={16} />
+          </button>
+        ) : null}
         {modal ? (
           <div className="a2-sheet-layer">
             <div className="a2-dimmer" onClick={closeSheet} />
@@ -766,19 +784,7 @@ export const A2uiPreview = ({ messages, reply, media, label, icons = "/images/ca
           </div>
         ) : null}
       </div>
-      {taps.length ? (
-        <div className="a2-taps" role="status">
-          {taps.map((message, index) => (
-            <div key={index} className="a2-tap">
-              <div className="a2-tap-label">{("Tap " + (index + 1) + ": your agent receives this A2UI message")}</div>
-              <pre><code>{JSON.stringify(message, null, 2)}</code></pre>
-            </div>
-          ))}
-          <div className="buttons-preview-controls">
-            <button type="button" className="buttons-reset" onClick={reset}>Reset demo</button>
-          </div>
-        </div>
-      ) : null}
     </div>
+    </Frame>
   );
 };
