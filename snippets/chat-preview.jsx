@@ -341,6 +341,7 @@ export const ChatPreview = ({ scene, json, label }) => {
   const [video, setVideo] = useState(false);
   const [menu, setMenu] = useState(false);
   const [share, setShare] = useState(null);
+  const [lastShare, setLastShare] = useState(null);
   const [status, setStatus] = useState("completed");
   const [ranged, setRanged] = useState(true);
   const [maps, setMaps] = useState(null);
@@ -557,10 +558,15 @@ export const ChatPreview = ({ scene, json, label }) => {
   // Replay for a scene whose only motion is the message arriving.
   let corner = null;
   let caption;
-  // A state switcher at the frame's bottom edge (style.css .relay-preview-seg).
-  const toggle = (pressed, onClick, words) => (
-    <div className="relay-preview-seg">
-      <button type="button" aria-pressed={pressed} onClick={onClick}>{words}</button>
+  // A state switcher at the preview's bottom edge, inside its block: one
+  // segmented control naming every state, the way the Payments preview
+  // switches its status (style.css .relay-preview-seg). `options` is a list
+  // of [value, words].
+  const segmented = (label, options, value, onPick) => (
+    <div className="relay-preview-seg" role="group" aria-label={label}>
+      {options.map(([v, words]) => (
+        <button type="button" key={String(v)} aria-pressed={value === v} onClick={() => onPick(v)}>{words}</button>
+      ))}
     </div>
   );
 
@@ -651,7 +657,7 @@ export const ChatPreview = ({ scene, json, label }) => {
       <div key="b">{bubble("out", "Can you check the draft?")}</div>,
       <div key="r">{receipt(read ? "Read 9:41 AM" : "Delivered")}</div>,
     ]);
-    controls = toggle(read, () => setRead((r) => !r), read ? "Back to Delivered" : "Agent marks the chat Read");
+    controls = segmented("Receipt", [[false, "Delivered"], [true, "Read"]], read, setRead);
   } else if (scene === "voice-memo") {
     const seconds = 12;
     const bars = waveform(json.attachment_id, 48);
@@ -730,7 +736,7 @@ export const ChatPreview = ({ scene, json, label }) => {
         <img src="/images/chat/photo-tartine.jpg" alt="" />
       </div>
     ) : null;
-    controls = typed ? null : toggle(video, () => setVideo((v) => !v), video ? "Show as a photo" : "Show as a video");
+    controls = typed ? null : segmented("Media type", [[false, "Photo"], [true, "Video"]], video, setVideo);
   } else if (scene === "typing") {
     const handle = json.data.contact.handle;
     title = handle.charAt(0).toUpperCase() + handle.slice(1);
@@ -741,7 +747,7 @@ export const ChatPreview = ({ scene, json, label }) => {
         <i /><i /><i />
       </div>
     )) : <div role="status" aria-label="Not typing" style={{ height: 42 }} />;
-    controls = toggle(typing, () => setTyping((t) => !t), typing ? "Stop typing" : "Start typing");
+    controls = segmented("Typing", [[true, "Typing"], [false, "Stopped"]], typing, setTyping);
   } else if (scene === "location") {
     // Request card, the Share My Location menu, then the person's card.
     // Models/LocationSharing.swift:141-163: Once first, then the three
@@ -766,7 +772,7 @@ export const ChatPreview = ({ scene, json, label }) => {
             onKeyDown={(e) => { if (e.key === "Escape") setMenu(false); }}>
             <div className="chatp-menu-title">Share My Location</div>
             {durations.map((d) => (
-              <button type="button" role="menuitem" key={d[0]} onClick={() => { setShare(d[0]); setMenu(false); }}>
+              <button type="button" role="menuitem" key={d[0]} onClick={() => { setShare(d[0]); if (d[0] !== "once") setLastShare(d[0]); setMenu(false); }}>
                 <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
                   {d[0] === "once" ? <g><circle cx="9" cy="5.6" r="3.6" /><path d="M9 9.2v7.3" /></g> : null}
                   {d[0] === "hour" ? <g><circle cx="9" cy="9" r="7.2" /><path d="M9 4.8V9l2.8 1.7" /></g> : null}
@@ -794,8 +800,11 @@ export const ChatPreview = ({ scene, json, label }) => {
         ], { gap: 12 }) : null}
       </div>
     );
-    controls = share && share !== "stopped" && share !== "once" ? toggle(false, () => setShare("stopped"), "Stop sharing") : null;
-    corner = share ? { label: "Reset demo", run: () => { setShare(null); setMenu(false); } } : null;
+    controls = lastShare && share !== "once" && share !== null
+      ? segmented("Location sharing", [["on", "Sharing"], ["stopped", "Stopped"]], share === "stopped" ? "stopped" : "on",
+        (v) => setShare(v === "stopped" ? "stopped" : lastShare))
+      : null;
+    corner = share ? { label: "Reset demo", run: () => { setShare(null); setLastShare(null); setMenu(false); } } : null;
   } else if (scene === "place") {
     // An agent's message draws on the left; a person's own place, as the
     // agent receives it, draws on the person's screen on the right.

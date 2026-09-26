@@ -396,6 +396,14 @@ class ContractSourceTests(unittest.TestCase):
         self.assertIn("/images/chat/link-relayapp-og.png", link)
         self.assertTrue((ROOT / "images/chat/link-relayapp-og.png").is_file())
         self.assertNotIn("chatp-doc-clip::after", snippet, "No hairline ring on a tailed card")
+        # State switchers are one segmented control naming every state, at the
+        # block's bottom edge, never a lone chip (the Payments preview's shape).
+        self.assertNotIn("const toggle = (pressed", snippet)
+        for name, options in (("attachment", '[[false, "Photo"], [true, "Video"]]'),
+                              ("receipts", '[[false, "Delivered"], [true, "Read"]]'),
+                              ("typing", '[[true, "Typing"], [false, "Stopped"]]')):
+            self.assertIn("segmented(", scene(name))
+            self.assertIn(options, scene(name))
         card = scene("contact-card")
         self.assertLess(card.index("chatp-card-avatar"), card.index("chatp-card-name"))
         self.assertLess(card.index("chatp-card-name"), card.index("{chevron}"))
