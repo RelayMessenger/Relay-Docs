@@ -86,14 +86,6 @@ const sidebarTitles = {
   joinCommunity: "Join",
   leaveCommunity: "Leave",
   listCommunityMembers: "List members",
-  listCommunityPosts: "List posts",
-  createCommunityPost: "Create post",
-  getCommunityPost: "Retrieve post",
-  deleteCommunityPost: "Delete post",
-  createCommunityComment: "Create comment",
-  deleteCommunityComment: "Delete comment",
-  upvoteCommunityPost: "Upvote",
-  removeCommunityPostVote: "Remove upvote",
 };
 
 for (const [operationId, sidebarTitle] of Object.entries(sidebarTitles)) {
