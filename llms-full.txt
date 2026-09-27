@@ -5061,8 +5061,82 @@ Relay writes one system message into the chat with `is_system_message: true` and
 
 ## See also
 
+- [Call a person](/calls/call-a-person)
 - [Read call outcomes in messages](/api-reference/resources/messages/overview#system-events)
 - [Read chat history](/chats/history)
+
+# Call a person
+
+> Ring the person in a one-to-one chat, when they added your agent and allow its calls.
+
+Source: https://docs.staging.relayapp.im/calls/call-a-person.md
+
+Call the person in a one-to-one chat with one request. Relay rings their phone and sends `call.created` to your agent, as when they call you.
+
+## Who you can call
+
+Your agent can call only a person who added it and left **Allow Calls** on for it. A person adds your agent by messaging it first, replying to it, or tapping Add. An agent that wrote first and got no reply cannot call.
+
+Allow Calls starts on for every agent a person adds. The person can turn it off in your agent's profile or in Settings, and turn it back on. It never stops the person's own call to your agent.
+
+## Start the call
+
+Send the person's handle in `to`, with an `Idempotency-Key` you reuse if the response is uncertain:
+
+<CodeGroup>
+```typescript TypeScript SDK
+const { call } = await relay.calls.create(
+  chatId,
+  { to: ["<person handle>"] },
+  { idempotencyKey: "<unique key>" },
+);
+```
+
+```bash cURL
+curl -sS -X POST "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/calls" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: <unique key>' \
+  -d '{"to":["<person handle>"]}'
+```
+</CodeGroup>
+
+Relay answers `201` with the Call while the phone rings:
+
+```json
+{
+  "call": {
+    "id": "<call id>",
+    "chat_id": "<chat id>",
+    "from": { "id": "<agent id>", "handle": "<agent handle>", "kind": "agent" },
+    "to": [{ "id": "<person id>", "handle": "<person handle>", "kind": "user" }],
+    "status": "ringing",
+    "revision": 1,
+    "created_at": "2026-09-27T17:02:00.000Z",
+    "ringing_at": "2026-09-27T17:02:00.000Z",
+    "answered_at": null,
+    "ended_at": null
+  }
+}
+```
+
+Answer through your call address, as for [a call the person starts](/calls/index#how-relay-rings-you).
+
+## When it fails
+
+Relay answers `403` with error code [2003](/api-reference/errors#2003) and places no call. Read the `message`, and tell the person in your own words.
+
+| `message` | What happened |
+| --- | --- |
+| `This person turned off calls from this agent.` | The person added your agent and turned off Allow Calls for it. |
+| `Call permission is required.` | The person has not added your agent, one of you blocked the other, or a member left the chat. |
+
+A person already on another call gets a call with status `busy`, not an error.
+
+## See also
+
+- [Audio calls](/calls/index)
+- [The Call object states](/calls/index#the-call-object-states)
 
 # What an agent is
 
@@ -20635,7 +20709,7 @@ paths:
         - Calls
       security:
         - BearerAuth: []
-      description: Start an audio Call in an existing individual Chat containing exactly one user and one agent. The caller comes from authentication. The user must have added the agent; sending or replying to a Message establishes that relationship. A block in either direction prevents the call. A group Chat is rejected even when it has only two current members. Reuse the same Idempotency-Key and body after an uncertain response. Relay emits `call.created` through the agent's configured event transport. Both Contacts use the authenticated Call room for signaling and publish one WebRTC `audio` track. The callee answers by sending `join` within the 10-second ring lease; silence ends `no-answer`. A Call to a person who is already ringing or in-progress on another Call is created and finished at once with status `busy`; an agent is never marked busy by Relay. An answered Call has no duration limit.
+      description: Start an audio Call in an existing individual Chat containing exactly one user and one agent. The caller comes from authentication. The user must have added the agent; sending or replying to a Message, or adding the agent, establishes that relationship. An agent calls only a person who added it and who has not turned off Allow Calls for it; Allow Calls is the person's own switch for each agent they added, on by default, and it never stops the person's own call to the agent. A block in either direction prevents the call. A group Chat is rejected even when it has only two current members. Reuse the same Idempotency-Key and body after an uncertain response. Relay emits `call.created` through the agent's configured event transport. Both Contacts use the authenticated Call room for signaling and publish one WebRTC `audio` track. The callee answers by sending `join` within the 10-second ring lease; silence ends `no-answer`. A Call to a person who is already ringing or in-progress on another Call is created and finished at once with status `busy`; an agent is never marked busy by Relay. An answered Call has no duration limit.
       parameters:
         - name: chatId
           in: path
@@ -20674,7 +20748,19 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          $ref: "#/components/responses/Forbidden"
+          description: |-
+            The call is not permitted (error code `2003`). A block in either
+            direction, a member who is not active, or a person who has not
+            added the calling agent is refused with "Call permission is
+            required.". When the person added the agent but turned off Allow
+            Calls for it, the agent's call is refused with "This person turned
+            off calls from this agent.". Tell the person in your own words;
+            they can turn Allow Calls on again in the agent's profile or in
+            Settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
