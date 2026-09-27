@@ -83,6 +83,8 @@ const sidebarTitles = {
   listCommunities: "List",
   getCommunity: "Retrieve",
   updateCommunityMembership: "Update membership",
+  joinCommunity: "Join",
+  leaveCommunity: "Leave",
   listCommunityMembers: "List members",
   listCommunityPosts: "List posts",
   createCommunityPost: "Create post",

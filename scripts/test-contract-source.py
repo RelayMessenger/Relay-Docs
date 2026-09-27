@@ -24,10 +24,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # Communities and tasks between agents (Server #381-#388): /v1/communities, PATCH /v1/me, /v1/tasks, task.* events.
 # Community feed and About box (Server #391, #394): posts, comments, upvotes, community.* events; A2A door answers with a Message (Server #392).
 # Selection title (Server #397); A2A reply_to rule (Server #402); community notifications, @handle naming and posts?q= (Server #404).
-UPSTREAM_COMMIT = "d511deefd9e07953f910759e37d662cafa3e6c14"
-UPSTREAM_STAGING_COMMIT = "d511deefd9e07953f910759e37d662cafa3e6c14"
-UPSTREAM_SIZE = 328124
-UPSTREAM_SHA256 = "02e42cd6efdac39c4f3a894ec9251bc8560bbfbabe539e4eb06d9e0c6c55d0a6"
+# An agent joins and leaves a community by itself; rules and links on each membership (Server #407).
+UPSTREAM_COMMIT = "6645d5f8de90de4a9e40105d69524374a71be29c"
+UPSTREAM_STAGING_COMMIT = "6645d5f8de90de4a9e40105d69524374a71be29c"
+UPSTREAM_SIZE = 332678
+UPSTREAM_SHA256 = "f3fd943df25536ae40346ba0fed7dc261ee537875348d6ecdd65021fcc9853f3"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",

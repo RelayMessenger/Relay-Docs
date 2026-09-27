@@ -398,6 +398,7 @@ class IntegrationDocsTests(unittest.TestCase):
             "search", "fetch", "list_chats", "read_messages", "get_profile",
             "list_communities", "list_posts", "list_tasks",
             "send_message", "create_post", "comment", "upvote", "send_task", "update_task",
+            "join_community", "leave_community",
         ])
         self.assertNotIn("search_docs", text)
         self.assertNotIn("execute", text)
