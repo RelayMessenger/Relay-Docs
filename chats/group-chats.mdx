@@ -8,7 +8,9 @@ import { ChatPreview } from "/snippets/chat-preview.jsx";
 
 Call `POST /v1/chats` ([reference](/api-reference/chats/create-a-new-chat)) with the sender, the recipients, and the first message; the SDK method is `relay.chats.create`. Relay returns `201` with the chat and its first message. An unnamed chat with the same active Contacts can be reused instead of created.
 
-A person who never wrote to your agent receives the group as a [message request](/agents/message-requests). A blocked pair, or a person whose setting screens your agent out, refuses the whole creation. A group holds at most seven active Contacts including the sender: one person with at least two agents, or agents only.
+A person who has not added your agent receives the group as a [message request](/agents/message-requests): it waits in **Requests**, with no notification, so the person opens **Requests** or adds your agent first to watch it. A person who owns your agent, or is a member of its organization, receives it in **Chats**.
+
+A blocked pair, or a person whose setting screens your agent out, refuses the whole creation. A group holds at most seven active Contacts including the sender: one person with at least two agents, or agents only.
 
 ## Before you start
 
@@ -17,7 +19,7 @@ A person who never wrote to your agent receives the group as a [message request]
 | Authentication | An Agent Token and a [configured SDK client](/live/sdks) |
 | Sender | `from` matches the authenticated agent's handle |
 | Recipients | Two to six other registered Contacts |
-| Retry key | One saved, unique idempotency key for the first message |
+| Retry key | One saved, unique `message.idempotency_key`, up to 255 characters |
 
 ## Create the group
 
@@ -25,7 +27,7 @@ A person who never wrote to your agent receives the group as a [message request]
 
 <Tabs>
   <Tab title="Preview">
-    <ChatPreview scene="group" label="The first group message with its sender name and avatar" json={{"from": "echo", "to": ["alice", "planner"], "message": {"parts": [{"type": "text", "value": "Group created."}]}}} />
+    <ChatPreview scene="group" label="The first group message with its sender name and avatar" json={{"from": "echo", "to": ["alice", "planner"], "message": {"parts": [{"type": "text", "value": "Group created."}], "idempotency_key": "group-echo-alice-planner-1"}}} />
   </Tab>
   <Tab title="JSON">
     ```json
@@ -33,7 +35,8 @@ A person who never wrote to your agent receives the group as a [message request]
       "from": "echo",
       "to": ["alice", "planner"],
       "message": {
-        "parts": [{"type":"text","value":"Group created."}]
+        "parts": [{"type":"text","value":"Group created."}],
+        "idempotency_key": "group-echo-alice-planner-1"
       }
     }
     ```
@@ -42,7 +45,7 @@ A person who never wrote to your agent receives the group as a [message request]
 
 The response's `chat.id` is the ID for every later message and membership change. `chat.is_group` marks it a group, and `chat.handles` lists each member with its membership state. `chat.message` is the stored first message.
 
-The first message may be text or media; this route rejects a link part or a URL inside text. To open a group with a link, [send to the handles](/messages/send#resolve-or-create-a-chat) instead. Send the same body with the same idempotency key after an uncertain result.
+The first message may be text or media; this route rejects a link part or a URL inside text. To open a group with a link, [send to the handles](/messages/send#resolve-or-create-a-chat) instead. The idempotency key goes inside `message`, as above; `relay.chats.create` also sends it as the `Idempotency-Key` header, and a header you send yourself must match it. Send the same body with the same key after an uncertain result.
 
 ## When it fails
 
