@@ -18,7 +18,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from origins import ROOT, TARGET_FILE, production_text
+from origins import CONTENT_SUFFIXES, ROOT, TARGET_FILE, production_text
 
 # Pinned independently of scripts/origins.py so a host dropped from the table
 # fails the test instead of silently leaving the table's own list shorter.
@@ -61,7 +61,6 @@ EXPECTED_INSTRUCTION_REWRITES = {
         "set these values under `env.production.vars`:",
 }
 
-CONTENT_SUFFIXES = {".mdx", ".md", ".json", ".yaml", ".yml", ".txt", ".js", ".mjs", ".svg"}
 SKIP_DIRS = {".git", "node_modules", ".mint", "scripts", ".github"}
 # Immutable contract and registry observations are inputs, not content to derive.
 SKIP_FILES = {
@@ -154,6 +153,18 @@ class DeriveTests(unittest.TestCase):
             page.read_text().splitlines(),
             list(EXPECTED_INSTRUCTION_REWRITES.values()),
         )
+
+    def test_every_content_suffix_is_rewritten(self):
+        root = self.fixture()
+        pages = [root / "guides" / f"page{suffix}" for suffix in sorted(CONTENT_SUFFIXES)]
+        for page in pages:
+            page.write_text("https://pay.staging.relayapp.im/x\n")
+        rewrite_tree(root)
+        for page in pages:
+            with self.subTest(suffix=page.suffix):
+                self.assertEqual(page.read_text(), "https://pay.relayapp.im/x\n")
+        for suffix in (".jsx", ".css", ".html"):
+            self.assertIn(suffix, CONTENT_SUFFIXES)
 
     def test_rewrite_is_idempotent(self):
         root = self.fixture()

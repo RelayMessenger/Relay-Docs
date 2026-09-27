@@ -9,6 +9,7 @@ validation. GitHub Actions may not open pull requests in this org, so a
 """
 import re
 import py_compile
+import shutil
 import subprocess
 import tempfile
 import textwrap
@@ -73,6 +74,40 @@ class PromoteWorkflowTests(unittest.TestCase):
         body = step_body(self.text, GUARD_STEP)
         self.assertIn("staging\\.relayapp\\.im", body)
         self.assertIn('test "$(cat .docs-target)" = production', body)
+
+    def guard_script(self):
+        body = step_body(self.text, GUARD_STEP)
+        return textwrap.dedent(body.split("run: |\n", 1)[1])
+
+    def test_guard_passes_on_the_tree_derived_from_this_checkout(self):
+        # The guard greps every text file; the derivation rewrites only
+        # CONTENT_SUFFIXES. A reader-facing suffix the derivation skips (the
+        # .jsx payment preview kept pay.staging.relayapp.im) fails promotion
+        # after staging merged, so run the real guard on a derived copy here.
+        directory = tempfile.TemporaryDirectory(prefix="docs-promotion-guard-")
+        self.addCleanup(directory.cleanup)
+        copy = Path(directory.name) / "tree"
+        files = subprocess.check_output(
+            ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+            cwd=ROOT, text=True,
+        ).split("\0")
+        for name in filter(None, files):
+            source = ROOT / name
+            if source.is_file():
+                target = copy / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+        derived = subprocess.run(
+            ["python3", "scripts/derive-production.py", "--no-generate"],
+            cwd=copy, capture_output=True, text=True,
+            env={"PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1"},
+        )
+        self.assertEqual(derived.returncode, 0, derived.stderr)
+        result = subprocess.run(
+            ["bash", "-e", "-o", "pipefail", "-c", self.guard_script()],
+            cwd=copy, capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_push_replaces_main_tree_with_the_derived_tree(self):
         body = step_body(self.text, PUSH_STEP)
