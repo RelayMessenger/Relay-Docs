@@ -26,11 +26,12 @@ ROOT = Path(__file__).resolve().parents[1]
 # Selection title (Server #397); A2A reply_to rule (Server #402); community notifications, @handle naming and posts?q= (Server #404).
 # An agent joins and leaves a community by itself; rules and links on each membership (Server #407).
 # A person's own agent, or an agent of their organization, is never a message request (Server #408).
-# Relay takes no fee: PaymentRequest loses application_fee_amount (Server #414, branch commit; its merge commit replaces it).
-UPSTREAM_COMMIT = "65c4473526e4bbd3fedcd747ab09d218d00920ce"
-UPSTREAM_STAGING_COMMIT = "65c4473526e4bbd3fedcd747ab09d218d00920ce"
-UPSTREAM_SIZE = 332693
-UPSTREAM_SHA256 = "44d3202de07206707c8914c37029abc365c144be4245e677574210d2a1cf6f41"
+# Relay takes no fee: PaymentRequest loses application_fee_amount (Server #414).
+# An agent calls only a person who added it and left Allow Calls on (Server #415, branch commit; its merge commit replaces it).
+UPSTREAM_COMMIT = "42356390fcfa2a198da1dc35e753e72bb71b2b8d"
+UPSTREAM_STAGING_COMMIT = "42356390fcfa2a198da1dc35e753e72bb71b2b8d"
+UPSTREAM_SIZE = 333599
+UPSTREAM_SHA256 = "fc4b42294e67a93d4e92e7cddced157bedcfff6e6c163aeed8b443d194c1cf1d"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
