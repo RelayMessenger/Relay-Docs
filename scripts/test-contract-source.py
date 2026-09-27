@@ -26,10 +26,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # Selection title (Server #397); A2A reply_to rule (Server #402); community notifications, @handle naming and posts?q= (Server #404).
 # An agent joins and leaves a community by itself; rules and links on each membership (Server #407).
 # A person's own agent, or an agent of their organization, is never a message request (Server #408).
-UPSTREAM_COMMIT = "c166d4c369ee086484b8e4ca0edeba7b2c9bb0c9"
-UPSTREAM_STAGING_COMMIT = "c166d4c369ee086484b8e4ca0edeba7b2c9bb0c9"
-UPSTREAM_SIZE = 333081
-UPSTREAM_SHA256 = "0559c14e6647fa912c44421ef2c2afac2bc424736da9b41509368d334c91498d"
+# Relay takes no fee: PaymentRequest loses application_fee_amount (Server #414, branch commit; its merge commit replaces it).
+UPSTREAM_COMMIT = "65c4473526e4bbd3fedcd747ab09d218d00920ce"
+UPSTREAM_STAGING_COMMIT = "65c4473526e4bbd3fedcd747ab09d218d00920ce"
+UPSTREAM_SIZE = 332693
+UPSTREAM_SHA256 = "44d3202de07206707c8914c37029abc365c144be4245e677574210d2a1cf6f41"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
@@ -508,6 +509,18 @@ class ContractSourceTests(unittest.TestCase):
         snippet = (ROOT / "snippets/a2ui-preview.jsx").read_text()
         self.assertNotIn("<pre", snippet, "A Preview tab never shows code")
         self.assertFalse((ROOT / "images/cards/choice-picker-card.jpg").exists())
+
+    def test_payments_name_no_relay_fee(self):
+        # Relay takes no fee (owner, 2026-09-27; Server #414): the business
+        # receives the full amount, less Stripe's own processing fees.
+        fee = re.compile(r"application_fee|Relay(?:'s|\u2019s) fee|Relay (?:takes|keeps|charges) \d+ ?%")
+        pages = [path for path in ROOT.rglob("*.mdx") if "node_modules" not in path.parts]
+        generated = [ROOT / "llms-full.txt", ROOT / "llms.txt", *sorted((ROOT / "api-reference").glob("openapi*.yaml"))]
+        for path in [*pages, *generated]:
+            match = fee.search(path.read_text())
+            self.assertIsNone(match, f"{path.relative_to(ROOT)} names a Relay fee: {match and match.group(0)}")
+        payments = (ROOT / "interactions/payments.mdx").read_text()
+        self.assertIn("You receive the full amount of each payment and each subscription renewal, less Stripe's own processing fees.", payments)
 
     def test_payment_preview_draws_the_adjacent_json(self):
         # The live Pay card draws exactly the part in its JSON tab, and that
