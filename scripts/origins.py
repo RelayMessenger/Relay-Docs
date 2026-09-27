@@ -43,6 +43,16 @@ STAGING_TO_PRODUCTION = {
 
 STAGING_HOSTS = tuple(host for host in STAGING_TO_PRODUCTION if "/" not in host)
 
+# Text files the derivation rewrites and the production sweep reads. The
+# promotion guard (.github/workflows/promote-to-production.yml) greps every
+# text file, so a suffix missing here survives derivation and fails promotion:
+# snippets/payment-preview.jsx kept pay.staging.relayapp.im until .jsx joined.
+# scripts/test-promote-workflow.py runs that guard on a derived copy of the tree.
+CONTENT_SUFFIXES = frozenset({
+    ".mdx", ".md", ".json", ".yaml", ".yml", ".txt", ".js", ".mjs", ".jsx",
+    ".svg", ".css", ".html",
+})
+
 # npm packages this repository documents. On production a reader installs the
 # plain name (the `latest` tag) and never a `@staging` dist-tag or a
 # `-staging.N` prerelease (owner ruling, 2026-09-07). The rewrite drops the

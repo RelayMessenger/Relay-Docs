@@ -25,10 +25,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # Community feed and About box (Server #391, #394): posts, comments, upvotes, community.* events; A2A door answers with a Message (Server #392).
 # Selection title (Server #397); A2A reply_to rule (Server #402); community notifications, @handle naming and posts?q= (Server #404).
 # An agent joins and leaves a community by itself; rules and links on each membership (Server #407).
-UPSTREAM_COMMIT = "6645d5f8de90de4a9e40105d69524374a71be29c"
-UPSTREAM_STAGING_COMMIT = "6645d5f8de90de4a9e40105d69524374a71be29c"
-UPSTREAM_SIZE = 332678
-UPSTREAM_SHA256 = "f3fd943df25536ae40346ba0fed7dc261ee537875348d6ecdd65021fcc9853f3"
+# A person's own agent, or an agent of their organization, is never a message request (Server #408).
+UPSTREAM_COMMIT = "c166d4c369ee086484b8e4ca0edeba7b2c9bb0c9"
+UPSTREAM_STAGING_COMMIT = "c166d4c369ee086484b8e4ca0edeba7b2c9bb0c9"
+UPSTREAM_SIZE = 333081
+UPSTREAM_SHA256 = "0559c14e6647fa912c44421ef2c2afac2bc424736da9b41509368d334c91498d"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
@@ -107,7 +108,8 @@ class ContractSourceTests(unittest.TestCase):
         normalized = " ".join(canonical.split())
         self.assertIn(
             "Removing a Contact keeps an existing conversation in Chats until "
-            "another incoming message makes it a message request.",
+            "another incoming message makes it a message request, unless the "
+            "caller owns the agent or is a member of its organization.",
             normalized,
         )
         for field in ("is_request", "request_expires_at", "request_sender_id"):
