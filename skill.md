@@ -262,8 +262,8 @@ and the current OpenAPI before implementing it.
   `createSurface`, then `updateComponents` whose first list holds the
   component with id `root`, then an optional `updateDataModel`.
 - `catalogId` is `https://relayapp.im/a2ui/catalog/v1` (the basic catalog plus
-  `PaymentRequest`) or the A2UI basic catalog; `message.received` lists both in
-  `metadata.a2uiClientCapabilities`.
+  `PaymentRequest` and `Browser`) or the A2UI basic catalog;
+  `message.received` lists both in `metadata.a2uiClientCapabilities`.
 - A tap is a `message.received` holding a `data` part with the A2UI `action`;
   read it with `readA2uiAction` or `read_a2ui_action`. The tap, and the data
   model when the surface set `sendDataModel`, reach only the person who tapped

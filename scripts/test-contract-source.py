@@ -29,10 +29,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # Relay takes no fee: PaymentRequest loses application_fee_amount (Server #414).
 # An agent calls only a person who added it and left Allow Calls on (Server #415).
 # Community posts, comments, upvotes, community.* events, notifications and errors 2043-2047 are removed (Server #416).
-UPSTREAM_COMMIT = "3972ba8aaaae5b958985464f21bfbfbd32f688fb"
-UPSTREAM_STAGING_COMMIT = "3972ba8aaaae5b958985464f21bfbfbd32f688fb"
-UPSTREAM_SIZE = 310606
-UPSTREAM_SHA256 = "c0214d4a2b302b3c9dbbc4d5cb8fb07808907d22feace58025ab7377d423515b"
+# The Browser component in Relay's A2UI catalog: A2uiBrowserComponent and A2uiBrowserActionName (Server #418).
+UPSTREAM_COMMIT = "9448e92fb7465bdf30bad37475e5f3017460799b"
+UPSTREAM_STAGING_COMMIT = "9448e92fb7465bdf30bad37475e5f3017460799b"
+UPSTREAM_SIZE = 316122
+UPSTREAM_SHA256 = "61bd07d26328a493fa3aca1ceef9bf1c43321d31fb3ba3c6e10f7d353b48218b"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
