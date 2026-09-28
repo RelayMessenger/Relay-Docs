@@ -2632,6 +2632,9 @@ Only an agent can send an interaction. The app draws it, the person acts on it, 
   <Card title="Cards" href="/interactions/cards">
     Send a card built from A2UI components, read each tap, and change the card in place.
   </Card>
+  <Card title="Browser" href="/interactions/browser">
+    Show your agent's live browser in a card. The person watches it work and takes control when it needs them.
+  </Card>
   <Card title="Payments" href="/interactions/payments">
     Ask the person to pay with a Pay card, on your organization's own Stripe account.
   </Card>
@@ -2644,6 +2647,7 @@ New interactions are added here as parts, never as endpoints.
 - [Buttons](/interactions/buttons)
 - [Selection](/interactions/selection)
 - [Cards](/interactions/cards)
+- [Browser](/interactions/browser)
 - [Payments](/interactions/payments)
 - [Send a message](/messages/send)
 
@@ -3062,7 +3066,7 @@ Pick a ride, tap **Review ride**, then tap the new button to book it. Under the 
 
 ## Send a card
 
-A new card is one `createSurface`, one `updateComponents` and, optionally, one `updateDataModel`. The first `updateComponents` must hold the component with the id `root`. `catalogId` names a catalog Relay draws: Relay's catalog (the A2UI basic catalog plus `PaymentRequest`) or the A2UI basic catalog.
+A new card is one `createSurface`, one `updateComponents` and, optionally, one `updateDataModel`. The first `updateComponents` must hold the component with the id `root`. `catalogId` names a catalog Relay draws: Relay's catalog (the A2UI basic catalog plus `PaymentRequest` and [`Browser`](/interactions/browser)) or the A2UI basic catalog.
 
 This card offers two rides and a button that sends the choice back:
 
@@ -3559,6 +3563,240 @@ The rest of the send is still applied and returns `202`. A send that applies not
 - [Payments](/interactions/payments)
 - [Receive `message.received`](/events/message-received)
 - [A2UI specification](https://a2ui.org)
+
+# Show your agent's browser
+
+> Put your agent's live browser in the chat as a Browser card, so the person can watch it work and take control when it needs them.
+
+Source: https://docs.staging.relayapp.im/interactions/browser.md
+
+Show your agent's browser in three steps: get a live view address, send a `Browser` card, and answer the person's taps.
+
+## Get a live view address
+
+`watchUrl` is a read-only live view of your agent's browser, and `controlUrl` lets the person click and type. Both are `https`.
+
+With [Cloudflare Browser Run](https://developers.cloudflare.com/browser-run/features/live-view/), create a session, open a tab, then ask for two [Live View URLs](https://developers.cloudflare.com/browser-run/features/live-view/#generate-a-live-view-url) for that tab. The `guardrails` of the first make it read-only:
+
+<CodeGroup>
+```typescript TypeScript
+const cf = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/browser-run/devtools/browser`;
+const headers = { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`, "Content-Type": "application/json" };
+const call = async (path: string, method: string, body?: object) =>
+  (await fetch(`${cf}${path}`, { method, headers, body: body && JSON.stringify(body) })).json();
+
+const { sessionId } = await call("?keep_alive=600000", "POST");
+const tab = await call(`/${sessionId}/json/new?url=${encodeURIComponent("https://www.united.com")}`, "PUT");
+const view = { mode: "tab", targetId: tab.id, expiresInMs: 600_000 };
+const watchUrl = (await call(`/${sessionId}/live_view`, "POST", { ...view, guardrails: { mode: "readonly" } })).devtoolsFrontendUrl;
+const controlUrl = (await call(`/${sessionId}/live_view`, "POST", view)).devtoolsFrontendUrl;
+```
+
+```bash cURL
+CF="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/browser-run/devtools/browser"
+SESSION=$(curl -sS -X POST "$CF?keep_alive=600000" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | jq -r .sessionId)
+TAB=$(curl -sS -X PUT "$CF/$SESSION/json/new?url=https%3A%2F%2Fwww.united.com" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | jq -r .id)
+curl -sS -X POST "$CF/$SESSION/live_view" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  --json "{\"mode\":\"tab\",\"targetId\":\"$TAB\",\"expiresInMs\":600000,\"guardrails\":{\"mode\":\"readonly\"}}"
+curl -sS -X POST "$CF/$SESSION/live_view" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  --json "{\"mode\":\"tab\",\"targetId\":\"$TAB\",\"expiresInMs\":600000}"
+```
+</CodeGroup>
+
+The address is `devtoolsFrontendUrl`, shown without its session id and `jwt`:
+
+```json
+{
+  "id": "1C10C83F33FB9A38C9BB88B2B59944B2",
+  "devtoolsFrontendUrl": "https://live.browser.run/ui/view?mode=tab&wss=live.browser.run/api/devtools/browser/SESSION_ID/page/1C10C83F33FB9A38C9BB88B2B59944B2?jwt=…",
+  "webSocketDebuggerUrl": "wss://live.browser.run/api/devtools/browser/SESSION_ID/page/1C10C83F33FB9A38C9BB88B2B59944B2?jwt=…",
+  "options": {"mode": "tab", "guardrails": {"mode": "readonly"}}
+}
+```
+
+The read-only one is your `watchUrl`. Your token needs Cloudflare's Browser Rendering Write permission.
+
+<Warning>
+Anyone in the chat can open the addresses in the card. Cloudflare refuses a new viewer after `expiresInMs`.
+</Warning>
+
+## Send a Browser card
+
+`Browser` is a component of Relay's catalog, `https://relayapp.im/a2ui/catalog/v1`. Send it as the `root` of a [card](/interactions/cards):
+
+<CodeGroup>
+```typescript TypeScript SDK
+import Relay, { RELAY_A2UI_CATALOG_ID, sendA2uiSurface } from "@relaymessenger/sdk";
+
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+  baseURL: "https://api.staging.relayapp.im",
+});
+
+await sendA2uiSurface(relay, "CHAT_ID", {
+  surfaceId: "flight-1042",
+  catalogId: RELAY_A2UI_CATALOG_ID,
+  components: [{
+    id: "root",
+    component: "Browser",
+    status: "Working · united.com",
+    state: "working",
+    watchUrl: process.env.WATCH_URL!,
+    controlUrl: process.env.CONTROL_URL!,
+  }],
+}, { idempotency_key: "flight-1042-browser" });
+```
+
+```bash cURL
+curl -sS "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": {
+      "parts": [{"type":"data","media_type":"application/a2ui+json","data":[
+        {"version":"v0.9.1","createSurface":{"surfaceId":"flight-1042","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
+        {"version":"v0.9.1","updateComponents":{"surfaceId":"flight-1042","components":[
+          {"id":"root","component":"Browser","status":"Working · united.com","state":"working",
+           "watchUrl":"https://live.browser.run/ui/view?mode=tab&wss=…","controlUrl":"https://live.browser.run/ui/view?mode=tab&wss=…"}
+        ]}}
+      ]}],
+      "idempotency_key": "flight-1042-browser"
+    }
+  }'
+```
+</CodeGroup>
+
+Relay answers `202` with the stored Message:
+
+```json
+{
+  "chat_id": "01a0e5c8-6ba5-7518-af13-f5c8c8f9218c",
+  "message": {
+    "id": "01a0e5c8-6f14-77bc-ae3e-d243dd37fdcf",
+    "parts": [
+      {
+        "type": "data",
+        "media_type": "application/a2ui+json",
+        "data": [
+          {"version":"v0.9.1","createSurface":{"surfaceId":"flight-1042","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
+          {"version":"v0.9.1","updateComponents":{"surfaceId":"flight-1042","components":[{"id":"root","component":"Browser","status":"Working · united.com","state":"working","watchUrl":"https://live.browser.run/ui/view?mode=tab&wss=…","controlUrl":"https://live.browser.run/ui/view?mode=tab&wss=…"}]}}
+        ],
+        "reactions": null
+      }
+    ]
+  }
+}
+```
+
+| Property | Required | Value |
+| --- | --- | --- |
+| `status` | Yes | The card's status line in your own words, 1 to 80 characters. |
+| `state` | Yes | `working`, `needs_you`, `done` or `failed`. |
+| `watchUrl` | Yes | The read-only live view, `https`. |
+| `controlUrl` | No | The interactive live view, `https`. Without it, the card offers no control. |
+| `imageUrl` | No | A still picture of the page, `https`. |
+
+`status` and each address can instead bind to the data model, as `{"path": "/pointer"}`. With no `text` part, the chat list and notification show `status`.
+
+## What the person gets
+
+- **Working:** a card titled **Browser** with your `status` and **Open browser**. It opens `watchUrl` over the chat, with **Take control of the browser** and **Stop the task**.
+- **Needs you:** `needs_you` turns the card orange. Say why in your own text Message.
+- **In control:** the window shows `controlUrl` under **You have control** until the person taps **Finish up**.
+- **Done or failed:** the card shrinks to one row, **Completed ·** or **Failed ·** before your `status`.
+
+Relay never loads the addresses; only the app's web view opens them.
+
+## Answer the taps
+
+Each tap reaches only your agent, as a [`message.received`](/events/message-received) that holds an A2UI `action` with an empty `context`. `sourceComponentId` is the Browser's `id`:
+
+```json
+{"version":"v0.9.1","action":{"name":"browser.takeControl","surfaceId":"flight-1042","sourceComponentId":"root","timestamp":"2026-09-27T20:00:00Z","context":{}}}
+```
+
+| `name` | The person tapped | Your agent |
+| --- | --- | --- |
+| `browser.takeControl` | Take control of the browser | Pauses its browser work. |
+| `browser.returnControl` | Finish up | Resumes its browser work. |
+| `browser.stop` | Stop the task | Ends the task. |
+
+```typescript TypeScript SDK
+import { readA2uiAction, type RelayWebhookEvent } from "@relaymessenger/sdk";
+
+export async function onEvent(event: RelayWebhookEvent) {
+  const tap = event.event_type === "message.received" ? readA2uiAction(event) : null;
+  if (tap?.action.name === "browser.takeControl") task.pause();
+  if (tap?.action.name === "browser.returnControl") task.resume();
+  if (tap?.action.name === "browser.stop") task.end();
+}
+```
+
+`updateComponents` replaces the whole component, so send every property. A `text` beside it is your own Message, and it gets the notification:
+
+<CodeGroup>
+```typescript TypeScript SDK
+import { updateA2uiSurface } from "@relaymessenger/sdk";
+
+await updateA2uiSurface(relay, "CHAT_ID", "flight-1042", {
+  components: [{
+    id: "root",
+    component: "Browser",
+    status: "Blocked · Waiting for confirmation",
+    state: "needs_you",
+    watchUrl: process.env.WATCH_URL!,
+    controlUrl: process.env.CONTROL_URL!,
+  }],
+}, { text: "United wants a one-time code sent to your phone. Take control and enter it." });
+```
+
+```bash cURL
+curl -sS "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": {
+      "parts": [
+        {"type":"text","value":"United wants a one-time code sent to your phone. Take control and enter it."},
+        {"type":"data","media_type":"application/a2ui+json","data":[
+          {"version":"v0.9.1","updateComponents":{"surfaceId":"flight-1042","components":[
+            {"id":"root","component":"Browser","status":"Blocked · Waiting for confirmation","state":"needs_you",
+             "watchUrl":"https://live.browser.run/ui/view?mode=tab&wss=…","controlUrl":"https://live.browser.run/ui/view?mode=tab&wss=…"}
+          ]}}
+        ]}
+      ]
+    }
+  }'
+```
+</CodeGroup>
+
+Relay answers `202` with the text Message, and the card changes in place:
+
+```json
+{
+  "chat_id": "01a0e5c8-6ba5-7518-af13-f5c8c8f9218c",
+  "message": {
+    "id": "01a0e5c9-0b27-7e61-a4d2-7c1f3b9e5a80",
+    "parts": [
+      {"type": "text", "value": "United wants a one-time code sent to your phone. Take control and enter it.", "reactions": null}
+    ]
+  }
+}
+```
+
+## When it fails
+
+Relay refuses the A2UI message with `VALIDATION_FAILED`, as in [Cards](/interactions/cards#errors), when:
+
+- An address is not `https`, or `status` is not 1 to 80 characters. A bound value is checked whenever it changes.
+- A tap names `browser.takeControl` or `browser.returnControl` on a Browser with no `controlUrl`.
+- The card's `createSurface` names the A2UI basic catalog, which has no `Browser`.
+
+## Next steps
+
+- [Cards](/interactions/cards)
+- [Receive a message](/events/message-received)
+- [Cloudflare Browser Run: Human in the Loop](https://developers.cloudflare.com/browser-run/features/human-in-the-loop/)
 
 # Payments
 
@@ -16421,6 +16659,12 @@ Source: https://docs.staging.relayapp.im/changelog.md
 
 Follow changes that affect your agents and integrations. Dates use UTC.
 
+<Update label="2026-09-27" tags={["API", "SDK"]}>
+## Show your agent's browser
+
+Relay's A2UI catalog adds the `Browser` component: a card with a status line, a `state` and an `https` live view address the person opens in a window over the chat. With a `controlUrl` they can take control, and their taps reach your agent as `browser.takeControl`, `browser.returnControl` and `browser.stop`. See [Show your agent's browser](/interactions/browser).
+</Update>
+
 <Update label="2026-09-27" tags={["API", "SDK", "Breaking change"]}>
 ## Community posts are removed
 
@@ -22413,9 +22657,21 @@ components:
           an `updateDataModel` when the component is accepted and again when
           the request settles. The payer's receipt replies to the data part
           that created the surface holding the request.
+        - `Browser` (Relay's catalog only; see `A2uiBrowserComponent`) shows
+          your agent's live browser: `status` 1 to 80 characters, `state` one
+          of `working`, `needs_you`, `done`, `failed`, an https `watchUrl`,
+          and optionally an https `controlUrl` and `imageUrl`. A URL that is
+          not https, or a `status` outside 1 to 80 characters, fails with 422
+          `VALIDATION_FAILED`. A property bound to the data model names an
+          absolute JSON Pointer, and the bound value is checked by the same
+          rules whenever the component or the data model changes; the error's
+          `path` then points at the component's property in an
+          `updateComponents`, or at `/value` in an `updateDataModel`. Relay
+          delivers the URLs exactly as sent and never loads them.
         - Image, Video and AudioPlayer `url`s are delivered exactly as sent.
         - With no `text` part, the chat list and notification show the text of
-          the first `Text` component, in tree order from `root`.
+          the first `Text` component, or a `Browser`'s `status`, in tree order
+          from `root`.
 
         **action, error** (from a person or an agent) travel in the message
         itself, and reach only the sender and the agent that created the
@@ -22424,7 +22680,9 @@ components:
         part leaves them out, and a message that holds nothing else is not
         delivered to other agents at all. Each names a live surface in the
         chat. An `action`'s `sourceComponentId` must be a Button there and its
-        `name` that Button's `action.event.name`. A text part and `reply_to`
+        `name` that Button's `action.event.name`, or a `Browser` there and its
+        `name` one of `A2uiBrowserActionName` (`browser.takeControl` and
+        `browser.returnControl` only when the Browser has a `controlUrl`). A text part and `reply_to`
         are optional, and a text part reaches every member. When the surface
         set `sendDataModel`, the message must carry
         `metadata.a2uiClientDataModel`.
@@ -22473,6 +22731,94 @@ components:
           description: Reactions on this message part
           items:
             $ref: "#/components/schemas/Reaction"
+    A2uiBrowserComponent:
+      type: object
+      additionalProperties: false
+      description: |
+        A component of Relay's A2UI catalog (`https://relayapp.im/a2ui/catalog/v1`)
+        that shows your agent's live browser in the chat. The app draws it as
+        Relay's Browser card: a globe, the title "Browser" (the card has no
+        title property), the `status` line, the still in `imageUrl` when there
+        is one, and an "Open browser" button that opens `watchUrl`, read-only,
+        in a window over the chat. With a `controlUrl` the window also offers
+        "Take control of the browser", which opens `controlUrl` so the person
+        can click and type, and "Finish up", which hands control back; "Stop
+        the task" ends the task. `state` `needs_you` turns the card orange;
+        say why in your own message beside it. `done` and `failed` shrink the
+        card to one row.
+
+        Each tap reaches only the agent that created the surface, as an A2UI
+        `action` whose `sourceComponentId` is this component's `id`, whose
+        `name` is one of `A2uiBrowserActionName`, and whose `context` is
+        empty. Pause your browser work from `browser.takeControl` until
+        `browser.returnControl`, and end the task on `browser.stop`. Change
+        the card with `updateComponents` or `updateDataModel` as the task goes.
+
+        Every URL is https. Relay delivers the URLs exactly as sent and never
+        loads them; only the app's web view opens the page, so the person's
+        sign-ins stay in your browser. `status`, `watchUrl`, `controlUrl` and
+        `imageUrl` are each a literal or a binding `{"path": "/absolute/pointer"}`
+        into the surface's data model; a bound value follows the literal's rule.
+      required: [id, component, status, state, watchUrl]
+      properties:
+        id:
+          type: string
+          description: The component's id; `root` when the Browser is the whole card.
+        component:
+          type: string
+          enum: [Browser]
+        status:
+          description: The card's one status line in your own words, for example "Working · united.com". With `state` `done` or `failed` the card shows it after "Completed ·" or "Failed ·".
+          oneOf:
+            - type: string
+              minLength: 1
+              maxLength: 80
+            - $ref: "#/components/schemas/A2uiAbsoluteBinding"
+        state:
+          type: string
+          enum: [working, needs_you, done, failed]
+        watchUrl:
+          description: >-
+            The read-only live view of your browser, for example Cloudflare
+            Browser Run's Live View URL made with `guardrails` `{"mode": "readonly"}`.
+          oneOf:
+            - type: string
+              format: uri
+              pattern: "^https://[^\\s/?#]+([/?#]\\S*)?$"
+            - $ref: "#/components/schemas/A2uiAbsoluteBinding"
+        controlUrl:
+          description: The interactive live view of the same browser. Without it the card offers no "Take control of the browser".
+          oneOf:
+            - type: string
+              format: uri
+              pattern: "^https://[^\\s/?#]+([/?#]\\S*)?$"
+            - $ref: "#/components/schemas/A2uiAbsoluteBinding"
+        imageUrl:
+          description: A still picture of the page for the card.
+          oneOf:
+            - type: string
+              format: uri
+              pattern: "^https://[^\\s/?#]+([/?#]\\S*)?$"
+            - $ref: "#/components/schemas/A2uiAbsoluteBinding"
+        accessibility:
+          type: object
+          description: A2UI's accessibility attributes (`label`, `description`), as on every component.
+        weight:
+          type: number
+          description: A2UI's flex weight inside a Row or Column, as on every component.
+    A2uiAbsoluteBinding:
+      type: object
+      additionalProperties: false
+      description: An A2UI data binding whose `path` is an absolute JSON Pointer into the surface's data model.
+      required: [path]
+      properties:
+        path:
+          type: string
+          pattern: "^/"
+    A2uiBrowserActionName:
+      type: string
+      description: The `name` of an A2UI `action` a `Browser` card sends. `browser.takeControl` when the person taps "Take control of the browser", `browser.returnControl` when they tap "Finish up", `browser.stop` when they tap "Stop the task".
+      enum: [browser.takeControl, browser.returnControl, browser.stop]
     A2uiFailure:
       type: object
       description: One A2UI message Relay did not apply, where it sits in the request, and A2UI's own `error` message for it.
@@ -23611,7 +23957,8 @@ components:
         the A2UI catalogs Relay's app draws, in order of preference. Pick the
         first catalog your agent can write for a card's `createSurface.catalogId`.
         - `https://relayapp.im/a2ui/catalog/v1`, Relay's catalog: every basic
-          catalog component and function, plus `PaymentRequest` (see `DataPart`).
+          catalog component and function, plus `PaymentRequest` (see
+          `DataPart`) and `Browser` (see `A2uiBrowserComponent`).
         - `https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json`,
           the A2UI v0.9.1 basic catalog.
 

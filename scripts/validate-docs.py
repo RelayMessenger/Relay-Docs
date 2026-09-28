@@ -538,8 +538,9 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server 65c44735 (PR 414); Relay takes no fee, PaymentRequest has no application_fee_amount, September 27, 2026.
 # Source authority: Relay-Server 42356390 (PR 415); an agent calls only a person who added it and left Allow Calls on, and createCall's 403 names both refusals, September 27, 2026.
 # Source authority: Relay-Server 3972ba8a (PR 416); community posts, comments, upvotes, community.* events, the notifications switch and contributor_count are removed, September 27, 2026.
+# Source authority: Relay-Server 9448e92f (PR 418); the Browser component in Relay's A2UI catalog, A2uiBrowserComponent and A2uiBrowserActionName, September 27, 2026.
 expected_openapi_sha256 = (
-    "c0214d4a2b302b3c9dbbc4d5cb8fb07808907d22feace58025ab7377d423515b"
+    "61bd07d26328a493fa3aca1ceef9bf1c43321d31fb3ba3c6e10f7d353b48218b"
 )
 # Local candidate provenance is shared with the guide and contract gates;
 # it does not relabel the historical Server release as selection-capable.
@@ -898,6 +899,9 @@ all_contract_text = handwritten_text + "\n" + openapi_text
 # The contract cites PayPal Orders v2 for the payment categories; that is
 # PayPal's route, not Relay's, so route-version checks read around it.
 PAYPAL_ORDERS_CITATION = "developer.paypal.com/docs/api/orders/v2/"
+# Cloudflare's own API is v4; interactions/browser.mdx calls it to get a live
+# view address (Relay-Server PR 418, the Browser component).
+CLOUDFLARE_API_CITATION = "api.cloudflare.com/client/v4/"
 if target() == "production" and STAGING_INSTRUCTION_REFERENCE.search(handwritten_text):
     raise SystemExit("staging installation or credential guidance returned to production")
 generated_paths = [root / "llms.txt", root / "llms-full.txt"]
@@ -931,7 +935,7 @@ for field, expected in [
             )
 route_versions = set(re.findall(
     r"/v([0-9]+)/",
-    published_contract_text.replace(PAYPAL_ORDERS_CITATION, ""),
+    published_contract_text.replace(PAYPAL_ORDERS_CITATION, "").replace(CLOUDFLARE_API_CITATION, ""),
 ))
 if route_versions != {"1"}:
     raise SystemExit(
