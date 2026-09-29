@@ -30,10 +30,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # An agent calls only a person who added it and left Allow Calls on (Server #415).
 # Community posts, comments, upvotes, community.* events, notifications and errors 2043-2047 are removed (Server #416).
 # The Browser component in Relay's A2UI catalog: A2uiBrowserComponent and A2uiBrowserActionName (Server #418).
-UPSTREAM_COMMIT = "9448e92fb7465bdf30bad37475e5f3017460799b"
-UPSTREAM_STAGING_COMMIT = "9448e92fb7465bdf30bad37475e5f3017460799b"
-UPSTREAM_SIZE = 316122
-UPSTREAM_SHA256 = "61bd07d26328a493fa3aca1ceef9bf1c43321d31fb3ba3c6e10f7d353b48218b"
+# GET /v1/me calls_enabled and 503 with calls off (Server #421); WebSocket subscribed_events (Server #428); each agent's A2A address is its own origin (Server #429).
+UPSTREAM_COMMIT = "78eb6425c353eae043e201b47b41eacd684a7a90"
+UPSTREAM_STAGING_COMMIT = "78eb6425c353eae043e201b47b41eacd684a7a90"
+UPSTREAM_SIZE = 318745
+UPSTREAM_SHA256 = "41ee27dcb43341cb447ece84f929ea26942d948149f212d126838d517781dc6a"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",

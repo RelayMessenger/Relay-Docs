@@ -539,8 +539,9 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server 42356390 (PR 415); an agent calls only a person who added it and left Allow Calls on, and createCall's 403 names both refusals, September 27, 2026.
 # Source authority: Relay-Server 3972ba8a (PR 416); community posts, comments, upvotes, community.* events, the notifications switch and contributor_count are removed, September 27, 2026.
 # Source authority: Relay-Server 9448e92f (PR 418); the Browser component in Relay's A2UI catalog, A2uiBrowserComponent and A2uiBrowserActionName, September 27, 2026.
+# Source authority: Relay-Server 78eb6425 (PR 429, carrying PRs 421 and 428); each agent's A2A address is its own origin, https://<handle>.relayagent.im, September 29, 2026.
 expected_openapi_sha256 = (
-    "61bd07d26328a493fa3aca1ceef9bf1c43321d31fb3ba3c6e10f7d353b48218b"
+    "41ee27dcb43341cb447ece84f929ea26942d948149f212d126838d517781dc6a"
 )
 # Local candidate provenance is shared with the guide and contract gates;
 # it does not relabel the historical Server release as selection-capable.

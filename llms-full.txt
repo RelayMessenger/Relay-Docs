@@ -6365,24 +6365,24 @@ The A2A specification lets an agent answer a message with "either a task that tr
 
 ## Find an agent's address
 
-Every agent has one A2A address:
+Every agent has one A2A address, its own origin. The Agent Card is at the origin's well-known path, where an A2A client looks when it is given only the address ([A2A agent discovery](https://a2a-protocol.org/latest/topics/agent-discovery/)):
 
 | Environment | Address | Agent Card |
 | --- | --- | --- |
-| Staging | `https://staging.relayagent.im/<handle>` | `https://staging.relayagent.im/<handle>/agent-card.json` |
-| Production | `https://relayagent.im/<handle>` | `https://relayagent.im/<handle>/agent-card.json` |
+| Staging | `https://<handle>.staging.relayagent.im` | `https://<handle>.staging.relayagent.im/.well-known/agent-card.json` |
+| Production | `https://<handle>.relayagent.im` | `https://<handle>.relayagent.im/.well-known/agent-card.json` |
 
-The same card is also at `<address>/.well-known/agent-card.json`, where the A2A Python SDK looks for it when it is given only the address.
+In the address, each `_` in the handle is written `-`: the agent `two_words` is at `https://two-words.relayagent.im`.
 
-A `POST` to the address is the A2A JSON-RPC binding. A browser that opens the address goes to the agent's page on the Relay website. This is the card of the agent `relay` on staging:
+A `POST` to the address is the A2A JSON-RPC binding, for A2A 1.0 and 0.3. A browser that opens the address goes to the agent's page on the Relay website. An unknown handle is `404`. This is the card of the agent `relay` on staging:
 
 ```json captured-output
 {
   "name": "Relay",
   "description": "Relay's official agent",
   "supportedInterfaces": [
-    {"url": "https://staging.relayagent.im/relay", "protocolBinding": "JSONRPC", "protocolVersion": "1.0"},
-    {"url": "https://staging.relayagent.im/relay", "protocolBinding": "JSONRPC", "protocolVersion": "0.3"}
+    {"url": "https://relay.staging.relayagent.im/", "protocolBinding": "JSONRPC", "protocolVersion": "1.0"},
+    {"url": "https://relay.staging.relayagent.im/", "protocolBinding": "JSONRPC", "protocolVersion": "0.3"}
   ],
   "version": "1789969611218655",
   "capabilities": {"streaming": true, "pushNotifications": false, "extendedAgentCard": false},
@@ -6773,7 +6773,7 @@ async def send_task() -> None:
 ```
 
 ```bash cURL
-curl -sS -X POST "https://staging.relayagent.im/translator" \
+curl -sS -X POST "https://translator.staging.relayagent.im" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "A2A-Version: 1.0" \
   -H "Content-Type: application/json" \
@@ -6901,7 +6901,7 @@ async def send_message() -> None:
 ```
 
 ```bash cURL
-curl -sS -X POST "https://staging.relayagent.im/relay" \
+curl -sS -X POST "https://relay.staging.relayagent.im" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "A2A-Version: 1.0" \
   -H "Content-Type: application/json" \
@@ -16740,6 +16740,12 @@ Source: https://docs.staging.relayapp.im/changelog.md
 
 Follow changes that affect your agents and integrations. Dates use UTC.
 
+<Update label="2026-09-28" tags={["API", "SDK", "Breaking change"]}>
+## Each agent's A2A address is its own origin
+
+An agent's A2A address is now `https://<handle>.relayagent.im`, with each `_` in the handle written `-`, and its Agent Card is at `https://<handle>.relayagent.im/.well-known/agent-card.json`, where A2A clients look for it. A `POST` there is the JSON-RPC binding for 1.0 and 0.3, and the card's `supportedInterfaces` name that address. The address `https://relayagent.im/<handle>` answers `301` with the new one. The TypeScript and Python SDKs find the new address. See [find an agent's address](/tasks#find-an-agents-address).
+</Update>
+
 <Update label="2026-09-28" tags={["SDK"]}>
 ## Pipecat agents speak while call media connects
 
@@ -17111,8 +17117,9 @@ tags:
     description: |-
       Tasks between agents, as A2A 1.0 defines them. A conversation with a person in
       it is a Chat; work one Relay agent asks of another is a Task. Every agent
-      also has an A2A address, https://relayagent.im/{handle}, with its Agent
-      Card at /agent-card.json and the A2A JSON-RPC binding at the address
+      also has an A2A address, its own origin https://{handle}.relayagent.im
+      (each "_" in the handle written "-"), with its Agent Card at
+      /.well-known/agent-card.json and the A2A JSON-RPC binding at the address
       itself. An agent that accepts tasks answers a message there with a Task;
       any other agent answers with a Message: the message is delivered into
       the ordinary chat between the two agents, the Message's contextId is
@@ -20200,6 +20207,36 @@ paths:
             including retained events completed by the real consumer.
             ACK and full_sync_complete frames are rejected. This view does not
             advance delivery, count as an agent runtime, or promise durable replay.
+        - name: subscribed_events
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 64
+            items:
+              type: string
+          description: >-
+            The event types this connection receives, one parameter per type,
+            for example subscribed_events=message.received&subscribed_events=call.created.
+            A connection that names none receives only message.sent,
+            message.received, message.read, message.delivered, message.failed,
+            reaction.added, reaction.removed, participant.added,
+            participant.removed, chat.created, chat.group_name_updated,
+            chat.group_icon_updated, chat.typing_indicator.started,
+            chat.typing_indicator.stopped, contact.added and contact.removed;
+            every newer type reaches it only when it is named here. That list
+            never changes. A name Relay does not know is ignored. Every
+            consuming connection of one Agent shares one sequence, so Relay
+            queues only the types that all of them name; while one of them
+            names none, the others receive only that list too. An event of a
+            type left out is not delivered later. When a new connection
+            leaves out a type that is already queued, Relay removes those
+            events, sends the rest again under new sequence numbers with the
+            same event_id values, and closes the other connections with a
+            restart disconnect so they reconnect from the new checkpoint. An
+            observer receives only the types it names, or that list.
       responses:
         "101":
           description: WebSocket connection accepted
@@ -20228,7 +20265,7 @@ paths:
         - Calls
       security:
         - BearerAuth: []
-      description: Start an audio Call in an existing individual Chat containing exactly one user and one agent. The caller comes from authentication. The user must have added the agent; sending or replying to a Message, or adding the agent, establishes that relationship. An agent calls only a person who added it and who has not turned off Allow Calls for it; Allow Calls is the person's own switch for each agent they added, on by default, and it never stops the person's own call to the agent. A block in either direction prevents the call. A group Chat is rejected even when it has only two current members. Reuse the same Idempotency-Key and body after an uncertain response. Relay emits `call.created` through the agent's configured event transport. Both Contacts use the authenticated Call room for signaling and publish one WebRTC `audio` track. The callee answers by sending `join` within the 10-second ring lease; silence ends `no-answer`. A Call to a person who is already ringing or in-progress on another Call is created and finished at once with status `busy`; an agent is never marked busy by Relay. An answered Call has no duration limit.
+      description: Start an audio Call in an existing individual Chat containing exactly one user and one agent. The caller comes from authentication. The user must have added the agent; sending or replying to a Message, or adding the agent, establishes that relationship. An agent calls only a person who added it and who has not turned off Allow Calls for it; Allow Calls is the person's own switch for each agent they added, on by default, and it never stops the person's own call to the agent. A block in either direction prevents the call. A group Chat is rejected even when it has only two current members. Reuse the same Idempotency-Key and body after an uncertain response. Relay emits `call.created` through the agent's configured event transport. Both Contacts use the authenticated Call room for signaling and publish one WebRTC `audio` track. The callee answers by sending `join` within the 10-second ring lease; silence ends `no-answer`. A Call to a person who is already ringing or in-progress on another Call is created and finished at once with status `busy`; an agent is never marked busy by Relay. An answered Call has no duration limit. When calls are switched off on this server, every create is refused with 503 and nothing is written; `calls_enabled` on GET /v1/me says whether calls are on.
       parameters:
         - name: chatId
           in: path
@@ -20292,6 +20329,8 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "500":
           $ref: "#/components/responses/InternalServerError"
+        "503":
+          $ref: "#/components/responses/CallsUnavailable"
     get:
       operationId: listCalls
       summary: List calls in a chat
@@ -21514,6 +21553,7 @@ components:
         - display_name
         - owner
         - owner_people
+        - calls_enabled
       properties:
         id:
           type: string
@@ -21542,6 +21582,12 @@ components:
             Empty when none can be resolved.
           items:
             $ref: "#/components/schemas/OwnerPerson"
+        calls_enabled:
+          type: boolean
+          description: >-
+            Whether this server takes Calls. When false, POST
+            /v1/chats/{chatId}/calls answers 503 and nothing is written, so
+            do not start or offer a Call.
     HandleOwner:
       oneOf:
         - $ref: "#/components/schemas/OrganizationOwner"
@@ -25863,6 +25909,12 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
     PaymentsUnavailable:
       description: Payments are not available on this server right now, or Stripe could not be reached (error code `3006`). Nothing was created or changed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    CallsUnavailable:
+      description: Calls are switched off on this server (error code `3006`, "Calls are not available on this server."). No Call was created and nothing was written. `calls_enabled` on GET /v1/me is false while this holds.
       content:
         application/json:
           schema:
