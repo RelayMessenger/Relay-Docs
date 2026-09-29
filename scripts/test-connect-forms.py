@@ -21,6 +21,10 @@ FORBIDDEN = re.compile(rf"\bconnect (?:{PROVIDER_ALT})\b|RUNTIME=")
 PROVIDER_LINK = re.compile(rf"/integrations/(?:{PROVIDER_ALT})\b")
 # The integrations index is the one general page that lists the providers (a card each).
 CARD_INDEX = ROOT / "integrations/index.mdx"
+# The promotion writes `.docs-target` = production after that rewrite, and then
+# every CLI line must carry the bare form instead.
+TARGET = ROOT / ".docs-target"
+PRODUCTION = TARGET.exists() and TARGET.read_text().strip() == "production"
 
 
 def pages():
@@ -35,9 +39,10 @@ class ConnectFormsTests(unittest.TestCase):
         offending = []
         for path in pages():
             for number, line in enumerate(path.read_text().splitlines(), 1):
-                if COMMAND_LINE.match(line) and "relaymessenger@staging" not in line:
+                if COMMAND_LINE.match(line) and (("relaymessenger@staging" in line) == PRODUCTION):
                     offending.append(f"{path.relative_to(ROOT)}:{number}: {line}")
-        self.assertEqual(offending, [], "CLI lines without relaymessenger@staging")
+        self.assertEqual(offending, [], "CLI lines that do not name "
+                         + ("bare relaymessenger" if PRODUCTION else "relaymessenger@staging"))
 
     def test_general_pages_never_name_a_provider_runtime(self):
         offending = []
