@@ -1,0 +1,188 @@
+---
+title: "Selection"
+description: "Ask a person to choose several options and receive stable values beside a readable reply."
+keywords: ["selection", "multiselect", "selected_values", "selection_response", "has_responded", "interactions"]
+---
+
+import { SelectionPreview, MessageBubble } from "/snippets/buttons-preview.jsx";
+
+Send a `selection` part with a short `title` and 1 to 25 options. Each option has a readable `label` and a stable `value`. The app draws the selection as one card that opens a sheet holding the whole option list, and the person checks several options there and submits them in one reply.
+
+## Send a selection
+
+This request contains an optional `text` part followed by a `selection` part. The text shows as a normal message above the card. The selection's `title` is the card's title and the sheet's title; a second line reads "Pick options", and a chevron marks the card as something to open. Open the prompt below, check options in the sheet, then press **Send**; this demo stays in your browser and sends no request.
+
+<Tabs>
+  <Tab title="Preview">
+    <SelectionPreview bubble={MessageBubble} title="Topics" options={[{ "value": "research", "label": "Research" }, { "value": "design", "label": "Design" }]} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    {
+      "message": {
+        "parts": [
+          {"type":"text","value":"Which topics interest you?"},
+          {"type":"selection","title":"Topics","options":[
+            {"value":"research","label":"Research"},
+            {"value":"design","label":"Design"}
+          ]}
+        ],
+        "idempotency_key":"topics-prompt-001"
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+Checking a row sends nothing. The sheet lists every option in source order with a checkbox on the leading edge, and its Send stays disabled until at least one row is checked, so one submission carries the whole answer.
+
+### Rules for the prompt
+
+- Only an agent can send a selection.
+- A Message carries at most one `selection` part. A `text` part is optional; when present it shows as a normal message above the card.
+- `title` is required: 1 to 60 characters after surrounding whitespace is trimmed, a few words such as "Pizza toppings". It is the card's title and the sheet's title.
+- A selection cannot share a Message with a `buttons` part.
+- `options` holds 1 to 25 options.
+- Each `value` is 1 to 100 characters, matches `^[A-Za-z0-9][A-Za-z0-9._:-]*$`, is case-sensitive, and is unique within the selection. Your application keys on it, so keep it stable.
+- Each `label` is 1 to 80 characters after surrounding whitespace is trimmed. The app shows labels verbatim.
+- An option has only `value` and `label`; any other field is rejected.
+
+Use an Agent Token and an existing chat ID to send the same request:
+
+<CodeGroup>
+```typescript TypeScript SDK
+import Relay, { partsWithSelection } from "@relaymessenger/sdk";
+
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+  baseURL: "https://api.relayapp.im",
+});
+
+await relay.chats.messages.send("CHAT_ID", {
+  message: {
+    parts: partsWithSelection("Which topics interest you?", {
+      type: "selection",
+      title: "Topics",
+      options: [
+        { value: "research", label: "Research" },
+        { value: "design", label: "Design" },
+      ],
+    }),
+    idempotency_key: "topics-prompt-001",
+  },
+});
+```
+
+```bash HTTPS
+curl -sS "https://api.relayapp.im/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": {
+      "parts": [
+        {"type":"text","value":"Which topics interest you?"},
+        {"type":"selection","title":"Topics","options":[
+          {"value":"research","label":"Research"},
+          {"value":"design","label":"Design"}
+        ]}
+      ],
+      "idempotency_key":"topics-prompt-001"
+    }
+  }'
+```
+</CodeGroup>
+
+The send path returns `202` after storing the message. Keep the returned message ID so your application can associate responses with this question. Reuse the same request and idempotency key after an uncertain send.
+
+```http
+HTTP/1.1 202 Accepted
+```
+
+## Receive stable values
+
+The user's submission contains exactly two ordered parts: readable text, then structured metadata. Its `reply_to` identifies the source message and selection part.
+
+<Tabs>
+  <Tab title="Preview">
+    <SelectionPreview bubble={MessageBubble} title="Topics" options={[{ "value": "research", "label": "Research" }, { "value": "design", "label": "Design" }]} received={"• Research\n• Design"} />
+  </Tab>
+  <Tab title="What you receive">
+    ```json
+    {
+      "event_type":"message.received",
+      "data": {
+        "parts": [
+          {"type":"text","value":"• Research\n• Design"},
+          {"type":"selection_response","selected_values":["research","design"]}
+        ],
+        "reply_to": {
+          "message_id":"01993d50-ef7b-7b37-886b-23fd80c7ec13",
+          "part_index":1
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+The event example shows the response fields used by your handler. The preview draws the reply as the selection's title over one line per chosen label; metadata adds no visible text.
+
+New text equals literal `• ` + each selected source label joined with `\n`, in source-option order. It supplies portable bubble, notification, and copy text; iOS may draw a checkmark in place of each bullet, and repeat the selection's `title` above the lines, as presentation only. The `selection_response` part carries metadata only.
+
+A person answers a given selection once. Opening the answered prompt again, or opening the reply, presents the same sheet read only: the chosen rows are checked, no row is tappable, and the sheet carries no Send. Try it in the preview above.
+
+## Read whether someone answered
+
+When you read a Message back, its `selection` part carries `has_responded` and `selected_values`, and its `reactions` is always `null`:
+
+```json
+{"type":"selection","title":"Topics","options":[{"value":"research","label":"Research"},{"value":"design","label":"Design"}],"has_responded":false,"selected_values":null,"reactions":null}
+```
+
+Both fields belong to whoever is reading. `has_responded` is `true` once that person has answered this selection, and `selected_values` holds the values they chose, in option order, so every one of their devices shows the same answer even when it has not loaded the answer Message. `selected_values` is `null` until they answer, and also if their answer Message no longer exists. For an agent, `has_responded` is always `false` and `selected_values` always `null`, so an agent learns about answers from the `selection_response` Messages it receives, not from these fields. When a person answers, their own devices receive a `message.upserted` for the prompt with both fields set.
+
+A `selection_response` part you read back has no `reactions` key, and neither selection part can receive a reaction.
+
+Your existing signed [webhook](/webhooks/verify-signatures) or [WebSocket](/websocket/index) handler receives the ordinary `message.received` event. The SDK's default event types expose the metadata:
+
+```typescript Application handler
+import type { RelayWebhookEvent } from "@relaymessenger/sdk";
+
+function selectionFrom(event: RelayWebhookEvent) {
+  if (event.event_type !== "message.received") return;
+  const response = event.data.parts.find(
+    (part) => part.type === "selection_response",
+  );
+  if (!response || !event.data.reply_to) return;
+  return {
+    source: event.data.reply_to,
+    selectedValues: response.selected_values,
+  };
+}
+```
+
+Dispatch your own application handler using the source message ID, part index, and stable values. Preserve the metadata when forwarding events to a runtime. Use the existing event deduplication and durable processing path before acknowledging delivery.
+
+## Send from a runtime
+
+Selections use the runtime's existing send path: a backend includes a `selection` part, with optional text before it, in `parts`; a runtime with a send tool takes a `selection` argument; and a runtime that answers in text ends its answer with a fenced code block tagged `selection` containing the selection's `title` and `options`. Responses carry `selected_values` and `reply_to` alongside the readable text. Each [integration](/integrations/index) describes its send and receive format.
+
+## When it fails
+
+The server checks an answer against the prompt it names: the reply must come from a person who can see that prompt in the same chat, its text must match the chosen labels exactly, and its values must be known and in the prompt's option order. For compatibility it also accepts the exact selected source labels joined with `, `; new clients send bullet lines. Dispatch on `selected_values` and `reply_to`, never by parsing the text.
+
+| Status | Code | Cause |
+| --- | --- | --- |
+| `400` | [1005](/api-reference/errors#1005) | An option is malformed, has an unknown field, or repeats a value; the title is missing or longer than 60 characters, or the Message has two selections or buttons beside the selection. An answer is not exactly a text part then a `selection_response` part, its text carries a mention, or `reply_to.part_index` is missing. |
+| `403` | [2003](/api-reference/errors#2003) | Someone other than an agent sent a selection, or someone other than a person answered one. |
+| `404` | [2001](/api-reference/errors#2001) | The answer's `reply_to.message_id` is not a Message the person can see in this chat. |
+| `409` | [1005](/api-reference/errors#1005) | The person already answered this selection with a different idempotency key. A retry with the same key and body returns the original answer instead. |
+| `422` | [2006](/api-reference/errors#2006) | The answer's text or value order does not match the prompt, `reply_to.part_index` does not name a selection part, or a reaction targets a selection part. |
+
+Keep the original body and idempotency key when retrying an uncertain submission.
+
+## Next steps
+
+- [Interactions](/interactions/index)
+- [Buttons](/interactions/buttons)
+- [Replies](/messages/replies)

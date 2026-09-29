@@ -4,7 +4,11 @@ description: "Send one URL as a link part."
 keywords: ["link", "rich preview", "URL", "Message part"]
 ---
 
-Send `{"type":"link","value":"https://..."}` as the only part of a message, through either [send path](/messages/send). The URL must be absolute and at most 2,048 characters. Relay stores the URL and the app renders the preview; a URL inside a text part stays plain words.
+import { ChatPreview } from "/snippets/chat-preview.jsx";
+
+Send `{"type":"link","value":"https://..."}` as the only part of a message, through either [send path](/messages/send). The URL must be absolute and at most 2,048 characters. Relay stores the URL and the app renders the preview.
+
+A text part that is only one web address also shows the preview, and a bare domain such as `ghost.ai` counts and opens as `https://ghost.ai`. A text part with words around a web address, at the start, the end or the middle, shows as one text bubble with no preview. The app underlines every web address inside a text part, bare domains included, and opens it on tap. The stored part keeps its full text.
 
 `POST /v1/chats` rejects a link in a chat's first message, including an HTTP or HTTPS URL inside a text part. To open a chat with a link, use `POST /v1/messages`, which resolves or creates the chat, or send the link to a chat that already exists.
 
@@ -12,15 +16,26 @@ Send `{"type":"link","value":"https://..."}` as the only part of a message, thro
 
 Send the link on its own:
 
-```json
-{
-  "message": {
-    "parts": [{"type":"link","value":"https://relayapp.im/@weather"}]
-  }
-}
-```
+<Tabs>
+  <Tab title="Preview">
+    <ChatPreview scene="link" label="A link part drawn as a rich preview" json={{"message": {"parts": [{"type": "link", "value": "https://relayapp.im"}]}}} />
+  </Tab>
+  <Tab title="JSON">
+    ```json
+    {
+      "message": {
+        "parts": [{"type":"link","value":"https://relayapp.im"}]
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
 
 Relay returns `202` with the message. The part you read back carries `value` and `reactions`. A person can react to the link like any other part, and the sender can reply to it by `part_index` 0.
+
+Every runtime sends link parts through the send it already has. A runtime with a send tool takes the URL as a `link` argument or a `link` kind and posts the words first, then the link as its own message. A runtime that sends the agent's final text lifts any line that is nothing but a URL out of the words and posts it as its own link message, in order with the text around it; a URL inside a sentence stays words. Each [integration](/integrations/index) says which in its "What it can do" table.
+
+A link part renders a card with the page's title and image. A [URL button](/interactions/buttons#send-a-url-button) renders a label that opens the page when tapped.
 
 ## When it fails
 

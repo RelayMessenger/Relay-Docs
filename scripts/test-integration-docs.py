@@ -7,7 +7,7 @@ SDK evidence reread on 2026-09-08 at origin/staging (28db9cd):
   packages/cli/test/runtime-connect.test.ts
   packages/openclaw/src/dispatch.real-ingress.test.ts
   packages/claude-code/{README.md,src/config.ts}
-  packages/mcp/src/{cli,auth}.ts
+  Relay-Server server/src/hosted-mcp{,-tools}.ts (the hosted MCP, 2026-09-26)
   packages/chat-sdk-adapter/test/adapter.test.ts (file-byte uploads are supported)
   .{agents/plugins,cursor-plugin,claude-plugin}/marketplace.json
 
@@ -31,15 +31,16 @@ AUTH = "cli/auth.mdx"
 OBSERVE = "cli/watch.mdx"
 # 2026-09-11: native setup is folded into the main page; the Claude Code
 # guide is the page that owns the native connect walkthrough now.
-NATIVE = "integrations/claude-code.mdx"
 SKILLS = "integrations/skills.mdx"
 MCP = "integrations/mcp.mdx"
 OBSERVER_REFERENCE = "websocket/observe-events.mdx"
 FENCE = re.compile(r"^(`{3,})[^\n]*\n(.*?)^\1[ \t]*$", re.M | re.S)
+SHELL_FENCE = re.compile(
+    r"^(`{3,})(?:bash|sh|shell|zsh)\b[^\n]*\n(.*?)^\1[ \t]*$", re.M | re.S
+)
 FINISH = {"Next steps", "See also", "Related"}
 SOURCES = {
     CLI: "packages/cli",
-    MCP: "packages/mcp",
     SKILLS: "skills/relay",
     "integrations/chat-sdk.mdx": "packages/chat-sdk-adapter",
     "integrations/openclaw.mdx": "packages/openclaw",
@@ -81,10 +82,10 @@ def normalized(text):
 
 
 def commands(text):
-    """Join shell continuations without mistaking Markdown prose for commands."""
+    """Join shell continuations in shell fences only; text and other fences are not commands."""
     return [
         line.strip()
-        for _, block in FENCE.findall(re.sub(
+        for _, block in SHELL_FENCE.findall(re.sub(
             r"^```text captured-output\n.*?^```[ \t]*$", "", text, flags=re.M | re.S
         ))
         for line in re.sub(r"\\\s*\n\s*", " ", block).splitlines()
@@ -225,17 +226,24 @@ class IntegrationDocsTests(unittest.TestCase):
             self.assertEqual(relay_cli_version, published["npm"]["relaymessenger"]["staging"],
                              "The current staging install needs a fresh CLI help capture")
         installs = {
-            CLI: f"npm install --global relaymessenger@{relay_cli_version}",
-            MCP: "npm install --global @relaymessenger/mcp@staging",
+            CLI: "npm install --global relaymessenger@staging",
+            MCP: "claude mcp add --transport http relay https://mcp.staging.relayapp.im",
             "integrations/openclaw.mdx": "openclaw plugins install @relaymessenger/openclaw-plugin@staging",
-            "integrations/hermes.mdx": "hermes plugins install RelayMessenger/Relay-Hermes --enable",
+            "integrations/hermes.mdx": "hermes plugins install RelayMessenger/Relay-Hermes --no-enable",
             "integrations/claude-code.mdx": "npx relaymessenger@staging connect claude-code",
             "integrations/codex.mdx": "codex plugin add relay@relay-plugin-marketplace",
         }
         for page, command in installs.items():
             self.assertIn(expected(command), commands(read(page)), page)
+        # A script cannot answer OpenClaw's trust and capability questions, and
+        # Hermes's `install --enable` skips dependencies without a terminal.
         self.assertIn(
-            expected(f"npx relaymessenger@{relay_cli_version} --help"),
+            expected("openclaw plugins install @relaymessenger/openclaw-plugin@staging --force --accept-capabilities"),
+            commands(read("integrations/openclaw.mdx")),
+        )
+        self.assertIn("hermes plugins enable relay-hermes", commands(read("integrations/hermes.mdx")))
+        self.assertIn(
+            expected("npx relaymessenger@staging --help"),
             commands(read(CLI)),
         )
         self.assertEqual(
@@ -268,19 +276,21 @@ class IntegrationDocsTests(unittest.TestCase):
             self.assertIn("22.22.3", read(page), "Keep the supported Node minimum at the install task")
         for page in ("integrations/claude-code.mdx", "integrations/codex.mdx", "integrations/cursor.mdx", "integrations/opencode.mdx", "integrations/cline.mdx", "integrations/vs-code.mdx", "integrations/gemini-cli.mdx", "integrations/hermes.mdx", "integrations/openclaw.mdx", "start/quickstart.mdx"):
             self.assertNotIn("RELAY_API_URL", read(page), page)
-        self.assertIn(">=2026.8.1 <2026.9.0", read("integrations/openclaw.mdx"))
-        for version in ("3.11", "3.13"):
-            self.assertIn(version, read("integrations/hermes.mdx"))
+        self.assertIn("2026.8.1 through 2026.9.6", read("integrations/openclaw.mdx"))
+        self.assertIn("Python 3.11 or newer", read("integrations/hermes.mdx"))
         self.assertIn("installed and signed in.", read("integrations/claude-code.mdx"))
         self.assertLink(MCP, "/cli/auth")
         self.assertNotIn("RELAY_API_URL", read(MCP))
-        self.assertConcept(read(MCP), r"local.*stdio.*mcp", "MCP must document its local stdio transport")
+        self.assertConcept(read(MCP), r"hosted mcp server", "MCP documents Relay's hosted server")
+        self.assertNotIn("@relaymessenger/mcp", read(MCP), "The local MCP package is retired")
 
     def test_cli_routes_to_task_owners_without_copying_agent_flows(self):
         for task in ("create-agent", "list-agents", "delete-agent"):
             self.assertLink(CLI, f"/agents/{task}")
-        for page in (AUTH, OBSERVE, NATIVE):
+        for page in (AUTH, OBSERVE):
             self.assertLink(CLI, "/" + page.removesuffix(".mdx"))
+        # Owner ruling 2026-09-18: general pages route to the runtimes index, never one provider.
+        self.assertLink(CLI, "/integrations")
         for path in ROOT.glob("integrations/**/*.mdx"):
             self.assertFalse(
                 any(re.search(r"\bagents (?:create|list|delete)\b", line) for line in commands(path.read_text())),
@@ -331,7 +341,7 @@ class IntegrationDocsTests(unittest.TestCase):
             self.assertIn(marker, reference, "Wire details belong to the observer reference")
         self.assertConcept(reference, r"(?:neither|no|without).*ack", "An observer must never ACK")
         self.assertConcept(reference, r"without.*consuming fallback", "Observer failure must not start a consumer")
-        self.assertLink(OBSERVE, "/integrations/claude-code")
+        self.assertLink(OBSERVE, "/integrations")
 
     def test_native_runtimes_route_setup_to_the_owning_guide(self):
         # Owner ruling 2026-09-12: no runtime is the default; each native guide routes to the runtimes index.
@@ -353,7 +363,15 @@ class IntegrationDocsTests(unittest.TestCase):
         for pattern in (r"allowfrom", r"contact uuids", r"stable.id", r"session scope"):
             self.assertConcept(openclaw, pattern, "Keep account-specific admission and session boundaries")
         self.assertIn("Leave the command running: it answers each message with Claude Code from the folder you ran it in. Control-C stops it.", claude)
-        self.assertIn("Claude Code runs without permission prompts in that folder", claude)
+        # 2026-09-26, Relay-SDK PR 375: connect no longer approves tools by
+        # itself. The coding agent asks with its own settings and the question
+        # goes to the agent's owners as a card; no page may say otherwise.
+        self.assertNotIn("without permission prompts", claude)
+        self.assertIn("/cli/connect#approve-tools-from-your-phone", claude)
+        connect = read("cli/connect.mdx")
+        for marker in ("## Approve tools from your phone", "Not authorized.", "600 seconds",
+                       "Timed out, not approved.", "owner_people", "relay phone link"):
+            self.assertIn(marker, connect)
         self.assertIn("each chat keeps its own Claude Code session.", claude)
         for marker in ("RELAY_ALLOWED_CONTACTS", "RELAY_STATE_DIR"):
             self.assertIn(marker, hermes)
@@ -362,25 +380,28 @@ class IntegrationDocsTests(unittest.TestCase):
         self.assertConcept(hermes, r"/approve session", "Approval answers reach Hermes from the chat")
 
     def test_api_mcp_and_docs_search_have_one_explanation(self):
-        self.assertIn("stdio", read(MCP))
         self.assertConcept(read(MCP), r"trusted (?:local )?mcp client|mcp client remains the security boundary", "The MCP host is the security boundary")
-        self.assertConcept(read(MCP), r"selected cli profile|relay_agent_token", "The local MCP must explain local credential resolution")
+        self.assertConcept(read(MCP), r"sign in with relay.*relay_agent_token", "The MCP explains both credentials: Relay sign-in and an Agent Token")
         text = read(SKILLS)
         self.assertConcept(text, r"Mintlify provides documentation search|documentation search", "Mintlify owns docs search")
         self.assertConcept(text, r"read-only", "Docs search must be read-only")
-        self.assertConcept(text, r"relay api mcp.*separately", "API tools remain an optional local install")
+        self.assertConcept(text, r"relay api mcp.*separately", "API tools remain an optional install")
         self.assertLink(SKILLS, "/integrations/mcp")
         for page in (MCP, "integrations/codex.mdx", "integrations/cursor.mdx"):
             self.assertLink(page, "/integrations/skills")
 
-    def test_api_mcp_has_exactly_the_two_current_tools(self):
+    def test_api_mcp_lists_exactly_the_hosted_tools(self):
+        # Relay-Server server/src/hosted-mcp-tools.ts READ_TOOLS then WRITE_TOOLS.
         text = read(MCP)
         rows = re.findall(r"^\| `([a-z_]+)` \|", text, re.M)
-        self.assertEqual(rows, ["search_docs", "execute"])
-        self.assertIn("async function run(client)", text)
-        self.assertIn("client.contactCard.retrieve()", text)
-        self.assertIn("packaged", text)
-        self.assertNotIn("text only", text)
+        self.assertEqual(rows, [
+            "search", "fetch", "list_chats", "read_messages", "get_profile",
+            "list_communities", "list_tasks",
+            "send_message", "send_task", "update_task",
+            "join_community", "leave_community",
+        ])
+        self.assertNotIn("search_docs", text)
+        self.assertNotIn("execute", text)
         self.assertNotRegex(text, r"`(?:talk|relay_[a-z_]+)`")
         self.assertNotIn("RELAY_API_URL", text)
 

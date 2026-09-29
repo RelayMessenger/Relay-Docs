@@ -28,7 +28,7 @@ if (installedVersion !== expectedVersion) {
   throw new Error(`${production ? 'Production' : 'Staging'} CLI reference needs relaymessenger ${expectedVersion} installed, found ${installedVersion}`
     + (production ? ` (run: npm install --no-save relaymessenger@${latestVersion})` : ''));
 }
-const installSpec = production ? 'relaymessenger' : `relaymessenger@${pinnedVersion}`;
+const installSpec = production ? 'relaymessenger' : 'relaymessenger@staging';
 const sourceRef = production ? 'main' : 'staging';
 const programModule = await import(pathToFileURL(require.resolve('relaymessenger/dist/program.js')).href);
 const directory = path.join(root, 'cli/reference');
@@ -87,6 +87,7 @@ const GUIDE_LINKS = {
   login: ['Authentication', '/live/authentication'],
   logout: ['Authentication', '/live/authentication'],
   whoami: ['Authentication', '/live/authentication'],
+  phone: ['Connect an agent', '/cli/connect'],
   profiles: ['Authentication', '/live/authentication'],
   organization: ['Relay Console', '/console/organization'],
   chats: ['Direct and group chats', '/chats'],
@@ -103,10 +104,20 @@ const GUIDE_LINKS = {
 
 const TITLES = {
   "agents-create": "Create an agent",
+  "agents-update": "Update an agent",
   "agents-list": "List agents",
   "agents-delete": "Delete an agent",
+  "agents-access-show": "Show who can message an agent",
+  "agents-access-update": "Change who can message an agent",
+  "agents-access-private": "Make an agent private",
+  "agents-access-open": "Open an agent to everyone",
+  "agents-access-allow": "Always allow a contact",
+  "agents-access-deny": "Never allow a contact",
+  "agents-access-remove": "Take a contact off both lists",
+  "phone-link": "Link your phone",
   "auth-login": "Save a token",
   "auth-status": "Check the token",
+  "auth-token": "Print the token",
   "auth-logout": "Remove the token",
   "organization-show": "Show the organization",
   "organization-update": "Update the organization",
@@ -130,6 +141,9 @@ const TITLES = {
   "chats-participants-remove": "Remove a participant",
   "chats-typing-start": "Start typing",
   "chats-typing-stop": "Stop typing",
+  "chats-activity-get": "Get activity",
+  "chats-activity-set": "Start a task activity",
+  "chats-activity-clear": "Clear activity",
   "messages-send": "Send to handles",
   "messages-get": "Show a message",
   "messages-thread": "List replies",
@@ -172,8 +186,21 @@ const CLI_GROUPS = [
     "pages": [
       "cli/agents",
       "cli/reference/agents-create",
+      "cli/reference/agents-update",
       "cli/reference/agents-list",
-      "cli/reference/agents-delete"
+      "cli/reference/agents-delete",
+      {
+        "group": "Who can message",
+        "pages": [
+          "cli/reference/agents-access-show",
+          "cli/reference/agents-access-update",
+          "cli/reference/agents-access-private",
+          "cli/reference/agents-access-open",
+          "cli/reference/agents-access-allow",
+          "cli/reference/agents-access-deny",
+          "cli/reference/agents-access-remove"
+        ]
+      }
     ]
   },
   {
@@ -182,10 +209,12 @@ const CLI_GROUPS = [
       "cli/auth",
       "cli/reference/auth-login",
       "cli/reference/auth-status",
+      "cli/reference/auth-token",
       "cli/reference/auth-logout",
       "cli/reference/login",
       "cli/reference/logout",
       "cli/reference/whoami",
+      "cli/reference/phone-link",
       {
         "group": "Profiles",
         "pages": [
@@ -227,7 +256,10 @@ const CLI_GROUPS = [
           "cli/reference/chats-typing-start",
           "cli/reference/chats-typing-stop"
         ]
-      }
+      },
+      "cli/reference/chats-activity-get",
+      "cli/reference/chats-activity-set",
+      "cli/reference/chats-activity-clear"
     ]
   },
   {
@@ -318,7 +350,7 @@ function collect(commandPath) {
   if (pages.has(slug)) throw new Error(`Duplicate command slug ${slug}`);
   const title = TITLES[slug];
   if (!title) throw new Error(`Missing CLI title for ${slug}`);
-  const invocation = ['relaymessenger', ...commandPath].join(' ');
+  const invocation = [installSpec, ...commandPath].join(' ');
   const guide = GUIDE_LINKS[commandPath[0]];
   if (!guide) throw new Error(`Missing guide link for ${commandPath[0]}`);
   const rawDescription = command.description();
@@ -501,7 +533,7 @@ ${fence}text command-tree
 ${commandTree()}
 ${fence}
 
-[Connect a runtime](/integrations/claude-code) · [Install Relay guidance](/integrations/skills)
+[Connect a runtime](/integrations) · [Install Relay guidance](/integrations/skills)
 
 Source: [Relay-SDK CLI](https://github.com/RelayMessenger/Relay-SDK/tree/${sourceRef}/packages/cli).
 

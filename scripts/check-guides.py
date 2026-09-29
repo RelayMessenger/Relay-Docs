@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -60,9 +61,12 @@ def requests(text):
         variants = []
         for f in FENCES.finditer(block[0]):
             lang, code = f[2].lower(), f[3]
+            # Worker fetch handlers declare an inbound request handler, not an outbound call.
+            code = re.sub(r'\b(?:async\s+)?fetch\s*\([^)]*\)\s*\{', '', code)
             if re.search(r'\bcurl\s+(?:[^\n]*|\\\n)', code) and lang.split(' ')[0] in {'bash', 'sh', 'shell', 'console'}:
                 variants.append('curl')
-            if lang.split(' ')[0] in {'typescript', 'ts', 'javascript', 'js'} and re.search(r'\b(?:(?:relay|client)\.(?!(?:webhooks\.(?:verify|unwrap)|events\.(?:on|off))\b)[\w.]+|Relay\.createAgent|\w+\.getNextPage|fetch)\s*\(', code):
+            # The SDK's A2UI helpers (sendA2uiSurface and its siblings) send a Message too.
+            if lang.split(' ')[0] in {'typescript', 'ts', 'javascript', 'js'} and re.search(r'\b(?:(?:relay|client)\.(?!(?:webhooks\.(?:verify|unwrap)|events\.(?:on|off))\b)[\w.]+|Relay\.createAgent|\w+\.getNextPage|(?:send|update|delete)A2uiSurface|fetch)\s*\(', code):
                 variants.append('typescript')
         if variants:
             result.append((block.start(), block.end(), set(variants)))
@@ -141,7 +145,8 @@ def missing_responses(root):
         text = p.read_text(); reqs = requests(text)
         for i, (_, end, _) in enumerate(reqs):
             tail = text[end:reqs[i + 1][0] if i + 1 < len(reqs) else len(text)]
-            if not any(re.match(r'(?:json|http|text)\b', b[2]) for b in FENCES.finditer(tail)):
+            # A response may sit in a Preview/JSON tab pair, indented under <Tab>.
+            if not re.search(r'^[ \t]*`{3,}(?:json|http|text)\b', tail, re.M):
                 found.append(f'{p.relative_to(root)}: request {i + 1} has no following response')
     return found
 
@@ -234,8 +239,8 @@ def check_15(root):
 
 
 def check_16(root):
-    expected = load('test-contract-source').UPSTREAM_SHA256
-    assert hashlib.sha256((root / 'api-reference/openapi.yaml').read_bytes()).hexdigest() == expected, 'api-reference/openapi.yaml: differs from pinned Server contract'
+    from contract_source import verify_contract_source
+    verify_contract_source(root, load('test-contract-source').UPSTREAM_SHA256)
     # Existing check:openapi-bundle validates the generated Mintlify projection.
 
 

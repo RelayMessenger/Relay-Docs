@@ -84,13 +84,22 @@ Open Relay on your phone and message the agent's Handle. Relay sends the event t
 | Send Markdown source | A string or `{ raw: "…" }` passes through unchanged. `{ markdown: "…" }` is converted to plain text. See [Markdown rendering](/messages/send#markdown). |
 | Send attachments | Yes, from a public HTTPS URL or file bytes. See [attachments](/messages/attachments). |
 | Read Chat history | Yes, one page at a time. |
+| A reply to an earlier Message | Yes. When a person swipe-replies, `message.replyTo` is the Message they replied to: only the bubble they swiped, with its sender. Chat SDK's `toAiMessages` does not render it, so put it in your model's text for that turn. |
 | Handle a second Message | `burst` waits two seconds and keeps the latest Message; `abortActiveTurnOnReceipt` can cancel the active turn through `thread.signal`. |
+| Buttons | Yes; see [Buttons](/interactions/buttons). A tap comes back as a message whose text is the label. |
+| Link preview | Yes; a message whose whole text is one URL goes out as a link part; see [Rich link previews](/messages/rich-link-previews). |
+
+Outgoing parts include `buttons` (`{ type: "buttons", items: [{ label }, { label, url }] }`, 1 to 5 items) beside a text part. The Chat SDK's message model carries text and attachments only, so a backend that wants buttons sends them through the Relay client directly, as [Send buttons under a Message](/interactions/buttons) shows. A tap comes back as an ordinary message whose text is the label.
 
 ## When it fails
 
 - Signature verification fails: the secret does not belong to this delivery path, or the body was re-encoded.
 - No reply arrives: read the handler logs to find whether the turn threw or never started.
 - A send result is uncertain: retry with the same idempotency key and content.
+
+[Selection](/interactions/selection). Send text and selection parts through `postMessageParts` with the existing idempotency strategy. Read `selected_values` and `reply_to` from `message.raw.message`; `message.text` retains the readable bullet text.
+
+[Payments](/interactions/payments). Create the request with `adapter.client.createPaymentRequest`, then send its `checkout_url` alone as a `payment` part through `postMessageParts`, with any words before it as their own Message. The part, including its `status`, stays in `message.raw.message`, and `adapter.client.cancelPaymentRequest` cancels a request that has not been paid.
 
 ## Next steps
 

@@ -10,7 +10,7 @@ import json
 import re
 import unittest
 from pathlib import Path
-from origins import STAGING_HOSTS, STAGING_PACKAGE_REFERENCE, STAGING_INSTRUCTION_REFERENCE, ROOT, origin, target
+from origins import CONTENT_SUFFIXES, STAGING_HOSTS, STAGING_PACKAGE_REFERENCE, STAGING_INSTRUCTION_REFERENCE, ROOT, origin, target
 
 PRODUCTION = re.compile(r"(?:https|wss)://(?:api|console|docs|go)\.relayapp\.im")
 STAGING = re.compile(
@@ -27,7 +27,6 @@ STAGING = re.compile(
 ENVIRONMENT_FREE_DOC_URL = re.compile(
     r'"doc_url"\s*:\s*"https://docs\.relayapp\.im/error/codes/[^"]*"'
 )
-CONTENT_SUFFIXES = {".mdx", ".md", ".json", ".yaml", ".yml", ".txt", ".js", ".mjs"}
 # The tooling that knows both spellings is exempt from the production sweep,
 # and so is versions.json, the mirror of what the registries actually publish.
 SWEEP_EXEMPT = {".github", "node_modules", "scripts", ".git", ".mint"}

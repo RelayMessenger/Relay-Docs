@@ -371,9 +371,14 @@ for path in mdx_paths:
         text,
     ):
         if "TypeScript SDK" in block and "cURL" in block:
+            # Chat activity follows the requested SDK-first examples. Keep
+            # the established ordering checks for unrelated pages unchanged.
+            if path == root / "chats/activity.mdx":
+                if block.index("TypeScript SDK") > block.index("cURL"):
+                    raise SystemExit(f"TypeScript SDK must appear before cURL: {path.relative_to(root)}")
             # start/build-on-the-api is the main page's API walkthrough moved out
             # verbatim (2026-09-11), so it keeps the main page's cURL-first order.
-            if is_task_guide(path.relative_to(root).with_suffix("").as_posix()) or path in {root / "index.mdx", root / "start/build-on-the-api.mdx"}:
+            elif is_task_guide(path.relative_to(root).with_suffix("").as_posix()) or path in {root / "index.mdx", root / "start/build-on-the-api.mdx"}:
                 if block.index("cURL") > block.index("TypeScript SDK"):
                     raise SystemExit(f"cURL must appear before TypeScript SDK: {path.relative_to(root)}")
             elif block.index("TypeScript SDK") > block.index("cURL"):
@@ -408,15 +413,27 @@ private_path_prefixes = (
     "/v1/client/",
     "/v1/console/",
     "/v1/internal/",
-    "/v1/contacts",
     "/api/auth/",
 )
 private_user_operations = (
     "acknowledgeMessageDelivered",
     "acknowledgeDelivered",
 )
+# The approved public lookup and the public agent ratings, Relay-Server PR 337,
+# are the only Contact routes a public surface may name. Private Contact
+# list/write routes stay banned.
+public_contact_route = re.compile(
+    r"(?:/v1/contacts/lookup"
+    r"|/v1/contacts/\{handle\}/ratings"
+    r"|/v1/contacts/\{handle\}/rating)(?=$|[\s`\"':#?])"
+)
 for path in public_contract_paths:
     text = path.read_text()
+    without_public_routes = public_contact_route.sub("", text)
+    if "/v1/contacts" in without_public_routes:
+        raise SystemExit(
+            f"private Contact route leaked into {path.relative_to(root)}"
+        )
     if "is_premium_handle" in text:
         raise SystemExit(
             f"private premium Handle field leaked into {path.relative_to(root)}"
@@ -496,19 +513,39 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # A person's reply accepts a message request; the request route takes deleted
 # only, Relay-Server PR 207, September 9, 2026.
 # Add comes back: POST /v1/contacts for people, is_contact on chat handles, request_state, chat.request.updated and error 2029 removed, Relay-Server PR 225, September 13, 2026.
-# Source authority: Relay-Server staging merge 35023fe; developer agent handles are flat.
+# Client heartbeat and send rate limits, Relay-Server, September 16, 2026.
+# Source authority: Relay-Server commit 74b7603f; Calls API and call.created/updated/ended, September 17, 2026.
+# Source authority: Relay-Server commit ef8cedb1; call room socket GET /v1/calls/{callId}/room replaces the four REST media routes, September 18, 2026.
+# Source authority: Relay-Server commit 9cffa7a8; an unnamed group's display_name is null, September 18, 2026.
+# Source authority: Relay-Server commit 17ad8d0c; rebuilt call-address channel, September 19, 2026.
 # The digest pins source bytes independently of the Server release commit.
+# Source authority: Relay-Server commit eb83978b; an unnamed chat is titled by its other members' names, September 19, 2026.
+# Source authority: Relay-Server commit 328ba8ae; a call marker exists from placement and carries its current state.
+# Source authority: Relay-Server efd780128d1f71d90c05947fcf919e3e0d03acbb; subtitle and description.
+# Source authority: Relay-Server 8b608647; request membership, scoped lookup, and removed agent admission fields.
+# Source authority: Relay-Server a2511152; call status copies Twilio's words, end_reason and connected removed, September 20, 2026.
+# Source authority: Relay-Server 3bde6d9d; selection parts carry the viewer's selected_values, September 22, 2026.
+# Source authority: Relay-Server 51bc3ecd; payment requests on the organization's connected Stripe account, September 23, 2026.
+# Source authority: Relay-Server 26e0ceac (branch location-sharing-20260923); agent location requests and reads, location.sharing.* events, September 23, 2026.
+# Source authority: Relay-Server b1e534c0 (PR 370); is_verified on contact cards, creator on agent contact resources, September 24, 2026.
+# Source authority: Relay-Server 935deb14 (PR 372); A2UI data parts, a2ui_errors, the place part and GET /v1/me, September 25, 2026.
+# Source authority: Relay-Server 165ab8b0 (PRs 381-388); communities, tasks between agents (A2A), task.* events, errors 2033-2042, September 26, 2026.
+# Source authority: Relay-Server 0ccaba4b (PRs 391, 392, 394); community posts, comments and upvotes, community.* events, errors 2043-2047, the About box, A2A Message replies, September 26, 2026.
+# Source authority: Relay-Server e53138b7 (PR 397); selection title, September 26, 2026.
+# Source authority: Relay-Server d511deef (PRs 402, 404); A2A reply_to rule, community notifications, @handle naming and search inside a community, September 26, 2026.
+# Source authority: Relay-Server 6645d5f8 (PR 407); an agent joins and leaves a community by itself, rules and links on each membership, September 27, 2026.
+# Source authority: Relay-Server c166d4c3 (PR 408); a person who owns the sending agent, or is a member of its organization, never gets a message request, September 27, 2026.
+# Source authority: Relay-Server 65c44735 (PR 414); Relay takes no fee, PaymentRequest has no application_fee_amount, September 27, 2026.
+# Source authority: Relay-Server 42356390 (PR 415); an agent calls only a person who added it and left Allow Calls on, and createCall's 403 names both refusals, September 27, 2026.
+# Source authority: Relay-Server 3972ba8a (PR 416); community posts, comments, upvotes, community.* events, the notifications switch and contributor_count are removed, September 27, 2026.
+# Source authority: Relay-Server 9448e92f (PR 418); the Browser component in Relay's A2UI catalog, A2uiBrowserComponent and A2uiBrowserActionName, September 27, 2026.
 expected_openapi_sha256 = (
-    "42e8039ee94377aa047f70593102bed980d00c3597f6850a0628cbd0fdf6bc81"
+    "61bd07d26328a493fa3aca1ceef9bf1c43321d31fb3ba3c6e10f7d353b48218b"
 )
-actual_openapi_sha256 = hashlib.sha256(
-    (root / "api-reference/openapi.yaml").read_bytes()
-).hexdigest()
-if actual_openapi_sha256 != expected_openapi_sha256:
-    raise SystemExit(
-        "canonical OpenAPI changed: "
-        f"{actual_openapi_sha256} != {expected_openapi_sha256}"
-    )
+# Local candidate provenance is shared with the guide and contract gates;
+# it does not relabel the historical Server release as selection-capable.
+from contract_source import verify_contract_source
+verify_contract_source(root, expected_openapi_sha256)
 if "\n      x-mint:\n" in openapi_text:
     raise SystemExit("Mintlify presentation metadata entered the locked OpenAPI")
 if "2026-02-03" in openapi_text:
@@ -655,6 +692,9 @@ if leaked_private_operations:
         f"private operation entered public OpenAPI: {leaked_private_operations}"
     )
 expected_operation_ids = {
+    "getActivity",
+    "setActivity",
+    "clearActivity",
     "deleteAgent",
     "addParticipant",
     "blockHandle",
@@ -666,6 +706,11 @@ expected_operation_ids = {
     "getAttachment",
     "getChat",
     "getContactCard",
+    "lookupContact",
+    "listDirectory",
+    "rateAgent",
+    "deleteAgentRating",
+    "listAgentRatings",
     "getMessage",
     "getMessages",
     "getMessageThread",
@@ -690,6 +735,32 @@ expected_operation_ids = {
     "updateChat",
     "updateContactCard",
     "updateWebhookSubscription",
+    "createCall",
+    "listCalls",
+    "getCall",
+    "connectCallRoom",
+    "endCall",
+    "createPaymentRequest",
+    "listPaymentRequests",
+    "getPaymentRequest",
+    "cancelPaymentRequest",
+    "requestLocation",
+    "getLocation",
+    "getMe",
+    "listAgentAccess",
+    "setAgentAccess",
+    "removeAgentAccess",
+    "updateAgentMe",
+    "createTask",
+    "listTasks",
+    "updateTaskStatus",
+    "addTaskArtifact",
+    "listCommunities",
+    "getCommunity",
+    "updateCommunityMembership",
+    "joinCommunity",
+    "leaveCommunity",
+    "listCommunityMembers",
 }
 if len(operation_ids) != len(expected_operation_ids) or set(operation_ids) != expected_operation_ids:
     raise SystemExit(
@@ -759,7 +830,7 @@ contract_events = {
 event_catalog_text = webhook_events_text
 documented_events = set(
     re.findall(
-        r"`((?:message|reaction|participant|chat|contact)\.[a-z_.]+)`",
+        r"`((?:message|reaction|participant|chat|contact|call|payment|location|task|community)\.[a-z_.]+)`",
         event_catalog_text,
     )
 )
@@ -811,6 +882,10 @@ def relay_vocabulary(text):
 def product_prose(path):
     # Verbatim payload text is user content, not product vocabulary.
     text = re.sub(r"^```json captured-output\n.*?^```\s*$", "", path.read_text(), flags=re.M | re.S)
+    # A generated CLI reference page's help is the installed CLI's own words,
+    # proved byte-equal by build-cli-reference.mjs --check; it is not docs prose.
+    if path.is_relative_to(root / "cli/reference"):
+        text = re.sub(r"^```text captured-output\n.*?^```\s*$", "", text, flags=re.M | re.S)
     if not path.match("resources/migrate-from-*.mdx"):
         return text
     # Owner decision 2026-09-11: a migration guide names the product the reader
@@ -821,6 +896,12 @@ def product_prose(path):
 
 handwritten_text = "\n".join(product_prose(path) for path in handwritten_paths)
 all_contract_text = handwritten_text + "\n" + openapi_text
+# The contract cites PayPal Orders v2 for the payment categories; that is
+# PayPal's route, not Relay's, so route-version checks read around it.
+PAYPAL_ORDERS_CITATION = "developer.paypal.com/docs/api/orders/v2/"
+# Cloudflare's own API is v4; interactions/browser.mdx calls it to get a live
+# view address (Relay-Server PR 418, the Browser component).
+CLOUDFLARE_API_CITATION = "api.cloudflare.com/client/v4/"
 if target() == "production" and STAGING_INSTRUCTION_REFERENCE.search(handwritten_text):
     raise SystemExit("staging installation or credential guidance returned to production")
 generated_paths = [root / "llms.txt", root / "llms-full.txt"]
@@ -852,7 +933,10 @@ for field, expected in [
             raise SystemExit(
                 f"public {field} must be {expected}, found {value}"
             )
-route_versions = set(re.findall(r"/v([0-9]+)/", published_contract_text))
+route_versions = set(re.findall(
+    r"/v([0-9]+)/",
+    published_contract_text.replace(PAYPAL_ORDERS_CITATION, "").replace(CLOUDFLARE_API_CITATION, ""),
+))
 if route_versions != {"1"}:
     raise SystemExit(
         f"public product docs must use only /v1: {sorted(route_versions)}"
@@ -914,7 +998,7 @@ for command in sdk_install_commands:
         )
 
 for name, pattern in {
-    "deprecated product name": r"\bRelay App\b",
+    "deprecated product name": r"(?-i:\bRelay App\b)",
     "Business API name": r"\bBusiness API\b",
     "Partner API name": r"\bPartner API\b",
     "mobile product namespace": r"\bmobile(?: API| namespace| endpoint| boundary)?\b",
@@ -970,8 +1054,19 @@ for name, pattern in {
     "received delivery status": r"`sent`,\s*`received`,\s*`delivered`",
     "deprecated compatibility field": r"[\"'](?:compatibility_source|service|from_number|to_number)[\"']\s*:",
 }.items():
-    if re.search(pattern, all_contract_text, re.I):
+    if re.search(pattern, all_contract_text.replace(PAYPAL_ORDERS_CITATION, ""), re.I):
         raise SystemExit(f"stale {name}")
+
+# Mintlify carries only a snippet's exports into the page that imports it; a
+# top-level helper is undefined at render time and blanks the component
+# (a card preview, 2026-09-23). Everything a component reads lives inside it.
+for snippet in sorted((root / "snippets").glob("*.jsx")):
+    for number, line in enumerate(snippet.read_text().splitlines(), 1):
+        if re.match(r"(const|let|var|function|class)\s", line):
+            raise SystemExit(
+                f"{snippet.relative_to(root)}:{number}: top-level {line.split()[0]} is not exported "
+                "to the page; move it inside the component that uses it"
+            )
 
 print(
     f"validated {len(files)} Relay public pages, six tabs, "
