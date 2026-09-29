@@ -1,156 +1,78 @@
 ---
 title: "Audio calls"
 sidebarTitle: "Overview"
-description: "Register a call address and answer calls with Twilio Media Streams."
-keywords: ["calls", "audio", "call_url", "WebSocket", "Twilio Media Streams"]
+description: "Answer a call from a person by joining its room, and carry the audio over WebRTC."
+keywords: ["calls", "audio", "call.created", "call room", "WebRTC", "RelayCallTransport"]
 ---
 
 import { ChatPreview } from "/snippets/chat-preview.jsx";
 
 ## What a call is
 
-A person calls your agent from the Relay app. Relay rings your agent's call address and carries the audio. Your backend runs the agent.
+A person calls your agent from the Relay app. Relay sends your agent `call.created`, and your agent answers by joining the call's room. Relay carries the audio over WebRTC. Your backend runs the agent.
 
-## Register your call address
+Your agent registers nothing for calls. `call.created` arrives on the webhook or WebSocket your agent already uses for messages.
 
-Register one `call_url` on your agent. It must be a `wss://` URL that accepts a WebSocket connection.
+## Answer a call
 
-Set it in Relay Console, with the CLI, or with `PATCH /v1/contact_card?handle=<agent handle>`. The API request uses your Agent Token.
+When `call.created` arrives with `status: "ringing"`, join the room for `call.id` within 32 seconds. Joining is the answer: the call becomes `in-progress`. A call nobody joins ends `no-answer`.
 
-<CodeGroup>
-```typescript TypeScript SDK
-const card = await relay.contactCard.update({
-  handle: "my_assistant",
-  call_url: "wss://your-agent.example/relay",
-});
-```
-
-```bash cURL
-curl -sS -X PATCH 'https://api.staging.relayapp.im/v1/contact_card?handle=<agent handle>' \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"call_url":"wss://your-agent.example/relay"}'
-```
-</CodeGroup>
-
-```http
-HTTP/1.1 200 OK
-```
-
-## How Relay rings you
-
-When a person taps call, Relay opens a WebSocket to your `call_url`. The request is signed like a webhook.
-
-Accept the WebSocket with HTTP `101` within the 10-second ring lease to answer. The call becomes `in-progress`. Any other reply ends it `no-answer`, and so does silence.
-
-Relay speaks Twilio Media Streams. The first message identifies the protocol.
-
-```json
-{"event":"connected","protocol":"Call","version":"1.0.0"}
-```
-
-The `start` message identifies the call, caller, callee, chat, and audio format. Both `streamSid` and `callSid` are the Relay call ID.
-
-```json
-{
-  "event": "start",
-  "sequenceNumber": "1",
-  "start": {
-    "streamSid": "<call id>",
-    "callSid": "<call id>",
-    "tracks": ["inbound"],
-    "mediaFormat": {
-      "encoding": "audio/x-mulaw",
-      "sampleRate": 8000,
-      "channels": 1
-    },
-    "customParameters": {
-      "from": "<caller handle>",
-      "to": "<callee handle>",
-      "chat_id": "<chat id>",
-      "direction": "inbound"
-    }
-  },
-  "streamSid": "<call id>"
-}
-```
-
-Then `media` messages carry base64-encoded mu-law audio at 8 kHz. The audio payload has this shape.
-
-```json
-{"event":"media","streamSid":"<call id>","media":{"payload":"<base64 mu-law 8 kHz>"}}
-```
-
-A `stop` message ends the stream.
-
-```json
-{"event":"stop","streamSid":"<call id>"}
-```
-
-## What you send back
-
-Send `media` to play audio to the caller. Encode raw mu-law audio at 8 kHz as base64, without audio file headers.
-
-```json
-{"event":"media","streamSid":"<call id>","media":{"payload":"<base64 mu-law 8 kHz>"}}
-```
-
-Send `clear` to drop buffered audio.
-
-```json
-{"event":"clear","streamSid":"<call id>"}
-```
-
-Send `mark` after audio to track playback. The returned mark has the same `name` when playback finishes or the buffer is cleared, as described in the [Twilio message reference](https://www.twilio.com/docs/voice/media-streams/websocket-messages#send-a-mark-message).
-
-```json
-{"event":"mark","streamSid":"<call id>","mark":{"name":"reply-finished"}}
-```
-
-## Use your framework's Twilio adapter
-
-On Cloudflare's Agents SDK, install `@cloudflare/voice-twilio` and route your call address to `TwilioAdapter.handleRequest`.
+The TypeScript SDK joins the room and runs the WebRTC connection for you. Install the SDK with the WebRTC packages it lists as optional peer dependencies:
 
 ```bash
-npm install @cloudflare/voice-twilio agents
+npm install @relaymessenger/sdk@staging werift @evan/opus rtp-packet
 ```
 
 ```typescript
-import { Agent, routeAgentRequest } from "agents";
-import { withVoice, type VoiceTurnContext } from "agents/voice";
-import { TwilioAdapter } from "@cloudflare/voice-twilio";
+import Relay from "@relaymessenger/sdk";
+import { RelayCallTransport } from "@relaymessenger/sdk/calls";
 
-const VoiceAgent = withVoice(Agent);
+const relay = new Relay({ apiKey: process.env.RELAY_AGENT_TOKEN!, baseURL: "https://api.staging.relayapp.im" });
 
-export class MyVoiceAgent extends VoiceAgent<Env> {
-  async onTurn(transcript: string, context: VoiceTurnContext) {
-    return "Hello! How can I help you?";
-  }
-}
+// In your call.created handler:
+const transport = new RelayCallTransport({ relay, callId: event.data.call.id });
 
-export default {
-  async fetch(request: Request, env: Env) {
-    const url = new URL(request.url);
+transport.on("audio", ({ samples, sampleRate, channelCount }) => {
+  // Interleaved signed PCM16 from the person, 48 kHz stereo by default.
+});
 
-    if (url.pathname === "/relay") {
-      return TwilioAdapter.handleRequest(request, env, "MyVoiceAgent");
-    }
-
-    return (
-      (await routeAgentRequest(request, env)) ??
-      new Response("Not found", { status: 404 })
-    );
-  }
-};
+await transport.connect();
+await transport.writeAudio({ samples, sampleRate: 48_000, channelCount: 1 });
 ```
 
-Pipecat's Twilio transport accepts the same stream.
+`writeAudio()` queues your agent's speech. Audio written before the person can hear it waits, in order, so your agent's first words are not cut off. `clearAudio()` drops what is still queued.
 
-OpenClaw's telephony provider accepts the same stream.
+## Decline a call
 
-## Ending a call
+To decline a ringing call, end it with `POST /v1/calls/{callId}/end`. A call your agent ends while it rings becomes `no-answer`.
 
-Close the WebSocket to hang up. You can also end the call with `POST /v1/calls/{callId}/end`.
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.calls.end(callId);
+```
+
+```bash cURL
+curl -sS -X POST "https://api.staging.relayapp.im/v1/calls/$CALL_ID/end" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+```
+</CodeGroup>
+
+## The call room
+
+The room is a WebSocket at `GET /v1/calls/{callId}/room`, opened with your Agent Token. It carries only signaling: JSON frames with WebRTC session descriptions. Audio travels over WebRTC, never through this socket.
+
+1. Send `{"type":"join"}` when the socket opens. Relay answers with `iceServers` and then `roomState`.
+2. Send an `offer` that publishes one track named `audio`. Relay answers with `answer`.
+3. Send `connected` when your peer connection is connected.
+4. Relay sends an `offer` for the person's `audio` track. Reply with `answer`.
+
+The [room reference](/api-reference/calls/join-a-call-room) lists every frame. Use the SDK unless you run your own WebRTC stack.
+
+## End a call
+
+Call `transport.close()` and end the call with `POST /v1/calls/{callId}/end`, or send `{"type":"end"}` in the room. An answered call becomes `completed`.
 
 ## The call in the chat
 
@@ -218,10 +140,10 @@ Relay writes one system message into the chat with `is_system_message: true` and
 
 | Status | Meaning |
 | --- | --- |
-| `ringing` | Relay is waiting for your call address to accept the WebSocket. |
-| `in-progress` | Your call address accepted the WebSocket within the ring lease. |
+| `ringing` | Relay is waiting for the person or agent being called to join the room. |
+| `in-progress` | The person or agent being called joined the room within 32 seconds. |
 | `completed` | An answered call ended. |
-| `no-answer` | The ring lease passed with no answer, or the recipient declined. |
+| `no-answer` | Nobody joined within 32 seconds, or the recipient declined. |
 | `canceled` | The caller ended the call while it was ringing. |
 | `busy` | The person was already on another call. An agent is never busy. |
 | `failed` | Relay could not connect or keep the call. |

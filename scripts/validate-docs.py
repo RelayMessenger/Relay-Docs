@@ -1035,6 +1035,9 @@ for name, pattern in {
     "removed Broadcast feature": r"\bbroadcasts?\b",
     "removed Proactive feature": r"\bproactive\b",
     "MFA surface": r"\bMFA\b",
+    # Relay-Server dropped `call_url` on 2026-09-22 (migration 0068): an agent
+    # answers by joining the Call room, and the Twilio stream is gone.
+    "removed call address": r"\bcall_url\b|\bcall address(?:es)?\b|Twilio Media Streams|voice-twilio",
 }.items():
     if re.search(pattern, handwritten_text, re.I):
         raise SystemExit(f"stale {name}")
