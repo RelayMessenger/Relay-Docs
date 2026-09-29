@@ -9,6 +9,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "node_modules/relaymessenger/dist/cli.js"
+# The package the pages tell a reader to run, as build-cli-reference.mjs
+# writes it: the staging prerelease on staging, the plain package once the
+# promotion wrote `.docs-target` = production.
+TARGET = ROOT / ".docs-target"
+INSTALL_SPEC = ("relaymessenger" if TARGET.exists() and TARGET.read_text().strip() == "production"
+                else "relaymessenger@staging")
 def captured(text):
     match = re.search(r"^```text captured-output\n(.*?)^```", text, re.M | re.S)
     if not match:
@@ -84,7 +90,7 @@ class CLIReferenceTests(unittest.TestCase):
                 self.assertIn('sidebarTitle: ' + json.dumps(expected["sidebarTitle"]), text)
             if "command" in expected:
                 self.assertEqual(re.search(r"^```bash\n(.*?)^```", text, re.M | re.S).group(1).strip(),
-                                 "npx " + expected["command"].replace("relaymessenger", "relaymessenger@staging", 1))
+                                 "npx " + expected["command"].replace("relaymessenger", INSTALL_SPEC, 1))
                 self.assertLess(text.index("```bash"), text.index("## Usage"))
                 self.assertNotIn("## Output", text)
                 # Three links: the family's concept guide (a page that exists), then the two CLI pages.
