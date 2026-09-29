@@ -262,7 +262,7 @@ class IntegrationDocsTests(unittest.TestCase):
             for line in commands(read(SKILLS))
         ))
         adapter_commands = "\n".join(commands(read("integrations/chat-sdk.mdx")))
-        self.assertIn("chat@4.39.0", adapter_commands)
+        self.assertRegex(adapter_commands, r"(?<![\w/@-])chat@\d+\.\d+\.\d+")
         self.assertIn(expected("@relaymessenger/chat-sdk-adapter@staging"), adapter_commands)
 
     def test_environment_pairing_and_runtime_requirements(self):

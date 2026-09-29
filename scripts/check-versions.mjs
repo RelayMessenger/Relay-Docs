@@ -192,6 +192,60 @@ for (const file of new Set(files)) {
   });
 }
 
+// A page that installs a Relay package beside a peer (`chat` for the Chat SDK
+// adapter) must pin a peer version the published package accepts; otherwise
+// npm stops with ERESOLVE (chat@4.39.0 against the adapter's ^4.41.0,
+// 2026-09-28). The ranges come from the registry through versions.json.
+const satisfies = (version, range) => {
+  const parse = (value) => value.split(".").map(Number);
+  const caret = /^\^(\d+\.\d+\.\d+)$/.exec(range);
+  if (!caret) return null;
+  const [major, minor, patch] = parse(version);
+  const [floorMajor, floorMinor, floorPatch] = parse(caret[1]);
+  if (major !== floorMajor) return false;
+  return minor > floorMinor || (minor === floorMinor && patch >= floorPatch);
+};
+const PEER_PAIRS = [
+  // [package, peer, pages pin it as ...]
+  ["@relaymessenger/chat-sdk-adapter", "chat", [
+    /(?<![\w./@-])chat@(\d+\.\d+\.\d+)\b/g,
+    /@chat-adapter\/state-memory@(\d+\.\d+\.\d+)\b/g,
+    /\[Chat SDK\]\([^)]*\) `(\d+\.\d+\.\d+)`/g,
+  ]],
+];
+for (const [name, peer, patterns] of PEER_PAIRS) {
+  const entry = versions.npm[name];
+  const tags = target === "production" ? [entry.latest] : [entry.latest, entry.staging];
+  const ranges = tags.map((tag) => entry.peerDependencies?.[tag]?.[peer]);
+  if (ranges.some((range) => typeof range !== "string")) {
+    failures.push(`versions.json has no ${peer} peer range for ${name} ${tags.join(" and ")}: run npm run refresh:versions`);
+    continue;
+  }
+  for (const file of new Set(files)) {
+    const relative = path.relative(root, file);
+    if (!published(relative)) continue;
+    const lines = (await readFile(file, "utf8")).split("\n");
+    lines.forEach((line, index) => {
+      for (const pattern of patterns) {
+        for (const claim of line.matchAll(pattern)) {
+          checked += 1;
+          for (const [position, range] of ranges.entries()) {
+            const verdict = satisfies(claim[1], range);
+            if (verdict === null) {
+              failures.push(`${name}@${tags[position]} declares ${peer} ${range}, which this check cannot read`);
+            } else if (!verdict) {
+              failures.push(
+                `${relative}:${index + 1} pins ${peer} ${claim[1]}, but ${name}@${tags[position]} `
+                + `requires ${peer} ${range}: npm install stops with ERESOLVE`,
+              );
+            }
+          }
+        }
+      }
+    });
+  }
+}
+
 if (versions.claudeCodePluginManifest
   !== versions.npm["relay-claude-channel"]?.staging) {
   failures.push(

@@ -99,6 +99,15 @@ async function npmPackage(name) {
     if (!integrity) throw new Error(`${name}@${version} has no registry integrity`);
     entry.integrity[version] = integrity;
   }
+  // A page that installs a package beside its peers (Chat SDK's `chat`) must
+  // pin a peer version the published package accepts, or npm stops with
+  // ERESOLVE. check-versions.mjs reads these ranges.
+  const peers = {};
+  for (const version of new Set([entry.latest, entry.staging])) {
+    const declared = metadata.versions?.[version]?.peerDependencies;
+    if (declared && Object.keys(declared).length > 0) peers[version] = declared;
+  }
+  if (Object.keys(peers).length > 0) entry.peerDependencies = peers;
   entry.sourceCommit = await npmSourceCommit(name, entry.latest);
   return entry;
 }

@@ -523,6 +523,15 @@ npm install --global ${installSpec}
 npx ${installSpec} --help
 ${fence}
 
+### Replace the old package
+
+The CLI used to ship as ${tick}@relaymessenger/cli${tick}, which installs the same ${tick}relay${tick} and ${tick}relaymessenger${tick} commands. npm stops with ${tick}EEXIST${tick} while the old package holds them, so remove it first:
+
+${fence}bash
+npm uninstall --global @relaymessenger/cli
+npm install --global ${installSpec}
+${fence}
+
 Run ${tick}npx ${installSpec} <command> --help${tick} for one command's options. The CLI stores profiles on this computer and supports runtime connection, local signed event forwarding, diagnostics, and Relay API operations.
 
 Use ${tick}--json${tick} for machine-readable results. [Create an agent](/agents/create-agent), [list agents](/agents/list-agents), or [delete an agent](/agents/delete-agent) from the CLI.
