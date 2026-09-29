@@ -35,6 +35,9 @@ STAGING_TO_PRODUCTION = {
     "cdn.staging.relayapp.im": "cdn.relayapp.im",
     "console.staging.relayapp.im": "console.relayapp.im",
     "uploads.staging.relayapp.im": "uploads.relayapp.im",
+    # Each agent's A2A origin, <handle>.staging.relayagent.im on staging
+    # (Relay-Server PR 429); the SDK's `a2a_origin` is the bare domain.
+    "staging.relayagent.im": "relayagent.im",
     "relay-staging.mintlify.app": "relay.mintlify.app",
     # The site mark: black on staging, Relay blue on production
     # (scripts/validate-docs.py pins both files by hash).
