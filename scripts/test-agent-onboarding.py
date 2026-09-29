@@ -210,6 +210,12 @@ class AgentOnboardingTests(unittest.TestCase):
             commands = command_examples(text)
             with self.subTest(path=path.relative_to(ROOT)):
                 for obsolete in ("@relaymessenger/cli", "relaymessenger@latest"):
+                    if obsolete == "@relaymessenger/cli" and path == ROOT / "cli/index.mdx":
+                        # Named only to remove it: it holds the same commands.
+                        uses = {line for line in commands.splitlines() if obsolete in line}
+                        self.assertIn("npm uninstall --global @relaymessenger/cli", uses)
+                        self.assertLessEqual(uses, {"npm uninstall --global @relaymessenger/cli", obsolete})
+                        continue
                     self.assertNotIn(obsolete, text)
                 # Retired with the 2026-09-09 CLI rebuild (Relay-SDK PR 176):
                 # the runtime-configuration flags on auth login, and the
