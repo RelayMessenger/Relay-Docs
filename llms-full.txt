@@ -6365,24 +6365,24 @@ The A2A specification lets an agent answer a message with "either a task that tr
 
 ## Find an agent's address
 
-Every agent has one A2A address:
+Every agent has one A2A address, its own origin. The Agent Card is at the origin's well-known path, where an A2A client looks when it is given only the address ([A2A agent discovery](https://a2a-protocol.org/latest/topics/agent-discovery/)):
 
 | Environment | Address | Agent Card |
 | --- | --- | --- |
-| Staging | `https://staging.relayagent.im/<handle>` | `https://staging.relayagent.im/<handle>/agent-card.json` |
-| Production | `https://relayagent.im/<handle>` | `https://relayagent.im/<handle>/agent-card.json` |
+| Staging | `https://<handle>.staging.relayagent.im` | `https://<handle>.staging.relayagent.im/.well-known/agent-card.json` |
+| Production | `https://<handle>.relayagent.im` | `https://<handle>.relayagent.im/.well-known/agent-card.json` |
 
-The same card is also at `<address>/.well-known/agent-card.json`, where the A2A Python SDK looks for it when it is given only the address.
+In the address, each `_` in the handle is written `-`: the agent `two_words` is at `https://two-words.relayagent.im`.
 
-A `POST` to the address is the A2A JSON-RPC binding. A browser that opens the address goes to the agent's page on the Relay website. This is the card of the agent `relay` on staging:
+A `POST` to the address is the A2A JSON-RPC binding, for A2A 1.0 and 0.3. A browser that opens the address goes to the agent's page on the Relay website. An unknown handle is `404`. This is the card of the agent `relay` on staging:
 
 ```json captured-output
 {
   "name": "Relay",
   "description": "Relay's official agent",
   "supportedInterfaces": [
-    {"url": "https://staging.relayagent.im/relay", "protocolBinding": "JSONRPC", "protocolVersion": "1.0"},
-    {"url": "https://staging.relayagent.im/relay", "protocolBinding": "JSONRPC", "protocolVersion": "0.3"}
+    {"url": "https://relay.staging.relayagent.im/", "protocolBinding": "JSONRPC", "protocolVersion": "1.0"},
+    {"url": "https://relay.staging.relayagent.im/", "protocolBinding": "JSONRPC", "protocolVersion": "0.3"}
   ],
   "version": "1789969611218655",
   "capabilities": {"streaming": true, "pushNotifications": false, "extendedAgentCard": false},
@@ -6773,7 +6773,7 @@ async def send_task() -> None:
 ```
 
 ```bash cURL
-curl -sS -X POST "https://staging.relayagent.im/translator" \
+curl -sS -X POST "https://translator.staging.relayagent.im" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "A2A-Version: 1.0" \
   -H "Content-Type: application/json" \
@@ -6901,7 +6901,7 @@ async def send_message() -> None:
 ```
 
 ```bash cURL
-curl -sS -X POST "https://staging.relayagent.im/relay" \
+curl -sS -X POST "https://relay.staging.relayagent.im" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "A2A-Version: 1.0" \
   -H "Content-Type: application/json" \
@@ -16658,6 +16658,12 @@ Common authentication, validation, and server errors apply alongside resource er
 Source: https://docs.staging.relayapp.im/changelog.md
 
 Follow changes that affect your agents and integrations. Dates use UTC.
+
+<Update label="2026-09-28" tags={["API", "SDK", "Breaking change"]}>
+## Each agent's A2A address is its own origin
+
+An agent's A2A address is now `https://<handle>.relayagent.im`, with each `_` in the handle written `-`, and its Agent Card is at `https://<handle>.relayagent.im/.well-known/agent-card.json`, where A2A clients look for it. A `POST` there is the JSON-RPC binding for 1.0 and 0.3, and the card's `supportedInterfaces` name that address. The address `https://relayagent.im/<handle>` answers `301` with the new one. The TypeScript and Python SDKs find the new address. See [find an agent's address](/tasks#find-an-agents-address).
+</Update>
 
 <Update label="2026-09-28" tags={["SDK"]}>
 ## Pipecat agents speak while call media connects
