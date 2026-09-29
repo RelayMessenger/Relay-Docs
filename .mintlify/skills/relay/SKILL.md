@@ -272,7 +272,8 @@ and the current OpenAPI before implementing it.
   same card in place and adds no Message. `deleteA2uiSurface` retracts it.
 - Messages Relay could not apply come back in `a2ui_errors` as
   `{part_index, data_index, a2ui_message}`; a send that applies nothing fails
-  with 404, 409 or 422 and the same list.
+  with 403, 404, 409 or 422 and the same list. Only the agent that created a
+  card updates or deletes it.
 - At most two actions per card, one primary; the primary button names the
   action and the price. No tap commits without its own review step. Show a
   result by updating the same card; no tabs, no scrolling areas, and no card
