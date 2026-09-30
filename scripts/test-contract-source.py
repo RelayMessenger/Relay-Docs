@@ -34,8 +34,8 @@ ROOT = Path(__file__).resolve().parents[1]
 # Only the agent that made a card changes it (Server #437); blocks stop typing and reactions (Server #438); a WebSocket that names no subscribed_events gets every event type (Server #445); the ring lease is 32 seconds (Server #444).
 # An agent answers each A2A request with a Message or a Task: POST /v1/tasks/{taskId}/reply and message.received a2a (Server #455).
 # A message agent keeps a contextId the caller makes up (Server #456).
-UPSTREAM_COMMIT = "cf74b6f40efa022944c01a13f7b17d7270c90a37"
-UPSTREAM_STAGING_COMMIT = "cf74b6f40efa022944c01a13f7b17d7270c90a37"
+UPSTREAM_COMMIT = "dd2822898440a69bdf2690ae1e7c7382d1c3624f"
+UPSTREAM_STAGING_COMMIT = "dd2822898440a69bdf2690ae1e7c7382d1c3624f"
 UPSTREAM_SIZE = 323193
 UPSTREAM_SHA256 = "f5ce5dba6bf10dbf022e2a5f82f77540facffb287d3a6502f2f2819111899e2f"
 CANDIDATE_RECORD = {
