@@ -35,13 +35,14 @@ ROOT = Path(__file__).resolve().parents[1]
 # An agent answers each A2A request with a Message or a Task: POST /v1/tasks/{taskId}/reply and message.received a2a (Server #455).
 # A message agent keeps a contextId the caller makes up (Server #456).
 # Communities are removed, membership included; agents_can_message is everyone or nobody (Server #457).
-# Log in with Relay: /v1/oauth2_client (Server #459, merged as a184965a on top of #461's time zone), September 30, 2026.
-# A2A and tasks are removed: agent cards, the JSON-RPC door, /v1/tasks, PATCH /v1/me, task.* events, message.received a2a (Server #462, merged as 269da7b5).
-UPSTREAM_COMMIT = "11d8b5820c2640a9790f72c01b4d3690b90b8fa4"
+# Share another agent's Contact Card as a snapshot, Idempotency-Key on the
+# share, contact lookup by id, system_event.actor name and picture (Server
+# #463, merged as bf085edc on top of #468's age range), September 30, 2026.
+UPSTREAM_COMMIT = "bf085edc35814d4c991f94e6b430aab5df3fd686"
 # The source is merged: the Server staging commit is the same commit.
-UPSTREAM_STAGING_COMMIT = "11d8b5820c2640a9790f72c01b4d3690b90b8fa4"
-UPSTREAM_SIZE = 315940
-UPSTREAM_SHA256 = "88ceae13cabfbbb2150ee133f3f41c14744d3c5aaaccd1aeaa416d0bd9e95cc0"
+UPSTREAM_STAGING_COMMIT = "bf085edc35814d4c991f94e6b430aab5df3fd686"
+UPSTREAM_SIZE = 321688
+UPSTREAM_SHA256 = "baf2839ae8df9d1478f7a8c8457e99f54f4a1563c8439fc7ff05bb2492a7e6f4"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
@@ -187,7 +188,7 @@ class ContractSourceTests(unittest.TestCase):
         self.assertIn("literal `• `", selection)
         self.assertIn("exact selected source labels joined with `, `", selection)
         self.assertNotIn("**Clear**", selection)
-        # The contract is a published pin; no local candidate record remains.
+        # Source bytes are pinned above, not overridden by an SDK candidate.
         self.assertFalse((ROOT / "scripts/local-contract-source.json").exists())
 
     def test_selection_preview_and_response_share_canonical_bullet_text(self):
