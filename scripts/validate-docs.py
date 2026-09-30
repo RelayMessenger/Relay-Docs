@@ -560,8 +560,9 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server 269da7b5 (PR 462, merged); A2A and tasks are removed: no agent cards or JSON-RPC door, no /v1/tasks, no PATCH /v1/me, no task.* events, no message.received a2a, errors 2033 and 2034 retired, September 30, 2026.
 # Source authority: Relay-Server 11d8b582 (PR 468, open, on PR 462); every person object carries age_range beside timezone, agents carry age_rating, error 2035, September 30, 2026.
 # Source authority: Relay-Server bf085edc (PR 463, merged); share another agent's Contact Card as a snapshot, Idempotency-Key, lookup by id, system_event.actor name and picture, September 30, 2026.
+# Source authority: Relay-Server 34943159 (PR 466, merged); the list picker upgrade of selection, September 30, 2026.
 expected_openapi_sha256 = (
-    "baf2839ae8df9d1478f7a8c8457e99f54f4a1563c8439fc7ff05bb2492a7e6f4"
+    "1721df340bf291aa1d5a12578fb4918209cba7525622dd5fb3af2ca68cbc77fc"
 )
 # Local candidate provenance is shared with the guide and contract gates;
 # it does not relabel the historical Server release as selection-capable.

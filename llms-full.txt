@@ -1815,7 +1815,7 @@ Interactions add controls that agents can send directly in the chat. Include the
 
 ## Read parts in a response
 
-A part you read back carries more than the part you sent. Most parts gain `reactions`, the current reactions on that part or `null`; a `selection` part's `reactions` is always `null`, and a `selection_response` part has no `reactions` key. A media part gains the Attachment ID, a download URL, and the file's metadata; a text part gains `mentions`; a `selection` part gains [`has_responded` and `selected_values`](/interactions/selection#read-whether-someone-answered); a `payment` part gains the request's amount, title and [`status`](/interactions/payments#status). A `payment_receipt` part is the payer's receipt, written only by Relay. A [`location_request`](/chats/location) part is your agent's request for a location, and a `location` part is the person's share: its `state` and times, never a position. A [`place`](/messages/places) part comes back as it was sent, and so do a [`rich_card` and a `carousel`](/interactions/rich-cards); a [`suggestion_response`](/interactions/rich-cards#receive-a-reply) part gains the reply's `label` and has no `reactions` key.
+A part you read back carries more than the part you sent. Most parts gain `reactions`, the current reactions on that part or `null`; a `selection` part's `reactions` is always `null`, and a `selection_response` part has no `reactions` key. A media part gains the Attachment ID, a download URL, and the file's metadata; a text part gains `mentions`; a `selection` part gains [`has_responded`, `selected_values`, and `selected_ids`](/interactions/selection#read-whether-someone-answered); a `payment` part gains the request's amount, title and [`status`](/interactions/payments#status). A `payment_receipt` part is the payer's receipt, written only by Relay. A [`location_request`](/chats/location) part is your agent's request for a location, and a `location` part is the person's share: its `state` and times, never a position. A [`place`](/messages/places) part comes back as it was sent, and so do a [`rich_card` and a `carousel`](/interactions/rich-cards); a [`suggestion_response`](/interactions/rich-cards#receive-a-reply) part gains the reply's `label` and has no `reactions` key.
 
 Relay also returns parts of `type: "system"` for visible chat events such as a participant joining or a group being renamed. Your agent cannot send a system part.
 
@@ -2618,7 +2618,7 @@ Only an agent can send an interaction. The app draws it, the person acts on it, 
     One to five tappable choices under a Message, or a single button that opens a page. A tap comes back as text equal to the label.
   </Card>
   <Card title="Selection" href="/interactions/selection">
-    Choose several options, then send one readable reply with stable values for your application.
+    Choose one or more options from a flat or grouped list, then send one readable reply with stable IDs.
   </Card>
   <Card title="Rich cards" href="/interactions/rich-cards">
     A card with a picture, a title and up to four buttons, or a carousel of cards the person swipes. A reply comes back with its id.
@@ -2800,17 +2800,17 @@ Buttons are a property of the Message, so every runtime sends them through the s
 
 # Selection
 
-> Ask a person to choose several options and receive stable values beside a readable reply.
+> Send a flat or grouped list picker and receive stable option IDs beside a readable reply.
 
 Source: https://docs.staging.relayapp.im/interactions/selection.md
 
 import { SelectionPreview, MessageBubble } from "/snippets/buttons-preview.jsx";
 
-Send a `selection` part with a short `title` and 1 to 25 options. Each option has a readable `label` and a stable `value`. The app draws the selection as one card that opens a sheet holding the whole option list, and the person checks several options there and submits them in one reply.
+Send a `selection` part with a short `title` and 1 to 25 options, flat or grouped into sections. Each option has a readable `label` and a stable `id` or legacy `value`. The user opens the picker and submits their choices in one reply.
 
 ## Send a selection
 
-This request contains an optional `text` part followed by a `selection` part. The text shows as a normal message above the card. The selection's `title` is the card's title and the sheet's title; a second line reads "Pick options", and a chevron marks the card as something to open. Open the prompt below, check options in the sheet, then press **Send**; this demo stays in your browser and sends no request.
+This flat example keeps the existing `value` format. Its optional text appears above the card; `title` heads the card and picker. Open the prompt below, check options, then press **Send**; this demo stays in your browser and sends no request.
 
 <Tabs>
   <Tab title="Preview">
@@ -2836,16 +2836,7 @@ This request contains an optional `text` part followed by a `selection` part. Th
 
 Checking a row sends nothing. The sheet lists every option in source order with a checkbox on the leading edge, and its Send stays disabled until at least one row is checked, so one submission carries the whole answer.
 
-### Rules for the prompt
-
-- Only an agent can send a selection.
-- A Message carries at most one `selection` part. A `text` part is optional; when present it shows as a normal message above the card.
-- `title` is required: 1 to 60 characters after surrounding whitespace is trimmed, a few words such as "Pizza toppings". It is the card's title and the sheet's title.
-- A selection cannot share a Message with a `buttons` part.
-- `options` holds 1 to 25 options.
-- Each `value` is 1 to 100 characters, matches `^[A-Za-z0-9][A-Za-z0-9._:-]*$`, is case-sensitive, and is unique within the selection. Your application keys on it, so keep it stable.
-- Each `label` is 1 to 80 characters after surrounding whitespace is trimmed. The app shows labels verbatim.
-- An option has only `value` and `label`; any other field is rejected.
+**`multiple` defaults to `true`; set it to `false` for one choice.** Older Relay app versions ignore `multiple: false` and can send several choices, which Relay refuses with a 422, so prefer `multiple: true` until the new app ships. Send exactly one of flat `options` or titled `sections`. [Selection fields](/interactions/selection-reference) covers limits, aliases, and returned fields.
 
 Use an Agent Token and an existing chat ID to send the same request:
 
@@ -2898,6 +2889,115 @@ The send path returns `202` after storing the message. Keep the returned message
 HTTP/1.1 202 Accepted
 ```
 
+### Group options and set the answered text
+
+Use `sections` to group rows, `subtitle` for the card's second line, and `reply_message` for the answered bubble. Row subtitles and images belong inside the picker. This example requests one delivery choice.
+
+<CodeGroup>
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+  baseURL: "https://api.staging.relayapp.im",
+});
+
+await relay.chats.messages.send("CHAT_ID", {
+  message: {
+    parts: [{
+      type: "selection",
+      title: "Delivery",
+      subtitle: "Choose your delivery speed.",
+      multiple: false,
+      sections: [{
+        title: "Shipping",
+        options: [
+          { id: "express", label: "Express", subtitle: "Next business day",
+            image_url: "https://example.com/express.png" },
+          { id: "standard", label: "Standard", subtitle: "Three business days" },
+        ],
+      }],
+      reply_message: {
+        title: "Delivery selected",
+        subtitle: "We have your choice.",
+      },
+    }],
+    idempotency_key: "delivery-picker-001",
+  },
+});
+```
+
+```bash HTTPS
+curl -sS "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": {
+      "parts": [{
+        "type": "selection",
+        "title": "Delivery",
+        "subtitle": "Choose your delivery speed.",
+        "multiple": false,
+        "sections": [{
+          "title": "Shipping",
+          "options": [
+            {"id":"express","label":"Express","subtitle":"Next business day",
+             "image_url":"https://example.com/express.png"},
+            {"id":"standard","label":"Standard","subtitle":"Three business days"}
+          ]
+        }],
+        "reply_message": {
+          "title": "Delivery selected",
+          "subtitle": "We have your choice."
+        }
+      }],
+      "idempotency_key": "delivery-picker-001"
+    }
+  }'
+```
+
+```python Python SDK
+import asyncio
+import os
+from relaymessenger import Relay
+
+async def main():
+    relay = Relay(
+        api_key=os.environ["RELAY_AGENT_TOKEN"],
+        base_url="https://api.staging.relayapp.im",
+    )
+    await relay.chats.messages.send("CHAT_ID", {
+        "message": {
+            "parts": [{
+                "type": "selection",
+                "title": "Delivery",
+                "subtitle": "Choose your delivery speed.",
+                "multiple": False,
+                "sections": [{
+                    "title": "Shipping",
+                    "options": [
+                        {"id": "express", "label": "Express",
+                         "subtitle": "Next business day",
+                         "image_url": "https://example.com/express.png"},
+                        {"id": "standard", "label": "Standard",
+                         "subtitle": "Three business days"},
+                    ],
+                }],
+                "reply_message": {
+                    "title": "Delivery selected",
+                    "subtitle": "We have your choice.",
+                },
+            }],
+            "idempotency_key": "delivery-picker-001",
+        },
+    })
+
+asyncio.run(main())
+```
+</CodeGroup>
+
+The returned prompt retains flat `options` as well as the supplied `sections`. Options return both `id` and an equal `value` alias, so existing readers can keep using `value`.
+
 ## Receive stable values
 
 The user's submission contains exactly two ordered parts: readable text, then structured metadata. Its `reply_to` identifies the source message and selection part.
@@ -2913,7 +3013,7 @@ The user's submission contains exactly two ordered parts: readable text, then st
       "data": {
         "parts": [
           {"type":"text","value":"• Research\n• Design"},
-          {"type":"selection_response","selected_values":["research","design"]}
+          {"type":"selection_response","selected_values":["research","design"],"selected_ids":["research","design"]}
         ],
         "reply_to": {
           "message_id":"01993d50-ef7b-7b37-886b-23fd80c7ec13",
@@ -2925,21 +3025,25 @@ The user's submission contains exactly two ordered parts: readable text, then st
   </Tab>
 </Tabs>
 
-The event example shows the response fields used by your handler. The preview draws the reply as the selection's title over one line per chosen label; metadata adds no visible text.
+The event example shows the response fields used by your handler. Relay returns source-derived `selected_ids` even when the user submitted only `selected_values`. Both arrays name the same options in source order.
+
+When the prompt supplies `reply_message`, Relay copies it into the answer metadata for the answered bubble, independently of the source Message. Without it, the reply uses the source title and chosen labels, as in the preview. This presentation does not replace the portable text.
 
 New text equals literal `• ` + each selected source label joined with `\n`, in source-option order. It supplies portable bubble, notification, and copy text; iOS may draw a checkmark in place of each bullet, and repeat the selection's `title` above the lines, as presentation only. The `selection_response` part carries metadata only.
 
-A person answers a given selection once. Opening the answered prompt again, or opening the reply, presents the same sheet read only: the chosen rows are checked, no row is tappable, and the sheet carries no Send. Try it in the preview above.
+A user answers a given selection once. Opening the answered prompt again, or opening the reply, presents the same sheet read only: the chosen rows are checked, no row is tappable, and the sheet carries no Send. Try it in the preview above.
 
 ## Read whether someone answered
 
-When you read a Message back, its `selection` part carries `has_responded` and `selected_values`, and its `reactions` is always `null`:
+When you read a Message back, its `selection` part carries `has_responded`, `selected_values`, and `selected_ids`, and its `reactions` is always `null`:
 
 ```json
-{"type":"selection","title":"Topics","options":[{"value":"research","label":"Research"},{"value":"design","label":"Design"}],"has_responded":false,"selected_values":null,"reactions":null}
+{"type":"selection","title":"Topics","options":[{"id":"research","value":"research","label":"Research"},{"id":"design","value":"design","label":"Design"}],"has_responded":false,"selected_values":null,"selected_ids":null,"reactions":null}
 ```
 
-Both fields belong to whoever is reading. `has_responded` is `true` once that person has answered this selection, and `selected_values` holds the values they chose, in option order, so every one of their devices shows the same answer even when it has not loaded the answer Message. `selected_values` is `null` until they answer, and also if their answer Message no longer exists. For an agent, `has_responded` is always `false` and `selected_values` always `null`, so an agent learns about answers from the `selection_response` Messages it receives, not from these fields. When a person answers, their own devices receive a `message.upserted` for the prompt with both fields set.
+These fields belong to whoever is reading. `has_responded` becomes `true` after that user answers; both arrays hold their choices in source order and are `null` before an answer or when the answer Message no longer exists. For an agent, `has_responded` is always `false` and both arrays are always `null`, so read answers from received `selection_response` Messages.
+
+The user's devices receive a `message.upserted` for the prompt with the updated viewer fields.
 
 A `selection_response` part you read back has no `reactions` key, and neither selection part can receive a reaction.
 
@@ -2957,6 +3061,7 @@ function selectionFrom(event: RelayWebhookEvent) {
   return {
     source: event.data.reply_to,
     selectedValues: response.selected_values,
+    selectedIds: response.selected_ids,
   };
 }
 ```
@@ -2965,26 +3070,154 @@ Dispatch your own application handler using the source message ID, part index, a
 
 ## Send from a runtime
 
-Selections use the runtime's existing send path: a backend includes a `selection` part, with optional text before it, in `parts`; a runtime with a send tool takes a `selection` argument; and a runtime that answers in text ends its answer with a fenced code block tagged `selection` containing the selection's `title` and `options`. Responses carry `selected_values` and `reply_to` alongside the readable text. Each [integration](/integrations/index) describes its send and receive format.
+Selections use each runtime's existing send path. The flat `title` and `options` examples remain valid; each [integration](/integrations/index) describes its accepted input. Preserve `selected_values`, `selected_ids`, and `reply_to` beside the readable text when forwarding a reply.
 
 ## When it fails
 
-The server checks an answer against the prompt it names: the reply must come from a person who can see that prompt in the same chat, its text must match the chosen labels exactly, and its values must be known and in the prompt's option order. For compatibility it also accepts the exact selected source labels joined with `, `; new clients send bullet lines. Dispatch on `selected_values` and `reply_to`, never by parsing the text.
+The server checks an answer against its source: the user must see the prompt in the same chat, text must match the chosen labels, and identifiers must be known and in source order. `selected_values` remains required; optional `selected_ids` must match it exactly, and `multiple: false` requires one choice. For compatibility it also accepts the exact selected source labels joined with `, `; new clients send bullet lines.
+
+Dispatch on the identifiers and `reply_to`, never by parsing text. The [field reference](/interactions/selection-reference) separates client reply inputs from server-owned metadata.
 
 | Status | Code | Cause |
 | --- | --- | --- |
-| `400` | [1005](/api-reference/errors#1005) | An option is malformed, has an unknown field, or repeats a value; the title is missing or longer than 60 characters, or the Message has two selections or buttons beside the selection. An answer is not exactly a text part then a `selection_response` part, its text carries a mention, or `reply_to.part_index` is missing. |
-| `403` | [2003](/api-reference/errors#2003) | Someone other than an agent sent a selection, or someone other than a person answered one. |
-| `404` | [2001](/api-reference/errors#2001) | The answer's `reply_to.message_id` is not a Message the person can see in this chat. |
-| `409` | [1005](/api-reference/errors#1005) | The person already answered this selection with a different idempotency key. A retry with the same key and body returns the original answer instead. |
-| `422` | [2006](/api-reference/errors#2006) | The answer's text or value order does not match the prompt, `reply_to.part_index` does not name a selection part, or a reaction targets a selection part. |
+| `400` | [1005](/api-reference/errors#1005) | A prompt violates the field limits, supplies both or neither option arrays, repeats an ID across sections, or supplies mismatched `id` and `value`. A Message has two selections or buttons beside one. Reply metadata is malformed, its arrays disagree, or it supplies `reply_message`; the answer is not plain text then metadata, or lacks `reply_to.part_index`. |
+| `403` | [2003](/api-reference/errors#2003) | Someone other than an agent sent a selection, or someone other than a user answered one. |
+| `404` | [2001](/api-reference/errors#2001) | The answer's `reply_to.message_id` is not a Message the user can see in this chat. |
+| `409` | [1005](/api-reference/errors#1005) | The user already answered this selection with a different idempotency key. A retry with the same key and body returns the original answer instead. |
+| `422` | [2006](/api-reference/errors#2006) | The answer's text, identifiers, order, or number of choices does not match the source; `reply_to.part_index` does not name a selection, or a reaction targets one. |
 
 Keep the original body and idempotency key when retrying an uncertain submission.
 
 ## Next steps
 
 - [Interactions](/interactions/index)
+- [Selection fields](/interactions/selection-reference)
 - [Buttons](/interactions/buttons)
+- [Replies](/messages/replies)
+
+# Selection fields
+
+> List picker inputs, limits, identifier aliases, and server-owned answer metadata.
+
+Source: https://docs.staging.relayapp.im/interactions/selection-reference.md
+
+Send a `selection` part with exactly one of `options` or `sections`.
+
+```json Prompt
+{
+  "type": "selection",
+  "title": "Delivery",
+  "subtitle": "Choose your delivery speed.",
+  "multiple": false,
+  "sections": [{
+    "title": "Shipping",
+    "options": [{
+      "id": "express",
+      "label": "Express",
+      "subtitle": "Next business day",
+      "image_url": "https://example.com/express.png"
+    }]
+  }],
+  "reply_message": {
+    "title": "Delivery selected",
+    "subtitle": "We have your choice."
+  }
+}
+```
+
+## Prompt fields
+
+**`multiple` defaults to `true`; `false` requires exactly one chosen option.**
+
+<Note>
+Relay app versions released before the list picker ignore `multiple: false`: a person on one of them can check several options, and Relay refuses that answer with a 422. Prefer `multiple: true` until everyone has the new app, unless you need exactly one answer.
+</Note>
+
+| Field | Limit or meaning |
+| --- | --- |
+| `title` | Required, 1 to 60 characters. Heads the card and picker. |
+| `subtitle` | Optional, 0 to 512 characters. Supplies the card's second line. |
+| `multiple` | Optional boolean. Applies to the whole picker. |
+| `options` | Flat list, 1 to 25 options. Alternative to `sections`. |
+| `sections` | 1 to 10 groups, each with a `title` of 1 to 24 characters and at least one option. **1 to 25 options total**, across all sections. |
+| `reply_message.title` | Required when `reply_message` is supplied, 1 to 512 characters. Answered bubble title. |
+| `reply_message.subtitle` | Optional, 0 to 512 characters. Answered bubble subtitle. |
+
+Every length limit counts the text as sent, before trimming. Titles, labels, and subtitles are then trimmed for storage, and an optional subtitle that is blank after trimming is stored as absent. Array order determines section and option order. Only an agent sends the prompt, with at most one selection per Message; a selection and buttons cannot share a Message.
+
+### Option fields
+
+| Field | Limit or meaning |
+| --- | --- |
+| `id` | 1 to 200 characters. Stable, case-sensitive identifier, unique across the whole picker. Supply `id` or `value`. |
+| `value` | Compatibility alias for `id`. A value-only input accepts 1 to 100 characters matching `^[A-Za-z0-9][A-Za-z0-9._:-]*$`. If both fields are supplied, they must match; the alias can then use the full 200-character ID limit. |
+| `label` | Required, 1 to 24 characters when `id` is supplied. Value-only inputs retain 1 to 80 characters. |
+| `subtitle` | Optional row description, 0 to 72 characters. |
+| `image_url` | Optional HTTPS URL, at most 2,048 characters. Image beside the option inside the picker. |
+
+## Reply input
+
+The user's Message contains plain text followed by this metadata part, with `reply_to.message_id` and `reply_to.part_index` pointing to the source selection.
+
+```json Reply input
+{
+  "type": "selection_response",
+  "selected_values": ["express"],
+  "selected_ids": ["express"]
+}
+```
+
+**`selected_values` is required, including for id-only options.** `selected_ids` is optional; when supplied, `selected_ids` must equal `selected_values`, in the same order.
+
+Each array has 1 to 25 unique identifiers of 1 to 200 characters, chosen from the source in source order. The source's `multiple: false` permits exactly one.
+
+The text is literal `• ` plus each chosen source label joined with `\n`. Exact legacy labels joined with `, ` remain accepted. Use the identifiers and `reply_to` to handle the answer.
+
+## Stored answer
+
+Relay derives `selected_ids` from the source, including for value-only prompts, and copies `reply_message` from the source when supplied.
+
+```json Stored reply
+{
+  "type": "selection_response",
+  "selected_values": ["express"],
+  "selected_ids": ["express"],
+  "reply_message": {
+    "title": "Delivery selected",
+    "subtitle": "We have your choice."
+  }
+}
+```
+
+This server-owned copy keeps the configured answered text available after the source Message is deleted. Set `reply_message` on the prompt; it is not an accepted reply input. Without it, the answered bubble uses the source title and chosen labels. The portable text remains the selected-label bullets in either case.
+
+## Prompt response
+
+Relay always includes flat `options` in display order, plus `sections` when supplied. Every returned option includes equal `id` and `value` fields, including legacy options; stored legacy labels up to 80 characters remain readable.
+
+```json Prompt response
+{
+  "type": "selection",
+  "title": "Topics",
+  "options": [
+    {"id": "research", "value": "research", "label": "Research"},
+    {"id": "design", "value": "design", "label": "Design"}
+  ],
+  "has_responded": false,
+  "selected_values": null,
+  "selected_ids": null,
+  "reactions": null
+}
+```
+
+The response echoes supplied `subtitle`, `multiple`, and `reply_message`. An omitted `multiple` still means `true`.
+
+`has_responded`, `selected_values`, and `selected_ids` are scoped to the authenticated viewer. Both arrays are equal and in source order; they are `null` before the viewer answers or when their answer Message no longer exists, and always `null` for an agent. An agent's `has_responded` is always `false`; read received answer Messages instead.
+
+## See also
+
+- [Send a selection](/interactions/selection)
+- [Message parts](/messages/parts)
 - [Replies](/messages/replies)
 
 # Rich cards
@@ -21846,24 +22079,136 @@ components:
     SelectionOption:
       type: object
       additionalProperties: false
-      required: [value, label]
+      required: [label]
+      description: A list picker row. Supply id or the legacy value alias. If both are supplied they must match. IDs are case-sensitive and unique across the whole picker. New id-bearing labels have at most 24 characters; value-only inputs retain the legacy 80-character label limit.
+      allOf:
+        - anyOf:
+            - required: [id]
+            - required: [value]
+        - if:
+            required: [id]
+          then:
+            properties:
+              label:
+                maxLength: 24
+          else:
+            properties:
+              value:
+                maxLength: 100
+                pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]*$'
       properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Stable row identifier, returned in selected_ids after the user answers.
         value:
           type: string
           minLength: 1
-          maxLength: 100
-          pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]*$'
-          description: Stable case-sensitive value, unique within the selection.
+          maxLength: 200
+          description: Legacy alias for id. Without id, accepts the existing 1 to 100 character ASCII token. When both are supplied, must equal id.
+        label:
+          type: string
+          minLength: 1
+          pattern: '\S'
+          maxLength: 80
+          description: Visible label, trimmed before storage; limits count the label as sent. At most 24 characters when id is supplied, or 80 for a legacy value-only row.
+        subtitle:
+          type: string
+          maxLength: 72
+          description: Optional row description, trimmed before storage; blank after trimming is stored as absent.
+        image_url:
+          type: string
+          format: uri
+          pattern: '^https://'
+          maxLength: 2048
+          description: Optional HTTPS image displayed beside the option inside the picker.
+    SelectionOptionResponse:
+      type: object
+      required: [id, value, label]
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Stable row identifier. For a legacy option, equals its value.
+        value:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Compatibility alias, equal to id.
         label:
           type: string
           minLength: 1
           maxLength: 80
-          description: Visible label, trimmed before storage.
+          description: Stored label. Legacy labels can exceed the new 24-character input limit.
+        subtitle:
+          type: string
+          maxLength: 72
+        image_url:
+          type: string
+          format: uri
+          pattern: '^https://'
+          maxLength: 2048
+    SelectionSection:
+      type: object
+      additionalProperties: false
+      required: [title, options]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          pattern: '\S'
+          maxLength: 24
+          description: Section heading, trimmed before storage.
+        options:
+          type: array
+          minItems: 1
+          maxItems: 25
+          items:
+            $ref: "#/components/schemas/SelectionOption"
+    SelectionSectionResponse:
+      type: object
+      required: [title, options]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 24
+        options:
+          type: array
+          minItems: 1
+          maxItems: 25
+          items:
+            $ref: "#/components/schemas/SelectionOptionResponse"
+    SelectionReplyMessage:
+      type: object
+      additionalProperties: false
+      required: [title]
+      description: Source-owned text for the answered bubble. Copied by the server into the answer metadata when supplied on the prompt. Does not replace the portable selected-label text.
+      properties:
+        title:
+          type: string
+          minLength: 1
+          pattern: '\S'
+          maxLength: 512
+          description: Answered bubble title, trimmed before storage.
+        subtitle:
+          type: string
+          maxLength: 512
+          description: Optional answered bubble subtitle, trimmed before storage; blank after trimming is stored as absent.
     SelectionPart:
       type: object
       additionalProperties: false
-      description: Agent-only multiselect prompt. One selection per Message, never with buttons. `title` is the question, shown as the card's title in the chat and the sheet's title. A text part is optional; when present it is an ordinary message shown above the card. Put the question in `title` (1 to 60 characters, a few words, e.g. "Pizza toppings"). Anything else you want to say goes in the text part, which shows as a normal message above the card. The person opens the prompt, checks any number of options and submits them once; checking sends nothing and only the submit does. A person answers a given selection once, and reopening it afterwards shows what they chose without letting them change it. Preview, notification and fallback text is the Message's text part when it has one, else `title`.
-      required: [type, title, options]
+      description: Agent-only list picker. One selection per Message, never with buttons. Supply either flat options or titled sections, with 1 to 25 options total. title is the question shown on the card and sheet. Optional subtitle supplies the card's second line. multiple defaults to true; false permits exactly one selected option. Checking an option sends nothing; only Submit sends the answer. A user answers a given selection once; reopening shows the saved choice without allowing changes. Optional reply_message supplies the answered bubble's title and subtitle; without it, clients show the prompt title and chosen labels. A text part is optional and appears as an ordinary message above the card. Preview, notification and fallback text is the Message's text part when present, otherwise title. Every length limit counts the text as sent, before trimming.
+      required: [type, title]
+      oneOf:
+        - required: [options]
+          not:
+            required: [sections]
+        - required: [sections]
+          not:
+            required: [options]
       properties:
         type:
           type: string
@@ -21871,17 +22216,35 @@ components:
         title:
           type: string
           minLength: 1
+          pattern: '\S'
           maxLength: 60
           description: The question, trimmed before storage. The card's title in the chat and the sheet's title.
+        subtitle:
+          type: string
+          maxLength: 512
+          description: Optional card subtitle, trimmed before storage; blank after trimming is stored as absent.
+        multiple:
+          type: boolean
+          default: true
+          description: Whether the user may choose more than one option before submitting.
         options:
           type: array
           minItems: 1
           maxItems: 25
           items:
             $ref: "#/components/schemas/SelectionOption"
+        sections:
+          type: array
+          minItems: 1
+          maxItems: 10
+          description: Titled groups in display order. At most 25 options across all sections.
+          items:
+            $ref: "#/components/schemas/SelectionSection"
+        reply_message:
+          $ref: "#/components/schemas/SelectionReplyMessage"
     SelectionPartResponse:
       type: object
-      required: [type, title, options, has_responded, selected_values, reactions]
+      required: [type, title, options, has_responded, selected_values, selected_ids, reactions]
       properties:
         type:
           type: string
@@ -21889,16 +22252,39 @@ components:
         title:
           type: string
           description: The question, as the agent sent it after trimming.
+        subtitle:
+          type: string
+          maxLength: 512
+        multiple:
+          type: boolean
+          default: true
         options:
           type: array
+          minItems: 1
+          maxItems: 25
+          description: All options in display order, including options from sections. Retained for clients that do not display groups.
           items:
-            $ref: "#/components/schemas/SelectionOption"
+            $ref: "#/components/schemas/SelectionOptionResponse"
+        sections:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/SelectionSectionResponse"
+        reply_message:
+          $ref: "#/components/schemas/SelectionReplyMessage"
         selected_values:
           type: [array, "null"]
           readOnly: true
           items:
             type: string
           description: The values the authenticated viewer chose, in source-option order, identical on every one of that user's devices; null until the viewer answers, when the answer Message no longer exists, and always for an agent viewer.
+        selected_ids:
+          type: [array, "null"]
+          readOnly: true
+          items:
+            type: string
+          description: The authenticated viewer's selected option IDs in source order. Equal to selected_values, including for legacy options; null under the same conditions.
         has_responded:
           type: boolean
           readOnly: true
@@ -21908,7 +22294,7 @@ components:
     SelectionResponsePart:
       type: object
       additionalProperties: false
-      description: User-only metadata, exactly the second part after plain text. Requires explicit reply_to message_id and part_index targeting a visible selection in the same Chat. Values are unique, nonempty, known and in source-option order. Canonical new text is literal '• ' + each selected source label joined with '\n'. The server also accepts exact legacy source labels joined with ', ' only for compatibility; arbitrary label parsing is never accepted. selected_values and source-option order remain authoritative. iOS may draw a checkmark in place of each bullet, and repeat the prompt's `title` above the lines, as presentation only; portable text remains the bullets. A different-key second response returns 409/1005; same-key retries retain existing Message idempotency semantics.
+      description: User-only metadata, exactly the second part after plain text. Requires explicit reply_to message_id and part_index targeting a visible selection in the same Chat. Values are unique, nonempty, known and in source-option order. A prompt with multiple false accepts exactly one value. Optional selected_ids must equal selected_values. Canonical text is literal '• ' plus each selected source label joined with '\n'. Exact legacy source labels joined with ', ' also remain accepted. The server owns the returned selected_ids and reply_message; callers cannot supply answered-bubble text in metadata. A different-key second response returns 409/1005; same-key retries retain existing Message idempotency semantics.
       required: [type, selected_values]
       properties:
         type:
@@ -21922,12 +22308,47 @@ components:
           items:
             type: string
             minLength: 1
-            maxLength: 100
-            pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]*$'
+            maxLength: 200
+        selected_ids:
+          type: array
+          minItems: 1
+          maxItems: 25
+          uniqueItems: true
+          description: Optional ID alias array. When present, must equal selected_values in the same order.
+          items:
+            type: string
+            minLength: 1
+            maxLength: 200
     SelectionResponsePartResponse:
-      allOf:
-        - $ref: "#/components/schemas/SelectionResponsePart"
-      description: Persisted selection metadata; contributes no fallback text and cannot receive reactions.
+      type: object
+      required: [type, selected_values, selected_ids]
+      description: Persisted selection metadata; contributes no fallback text and cannot receive reactions. selected_ids is source-derived. When the source supplies reply_message, it is copied into this answer so its bubble text remains available independently of the source.
+      properties:
+        type:
+          type: string
+          enum: [selection_response]
+        selected_values:
+          type: array
+          minItems: 1
+          maxItems: 25
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 200
+        selected_ids:
+          type: array
+          minItems: 1
+          maxItems: 25
+          uniqueItems: true
+          readOnly: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 200
+        reply_message:
+          $ref: "#/components/schemas/SelectionReplyMessage"
+          readOnly: true
     RichCardMedia:
       type: object
       additionalProperties: false

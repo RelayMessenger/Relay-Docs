@@ -1,16 +1,16 @@
 ---
 title: "Selection"
-description: "Ask a person to choose several options and receive stable values beside a readable reply."
-keywords: ["selection", "multiselect", "selected_values", "selection_response", "has_responded", "interactions"]
+description: "Send a flat or grouped list picker and receive stable option IDs beside a readable reply."
+keywords: ["selection", "list picker", "sections", "multiple", "selected_ids", "selected_values", "reply_message", "selection_response"]
 ---
 
 import { SelectionPreview, MessageBubble } from "/snippets/buttons-preview.jsx";
 
-Send a `selection` part with a short `title` and 1 to 25 options. Each option has a readable `label` and a stable `value`. The app draws the selection as one card that opens a sheet holding the whole option list, and the person checks several options there and submits them in one reply.
+Send a `selection` part with a short `title` and 1 to 25 options, flat or grouped into sections. Each option has a readable `label` and a stable `id` or legacy `value`. The user opens the picker and submits their choices in one reply.
 
 ## Send a selection
 
-This request contains an optional `text` part followed by a `selection` part. The text shows as a normal message above the card. The selection's `title` is the card's title and the sheet's title; a second line reads "Pick options", and a chevron marks the card as something to open. Open the prompt below, check options in the sheet, then press **Send**; this demo stays in your browser and sends no request.
+This flat example keeps the existing `value` format. Its optional text appears above the card; `title` heads the card and picker. Open the prompt below, check options, then press **Send**; this demo stays in your browser and sends no request.
 
 <Tabs>
   <Tab title="Preview">
@@ -36,16 +36,7 @@ This request contains an optional `text` part followed by a `selection` part. Th
 
 Checking a row sends nothing. The sheet lists every option in source order with a checkbox on the leading edge, and its Send stays disabled until at least one row is checked, so one submission carries the whole answer.
 
-### Rules for the prompt
-
-- Only an agent can send a selection.
-- A Message carries at most one `selection` part. A `text` part is optional; when present it shows as a normal message above the card.
-- `title` is required: 1 to 60 characters after surrounding whitespace is trimmed, a few words such as "Pizza toppings". It is the card's title and the sheet's title.
-- A selection cannot share a Message with a `buttons` part.
-- `options` holds 1 to 25 options.
-- Each `value` is 1 to 100 characters, matches `^[A-Za-z0-9][A-Za-z0-9._:-]*$`, is case-sensitive, and is unique within the selection. Your application keys on it, so keep it stable.
-- Each `label` is 1 to 80 characters after surrounding whitespace is trimmed. The app shows labels verbatim.
-- An option has only `value` and `label`; any other field is rejected.
+**`multiple` defaults to `true`; set it to `false` for one choice.** Older Relay app versions ignore `multiple: false` and can send several choices, which Relay refuses with a 422, so prefer `multiple: true` until the new app ships. Send exactly one of flat `options` or titled `sections`. [Selection fields](/interactions/selection-reference) covers limits, aliases, and returned fields.
 
 Use an Agent Token and an existing chat ID to send the same request:
 
@@ -98,6 +89,115 @@ The send path returns `202` after storing the message. Keep the returned message
 HTTP/1.1 202 Accepted
 ```
 
+### Group options and set the answered text
+
+Use `sections` to group rows, `subtitle` for the card's second line, and `reply_message` for the answered bubble. Row subtitles and images belong inside the picker. This example requests one delivery choice.
+
+<CodeGroup>
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+  baseURL: "https://api.staging.relayapp.im",
+});
+
+await relay.chats.messages.send("CHAT_ID", {
+  message: {
+    parts: [{
+      type: "selection",
+      title: "Delivery",
+      subtitle: "Choose your delivery speed.",
+      multiple: false,
+      sections: [{
+        title: "Shipping",
+        options: [
+          { id: "express", label: "Express", subtitle: "Next business day",
+            image_url: "https://example.com/express.png" },
+          { id: "standard", label: "Standard", subtitle: "Three business days" },
+        ],
+      }],
+      reply_message: {
+        title: "Delivery selected",
+        subtitle: "We have your choice.",
+      },
+    }],
+    idempotency_key: "delivery-picker-001",
+  },
+});
+```
+
+```bash HTTPS
+curl -sS "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": {
+      "parts": [{
+        "type": "selection",
+        "title": "Delivery",
+        "subtitle": "Choose your delivery speed.",
+        "multiple": false,
+        "sections": [{
+          "title": "Shipping",
+          "options": [
+            {"id":"express","label":"Express","subtitle":"Next business day",
+             "image_url":"https://example.com/express.png"},
+            {"id":"standard","label":"Standard","subtitle":"Three business days"}
+          ]
+        }],
+        "reply_message": {
+          "title": "Delivery selected",
+          "subtitle": "We have your choice."
+        }
+      }],
+      "idempotency_key": "delivery-picker-001"
+    }
+  }'
+```
+
+```python Python SDK
+import asyncio
+import os
+from relaymessenger import Relay
+
+async def main():
+    relay = Relay(
+        api_key=os.environ["RELAY_AGENT_TOKEN"],
+        base_url="https://api.staging.relayapp.im",
+    )
+    await relay.chats.messages.send("CHAT_ID", {
+        "message": {
+            "parts": [{
+                "type": "selection",
+                "title": "Delivery",
+                "subtitle": "Choose your delivery speed.",
+                "multiple": False,
+                "sections": [{
+                    "title": "Shipping",
+                    "options": [
+                        {"id": "express", "label": "Express",
+                         "subtitle": "Next business day",
+                         "image_url": "https://example.com/express.png"},
+                        {"id": "standard", "label": "Standard",
+                         "subtitle": "Three business days"},
+                    ],
+                }],
+                "reply_message": {
+                    "title": "Delivery selected",
+                    "subtitle": "We have your choice.",
+                },
+            }],
+            "idempotency_key": "delivery-picker-001",
+        },
+    })
+
+asyncio.run(main())
+```
+</CodeGroup>
+
+The returned prompt retains flat `options` as well as the supplied `sections`. Options return both `id` and an equal `value` alias, so existing readers can keep using `value`.
+
 ## Receive stable values
 
 The user's submission contains exactly two ordered parts: readable text, then structured metadata. Its `reply_to` identifies the source message and selection part.
@@ -113,7 +213,7 @@ The user's submission contains exactly two ordered parts: readable text, then st
       "data": {
         "parts": [
           {"type":"text","value":"• Research\n• Design"},
-          {"type":"selection_response","selected_values":["research","design"]}
+          {"type":"selection_response","selected_values":["research","design"],"selected_ids":["research","design"]}
         ],
         "reply_to": {
           "message_id":"01993d50-ef7b-7b37-886b-23fd80c7ec13",
@@ -125,21 +225,25 @@ The user's submission contains exactly two ordered parts: readable text, then st
   </Tab>
 </Tabs>
 
-The event example shows the response fields used by your handler. The preview draws the reply as the selection's title over one line per chosen label; metadata adds no visible text.
+The event example shows the response fields used by your handler. Relay returns source-derived `selected_ids` even when the user submitted only `selected_values`. Both arrays name the same options in source order.
+
+When the prompt supplies `reply_message`, Relay copies it into the answer metadata for the answered bubble, independently of the source Message. Without it, the reply uses the source title and chosen labels, as in the preview. This presentation does not replace the portable text.
 
 New text equals literal `• ` + each selected source label joined with `\n`, in source-option order. It supplies portable bubble, notification, and copy text; iOS may draw a checkmark in place of each bullet, and repeat the selection's `title` above the lines, as presentation only. The `selection_response` part carries metadata only.
 
-A person answers a given selection once. Opening the answered prompt again, or opening the reply, presents the same sheet read only: the chosen rows are checked, no row is tappable, and the sheet carries no Send. Try it in the preview above.
+A user answers a given selection once. Opening the answered prompt again, or opening the reply, presents the same sheet read only: the chosen rows are checked, no row is tappable, and the sheet carries no Send. Try it in the preview above.
 
 ## Read whether someone answered
 
-When you read a Message back, its `selection` part carries `has_responded` and `selected_values`, and its `reactions` is always `null`:
+When you read a Message back, its `selection` part carries `has_responded`, `selected_values`, and `selected_ids`, and its `reactions` is always `null`:
 
 ```json
-{"type":"selection","title":"Topics","options":[{"value":"research","label":"Research"},{"value":"design","label":"Design"}],"has_responded":false,"selected_values":null,"reactions":null}
+{"type":"selection","title":"Topics","options":[{"id":"research","value":"research","label":"Research"},{"id":"design","value":"design","label":"Design"}],"has_responded":false,"selected_values":null,"selected_ids":null,"reactions":null}
 ```
 
-Both fields belong to whoever is reading. `has_responded` is `true` once that person has answered this selection, and `selected_values` holds the values they chose, in option order, so every one of their devices shows the same answer even when it has not loaded the answer Message. `selected_values` is `null` until they answer, and also if their answer Message no longer exists. For an agent, `has_responded` is always `false` and `selected_values` always `null`, so an agent learns about answers from the `selection_response` Messages it receives, not from these fields. When a person answers, their own devices receive a `message.upserted` for the prompt with both fields set.
+These fields belong to whoever is reading. `has_responded` becomes `true` after that user answers; both arrays hold their choices in source order and are `null` before an answer or when the answer Message no longer exists. For an agent, `has_responded` is always `false` and both arrays are always `null`, so read answers from received `selection_response` Messages.
+
+The user's devices receive a `message.upserted` for the prompt with the updated viewer fields.
 
 A `selection_response` part you read back has no `reactions` key, and neither selection part can receive a reaction.
 
@@ -157,6 +261,7 @@ function selectionFrom(event: RelayWebhookEvent) {
   return {
     source: event.data.reply_to,
     selectedValues: response.selected_values,
+    selectedIds: response.selected_ids,
   };
 }
 ```
@@ -165,24 +270,27 @@ Dispatch your own application handler using the source message ID, part index, a
 
 ## Send from a runtime
 
-Selections use the runtime's existing send path: a backend includes a `selection` part, with optional text before it, in `parts`; a runtime with a send tool takes a `selection` argument; and a runtime that answers in text ends its answer with a fenced code block tagged `selection` containing the selection's `title` and `options`. Responses carry `selected_values` and `reply_to` alongside the readable text. Each [integration](/integrations/index) describes its send and receive format.
+Selections use each runtime's existing send path. The flat `title` and `options` examples remain valid; each [integration](/integrations/index) describes its accepted input. Preserve `selected_values`, `selected_ids`, and `reply_to` beside the readable text when forwarding a reply.
 
 ## When it fails
 
-The server checks an answer against the prompt it names: the reply must come from a person who can see that prompt in the same chat, its text must match the chosen labels exactly, and its values must be known and in the prompt's option order. For compatibility it also accepts the exact selected source labels joined with `, `; new clients send bullet lines. Dispatch on `selected_values` and `reply_to`, never by parsing the text.
+The server checks an answer against its source: the user must see the prompt in the same chat, text must match the chosen labels, and identifiers must be known and in source order. `selected_values` remains required; optional `selected_ids` must match it exactly, and `multiple: false` requires one choice. For compatibility it also accepts the exact selected source labels joined with `, `; new clients send bullet lines.
+
+Dispatch on the identifiers and `reply_to`, never by parsing text. The [field reference](/interactions/selection-reference) separates client reply inputs from server-owned metadata.
 
 | Status | Code | Cause |
 | --- | --- | --- |
-| `400` | [1005](/api-reference/errors#1005) | An option is malformed, has an unknown field, or repeats a value; the title is missing or longer than 60 characters, or the Message has two selections or buttons beside the selection. An answer is not exactly a text part then a `selection_response` part, its text carries a mention, or `reply_to.part_index` is missing. |
-| `403` | [2003](/api-reference/errors#2003) | Someone other than an agent sent a selection, or someone other than a person answered one. |
-| `404` | [2001](/api-reference/errors#2001) | The answer's `reply_to.message_id` is not a Message the person can see in this chat. |
-| `409` | [1005](/api-reference/errors#1005) | The person already answered this selection with a different idempotency key. A retry with the same key and body returns the original answer instead. |
-| `422` | [2006](/api-reference/errors#2006) | The answer's text or value order does not match the prompt, `reply_to.part_index` does not name a selection part, or a reaction targets a selection part. |
+| `400` | [1005](/api-reference/errors#1005) | A prompt violates the field limits, supplies both or neither option arrays, repeats an ID across sections, or supplies mismatched `id` and `value`. A Message has two selections or buttons beside one. Reply metadata is malformed, its arrays disagree, or it supplies `reply_message`; the answer is not plain text then metadata, or lacks `reply_to.part_index`. |
+| `403` | [2003](/api-reference/errors#2003) | Someone other than an agent sent a selection, or someone other than a user answered one. |
+| `404` | [2001](/api-reference/errors#2001) | The answer's `reply_to.message_id` is not a Message the user can see in this chat. |
+| `409` | [1005](/api-reference/errors#1005) | The user already answered this selection with a different idempotency key. A retry with the same key and body returns the original answer instead. |
+| `422` | [2006](/api-reference/errors#2006) | The answer's text, identifiers, order, or number of choices does not match the source; `reply_to.part_index` does not name a selection, or a reaction targets one. |
 
 Keep the original body and idempotency key when retrying an uncertain submission.
 
 ## Next steps
 
 - [Interactions](/interactions/index)
+- [Selection fields](/interactions/selection-reference)
 - [Buttons](/interactions/buttons)
 - [Replies](/messages/replies)
