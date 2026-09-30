@@ -542,7 +542,7 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server 78eb6425 (PR 429, carrying PRs 421 and 428); each agent's A2A address is its own origin, https://<handle>.relayagent.im, September 29, 2026.
 # Source authority: Relay-Server 246da210 (PRs 437, 438, 444, 445); only the agent that made a card changes it, blocks stop typing and reactions, a WebSocket that names no subscribed_events gets every event type, the ring lease is 32 seconds, September 29, 2026.
 # Source authority: Relay-Server 61c53fac (PR 455, merged); an agent answers each A2A request with a Message or a Task, POST /v1/tasks/{taskId}/reply and message.received a2a, September 29, 2026.
-# Source authority: Relay-Server 65309a18 (PR 456); a message agent keeps a contextId the caller makes up and refuses another pair's, September 30, 2026.
+# Source authority: Relay-Server cf74b6f4 (PR 456); a message agent keeps a contextId the caller makes up and refuses another pair's, September 30, 2026.
 expected_openapi_sha256 = (
     "f5ce5dba6bf10dbf022e2a5f82f77540facffb287d3a6502f2f2819111899e2f"
 )
