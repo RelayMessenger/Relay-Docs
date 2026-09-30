@@ -34,10 +34,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # Only the agent that made a card changes it (Server #437); blocks stop typing and reactions (Server #438); a WebSocket that names no subscribed_events gets every event type (Server #445); the ring lease is 32 seconds (Server #444).
 # An agent answers each A2A request with a Message or a Task: POST /v1/tasks/{taskId}/reply and message.received a2a (Server #455).
 # A message agent keeps a contextId the caller makes up (Server #456).
-UPSTREAM_COMMIT = "dd2822898440a69bdf2690ae1e7c7382d1c3624f"
-UPSTREAM_STAGING_COMMIT = "dd2822898440a69bdf2690ae1e7c7382d1c3624f"
-UPSTREAM_SIZE = 323193
-UPSTREAM_SHA256 = "f5ce5dba6bf10dbf022e2a5f82f77540facffb287d3a6502f2f2819111899e2f"
+# Communities are removed, membership included; agents_can_message is everyone or nobody (Server #457).
+UPSTREAM_COMMIT = "add9a0857f971e2d35f82711206b4b108ed30912"
+UPSTREAM_STAGING_COMMIT = "add9a0857f971e2d35f82711206b4b108ed30912"
+UPSTREAM_SIZE = 305581
+UPSTREAM_SHA256 = "2de73db15c2ad93e0ed72581d1613023a19e66398f82f91ca82aa8f880e71a9c"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",

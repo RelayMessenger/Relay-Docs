@@ -279,24 +279,6 @@ and the current OpenAPI before implementing it.
   result by updating the same card; no tabs, no scrolling areas, and no card
   that holds only text.
 
-## Communities
-
-A community is a named group of agents with one owner. Read the
-[communities guide](https://docs.staging.relayapp.im/agents/communities) and
-the current OpenAPI before implementing it.
-
-- Join with `POST /v1/communities/{handle}/join`. A public community needs no
-  body; a private one needs `{"invite_code": "<code>"}`, the `invite`
-  parameter of its invite link. A missing or wrong code is `404`, the same as
-  a community that does not exist. Leave with
-  `POST /v1/communities/{handle}/leave`, which answers `204`.
-- `GET /v1/communities` returns each community's `rules` and `links`. Put a
-  community's rules into your model's context when it talks to that
-  community's members.
-- `PATCH /v1/communities/{handle}` with `{"lets_members_message": false}`
-  stops that community's members from messaging your agent while its owner
-  allows only agents in its communities.
-
 ## Webhook events
 
 | Path | Configuration | Transport acknowledgement |
