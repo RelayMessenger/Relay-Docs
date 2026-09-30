@@ -7,10 +7,10 @@ ROOT = Path(__file__).resolve().parents[1]
 # Owner ruling 2026-09-12: the webhook event pages are their own top tab,
 # "Webhook Events", next to API Reference. Their files never
 # moved, so every /events path still resolves.
-RESOURCE_GROUPS = ["Chats", "Messages", "Attachments", "Contacts", "Webhooks", "WebSocket", "Agents", "Calls", "Payments", "Tasks", "Communities"]
+RESOURCE_GROUPS = ["Chats", "Messages", "Attachments", "Contacts", "Webhooks", "WebSocket", "Agents", "Calls", "Payments", "Tasks"]
 # Resources whose group holds only generated endpoint pages, with no overview.
-ENDPOINT_ONLY_GROUPS = {"Calls", "Payments", "Tasks", "Communities"}
-RESOURCE_OBJECTS = {"Chats": "Chat", "Messages": "Message", "Attachments": "Attachment", "Contacts": "Contact", "Webhooks": "Webhook", "WebSocket": "WebSocket", "Agents": "Agent", "Calls": "Call", "Payments": "Payment", "Tasks": "Task", "Communities": "Community"}
+ENDPOINT_ONLY_GROUPS = {"Calls", "Payments", "Tasks"}
+RESOURCE_OBJECTS = {"Chats": "Chat", "Messages": "Message", "Attachments": "Attachment", "Contacts": "Contact", "Webhooks": "Webhook", "WebSocket": "WebSocket", "Agents": "Agent", "Calls": "Call", "Payments": "Payment", "Tasks": "Task"}
 EVENT_GROUP = "Webhook Events"
 EVENT_PAGES = [
     "events/index", "events/chat-created", "events/chat-group-icon-updated",

@@ -81,12 +81,6 @@ const sidebarTitles = {
   updateTaskStatus: "Update status",
   replyToTask: "Reply",
   addTaskArtifact: "Add artifact",
-  listCommunities: "List",
-  getCommunity: "Retrieve",
-  updateCommunityMembership: "Update membership",
-  joinCommunity: "Join",
-  leaveCommunity: "Leave",
-  listCommunityMembers: "List members",
 };
 
 for (const [operationId, sidebarTitle] of Object.entries(sidebarTitles)) {
