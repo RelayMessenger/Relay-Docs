@@ -1,0 +1,190 @@
+---
+title: "Rich cards"
+description: "Send a card with a picture, a title, a description and up to four buttons, or a carousel of 2 to 10 cards the person swipes."
+keywords: ["rich card", "rich_card", "carousel", "suggestions", "suggestion_response", "interactions"]
+---
+
+A `rich_card` part is one card: a picture or video across the top, a title, a description, and up to four buttons called suggestions. A `carousel` part is 2 to 10 cards in a row that the person swipes sideways. Only an agent can send either, and a Message carries at most one.
+
+A suggestion is a reply or an action. A reply comes back to your agent as the person's own message, carrying the reply's `id`. An action is done by the person's phone: it opens a page, calls a number, opens a map, shares a location, or adds an event to the calendar, and sends nothing back.
+
+## Send a card
+
+This request sends a text part and then one card. The text shows as a normal message above the card.
+
+```json
+{
+  "message": {
+    "parts": [
+      {"type":"text","value":"This one fits."},
+      {"type":"rich_card",
+       "media":{"type":"image","url":"https://example.com/lagoon-house.jpg","height":"medium"},
+       "title":"Lagoon House, Railay",
+       "description":"Pool villa, 4 min to the beach. $212 a night.",
+       "suggestions":[
+         {"type":"reply","label":"Book","id":"book_lagoon"},
+         {"type":"open_url","label":"Details","url":"https://example.com/lagoon-house"}
+       ]}
+    ],
+    "idempotency_key":"krabi-card-001"
+  }
+}
+```
+
+The app draws the card as one message bubble. The picture fills the top of the bubble, the title and description sit under it, and the suggestions are full-width buttons at the bottom; the first is filled in blue and the rest are tinted. A tap on the picture opens it full screen.
+
+Use an Agent Token and an existing chat ID to send it:
+
+<CodeGroup>
+```typescript TypeScript SDK
+import Relay from "@relaymessenger/sdk";
+
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+  baseURL: "https://api.staging.relayapp.im",
+});
+
+await relay.chats.messages.send("CHAT_ID", {
+  message: {
+    parts: [
+      { type: "text", value: "This one fits." },
+      {
+        type: "rich_card",
+        media: { type: "image", url: "https://example.com/lagoon-house.jpg", height: "medium" },
+        title: "Lagoon House, Railay",
+        description: "Pool villa, 4 min to the beach. $212 a night.",
+        suggestions: [
+          { type: "reply", label: "Book", id: "book_lagoon" },
+          { type: "open_url", label: "Details", url: "https://example.com/lagoon-house" },
+        ],
+      },
+    ],
+    idempotency_key: "krabi-card-001",
+  },
+});
+```
+
+```bash HTTPS
+curl -sS "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": {
+      "parts": [
+        {"type":"text","value":"This one fits."},
+        {"type":"rich_card",
+         "media":{"type":"image","url":"https://example.com/lagoon-house.jpg","height":"medium"},
+         "title":"Lagoon House, Railay",
+         "suggestions":[{"type":"reply","label":"Book","id":"book_lagoon"}]}
+      ],
+      "idempotency_key":"krabi-card-001"
+    }
+  }'
+```
+</CodeGroup>
+
+### Rules for a card
+
+- A card needs at least one of `media`, `title` or `description`.
+- `title` is 1 to 200 characters and `description` is 1 to 2,000 characters.
+- `media.type` is `image` or `video`, and `media.url` is a public `https` address. A video can carry a `thumbnail_url`, shown before it plays.
+- `media.height` is `short` (112 pt), `medium` (168 pt, the default) or `tall` (264 pt).
+- `suggestions` holds 1 to 4 suggestions. Each `label` is 1 to 25 characters.
+- A Message carries at most one `rich_card` or `carousel`, and never a `selection` beside it.
+
+## Send a carousel
+
+A `carousel` holds 2 to 10 cards. Each card has the same fields as a `rich_card`, without `type`. `card_width` is `small` (180 pt) or `medium` (296 pt, the default). Every card is drawn as tall as the tallest one, and the next card peeks in from the edge so the person knows to swipe.
+
+```json
+{
+  "message": {
+    "parts": [
+      {"type":"text","value":"Three that fit. Swipe to compare."},
+      {"type":"carousel","card_width":"medium","cards":[
+        {"media":{"type":"image","url":"https://example.com/lagoon-house.jpg"},
+         "title":"Lagoon House","description":"$212 a night",
+         "suggestions":[{"type":"reply","label":"Book","id":"book_lagoon"}]},
+        {"media":{"type":"image","url":"https://example.com/cliffside.jpg"},
+         "title":"Cliffside Villas","description":"$238 a night",
+         "suggestions":[{"type":"reply","label":"Book","id":"book_cliffside"}]}
+      ]},
+      {"type":"buttons","items":[{"label":"Cheaper"},{"label":"Closer to the beach"}]}
+    ]
+  }
+}
+```
+
+A reply `id` must be unique across the whole part, so one `id` names one card's button. A [`buttons`](/interactions/buttons) part may follow the card or carousel in the same Message: its buttons are drawn under the cards, and they go away once the person answers the card or taps one of them.
+
+## Suggestions
+
+| `type` | Fields | What a tap does |
+| --- | --- | --- |
+| `reply` | `label`, `id` (1 to 256 characters) | Sends the person's reply to your agent. |
+| `open_url` | `label`, `url` (`http` or `https` only), optional `application` (`browser` or `webview`) | Opens the page inside the app. |
+| `dial` | `label`, `phone_number` in E.164 form, such as `+12223334444` | Opens the phone's dialer with the number filled in. |
+| `view_location` | `label`, then `latitude` and `longitude` together, or a `query`; optional `name` for the pin | Opens Apple Maps at the place, or searches for the query. |
+| `share_location` | `label` | Opens the person's location picker. What they pick arrives as their own [`place`](/messages/places) message. |
+| `create_calendar_event` | `label`, `start_time`, `end_time` (RFC 3339), `title` (1 to 100 characters), optional `description` (up to 500) | Opens the phone's new-event sheet, filled in. The person saves it. |
+
+A card's suggestions stay on the card after the person taps one, so the person can tap them again.
+
+## Receive a reply
+
+A tap on a `reply` suggestion arrives as an ordinary `message.received`. Its parts are a `text` part equal to the reply's `label`, then a `suggestion_response` part with the reply's `id` and `label`. Its `reply_to` names the card's message and part.
+
+```json
+{
+  "event_type":"message.received",
+  "data": {
+    "parts": [
+      {"type":"text","value":"Book"},
+      {"type":"suggestion_response","id":"book_lagoon","label":"Book"}
+    ],
+    "reply_to": {
+      "message_id":"01993d50-ef7b-7b37-886b-23fd80c7ec13",
+      "part_index":1
+    }
+  }
+}
+```
+
+The person sees their reply as a normal message bubble that reads "Book". Dispatch on `id`, never on the words. The SDKs read it for you:
+
+<CodeGroup>
+```typescript TypeScript SDK
+import { suggestionReply, type RelayWebhookEvent } from "@relaymessenger/sdk";
+
+function replyFrom(event: RelayWebhookEvent) {
+  if (event.event_type !== "message.received") return;
+  return suggestionReply(event.data.parts, event.data.reply_to);
+  // { id: "book_lagoon", label: "Book", reply_to: { message_id, part_index: 1 } }
+}
+```
+
+```python Python SDK
+from relaymessenger.rich_cards import suggestion_reply
+
+def reply_from(event):
+    if event["event_type"] != "message.received":
+        return None
+    data = event["data"]
+    return suggestion_reply(data["parts"], data.get("reply_to"))
+```
+</CodeGroup>
+
+## When it fails
+
+| Status | Code | Cause |
+| --- | --- | --- |
+| `400` | [1005](/api-reference/errors#1005) | A field is missing, too long or unknown; a card has no media, title or description; a URL is not `https` media or an `http`/`https` page; a number is not E.164; a carousel has fewer than 2 or more than 10 cards; two reply suggestions share an `id`; or the Message has two cards or a selection beside a card. A reply is not exactly a text part then a `suggestion_response` part, or its `reply_to.part_index` is missing. |
+| `403` | [2003](/api-reference/errors#2003) | Someone other than an agent sent a card, or someone other than a person answered one. |
+| `404` | [2001](/api-reference/errors#2001) | The reply's `reply_to.message_id` is not a Message the person can see in this chat. |
+| `422` | [2006](/api-reference/errors#2006) | The reply's `id` is not a reply suggestion on the named part, its text does not equal that suggestion's label, `reply_to.part_index` does not name a card or carousel, or a reaction targets a `suggestion_response` part. |
+
+## Next steps
+
+- [Interactions](/interactions/index)
+- [Buttons](/interactions/buttons)
+- [Replies](/messages/replies)
