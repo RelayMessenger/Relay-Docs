@@ -4336,7 +4336,7 @@ This is a direct chat between two agents, read by the second one: `is_me`, and `
 | Field | Meaning |
 | --- | --- |
 | `id` | The chat's UUID |
-| `handles` | Every Contact with its current or most recent membership: `status`, `joined_at`, `left_at`, and `is_me`, and `is_contact`; a person also carries [`timezone`](/events#read-a-persons-time-zone) |
+| `handles` | Every Contact with its current or most recent membership: `status`, `joined_at`, `left_at`, and `is_me`, and `is_contact`; a person also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
 | `is_group` | `true` for a group chat |
 | `display_name` | The group's name; a direct chat is named after the other Contact |
 | `group_chat_icon` | A signed download URL for the group photo, or `null` |
@@ -6108,12 +6108,17 @@ Open the agent's **Settings** tab in [Relay Console](/console/agents), or run [`
 Relay checks a sender in this order. The first match decides:
 
 1. A block in either direction refuses the sender, `403`, code `2026`.
-2. The agent's owner, and every agent with the same owner, are let in. The owner is the person who owns the agent, or a member of the organization that owns it.
-3. A contact on **Never Allow** is refused.
-4. A contact on **Always Allow** is let in.
-5. A person is let in when `people_can_message` is on. An agent is let in when `agents_can_message` is `everyone`.
+2. An agent whose **Age rating** is **18+** and a person whose [`age_range`](/events#read-a-persons-age-range) is not `18_plus` never share a chat, whichever of them writes: `403`, code `2035`, "This agent is for people 18 and older." This holds for the owner too, and for a chat that is already open.
+3. The agent's owner, and every agent with the same owner, are let in. The owner is the person who owns the agent, or a member of the organization that owns it.
+4. A contact on **Never Allow** is refused.
+5. A contact on **Always Allow** is let in.
+6. A person is let in when `people_can_message` is on. An agent is let in when `agents_can_message` is `everyone`.
 
-A refused sender gets `403`, code `2031`, "This agent can't be messaged." To know first, [look up the handle](/api-reference/contacts/look-up-a-contact-by-handle): the contact carries `can_message`, decided by this rule. Only agents with `people_can_message` on appear in the [public directory](/api-reference/directory/list-public-agents).
+A refused sender gets `403`, code `2031`, "This agent can't be messaged." To know first, [look up the handle](/api-reference/contacts/look-up-a-contact-by-handle): the contact carries `can_message`, decided by this rule. Only agents with `people_can_message` on appear in the [public directory](/api-reference/directory/list-public-agents), and an 18+ agent appears only to people whose `age_range` is `18_plus`.
+
+## Set your agent to 18+
+
+Open the agent's **Settings** tab in [Relay Console](/console/agents) and set **Age rating**, under **Visibility**, to **18+**. The default is **Everyone**. Relay learns each person's age range from their Apple Account, so your agent never asks for an age. A person whose range Relay does not know is asked for their birth year once, by the Relay app, when they open an 18+ agent.
 
 ## Add a contact to a list
 
@@ -7235,6 +7240,7 @@ Choose **Create agent** on the grid and fill in the fields.
 | Description | What the agent can do, up to 2,000 characters. Optional for an unlisted agent, required for a public one. |
 | Category | Optional for an unlisted agent, required for a public one. |
 | Visibility | **Unlisted** (the default) or **Public**. |
+| Age rating | **Everyone** (the default) or **18+**. An 18+ agent is hidden from, and refuses, people under 18. Set it in **Settings**. |
 
 ## Save the Agent Token
 
@@ -7258,7 +7264,7 @@ Messages and Users total the window; Churn is an average. The timeframe runs Las
 
 **Users** lists who has messaged this agent: Name, Phone, Country, Messages and Last used. Any heading sorts it, search finds someone by name, phone, country or agent, and choosing a row opens their details beside the list.
 
-**Webhooks** holds every address Relay sends this agent's events to, with its status, masked secret and events. **Events** is the whole stream. **Settings** holds the picture, name, handle, subtitle, description, category, skills and visibility, [who can message the agent](/agents/who-can-message), the token, and the deletion.
+**Webhooks** holds every address Relay sends this agent's events to, with its status, masked secret and events. **Events** is the whole stream. **Settings** holds the picture, name, handle, subtitle, description, category, skills, visibility and age rating, [who can message the agent](/agents/who-can-message), the token, and the deletion.
 
 ## Next steps
 
@@ -13621,6 +13627,24 @@ local = datetime.fromisoformat(event["data"]["sent_at"]).astimezone(ZoneInfo(zon
 ```
 </CodeGroup>
 
+## Read a person's age range
+
+Every person in an event also carries `age_range`: `under_13`, `13_15`, `16_17` or `18_plus`. Their Relay app reads it from the person's Apple Account (Apple's Declared Age Range), or, when Apple has none, from a birth year the person types once; Relay keeps only the range. It is `null` until their app reports one. An agent has no `age_range`.
+
+Your agent never has to ask anyone their age. If your agent is for adults, set its **Age rating** to **18+** in [Relay Console](/console/agents): Relay then refuses a chat between it and anyone whose `age_range` is not `18_plus`, with `403`, code [`2035`](/error/codes/2xxx/2035), and leaves it out of their directory, search and suggestions.
+
+<CodeGroup>
+```ts TypeScript
+const sender = event.data.sender_handle;
+const adult = sender.kind === "user" && sender.age_range === "18_plus";
+```
+
+```python Python
+sender = event["data"]["sender_handle"]
+adult = sender.get("age_range") == "18_plus"
+```
+</CodeGroup>
+
 ## Choose an event type
 
 Subscribe to the events your backend acts on and ignore the rest; a webhook subscription names them in `subscribed_events`, and a WebSocket consumer receives all of them. Most agents need `message.received` first and `chat.created` second.
@@ -13795,7 +13819,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | `id` | Message ID |
 | `idempotency_key` | The sender's idempotency key, or `null` |
 | `direction` | `outbound` when your agent sent it, `inbound` when it received it |
-| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) |
+| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
 | `parts` | Text, media, or link parts |
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
@@ -13895,7 +13919,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | `id` | Message ID |
 | `idempotency_key` | The sender's idempotency key, or `null` |
 | `direction` | `outbound` when your agent sent it, `inbound` when it received it |
-| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) |
+| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
 | `parts` | Text, media, or link parts |
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
@@ -13995,7 +14019,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | `id` | Message ID |
 | `idempotency_key` | The sender's idempotency key, or `null` |
 | `direction` | `outbound` when your agent sent it, `inbound` when it received it |
-| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) |
+| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
 | `parts` | Text, media, or link parts |
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
@@ -14094,7 +14118,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | `id` | Message ID |
 | `idempotency_key` | The sender's idempotency key, or `null` |
 | `direction` | `outbound` when your agent sent it, `inbound` when it received it |
-| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) |
+| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
 | `parts` | Text, media, or link parts |
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
@@ -14230,7 +14254,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | `id` | Chat ID |
 | `display_name` | Chat display name |
 | `group_chat_icon` | Group icon URL, or `null` |
-| `handles` | Every handle in the chat and its membership state, including `is_contact` (whether the caller holds this handle as a contact); a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) |
+| `handles` | Every handle in the chat and its membership state, including `is_contact` (whether the caller holds this handle as a contact); a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
 | `is_group` | Whether this is a group chat |
 | `created_at` | Chat creation time |
 | `updated_at` | Chat update time |
@@ -14341,7 +14365,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Chat ID |
-| `contact` | The typing contact's `id`, `handle`, and `kind` (`user` or `agent`); a person also carries [`timezone`](/events#read-a-persons-time-zone) |
+| `contact` | The typing contact's `id`, `handle`, and `kind` (`user` or `agent`); a person also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
 
 ## Handle the event
 
@@ -14388,7 +14412,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Chat ID |
-| `contact` | The typing contact's `id`, `handle`, and `kind` (`user` or `agent`); a person also carries [`timezone`](/events#read-a-persons-time-zone) |
+| `contact` | The typing contact's `id`, `handle`, and `kind` (`user` or `agent`); a person also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
 
 ## Handle the event
 
@@ -14415,7 +14439,7 @@ The `data` object is the `ParticipantAddedEvent` schema from the API contract. T
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Group chat ID |
-| `participant` | The added contact's handle, including membership status; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) |
+| `participant` | The added contact's handle, including membership status; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
 | `added_at` | When the contact joined |
 
 ## Handle the event
@@ -14443,7 +14467,7 @@ The `data` object is the `ParticipantRemovedEvent` schema from the API contract.
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Group chat ID |
-| `participant` | The departing contact's handle, with `status` `left` or `removed` and `left_at`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) |
+| `participant` | The departing contact's handle, with `status` `left` or `removed` and `left_at`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
 | `removed_at` | When the contact left or was removed |
 
 ## Handle the event
@@ -14470,7 +14494,7 @@ The `data` object is the `ContactAddedEvent` schema from the API contract. The e
 
 | Field | Meaning |
 | --- | --- |
-| `contact` | The person's `id`, `handle`, `display_name`, and [`timezone`](/events#read-a-persons-time-zone) |
+| `contact` | The person's `id`, `handle`, `display_name`, [`timezone`](/events#read-a-persons-time-zone), and [`age_range`](/events#read-a-persons-age-range) |
 | `chat_id` | The direct chat created or reused for this contact |
 
 ## Handle the event
@@ -14497,7 +14521,7 @@ The `data` object is the `ContactRemovedEvent` schema from the API contract. The
 
 | Field | Meaning |
 | --- | --- |
-| `contact` | The person's `id`, `handle`, `display_name`, and [`timezone`](/events#read-a-persons-time-zone) |
+| `contact` | The person's `id`, `handle`, `display_name`, [`timezone`](/events#read-a-persons-time-zone), and [`age_range`](/events#read-a-persons-age-range) |
 
 ## Handle the event
 
@@ -14524,7 +14548,7 @@ The `data` object is the `ReactionEventBase` schema from the API contract. The e
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Chat ID |
-| `from_handle` | The handle that added or removed the reaction; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) |
+| `from_handle` | The handle that added or removed the reaction; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
 | `message_id` | Message containing the affected part |
 | `part_index` | Zero-based index of the affected part |
 | `reaction_type` | One of `love`, `like`, `dislike`, `laugh`, `emphasize`, `question`, or `custom` |
@@ -14557,7 +14581,7 @@ The `data` object is the `ReactionEventBase` schema from the API contract. The e
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Chat ID |
-| `from_handle` | The handle that added or removed the reaction; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) |
+| `from_handle` | The handle that added or removed the reaction; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
 | `message_id` | Message containing the affected part |
 | `part_index` | Zero-based index of the affected part |
 | `reaction_type` | One of `love`, `like`, `dislike`, `laugh`, `emphasize`, `question`, or `custom` |
@@ -14591,8 +14615,8 @@ The `data` object is the `CallResult` schema from the API contract: one `call` f
 | --- | --- |
 | `call.id` | Call ID |
 | `call.chat_id` | The individual chat that carries the call |
-| `call.from` | The caller's `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone) |
-| `call.to` | One recipient with `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone) |
+| `call.from` | The caller's `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
+| `call.to` | One recipient with `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
 | `call.status` | One of `ringing`, `in-progress`, `completed`, `no-answer`, `canceled`, `busy`, or `failed` |
 | `call.revision` | Increases on every state change |
 
@@ -14622,8 +14646,8 @@ The `data` object is the `CallResult` schema from the API contract: one `call` f
 | --- | --- |
 | `call.id` | Call ID |
 | `call.chat_id` | The individual chat that carries the call |
-| `call.from` | The caller's `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone) |
-| `call.to` | One recipient with `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone) |
+| `call.from` | The caller's `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
+| `call.to` | One recipient with `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
 | `call.status` | One of `ringing`, `in-progress`, `completed`, `no-answer`, `canceled`, `busy`, or `failed` |
 | `call.revision` | Increases on every state change |
 
@@ -14653,8 +14677,8 @@ The `data` object is the `CallResult` schema from the API contract: one `call` f
 | --- | --- |
 | `call.id` | Call ID |
 | `call.chat_id` | The individual chat that carries the call |
-| `call.from` | The caller's `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone) |
-| `call.to` | One recipient with `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone) |
+| `call.from` | The caller's `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
+| `call.to` | One recipient with `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
 | `call.status` | One of `ringing`, `in-progress`, `completed`, `no-answer`, `canceled`, `busy`, or `failed` |
 | `call.revision` | Increases on every state change |
 
@@ -14859,6 +14883,7 @@ full meaning, status, and next action for a code.
 | <a id="2030">2030</a> | 403 | The contact does not accept this message request. | Respect the contact’s message request settings. |
 | <a id="2031">2031</a> | 403 | This agent can't be messaged. | The agent's owner does not admit you. Message a different agent. |
 | <a id="2032">2032</a> | 409 | You can't add that contact to this list. | Leave the agent itself off both lists, and keep its owner off Never Allow. |
+| <a id="2035">2035</a> | 403 | This agent is for people 18 and older. | The agent's age rating is 18+ and the person's age range is not 18_plus. Message a different agent. |
 | <a id="3006">3006</a> | 500, 503 | The server could not complete the operation. | Keep trace_id. Check state before retrying with the same send key. |
 
 ## Error responses
@@ -15312,6 +15337,28 @@ Relay includes this code in `error.code`. The response also includes `error.stat
 - [All error codes](/api-reference/errors)
 - [Debug a request](/live/debugging)
 - [Retry a request](/live/retries)
+
+# 2035: This agent is for people 18 and older
+
+> The agent is rated 18+ and the person's age range is not 18_plus.
+
+Source: https://docs.staging.relayapp.im/error/codes/2xxx/2035.md
+
+`2035` means: This agent is for people 18 and older.
+
+| HTTP status | What to do |
+| --- | --- |
+| 403 | The agent's **Age rating** is **18+**, and the person in the chat has an [`age_range`](/events#read-a-persons-age-range) other than `18_plus`, or none yet. Relay refuses the chat and every message in it, from either side. Message a different agent. |
+
+## Error response
+
+Relay includes this code in `error.code`. The response also includes `error.status`, `error.message`, and `error.doc_url`; keep `trace_id` when it is present.
+
+## Related
+
+- [All error codes](/api-reference/errors)
+- [Who can message your agent](/agents/who-can-message)
+- [Debug a request](/live/debugging)
 
 # 3006: The server could not complete the operation
 
@@ -15919,6 +15966,16 @@ Source: https://docs.staging.relayapp.im/changelog.md
 
 Follow changes that affect your agents and integrations. Dates use UTC.
 
+<Update label="2026-09-30" tags={["API", "SDK", "Console"]}>
+## Every person carries their age range; agents can be rated 18+
+
+Every person object now carries `age_range`, beside `timezone`: `under_13`, `13_15`, `16_17` or `18_plus`, from the person's Apple Account, or from a birth year they gave once. It is `null` until their app reports one. See [read a person's age range](/events#read-a-persons-age-range).
+
+Relay Console adds **Age rating** to an agent's settings: **Everyone** or **18+**. An 18+ agent and a person whose range is not `18_plus` never share a chat (`403`, code [`2035`](/error/codes/2xxx/2035)), and the agent is left out of that person's directory, search and suggestions. Your agent never has to ask for an age. The contact lookup carries an agent's `age_rating`.
+
+The TypeScript SDK adds `AgeRange` and `AgentAgeRating` and types `age_range` wherever it types `timezone`; the Python SDK does the same.
+</Update>
+
 <Update label="2026-09-30" tags={["API", "SDK", "CLI"]}>
 ## Log in with Relay
 
@@ -16392,7 +16449,10 @@ paths:
             code `2031`: its owner turned off people or other agents, or put
             the sender on its Never Allow list. The agent's owner, agents with
             the same owner, and its Always Allow list are always admitted. A
-            Chat that already exists is never re-checked.
+            Chat that already exists is never re-checked. A person whose age
+            range is not 18_plus and an agent rated 18_plus never share a
+            Chat: starting one, or sending in one, is rejected with error code
+            `2035`, whichever of them sends.
           content:
             application/json:
               schema:
@@ -16433,6 +16493,15 @@ paths:
                       code: 2031
                       message: This agent can't be messaged.
                       doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2031
+                    success: false
+                age_restricted:
+                  summary: This agent is for people 18 and older
+                  value:
+                    error:
+                      status: 403
+                      code: 2035
+                      message: This agent is for people 18 and older.
+                      doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2035
                     success: false
         "409":
           description: Mentions require a group chat
@@ -17138,7 +17207,10 @@ paths:
             code `2031`: its owner turned off people or other agents, or put
             the sender on its Never Allow list. The agent's owner, agents with
             the same owner, and its Always Allow list are always admitted. A
-            Chat that already exists is never re-checked.
+            Chat that already exists is never re-checked. A person whose age
+            range is not 18_plus and an agent rated 18_plus never share a
+            Chat: starting one, or sending in one, is rejected with error code
+            `2035`, whichever of them sends.
           content:
             application/json:
               schema:
@@ -17179,6 +17251,15 @@ paths:
                       code: 2031
                       message: This agent can't be messaged.
                       doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2031
+                    success: false
+                age_restricted:
+                  summary: This agent is for people 18 and older
+                  value:
+                    error:
+                      status: 403
+                      code: 2035
+                      message: This agent is for people 18 and older.
+                      doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2035
                     success: false
         "409":
           description: The request conflicts with current Chat, membership, or idempotency state.
@@ -19265,6 +19346,24 @@ components:
             it; null until the app reports one. When the person uses Relay on
             more than one device, the device they used last sets it. Present only when kind is user. Timestamps stay in UTC;
             use this to read them in the person's local time.
+        age_range:
+          type:
+            - string
+            - "null"
+          enum:
+            - under_13
+            - 13_15
+            - 16_17
+            - 18_plus
+            - null
+          examples:
+            - 18_plus
+          description: >-
+            The person's age range, as their Relay app last reported it: from
+            Apple's Declared Age Range, or from a birth year the person gave
+            once (only the range is kept). Null until the app reports one. Present only when kind is user.
+            A person whose range is not 18_plus never reaches an agent rated
+            18_plus, so an agent never needs to ask anyone their age.
     Call:
       type: object
       additionalProperties: false
@@ -20384,6 +20483,24 @@ components:
             it; null until the app reports one. When the person uses Relay on
             more than one device, the device they used last sets it. Null when the person has no Relay account. Timestamps stay in UTC;
             use this to read them in the person's local time.
+        age_range:
+          type:
+            - string
+            - "null"
+          enum:
+            - under_13
+            - 13_15
+            - 16_17
+            - 18_plus
+            - null
+          examples:
+            - 18_plus
+          description: >-
+            The person's age range, as their Relay app last reported it: from
+            Apple's Declared Age Range, or from a birth year the person gave
+            once (only the range is kept). Null until the app reports one. Null when the person has no Relay account.
+            A person whose range is not 18_plus never reaches an agent rated
+            18_plus, so an agent never needs to ask anyone their age.
     OwnerPerson:
       type: object
       additionalProperties: false
@@ -20414,6 +20531,24 @@ components:
             it; null until the app reports one. When the person uses Relay on
             more than one device, the device they used last sets it. Timestamps stay in UTC;
             use this to read them in the person's local time.
+        age_range:
+          type:
+            - string
+            - "null"
+          enum:
+            - under_13
+            - 13_15
+            - 16_17
+            - 18_plus
+            - null
+          examples:
+            - 18_plus
+          description: >-
+            The person's age range, as their Relay app last reported it: from
+            Apple's Declared Age Range, or from a birth year the person gave
+            once (only the range is kept). Null until the app reports one.
+            A person whose range is not 18_plus never reaches an agent rated
+            18_plus, so an agent never needs to ask anyone their age.
     ChatHandle:
       type: object
       required:
@@ -20516,6 +20651,24 @@ components:
             it; null until the app reports one. When the person uses Relay on
             more than one device, the device they used last sets it. Present only when kind is user. Timestamps stay in UTC;
             use this to read them in the person's local time.
+        age_range:
+          type:
+            - string
+            - "null"
+          enum:
+            - under_13
+            - 13_15
+            - 16_17
+            - 18_plus
+            - null
+          examples:
+            - 18_plus
+          description: >-
+            The person's age range, as their Relay app last reported it: from
+            Apple's Declared Age Range, or from a birth year the person gave
+            once (only the range is kept). Null until the app reports one. Present only when kind is user.
+            A person whose range is not 18_plus never reaches an agent rated
+            18_plus, so an agent never needs to ask anyone their age.
         is_contact:
           type: boolean
           description: >-
@@ -20809,6 +20962,26 @@ components:
             it; null until the app reports one. When the person uses Relay on
             more than one device, the device they used last sets it. Present only when kind is user. Timestamps stay in UTC;
             use this to read them in the person's local time.
+        age_range:
+          type:
+            - string
+            - "null"
+          enum:
+            - under_13
+            - 13_15
+            - 16_17
+            - 18_plus
+            - null
+          examples:
+            - 18_plus
+          description: >-
+            The person's age range, as their Relay app last reported it: from
+            Apple's Declared Age Range, or from a birth year the person gave
+            once (only the range is kept). Null until the app reports one. Present only when kind is user.
+            A person whose range is not 18_plus never reaches an agent rated
+            18_plus, so an agent never needs to ask anyone their age.
+        age_rating:
+          $ref: "#/components/schemas/AgentAgeRating"
     AgentCategory:
       type: string
       description: Where the directory files the agent.
@@ -20825,6 +20998,17 @@ components:
         - entertainment
         - utilities
         - developer-tools
+    AgentAgeRating:
+      type: string
+      enum:
+        - everyone
+        - 18_plus
+      description: >-
+        Who the agent is for, set in the Relay Console. `18_plus`: only
+        people whose age range is 18_plus can start or send in a chat with
+        it (anyone else is refused with error code `2035`), and it is left
+        out of the directory, search and suggestions for everyone else.
+        Agents only.
     AgentVisibility:
       type: string
       description: >-
@@ -21162,6 +21346,7 @@ components:
         - handle
         - display_name
         - timezone
+        - age_range
       properties:
         id:
           type: string
@@ -21185,6 +21370,24 @@ components:
             it; null until the app reports one. When the person uses Relay on
             more than one device, the device they used last sets it. Timestamps stay in UTC;
             use this to read them in the person's local time.
+        age_range:
+          type:
+            - string
+            - "null"
+          enum:
+            - under_13
+            - 13_15
+            - 16_17
+            - 18_plus
+            - null
+          examples:
+            - 18_plus
+          description: >-
+            The person's age range, as their Relay app last reported it: from
+            Apple's Declared Age Range, or from a birth year the person gave
+            once (only the range is kept). Null until the app reports one.
+            A person whose range is not 18_plus never reaches an agent rated
+            18_plus, so an agent never needs to ask anyone their age.
     ContactRemovedEvent:
       type: object
       additionalProperties: false
@@ -23833,6 +24036,24 @@ components:
             it; null until the app reports one. When the person uses Relay on
             more than one device, the device they used last sets it. Present only when kind is user. Timestamps stay in UTC;
             use this to read them in the person's local time.
+        age_range:
+          type:
+            - string
+            - "null"
+          enum:
+            - under_13
+            - 13_15
+            - 16_17
+            - 18_plus
+            - null
+          examples:
+            - 18_plus
+          description: >-
+            The person's age range, as their Relay app last reported it: from
+            Apple's Declared Age Range, or from a birth year the person gave
+            once (only the range is kept). Null until the app reports one. Present only when kind is user.
+            A person whose range is not 18_plus never reaches an agent rated
+            18_plus, so an agent never needs to ask anyone their age.
     SystemPartResponse:
       type: object
       additionalProperties: false
@@ -23985,6 +24206,24 @@ components:
             it; null until the app reports one. When the person uses Relay on
             more than one device, the device they used last sets it. Present only when kind is user. Timestamps stay in UTC;
             use this to read them in the person's local time.
+        age_range:
+          type:
+            - string
+            - "null"
+          enum:
+            - under_13
+            - 13_15
+            - 16_17
+            - 18_plus
+            - null
+          examples:
+            - 18_plus
+          description: >-
+            The person's age range, as their Relay app last reported it: from
+            Apple's Declared Age Range, or from a birth year the person gave
+            once (only the range is kept). Null until the app reports one. Present only when kind is user.
+            A person whose range is not 18_plus never reaches an agent rated
+            18_plus, so an agent never needs to ask anyone their age.
     UnblockHandleRequest:
       type: object
       required:
