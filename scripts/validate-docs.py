@@ -557,8 +557,9 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server b4478d21 (PR 460, merged); rich_card, carousel and suggestion_response, September 30, 2026.
 # Source authority: Relay-Server a3e534d4 (PR 461, merged); every person object carries the person's IANA time zone as timezone, the device used last sets it, September 30, 2026.
 # Source authority: Relay-Server a184965a (PR 459, merged); Log in with Relay: /v1/oauth2_client, September 30, 2026.
+# Source authority: Relay-Server 269da7b5 (PR 462, merged); A2A and tasks are removed: no agent cards or JSON-RPC door, no /v1/tasks, no PATCH /v1/me, no task.* events, no message.received a2a, errors 2033 and 2034 retired, September 30, 2026.
 expected_openapi_sha256 = (
-    "414d6cc6ca71ee575b75ca420faafa0059924f10ac481866f14377e0db39c455"
+    "70dc3dd60859a1bde4dcfae5aed6bfd28c77d05c67b09cfbfc96781262928034"
 )
 # Local candidate provenance is shared with the guide and contract gates;
 # it does not relabel the historical Server release as selection-capable.
@@ -773,12 +774,6 @@ expected_operation_ids = {
     "createOAuth2Client",
     "updateOAuth2Client",
     "resetOAuth2ClientSecret",
-    "updateAgentMe",
-    "createTask",
-    "listTasks",
-    "updateTaskStatus",
-    "replyToTask",
-    "addTaskArtifact",
 }
 if len(operation_ids) != len(expected_operation_ids) or set(operation_ids) != expected_operation_ids:
     raise SystemExit(

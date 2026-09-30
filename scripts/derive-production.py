@@ -29,7 +29,6 @@ EXPECTED_REWRITES = {
     "cdn.staging.relayapp.im": "cdn.relayapp.im",
     "console.staging.relayapp.im": "console.relayapp.im",
     "uploads.staging.relayapp.im": "uploads.relayapp.im",
-    "staging.relayagent.im": "relayagent.im",
     "relay-staging.mintlify.app": "relay.mintlify.app",
     "/favicon-staging.png": "/favicon.png",
 }

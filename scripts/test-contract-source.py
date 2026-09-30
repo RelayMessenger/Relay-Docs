@@ -36,11 +36,12 @@ ROOT = Path(__file__).resolve().parents[1]
 # A message agent keeps a contextId the caller makes up (Server #456).
 # Communities are removed, membership included; agents_can_message is everyone or nobody (Server #457).
 # Log in with Relay: /v1/oauth2_client (Server #459, merged as a184965a on top of #461's time zone), September 30, 2026.
-UPSTREAM_COMMIT = "a184965ad3d70ea543dca623cfb9111b052d0dd9"
+# A2A and tasks are removed: agent cards, the JSON-RPC door, /v1/tasks, PATCH /v1/me, task.* events, message.received a2a (Server #462, merged as 269da7b5).
+UPSTREAM_COMMIT = "269da7b573c2caa0a2033935c5c2b8f80071db84"
 # The source is merged: the Server staging commit is the same commit.
-UPSTREAM_STAGING_COMMIT = "a184965ad3d70ea543dca623cfb9111b052d0dd9"
-UPSTREAM_SIZE = 331983
-UPSTREAM_SHA256 = "414d6cc6ca71ee575b75ca420faafa0059924f10ac481866f14377e0db39c455"
+UPSTREAM_STAGING_COMMIT = "269da7b573c2caa0a2033935c5c2b8f80071db84"
+UPSTREAM_SIZE = 308850
+UPSTREAM_SHA256 = "70dc3dd60859a1bde4dcfae5aed6bfd28c77d05c67b09cfbfc96781262928034"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
