@@ -38,11 +38,12 @@ ROOT = Path(__file__).resolve().parents[1]
 # Share another agent's Contact Card as a snapshot, Idempotency-Key on the
 # share, contact lookup by id, system_event.actor name and picture (Server
 # #463, merged as bf085edc on top of #468's age range), September 30, 2026.
-UPSTREAM_COMMIT = "bf085edc35814d4c991f94e6b430aab5df3fd686"
+# List picker: sections, row ids, subtitles and images, multiple, the card subtitle and reply_message (Server #466, merged as 34943159 on top of #463), September 30, 2026.
+UPSTREAM_COMMIT = "349431592ca866731a95407ab8836611989371d2"
 # The source is merged: the Server staging commit is the same commit.
-UPSTREAM_STAGING_COMMIT = "bf085edc35814d4c991f94e6b430aab5df3fd686"
-UPSTREAM_SIZE = 321688
-UPSTREAM_SHA256 = "baf2839ae8df9d1478f7a8c8457e99f54f4a1563c8439fc7ff05bb2492a7e6f4"
+UPSTREAM_STAGING_COMMIT = "349431592ca866731a95407ab8836611989371d2"
+UPSTREAM_SIZE = 328145
+UPSTREAM_SHA256 = "1721df340bf291aa1d5a12578fb4918209cba7525622dd5fb3af2ca68cbc77fc"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
