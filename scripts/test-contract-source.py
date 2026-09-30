@@ -33,8 +33,8 @@ ROOT = Path(__file__).resolve().parents[1]
 # GET /v1/me calls_enabled and 503 with calls off (Server #421); WebSocket subscribed_events (Server #428); each agent's A2A address is its own origin (Server #429).
 # Only the agent that made a card changes it (Server #437); blocks stop typing and reactions (Server #438); a WebSocket that names no subscribed_events gets every event type (Server #445); the ring lease is 32 seconds (Server #444).
 # An agent answers each A2A request with a Message or a Task: POST /v1/tasks/{taskId}/reply and message.received a2a (Server #455).
-UPSTREAM_COMMIT = "be994fc8fb19bf56b8eb1c34a9409af3b99b833f"
-UPSTREAM_STAGING_COMMIT = "be994fc8fb19bf56b8eb1c34a9409af3b99b833f"
+UPSTREAM_COMMIT = "61c53facb171d9abeb5e3e9b1f1ec9b6b0d1647a"
+UPSTREAM_STAGING_COMMIT = "61c53facb171d9abeb5e3e9b1f1ec9b6b0d1647a"
 UPSTREAM_SIZE = 322963
 UPSTREAM_SHA256 = "5025a56a01b8934aa197a036463f3490983aa06b7354b9bab3dbe1fa9e513025"
 CANDIDATE_RECORD = {
