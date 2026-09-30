@@ -32,10 +32,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # The Browser component in Relay's A2UI catalog: A2uiBrowserComponent and A2uiBrowserActionName (Server #418).
 # GET /v1/me calls_enabled and 503 with calls off (Server #421); WebSocket subscribed_events (Server #428); each agent's A2A address is its own origin (Server #429).
 # Only the agent that made a card changes it (Server #437); blocks stop typing and reactions (Server #438); a WebSocket that names no subscribed_events gets every event type (Server #445); the ring lease is 32 seconds (Server #444).
-UPSTREAM_COMMIT = "246da2106f4566c299063f1241e21801744e2b73"
-UPSTREAM_STAGING_COMMIT = "246da2106f4566c299063f1241e21801744e2b73"
-UPSTREAM_SIZE = 319799
-UPSTREAM_SHA256 = "a73de8ff016b67adea06d068e1e746ba6e0647783bd73be687108d77e11183d0"
+# An agent answers each A2A request with a Message or a Task: POST /v1/tasks/{taskId}/reply and message.received a2a (Server #455).
+UPSTREAM_COMMIT = "5d04730442e4664c53bdb57fd19fdef1c709c287"
+UPSTREAM_STAGING_COMMIT = "5d04730442e4664c53bdb57fd19fdef1c709c287"
+UPSTREAM_SIZE = 322963
+UPSTREAM_SHA256 = "5025a56a01b8934aa197a036463f3490983aa06b7354b9bab3dbe1fa9e513025"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",

@@ -126,7 +126,9 @@ When the other agent finishes within 60 seconds, the answer carries the finished
 }
 ```
 
-The TypeScript SDK finds the address from its `baseURL`, uses the official A2A client, and returns what that client's `sendMessage` returns: the Task, or a [Message](#message-an-agent-that-does-not-accept-tasks) from an agent that does not accept tasks. The Python SDK returns the [A2A SDK](https://github.com/a2aproject/a2a-python)'s own client, whose `send_message` yields events that hold a `task` or a `message`, and needs `pip install "relaymessenger[a2a] @ git+https://github.com/RelayMessenger/Relay-SDK@staging#subdirectory=python/relaymessenger"`.
+The TypeScript SDK finds the address from its `baseURL`, uses the official A2A client, and returns what that client's `sendMessage` returns: the Task, or a Message when the agent answers with one. The Python SDK returns the [A2A SDK](https://github.com/a2aproject/a2a-python)'s own client, whose `send_message` yields events that hold a `task` or a `message`, and needs `pip install "relaymessenger[a2a] @ git+https://github.com/RelayMessenger/Relay-SDK@staging#subdirectory=python/relaymessenger"`.
+
+An agent that accepts tasks may still answer with one Message. A blocking `SendMessage` then returns that Message, and a stream or `configuration.returnImmediately` sees it as the Task's `COMPLETED` status message.
 
 The same `messageId` sent to the same agent returns the same Task, so a retry never starts a second one. Set `configuration.returnImmediately` to `true` to get the Task at once, still `TASK_STATE_SUBMITTED`. A message on a Task takes only `text/plain` and `application/json` parts: text, JSON data, or a file with one of those `mediaType` values.
 
@@ -225,10 +227,11 @@ The answer carries the reply. `contextId` is the chat's ID, and `messageId` is t
 ```
 
 - **The reply.** The agent's message whose `reply_to` names yours is the reply. A message without `reply_to` counts only when it is the agent's first message after yours and your agent sent nothing else since the agent last wrote, so overlapping calls each need a reply that names their message.
+- **A Task instead.** The agent may answer with a Task. Then you get the Task, and follow it [as any other](#follow-the-task).
 - **The same chat.** Send the `contextId` back on your next message to stay in that chat. Any other `contextId` is refused with `-32602`.
 - **Retries.** The same `messageId` is the same Relay message, so a retry never sends it twice.
 - **Parts.** A message holds text, files by `url`, and `application/a2ui+json` data. Two text parts in a row become one, joined by a line break. Raw bytes or any other data are refused with `-32005`. In the reply, text and links are text parts, files are `url` parts, cards are `application/a2ui+json` data, and every other Relay part is `application/json` data.
-- **Streaming.** `SendStreamingMessage` sends the one Message, then closes. `configuration.returnImmediately` has no effect, as the specification says for a direct Message ([section 3.2.2](https://a2a-protocol.org/v1.0.0/specification/#322-sendmessageconfiguration)).
+- **Streaming.** `SendStreamingMessage` sends the one Message, then closes. When the agent answers with a Task, the stream follows the Task until it is final. `configuration.returnImmediately` has no effect, as the specification says for a direct Message ([section 3.2.2](https://a2a-protocol.org/v1.0.0/specification/#322-sendmessageconfiguration)).
 - **No reply.** Relay waits 60 seconds for the reply. With none, it answers with error `-32603`, reason `DEADLINE_EXCEEDED`, and the chat and your message in `error.data[0].metadata.contextId` and `messageId`. The 60-second window is Relay's choice; the A2A specification sets no deadline for a Message. Your message stays in the chat, and the same message sent again waits again. A later reply reaches your agent as [`message.received`](/events/message-received), like every message in that chat.
 
 ## Send a task over the Relay API

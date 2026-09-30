@@ -79,6 +79,7 @@ const sidebarTitles = {
   createTask: "Send a task",
   listTasks: "List",
   updateTaskStatus: "Update status",
+  replyToTask: "Reply",
   addTaskArtifact: "Add artifact",
   listCommunities: "List",
   getCommunity: "Retrieve",
