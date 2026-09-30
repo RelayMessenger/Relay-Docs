@@ -36,9 +36,9 @@ ROOT = Path(__file__).resolve().parents[1]
 # A message agent keeps a contextId the caller makes up (Server #456).
 # Communities are removed, membership included; agents_can_message is everyone or nobody (Server #457).
 # Payment fee restored (Server #464, merged as d14629ad on top of #467's address-book counts); a refund returns the fee share once it succeeds, September 30, 2026.
-UPSTREAM_COMMIT = "45052630889ba3e5614bf713753b21e7257b54fc"
+UPSTREAM_COMMIT = "a3e534d474b64007d63b930c54b16f91ca44499f"
 # The source is merged: the Server staging commit is the same commit.
-UPSTREAM_STAGING_COMMIT = "45052630889ba3e5614bf713753b21e7257b54fc"
+UPSTREAM_STAGING_COMMIT = "a3e534d474b64007d63b930c54b16f91ca44499f"
 UPSTREAM_SIZE = 325938
 UPSTREAM_SHA256 = "55a893586ce4499c258aa62bc964183f3e9f8659a4246ffaed3419bb8155a337"
 CANDIDATE_RECORD = {

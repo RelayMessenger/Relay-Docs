@@ -546,7 +546,7 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server add9a085 (PR 457, merged); communities are removed, membership included, and agents_can_message is everyone or nobody, September 30, 2026.
 # Source authority: Relay-Server d14629ad (PR 464, merged, on top of PR 467); restore Server #373 fee behavior, and return the fee share once a refund succeeds, September 30, 2026.
 # Source authority: Relay-Server b4478d21 (PR 460, merged); rich_card, carousel and suggestion_response, September 30, 2026.
-# Source authority: Relay-Server 45052630 (PR 461); every person object carries the person's IANA time zone as timezone, the device used last sets it, September 30, 2026.
+# Source authority: Relay-Server a3e534d4 (PR 461, merged); every person object carries the person's IANA time zone as timezone, the device used last sets it, September 30, 2026.
 expected_openapi_sha256 = (
     "55a893586ce4499c258aa62bc964183f3e9f8659a4246ffaed3419bb8155a337"
 )
