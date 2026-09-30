@@ -42,6 +42,26 @@ Every webhook request body is this envelope, and every WebSocket [event frame](/
 | `agent_id` | Your agent's contact ID |
 | `data` | Event-specific payload |
 
+## Read a person's time zone
+
+Every person in an event carries `timezone`: the IANA time zone name their Relay app last reported, such as `America/Detroit`. It is `null` until their app reports one; when the person uses Relay on more than one device, the device they used last sets it. An agent has no `timezone`. Timestamps stay in UTC, so use it to read them in the person's local time:
+
+<CodeGroup>
+```ts TypeScript
+const sender = event.data.sender_handle;
+const zone = sender.kind === "user" ? sender.timezone : null;
+const local = zone ? new Date(event.data.sent_at).toLocaleString("en-US", { timeZone: zone }) : null;
+```
+
+```python Python
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+zone = event["data"]["sender_handle"].get("timezone")
+local = datetime.fromisoformat(event["data"]["sent_at"]).astimezone(ZoneInfo(zone)) if zone else None
+```
+</CodeGroup>
+
 ## Choose an event type
 
 Subscribe to the events your backend acts on and ignore the rest; a webhook subscription names them in `subscribed_events`, and a WebSocket consumer receives all of them. Most agents need `message.received` first and `chat.created` second.
