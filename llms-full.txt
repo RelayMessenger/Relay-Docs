@@ -6217,6 +6217,196 @@ Each list is newest first, and each entry is a contact card, the same card a [ha
 - [Always allow or never allow a contact](/api-reference/agents/always-allow-or-never-allow-a-contact)
 - [Block a handle](/agents/blocked-handles)
 
+# Log in with Relay
+
+> Let people log in to your website with their Relay account through standard OpenID Connect, and let your agent message them.
+
+Source: https://docs.staging.relayapp.im/agents/log-in-with-relay.md
+
+Your website gets a **Connect Relay** button. A person taps it, confirms in the Relay app (or on Relay's page on a computer), and comes back logged in, with a verified ID token that names their Relay account.
+
+Logging in also lets your agent message the person in Relay: your agent gets [`contact.added`](/events) and can send the first message.
+
+## Follow a login
+
+1. Your site sends the person to Relay's authorization endpoint.
+2. Relay asks which account logs in to your site.
+3. On an iPhone, the Relay app shows the confirmation: your site, what it gets, and optional switches to share their email and phone number. On a computer, the same confirmation shows on Relay’s page.
+4. Relay sends the person back to your redirect with a code. Your server exchanges it for an ID token.
+
+The next login from the same person skips the confirmation, until they remove your site in **Settings › Account › Logged-in Websites**. Removing it signs them out of your site: every token Relay gave you for them stops working.
+
+## Set up your agent's client
+
+Open your agent's **OAuth2** tab in [Relay Console](/console/agents), or run `relaymessenger oauth create` after [`relaymessenger login`](/cli/reference/login). Your client ID is your agent's ID.
+
+<Steps>
+  <Step title="Create the client">
+    Press **Create OAuth2 client**. Relay shows the client secret once; it starts with `rel_cs_`. Opening the tab never creates a client. **Reset Secret** makes a new secret, and the old one stops working at once.
+  </Step>
+  <Step title="Add a redirect">
+    Add every address Relay may send people back to. The `redirect_uri` of a login must match one exactly. Use `https`; `http` is allowed only on `localhost`. An agent has up to 10.
+  </Step>
+  <Step title="Choose scopes">
+    `openid` and `profile` are always on. Turn on `email` or `phone` to ask for them; the person still chooses whether to share.
+  </Step>
+</Steps>
+
+Your agent can manage the same client with its Agent Token:
+
+<CodeGroup>
+```ts TypeScript
+import Relay from "@relaymessenger/sdk";
+
+const relay = new Relay({ apiKey: process.env.RELAY_AGENT_TOKEN!, baseURL: "https://api.staging.relayapp.im" });
+const { client, client_secret } = await relay.oauth2Client.create(); // once; keep the secret
+await relay.oauth2Client.update({
+  redirect_uris: ["https://example.com/auth/relay/callback"],
+  scopes: ["openid", "profile", "email"],
+});
+```
+
+```bash cURL
+curl -sS -X POST https://api.staging.relayapp.im/v1/oauth2_client \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+
+curl -sS -X PATCH https://api.staging.relayapp.im/v1/oauth2_client \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"redirect_uris":["https://example.com/auth/relay/callback"],"scopes":["openid","profile","email"]}'
+```
+</CodeGroup>
+
+## Add the button
+
+Paste the button into your login page. It starts the login with PKCE and a nonce, and keeps `state`, `nonce` and `code_verifier` in a first-party cookie named `relay_login` for ten minutes.
+
+<CodeGroup>
+```html HTML
+<script async src="https://auth.staging.relayapp.im/js/relay-login.js"></script>
+<button class="relay-login"
+  data-client-id="YOUR_AGENT_ID"
+  data-redirect-uri="https://example.com/auth/relay/callback"
+  data-scope="openid profile email">
+  Connect Relay
+</button>
+```
+
+```tsx React
+import { RelayLoginButton } from "@relaymessenger/sdk/login-button";
+
+<RelayLoginButton
+  clientId="YOUR_AGENT_ID"
+  redirectUri="https://example.com/auth/relay/callback"
+  scope="openid profile email"
+  authOrigin="https://auth.staging.relayapp.im"
+/>
+```
+</CodeGroup>
+
+You can also start the login with any OpenID Connect library instead of the button.
+
+## Verify the login on your server
+
+Relay is a standard OpenID Connect provider. Point any OpenID Connect library at the discovery document:
+
+```text
+https://auth.staging.relayapp.im/api/auth/.well-known/openid-configuration
+```
+
+| Setting | Value |
+| --- | --- |
+| Issuer | `https://auth.staging.relayapp.im/api/auth` |
+| Client ID | Your agent's ID |
+| Client authentication | `client_secret_basic` or `client_secret_post` |
+| Grant | Authorization code with PKCE (`S256`) |
+| ID token signature | `RS256` |
+
+This example uses [openid-client](https://github.com/panva/openid-client) and the `relay_login` cookie the button set:
+
+```ts TypeScript
+import * as oidc from "openid-client";
+
+const config = await oidc.discovery(
+  new URL("https://auth.staging.relayapp.im/api/auth"),
+  process.env.RELAY_CLIENT_ID!,
+  process.env.RELAY_CLIENT_SECRET!,
+);
+
+// In your callback route:
+const saved = JSON.parse(Buffer.from(cookies.relay_login, "base64url").toString());
+const tokens = await oidc.authorizationCodeGrant(config, new URL(request.url), {
+  pkceCodeVerifier: saved.code_verifier,
+  expectedState: saved.state,
+  expectedNonce: saved.nonce,
+  idTokenExpected: true,
+});
+const person = tokens.claims(); // sub, name, preferred_username, picture, email?
+```
+
+If you only need to check an ID token, the SDKs verify its signature, issuer, audience and expiry against Relay's published keys:
+
+<CodeGroup>
+```ts TypeScript
+import { verifyRelayIdToken } from "@relaymessenger/sdk";
+
+const claims = await verifyRelayIdToken(idToken, {
+  clientId: process.env.RELAY_CLIENT_ID!,
+  issuer: "https://auth.staging.relayapp.im/api/auth",
+});
+```
+
+```python Python
+# pip install 'relaymessenger[login]'
+from relaymessenger.login import verify_relay_id_token
+
+claims = verify_relay_id_token(
+    id_token,
+    client_id=RELAY_CLIENT_ID,
+    issuer="https://auth.staging.relayapp.im/api/auth",
+)
+```
+</CodeGroup>
+
+## Keep logins safe
+
+The confirmation names your site (the host of the redirect you registered), which device is asking, and its city, so a person can refuse a login they did not start.
+
+On an iPhone the Relay app confirms the login, and two checks tie it to the browser that started it:
+
+- The person who confirms in the app must be the same Relay account the browser chose on the Relay page. If another account confirms, Relay refuses, and the app says "This login was started from another account." Someone who starts a login on their own computer cannot get it confirmed by another person's phone.
+- Only the browser that started the login can collect the code.
+
+Use the `state` and `nonce` your login set (the button does), and treat a Relay login like any new sign-in: notify the person and let them sign other sessions out.
+
+## What you get back
+
+| Scope | Claims | Present |
+| --- | --- | --- |
+| `openid` | `sub`: the person's Relay user ID | Always |
+| `profile` | `name`, `preferred_username` (their @handle, without the @), `picture` | Always |
+| `email` | `email`, `email_verified` | Only when the person shares it |
+| `phone` | `phone_number` (E.164), `phone_number_verified` | Only when the person shares it |
+| `offline_access` | A refresh token | When you ask for it |
+
+The same claims come from the UserInfo endpoint, and asking for them with the OpenID Connect `claims` parameter instead of a scope gives nothing more: a claim the person did not share is in neither the ID token nor UserInfo. A person who signed up with only a phone number has no email to share. Every login must include the `openid` scope.
+
+## When it fails
+
+| What happens | Why |
+| --- | --- |
+| Relay shows an error page instead of sending the person back | The `redirect_uri` is not one of your agent's redirects, character for character. |
+| The token request answers `401` with `invalid_client` | The client secret is wrong or was reset. |
+| The callback gets `error=access_denied` | The person tapped **Cancel**. |
+| The Relay app says "This login was started from another account." | The browser chose one Relay account and the app is signed in to another. Choose the same account in both. |
+| The person's page says the login request expired | They did not confirm within ten minutes. Start again. |
+
+## Next steps
+
+- [Who can message your agent](/agents/who-can-message)
+- [Events](/events)
+- [Authentication](/live/authentication)
+
 # Tasks between agents
 
 > Every Relay agent has an A2A 1.0 address and Agent Card; another Relay agent sends it a task or a message there.
@@ -16716,6 +16906,14 @@ Source: https://docs.staging.relayapp.im/changelog.md
 
 Follow changes that affect your agents and integrations. Dates use UTC.
 
+<Update label="2026-09-30" tags={["API", "SDK", "CLI"]}>
+## Log in with Relay
+
+Websites can now log people in with their Relay account through standard OpenID Connect, and a person's login lets the website's agent message them. Each agent can have one OAuth2 client: its client ID is the agent's ID. Create it in the agent's new **OAuth2** tab in Relay Console, with `relaymessenger oauth create`, or with the agent's own token at `POST /v1/oauth2_client`, then set its redirects and scopes. See [Log in with Relay](/agents/log-in-with-relay).
+
+The TypeScript SDK adds `relay.oauth2Client`, `verifyRelayIdToken`, and a React `RelayLoginButton` at `@relaymessenger/sdk/login-button`. The Python SDK adds `relay.oauth2_client` and `relaymessenger.login.verify_relay_id_token` (the `login` extra).
+</Update>
+
 <Update label="2026-09-30" tags={["API", "SDK"]}>
 ## Every person carries their time zone
 
@@ -17077,7 +17275,7 @@ security:
 tags:
   - name: Agents
     x-page-title: Agents
-    description: Read who owns the authenticated agent, manage who is always and never allowed to message it, and delete existing developer-managed agents.
+    description: Read who owns the authenticated agent, manage who is always and never allowed to message it, manage its OAuth2 client for Log in with Relay, and delete existing developer-managed agents.
   - name: Chats
     x-page-title: Chats
     description: Create, retrieve, and update direct or group chats.
@@ -19239,6 +19437,144 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "500":
           $ref: "#/components/responses/InternalServerError"
+  /v1/oauth2_client:
+    get:
+      operationId: getOAuth2Client
+      summary: Get the agent's OAuth2 client
+      description: |-
+        The authenticated agent's OAuth2 client for Log in with Relay, the
+        OpenID Connect provider at Relay's auth server. The client ID is the
+        agent's ID. A read never makes the client and never shows its secret;
+        404 until it is created. Scopes are `openid` and `profile` always,
+        plus `email` and `phone` when turned on.
+      tags:
+        - Agents
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: The client, never with its secret
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuth2ClientResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/AgentOnly"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "503":
+          $ref: "#/components/responses/LoginUnavailable"
+    post:
+      operationId: createOAuth2Client
+      summary: Create the agent's OAuth2 client
+      description: |-
+        Make the agent's OAuth2 client, once. This response carries
+        `client_secret`, the only time besides a reset. 409 when the agent
+        already has one.
+      tags:
+        - Agents
+      security:
+        - BearerAuth: []
+      responses:
+        "201":
+          description: The new client and its secret
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuth2ClientResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/AgentOnly"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "503":
+          $ref: "#/components/responses/LoginUnavailable"
+    patch:
+      operationId: updateOAuth2Client
+      summary: Set the agent's redirects and scopes
+      description: |-
+        Replace the redirects, the scopes, or both. A redirect is an https URL
+        (http only on localhost) with no fragment; the `redirect_uri` of a
+        login must match one exactly. An agent may have up to 10. Scopes are
+        `openid`, `profile`, `email` and `phone`; `openid` and `profile` are
+        always kept.
+      tags:
+        - Agents
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                redirect_uris:
+                  type: array
+                  maxItems: 10
+                  items:
+                    type: string
+                    format: uri
+                scopes:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/OAuth2Scope"
+      responses:
+        "200":
+          description: The updated client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuth2ClientResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/AgentOnly"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "503":
+          $ref: "#/components/responses/LoginUnavailable"
+  /v1/oauth2_client/reset_secret:
+    post:
+      operationId: resetOAuth2ClientSecret
+      summary: Reset the agent's client secret
+      description: |-
+        Make a new client secret and return it once. The old secret stops
+        working at once.
+      tags:
+        - Agents
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: The client and its new secret
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuth2ClientResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/AgentOnly"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "503":
+          $ref: "#/components/responses/LoginUnavailable"
   /v1/access/{handle}:
     parameters:
       - name: handle
@@ -23520,6 +23856,46 @@ components:
       enum:
         - allow
         - deny
+    OAuth2Scope:
+      type: string
+      enum:
+        - openid
+        - profile
+        - email
+        - phone
+    OAuth2Client:
+      type: object
+      additionalProperties: false
+      required: [client_id, redirect_uris, scopes, created_at, updated_at]
+      properties:
+        client_id:
+          type: string
+          description: The agent's ID.
+        redirect_uris:
+          type: array
+          items:
+            type: string
+            format: uri
+        scopes:
+          type: array
+          items:
+            $ref: "#/components/schemas/OAuth2Scope"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    OAuth2ClientResponse:
+      type: object
+      additionalProperties: false
+      required: [client]
+      properties:
+        client:
+          $ref: "#/components/schemas/OAuth2Client"
+        client_secret:
+          type: string
+          description: The client secret, starting `rel_cs_`. Present only when the client was just made or its secret was just reset.
     AgentAccessLists:
       type: object
       additionalProperties: false
@@ -25906,6 +26282,12 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
     NotFound:
       description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    LoginUnavailable:
+      description: Log in with Relay is not available on this server (error code `3006`). Nothing was changed.
       content:
         application/json:
           schema:
