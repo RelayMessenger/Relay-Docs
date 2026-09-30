@@ -36,11 +36,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # A message agent keeps a contextId the caller makes up (Server #456).
 # Communities are removed, membership included; agents_can_message is everyone or nobody (Server #457).
 # Payment fee restored (Server #464, merged as d14629ad on top of #467's address-book counts); a refund returns the fee share once it succeeds, September 30, 2026.
-UPSTREAM_COMMIT = "d14629ad638d9bb2022c20bd3ecb0f04c8291bc2"
+UPSTREAM_COMMIT = "b4478d218d71b1f0c2bdcc0a90de37503a03ea7c"
 # The source is merged: the Server staging commit is the same commit.
-UPSTREAM_STAGING_COMMIT = "d14629ad638d9bb2022c20bd3ecb0f04c8291bc2"
-UPSTREAM_SIZE = 309059
-UPSTREAM_SHA256 = "ea375c72a5a3e0e3640205dbec751b0d5f4152332f12486ab5bc09f2204b221b"
+UPSTREAM_STAGING_COMMIT = "b4478d218d71b1f0c2bdcc0a90de37503a03ea7c"
+UPSTREAM_SIZE = 321812
+UPSTREAM_SHA256 = "0711806487853a7962d5f85e35895244019411fb6b6436a37d250a604e05969c"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
