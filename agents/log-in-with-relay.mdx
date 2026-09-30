@@ -19,11 +19,11 @@ The next login from the same person skips the confirmation, until they remove yo
 
 ## Set up your agent's client
 
-Open your agent's **OAuth2** tab in [Relay Console](/console/agents), or use [`relaymessenger oauth`](/cli/index). Your client ID is your agent's ID.
+Open your agent's **OAuth2** tab in [Relay Console](/console/agents), or run `relaymessenger oauth create` after [`relaymessenger login`](/cli/reference/login). Your client ID is your agent's ID.
 
 <Steps>
-  <Step title="Copy the client secret">
-    The first time you open **OAuth2**, Relay shows the client secret once. It starts with `rel_cs_`. **Reset Secret** makes a new one, and the old one stops working at once.
+  <Step title="Create the client">
+    Press **Create OAuth2 client**. Relay shows the client secret once; it starts with `rel_cs_`. Opening the tab never creates a client. **Reset Secret** makes a new secret, and the old one stops working at once.
   </Step>
   <Step title="Add a redirect">
     Add every address Relay may send people back to. The `redirect_uri` of a login must match one exactly. Use `https`; `http` is allowed only on `localhost`. An agent has up to 10.
@@ -40,7 +40,7 @@ Your agent can manage the same client with its Agent Token:
 import Relay from "@relaymessenger/sdk";
 
 const relay = new Relay({ apiKey: process.env.RELAY_AGENT_TOKEN!, baseURL: "https://api.staging.relayapp.im" });
-const { client, client_secret } = await relay.oauth2Client.retrieve();
+const { client, client_secret } = await relay.oauth2Client.create(); // once; keep the secret
 await relay.oauth2Client.update({
   redirect_uris: ["https://example.com/auth/relay/callback"],
   scopes: ["openid", "profile", "email"],
@@ -48,6 +48,9 @@ await relay.oauth2Client.update({
 ```
 
 ```bash cURL
+curl -sS -X POST https://api.staging.relayapp.im/v1/oauth2_client \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+
 curl -sS -X PATCH https://api.staging.relayapp.im/v1/oauth2_client \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H "Content-Type: application/json" \
@@ -146,6 +149,12 @@ claims = verify_relay_id_token(
 ```
 </CodeGroup>
 
+## Keep logins safe
+
+The confirmation names your site (the host of the redirect you registered), which device is asking, and its city, so a person can refuse a login they did not start. On an iPhone the Relay app confirms it, and only the browser that started the login can collect the code.
+
+One risk remains, the same one every "confirm on your phone" login has, QR code logins included: someone can start a login to your site on their own computer and trick a person into confirming it in the Relay app. The confirmation shows their device and city, not the person's. To limit the harm, use the `state` and `nonce` your login set (the button does), and treat a Relay login like any new sign-in: notify the person and let them sign other sessions out.
+
 ## What you get back
 
 | Scope | Claims | Present |
@@ -156,7 +165,7 @@ claims = verify_relay_id_token(
 | `phone` | `phone_number` (E.164), `phone_number_verified` | Only when the person shares it |
 | `offline_access` | A refresh token | When you ask for it |
 
-The same claims come from the UserInfo endpoint. A person who signed up with only a phone number has no email to share.
+The same claims come from the UserInfo endpoint, and asking for them with the OpenID Connect `claims` parameter instead of a scope gives nothing more: a claim the person did not share is in neither the ID token nor UserInfo. A person who signed up with only a phone number has no email to share. Every login must include the `openid` scope.
 
 ## When it fails
 

@@ -427,8 +427,17 @@ public_contact_route = re.compile(
     r"|/v1/contacts/\{handle\}/ratings"
     r"|/v1/contacts/\{handle\}/rating)(?=$|[\s`\"':#?])"
 )
+# Log in with Relay: Relay-Auth's OpenID Connect provider is public, and its
+# issuer is https://auth.relayapp.im/api/auth (OpenID Connect Discovery 1.0
+# puts discovery at issuer + /.well-known/openid-configuration). Only its
+# public OIDC endpoints on the auth host may be named; Relay-Server's private
+# /api/auth/ routes stay banned.
+public_oidc_route = re.compile(
+    r"https://auth\.(?:staging\.)?relayapp\.im/api/auth"
+    r"(?:/\.well-known/openid-configuration|/oauth2/authorize|/jwks)?(?=$|[\s`\"')#?])"
+)
 for path in public_contract_paths:
-    text = path.read_text()
+    text = public_oidc_route.sub("", path.read_text())
     without_public_routes = public_contact_route.sub("", text)
     if "/v1/contacts" in without_public_routes:
         raise SystemExit(
@@ -547,8 +556,9 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server d14629ad (PR 464, merged, on top of PR 467); restore Server #373 fee behavior, and return the fee share once a refund succeeds, September 30, 2026.
 # Source authority: Relay-Server b4478d21 (PR 460, merged); rich_card, carousel and suggestion_response, September 30, 2026.
 # Source authority: Relay-Server a3e534d4 (PR 461, merged); every person object carries the person's IANA time zone as timezone, the device used last sets it, September 30, 2026.
+# Source authority: Relay-Server a184965a (PR 459, merged); Log in with Relay: /v1/oauth2_client, September 30, 2026.
 expected_openapi_sha256 = (
-    "55a893586ce4499c258aa62bc964183f3e9f8659a4246ffaed3419bb8155a337"
+    "414d6cc6ca71ee575b75ca420faafa0059924f10ac481866f14377e0db39c455"
 )
 # Local candidate provenance is shared with the guide and contract gates;
 # it does not relabel the historical Server release as selection-capable.
@@ -759,6 +769,10 @@ expected_operation_ids = {
     "listAgentAccess",
     "setAgentAccess",
     "removeAgentAccess",
+    "getOAuth2Client",
+    "createOAuth2Client",
+    "updateOAuth2Client",
+    "resetOAuth2ClientSecret",
     "updateAgentMe",
     "createTask",
     "listTasks",
