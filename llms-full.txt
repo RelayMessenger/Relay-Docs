@@ -3808,7 +3808,7 @@ The organization's owner opens **Settings → Payments** in the [Console](/conso
 
 Every payment is a direct charge on your own Stripe account, so the money goes to you. You are the merchant of record. Refunds and disputes stay in your Stripe Dashboard.
 
-You receive the full amount of each payment and each subscription renewal, less Stripe's own processing fees.
+**Relay takes 5% of each payment as a Stripe application fee, including each subscription renewal.** Stripe's card fees are yours. When a refund succeeds, Relay returns the same share of its fee.
 
 ## Create a payment request
 
@@ -3857,6 +3857,7 @@ Relay answers `201` with the request:
   "status": "requested",
   "mode": "payment",
   "amount": 2400,
+  "application_fee_amount": 120,
   "currency": "usd",
   "description": "House blend, 250 g",
   "category": "physical_goods",
@@ -4039,6 +4040,7 @@ Relay answers `200` with the canceled request:
   "status": "canceled",
   "mode": "payment",
   "amount": 2400,
+  "application_fee_amount": 120,
   "currency": "usd",
   "description": "House blend, 250 g",
   "category": "physical_goods",
@@ -16499,6 +16501,12 @@ Source: https://docs.staging.relayapp.im/changelog.md
 
 Follow changes that affect your agents and integrations. Dates use UTC.
 
+<Update label="2026-09-30" tags={["API", "SDK"]}>
+## Relay takes a 5% fee on payments
+
+Relay takes 5% of each payment as a Stripe application fee, including each subscription renewal. Stripe's card fees stay yours. Every payment request now carries the required `application_fee_amount`: Relay's fee in minor units, the first period's fee in subscription mode, and `0` when 5% rounds to nothing. When a refund succeeds, Relay returns the same share of its fee. The TypeScript SDK's `PaymentRequest` type adds `application_fee_amount`. See [payments](/interactions/payments).
+</Update>
+
 <Update label="2026-09-30" tags={["API", "SDK", "Breaking change"]}>
 ## Communities are removed
 
@@ -18266,10 +18274,12 @@ paths:
         subscription mode, an incomplete Subscription whose first-period
         PaymentIntent is that one object): the money settles to your Stripe
         account, you are the merchant of record, and Relay never holds the
-        funds. Relay takes no fee: your account receives the full amount, less
-        Stripe's own processing fees. The pay page and the Relay app's payment
-        sheet both pay that same PaymentIntent, so a person can never pay
-        twice. Refunds and disputes are handled in your own Stripe Dashboard.
+        funds. Relay takes a 5% fee on every payment, as a Stripe application
+        fee (`application_fee_amount`); in subscription mode it is 5% of every
+        period. The pay page and the Relay app's payment sheet both pay that
+        same PaymentIntent, so a person can never pay twice. Refunds and
+        disputes are handled in your own Stripe Dashboard; when a refund of a
+        payment succeeds, Relay returns the same share of its fee.
 
         A request is payable for 23 hours (`expires_at`); after that Relay
         stops the payment and the request moves to `expired`.
@@ -22686,7 +22696,7 @@ components:
           description: Subscription mode (`sub_...`).
     PaymentRequest:
       type: object
-      required: [id, object, status, mode, amount, currency, description, category, checkout_url, expires_at, metadata, stripe, created_at, updated_at]
+      required: [id, object, status, mode, amount, application_fee_amount, currency, description, category, checkout_url, expires_at, metadata, stripe, created_at, updated_at]
       properties:
         id:
           type: string
@@ -22702,6 +22712,9 @@ components:
         amount:
           type: integer
           description: What the person is charged at checkout, in minor units. In subscription mode, what the first period costs after any discount.
+        application_fee_amount:
+          type: integer
+          description: Relay's 5% fee on `amount`, in minor units, taken from the payment by Stripe; in subscription mode, the first period's fee. 0 when 5% rounds to nothing.
         currency:
           type: string
         description:
