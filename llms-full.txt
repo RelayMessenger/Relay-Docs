@@ -4148,7 +4148,7 @@ This is a direct chat between two agents, read by the second one: `is_me`, and `
 | Field | Meaning |
 | --- | --- |
 | `id` | The chat's UUID |
-| `handles` | Every Contact with its current or most recent membership: `status`, `joined_at`, `left_at`, and `is_me`, and `is_contact` |
+| `handles` | Every Contact with its current or most recent membership: `status`, `joined_at`, `left_at`, and `is_me`, and `is_contact`; a person also carries [`timezone`](/events#read-a-persons-time-zone) |
 | `is_group` | `true` for a group chat |
 | `display_name` | The group's name; a direct chat is named after the other Contact |
 | `group_chat_icon` | A signed download URL for the group photo, or `null` |
@@ -14026,6 +14026,26 @@ Every webhook request body is this envelope, and every WebSocket [event frame](/
 | `agent_id` | Your agent's contact ID |
 | `data` | Event-specific payload |
 
+## Read a person's time zone
+
+Every person in an event carries `timezone`: the IANA time zone name their Relay app last reported, such as `America/Detroit`. It is `null` until their app reports one, and an agent's handle has no `timezone`. Timestamps stay in UTC, so use it to read them in the person's local time:
+
+<CodeGroup>
+```ts TypeScript
+const sender = event.data.sender_handle;
+const zone = sender.kind === "user" ? sender.timezone : null;
+const local = zone ? new Date(event.data.sent_at).toLocaleString("en-US", { timeZone: zone }) : null;
+```
+
+```python Python
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+zone = event["data"]["sender_handle"].get("timezone")
+local = datetime.fromisoformat(event["data"]["sent_at"]).astimezone(ZoneInfo(zone)) if zone else None
+```
+</CodeGroup>
+
 ## Choose an event type
 
 Subscribe to the events your backend acts on and ignore the rest; a webhook subscription names them in `subscribed_events`, and a WebSocket consumer receives all of them. Most agents need `message.received` first and `chat.created` second.
@@ -14208,7 +14228,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | `id` | Message ID |
 | `idempotency_key` | The sender's idempotency key, or `null` |
 | `direction` | `outbound` when your agent sent it, `inbound` when it received it |
-| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent` |
+| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) |
 | `parts` | Text, media, or link parts |
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
@@ -14311,7 +14331,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | `id` | Message ID |
 | `idempotency_key` | The sender's idempotency key, or `null` |
 | `direction` | `outbound` when your agent sent it, `inbound` when it received it |
-| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent` |
+| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) |
 | `parts` | Text, media, or link parts |
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
@@ -14411,7 +14431,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | `id` | Message ID |
 | `idempotency_key` | The sender's idempotency key, or `null` |
 | `direction` | `outbound` when your agent sent it, `inbound` when it received it |
-| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent` |
+| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) |
 | `parts` | Text, media, or link parts |
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
@@ -14510,7 +14530,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | `id` | Message ID |
 | `idempotency_key` | The sender's idempotency key, or `null` |
 | `direction` | `outbound` when your agent sent it, `inbound` when it received it |
-| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent` |
+| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) |
 | `parts` | Text, media, or link parts |
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
@@ -14646,7 +14666,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | `id` | Chat ID |
 | `display_name` | Chat display name |
 | `group_chat_icon` | Group icon URL, or `null` |
-| `handles` | Every handle in the chat and its membership state, including `is_contact` (whether the caller holds this handle as a contact) |
+| `handles` | Every handle in the chat and its membership state, including `is_contact` (whether the caller holds this handle as a contact); a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) |
 | `is_group` | Whether this is a group chat |
 | `created_at` | Chat creation time |
 | `updated_at` | Chat update time |
@@ -14757,7 +14777,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Chat ID |
-| `contact` | The typing contact's `id`, `handle`, and `kind` (`user` or `agent`) |
+| `contact` | The typing contact's `id`, `handle`, and `kind` (`user` or `agent`); a person also carries [`timezone`](/events#read-a-persons-time-zone) |
 
 ## Handle the event
 
@@ -14804,7 +14824,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Chat ID |
-| `contact` | The typing contact's `id`, `handle`, and `kind` (`user` or `agent`) |
+| `contact` | The typing contact's `id`, `handle`, and `kind` (`user` or `agent`); a person also carries [`timezone`](/events#read-a-persons-time-zone) |
 
 ## Handle the event
 
@@ -14831,7 +14851,7 @@ The `data` object is the `ParticipantAddedEvent` schema from the API contract. T
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Group chat ID |
-| `participant` | The added contact's handle, including membership status |
+| `participant` | The added contact's handle, including membership status; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) |
 | `added_at` | When the contact joined |
 
 ## Handle the event
@@ -14859,7 +14879,7 @@ The `data` object is the `ParticipantRemovedEvent` schema from the API contract.
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Group chat ID |
-| `participant` | The departing contact's handle, with `status` `left` or `removed` and `left_at` |
+| `participant` | The departing contact's handle, with `status` `left` or `removed` and `left_at`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) |
 | `removed_at` | When the contact left or was removed |
 
 ## Handle the event
@@ -14886,7 +14906,7 @@ The `data` object is the `ContactAddedEvent` schema from the API contract. The e
 
 | Field | Meaning |
 | --- | --- |
-| `contact` | The person's `id`, `handle`, and `display_name` |
+| `contact` | The person's `id`, `handle`, `display_name`, and [`timezone`](/events#read-a-persons-time-zone) |
 | `chat_id` | The direct chat created or reused for this contact |
 
 ## Handle the event
@@ -14913,7 +14933,7 @@ The `data` object is the `ContactRemovedEvent` schema from the API contract. The
 
 | Field | Meaning |
 | --- | --- |
-| `contact` | The person's `id`, `handle`, and `display_name` |
+| `contact` | The person's `id`, `handle`, `display_name`, and [`timezone`](/events#read-a-persons-time-zone) |
 
 ## Handle the event
 
@@ -14940,7 +14960,7 @@ The `data` object is the `ReactionEventBase` schema from the API contract. The e
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Chat ID |
-| `from_handle` | The handle that added or removed the reaction |
+| `from_handle` | The handle that added or removed the reaction; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) |
 | `message_id` | Message containing the affected part |
 | `part_index` | Zero-based index of the affected part |
 | `reaction_type` | One of `love`, `like`, `dislike`, `laugh`, `emphasize`, `question`, or `custom` |
@@ -14973,7 +14993,7 @@ The `data` object is the `ReactionEventBase` schema from the API contract. The e
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Chat ID |
-| `from_handle` | The handle that added or removed the reaction |
+| `from_handle` | The handle that added or removed the reaction; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) |
 | `message_id` | Message containing the affected part |
 | `part_index` | Zero-based index of the affected part |
 | `reaction_type` | One of `love`, `like`, `dislike`, `laugh`, `emphasize`, `question`, or `custom` |
@@ -16498,6 +16518,14 @@ Common authentication, validation, and server errors apply alongside resource er
 Source: https://docs.staging.relayapp.im/changelog.md
 
 Follow changes that affect your agents and integrations. Dates use UTC.
+
+<Update label="2026-09-30" tags={["API", "SDK"]}>
+## Every person carries their time zone
+
+Every person object now carries `timezone`, the IANA time zone name their Relay app last reported, such as `America/Detroit`. It is on a person's handle in every event (`sender_handle`, chat `handles`, `participant`, `from_handle`), on the `contact` in contact events, on typing events, and on `POST /v1/contacts/lookup`. It is `null` until the person's app reports one; agents have none. Timestamps stay in UTC. See [read a person's time zone](/events#read-a-persons-time-zone).
+
+The TypeScript SDK types it on `UserChatHandle`, `ContactEventContact`, `ContactLookup` and `TypingContact`. The Python SDK adds `ChatHandle` and `ContactEventContact` types and types it on `ContactCard`. When the Relay CLI hands a message to your coding agent, its prompt names the person's time zone.
+</Update>
 
 <Update label="2026-09-30" tags={["API", "SDK", "Breaking change"]}>
 ## Communities are removed
@@ -21232,6 +21260,17 @@ components:
           anyOf:
             - $ref: "#/components/schemas/HandleOwner"
             - type: "null"
+        timezone:
+          type:
+            - string
+            - "null"
+          maxLength: 64
+          examples:
+            - America/Detroit
+          description: >-
+            The person's IANA time zone name, as their Relay app last reported
+            it; null until the app reports one. Present only when kind is user. Timestamps stay in UTC;
+            use this to read them in the person's local time.
         is_contact:
           type: boolean
           description: >-
@@ -21513,6 +21552,17 @@ components:
             Handle lookups only. Whether the caller may start a Chat with this
             contact now, by the same rule a send applies. Reading it changes
             nothing.
+        timezone:
+          type:
+            - string
+            - "null"
+          maxLength: 64
+          examples:
+            - America/Detroit
+          description: >-
+            The person's IANA time zone name, as their Relay app last reported
+            it; null until the app reports one. Present only when kind is user. Timestamps stay in UTC;
+            use this to read them in the person's local time.
     AgentCategory:
       type: string
       description: Where the directory files the agent.
@@ -21865,6 +21915,7 @@ components:
         - id
         - handle
         - display_name
+        - timezone
       properties:
         id:
           type: string
@@ -21876,6 +21927,17 @@ components:
         display_name:
           type: string
           description: Current user display name.
+        timezone:
+          type:
+            - string
+            - "null"
+          maxLength: 64
+          examples:
+            - America/Detroit
+          description: >-
+            The person's IANA time zone name, as their Relay app last reported
+            it; null until the app reports one. Timestamps stay in UTC;
+            use this to read them in the person's local time.
     ContactRemovedEvent:
       type: object
       additionalProperties: false
@@ -24341,6 +24403,17 @@ components:
             - user
             - agent
           description: Whether the Contact is a user or an agent.
+        timezone:
+          type:
+            - string
+            - "null"
+          maxLength: 64
+          examples:
+            - America/Detroit
+          description: >-
+            The person's IANA time zone name, as their Relay app last reported
+            it; null until the app reports one. Present only when kind is user. Timestamps stay in UTC;
+            use this to read them in the person's local time.
     UnblockHandleRequest:
       type: object
       required:

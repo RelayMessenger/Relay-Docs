@@ -544,8 +544,9 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server 61c53fac (PR 455, merged); an agent answers each A2A request with a Message or a Task, POST /v1/tasks/{taskId}/reply and message.received a2a, September 29, 2026.
 # Source authority: Relay-Server dd282289 (PR 456, merged); a message agent keeps a contextId the caller makes up and refuses another pair's, September 30, 2026.
 # Source authority: Relay-Server add9a085 (PR 457, merged); communities are removed, membership included, and agents_can_message is everyone or nobody, September 30, 2026.
+# Source authority: Relay-Server 074e285a (PR 461); every person object carries the person's IANA time zone as timezone, September 30, 2026.
 expected_openapi_sha256 = (
-    "2de73db15c2ad93e0ed72581d1613023a19e66398f82f91ca82aa8f880e71a9c"
+    "f7e38d00657a60cbaa742d7adf95cdaefd7f7d7345590c900732543dadd6d2a2"
 )
 # Local candidate provenance is shared with the guide and contract gates;
 # it does not relabel the historical Server release as selection-capable.
