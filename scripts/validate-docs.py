@@ -500,7 +500,7 @@ for path in [*mdx_paths, root / "skill.md", root / "agent-prompt.md"]:
                 "not a path in api-reference/openapi.yaml"
             )
 
-from docs_behavior import validate_behavior
+from docs_behavior import validate_behavior, validate_share_contract
 validate_behavior(root)
 webhook_events_text = (root / "events/index.mdx").read_text()
 
@@ -559,8 +559,9 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server a184965a (PR 459, merged); Log in with Relay: /v1/oauth2_client, September 30, 2026.
 # Source authority: Relay-Server 269da7b5 (PR 462, merged); A2A and tasks are removed: no agent cards or JSON-RPC door, no /v1/tasks, no PATCH /v1/me, no task.* events, no message.received a2a, errors 2033 and 2034 retired, September 30, 2026.
 # Source authority: Relay-Server 11d8b582 (PR 468, open, on PR 462); every person object carries age_range beside timezone, agents carry age_rating, error 2035, September 30, 2026.
+# Source authority: Relay-Server bf085edc (PR 463, merged); share another agent's Contact Card as a snapshot, Idempotency-Key, lookup by id, system_event.actor name and picture, September 30, 2026.
 expected_openapi_sha256 = (
-    "88ceae13cabfbbb2150ee133f3f41c14744d3c5aaaccd1aeaa416d0bd9e95cc0"
+    "baf2839ae8df9d1478f7a8c8457e99f54f4a1563c8439fc7ff05bb2492a7e6f4"
 )
 # Local candidate provenance is shared with the guide and contract gates;
 # it does not relabel the historical Server release as selection-capable.
@@ -853,13 +854,10 @@ if documented_events != contract_events:
         "Webhook Event Types page drifted from OpenAPI: "
         f"{sorted(documented_events ^ contract_events)}"
     )
-share_path_start = openapi_text.index("  /v1/chats/{chatId}/share_contact_card:")
-share_path_end = openapi_text.find("\n  /v1/", share_path_start + 2)
-share_operation = openapi_text[
-    share_path_start:share_path_end if share_path_end >= 0 else len(openapi_text)
-]
-if "requestBody:" in share_operation:
-    raise SystemExit("Contact Card sharing route must remain bodyless in OpenAPI")
+try:
+    validate_share_contract(openapi_text)
+except ValueError as error:
+    raise SystemExit(str(error)) from error
 disconnect = re.search(
     r"^    WebSocketDisconnectFrame:\n.*?^        reason:\n"
     r".*?^          enum:\n((?:^            - [^\n]+\n)+)",
@@ -1090,7 +1088,7 @@ print(
     "Console CTA, Copy agent prompt action, logo destination, Quickstart sidebar placement, "
     "atomic guide groups, "
     "focused page boundaries, "
-    "frontmatter, bodyless Contact Card sharing, exact delivery states and error pages, "
+    "frontmatter, optional Contact Card sharing body, exact delivery states and error pages, "
     "typing, exact OpenAPI event inventory, webhook retries, transport recovery, URL safety, "
     "message requests and exact idempotency scope, private Contact and route exclusion, Agent Read authentication, "
     "final automatic event paths, WebSocket disconnects, "
