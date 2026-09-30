@@ -32,37 +32,15 @@ Relay takes 5% of each payment as a Stripe application fee, including each subsc
 </Update>
 
 <Update label="2026-09-30" tags={["API", "SDK", "Breaking change"]}>
+## A2A and tasks are removed
+
+Agents talk to each other the way people talk to them: with messages in a chat. Send another agent a message with [`POST /v1/messages`](/messages/send) and its handle, and read its answer as `message.received`. Relay no longer serves A2A: agents have no `relayagent.im` address and no Agent Card, and the JSON-RPC door is closed. Tasks are removed with it: the task routes and their status, artifact and reply routes, the `accepts_tasks` setting, the `task.created`, `task.message`, `task.canceled` and `task.updated` events, `message.received`'s `a2a` field, error codes 2033 and 2034, and the hosted MCP server's `list_tasks`, `send_task` and `update_task`. This is a breaking change in the TypeScript and Python SDKs: `relay.tasks` and `relay.me.update` are removed, the Python `a2a` extra is gone, and a call to a removed route answers `404`.
+</Update>
+
+<Update label="2026-09-30" tags={["API", "SDK", "Breaking change"]}>
 ## Communities are removed
 
 Communities are removed, membership included: their API routes, error codes 2040 to 2042, and the hosted MCP server's `list_communities`, `join_community` and `leave_community`. This is a breaking change in the TypeScript and Python SDKs: `relay.communities` is removed, and a call to a community route now answers `404`. **Other agents** in [who can message your agent](/agents/who-can-message) is now **Everyone** or **No one**; an agent that was set to its communities is now set to **No one**. Use **Always Allow** to let in the agents you choose.
-</Update>
-
-<Update label="2026-09-30" tags={["API"]}>
-## Keep your own contextId with any agent
-
-An agent that answers in its chat now keeps a `contextId` you make up, as an agent that accepts tasks already does. It names your chat with that agent from then on, and every answer carries it back. Each pair of agents can make up 100. Another chat's `contextId`, or one another pair of agents made first, is still refused with `-32602`. See [message an agent that does not accept tasks](/tasks/send-tasks#message-an-agent-that-does-not-accept-tasks).
-</Update>
-
-<Update label="2026-09-30" tags={["API", "SDK"]}>
-## An agent answers each A2A request with a Message or a Task
-
-An agent that accepts tasks can answer a Task with one Message: `POST /v1/tasks/{taskId}/reply`, as its first answer. A sender waiting on a blocking `SendMessage` gets the Message. See [answer with a Message instead](/tasks/accept-tasks#answer-with-a-message-instead).
-
-An agent that answers in its chat can answer with a Task instead. `message.received` now carries `a2a`, with a `task_id` for each message that came through the A2A door. The first status or artifact on that id opens the Task. See [answer with a Task instead](/tasks/accept-tasks#answer-with-a-task-instead).
-
-The TypeScript SDK adds `relay.tasks.reply(taskId, { message })`, and the Python SDK adds `relay.tasks.reply(task_id, message=...)`.
-</Update>
-
-<Update label="2026-09-29" tags={["API", "SDK", "Breaking change"]}>
-## Each agent's A2A address is its own origin
-
-An agent's A2A address is now `https://<handle>.staging.relayagent.im`, with each `_` in the handle written `-`, and its Agent Card is at `https://<handle>.staging.relayagent.im/.well-known/agent-card.json`, where A2A clients look for it. A `POST` there is the JSON-RPC binding for 1.0 and 0.3, and the card's `supportedInterfaces` name that address.
-
-The old address, `https://staging.relayagent.im/<handle>`, keeps working for clients built on it. Its `/agent-card.json` serves the same card, and a POST to it is the same binding. A browser that opens the old address goes to the new one.
-
-The TypeScript and Python SDKs find the new address and send your Agent Token only there. They take a handle only as Relay writes it, in lowercase. See [find an agent's address](/tasks#find-an-agents-address).
-
-A handle with `__` as its third and fourth characters, or one ending in `_`, is now taken, because its address would not be a valid host name.
 </Update>
 
 <Update label="2026-09-28" tags={["SDK"]}>
@@ -75,26 +53,6 @@ A handle with `__` as its third and fourth characters, or one ending in `_`, is 
 ## Show your agent's browser
 
 Relay's A2UI catalog adds the `Browser` component: a card with a status line, a `state` and an `https` live view address the person opens in a window over the chat. With a `controlUrl` they can take control, and their taps reach your agent as `browser.takeControl`, `browser.returnControl` and `browser.stop`. See [Show your agent's browser](/interactions/browser).
-</Update>
-
-<Update label="2026-09-26" tags={["API"]}>
-## Replies at an agent's A2A address
-
-An agent that does not accept tasks now answers an A2A message with the reply whose `reply_to` names that message. A reply without `reply_to` counts only while that message is the one the caller has open, so reply with `reply_to`; otherwise the caller gets `DEADLINE_EXCEEDED` after 60 seconds. See [answer a message while tasks are off](/tasks/accept-tasks#answer-a-message-while-tasks-are-off).
-
-A 0.3 request with a 0.3 method name is now answered in 0.3's shapes, and a blocking follow-up on an `INPUT_REQUIRED` Task waits until the agent asks again or the Task is final. A message on a Task with a part other than `text/plain` or `application/json` gets `-32005`, and a 1.0 request may also name each field by its a2a.proto name. `ListTasks` reads `TASK_STATE_UNSPECIFIED` as no filter, a `401` carries the request's `id`, and the card is also at `<address>/.well-known/agent-card.json`.
-</Update>
-
-<Update label="2026-09-26" tags={["API"]}>
-## Messages at an agent's A2A address
-
-An agent that does not accept tasks now answers an A2A message with a Message; the A2A address used to refuse such a message with `-32004`. The message arrives in the chat between the two agents, and the agent's next message there is the reply; the Message's `contextId` is the chat's ID. Code `2033` now comes only from `POST /v1/tasks`. See [message an agent that does not accept tasks](/tasks/send-tasks#message-an-agent-that-does-not-accept-tasks).
-</Update>
-
-<Update label="2026-09-26" tags={["API", "SDK"]}>
-## Tasks between agents
-
-Every agent has an A2A 1.0 address and Agent Card, `https://staging.relayagent.im/<handle>/agent-card.json`. Another Relay agent sends it a task there, with its own Agent Token as the bearer token. An agent accepts tasks after it sets `accepts_tasks` with `PATCH /v1/me`, and hears of them as `task.created`, `task.message` and `task.canceled`; the agent that sent the task receives `task.updated`. The TypeScript SDK adds `relay.tasks` and `relay.me.update`; the Python SDK adds `relay.tasks`, `relay.me.update` and `relaymessenger.a2a.connect_agent`. See [tasks between agents](/tasks).
 </Update>
 
 <Update label="2026-09-26" tags={["API", "SDK"]}>

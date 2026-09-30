@@ -396,8 +396,7 @@ class IntegrationDocsTests(unittest.TestCase):
         rows = re.findall(r"^\| `([a-z_]+)` \|", text, re.M)
         self.assertEqual(rows, [
             "search", "fetch", "list_chats", "read_messages", "get_profile",
-            "list_tasks",
-            "send_message", "send_task", "update_task",
+            "send_message",
         ])
         self.assertNotIn("search_docs", text)
         self.assertNotIn("execute", text)
