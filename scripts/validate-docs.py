@@ -561,8 +561,9 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server 11d8b582 (PR 468, open, on PR 462); every person object carries age_range beside timezone, agents carry age_rating, error 2035, September 30, 2026.
 # Source authority: Relay-Server bf085edc (PR 463, merged); share another agent's Contact Card as a snapshot, Idempotency-Key, lookup by id, system_event.actor name and picture, September 30, 2026.
 # Source authority: Relay-Server 34943159 (PR 466, merged); the list picker upgrade of selection, September 30, 2026.
+# Source authority: Relay-Server 744d715a (PR 465, form candidate on top of PR 470 and PR 471), not yet merged, September 30, 2026.
 expected_openapi_sha256 = (
-    "1721df340bf291aa1d5a12578fb4918209cba7525622dd5fb3af2ca68cbc77fc"
+    "a95379e4f993fe329d589a64e456f59ec9676617eb40d8e57f6dea67cb0bd51e"
 )
 # Local candidate provenance is shared with the guide and contract gates;
 # it does not relabel the historical Server release as selection-capable.
@@ -734,6 +735,7 @@ expected_operation_ids = {
     "deleteAgentRating",
     "listAgentRatings",
     "countAgentsInAddressBook",
+    "requestAgent",
     "getMessage",
     "getMessages",
     "getMessageThread",
