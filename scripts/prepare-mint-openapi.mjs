@@ -63,6 +63,7 @@ const sidebarTitles = {
   rateAgent: "Rate",
   deleteAgentRating: "Remove rating",
   listAgentRatings: "List ratings",
+  countAgentsInAddressBook: "Count agents your contacts use",
   setupContactCard: "Create",
   updateContactCard: "Update",
   connectAgentWebSocket: "Connect",

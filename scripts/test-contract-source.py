@@ -35,12 +35,12 @@ ROOT = Path(__file__).resolve().parents[1]
 # An agent answers each A2A request with a Message or a Task: POST /v1/tasks/{taskId}/reply and message.received a2a (Server #455).
 # A message agent keeps a contextId the caller makes up (Server #456).
 # Communities are removed, membership included; agents_can_message is everyone or nobody (Server #457).
-# Fee restoration: canonical Server fee-branch commit (#464 head), not yet merged; a refund returns the fee share once it succeeds, September 30, 2026.
-UPSTREAM_COMMIT = "50d6cdde9b1e1431606402a3e4ea712a64b9b3d9"
-# Last merged Server staging base, not the source of the restored fee bytes.
-UPSTREAM_STAGING_COMMIT = "add9a0857f971e2d35f82711206b4b108ed30912"
-UPSTREAM_SIZE = 305979
-UPSTREAM_SHA256 = "ae5211b6c216c31a19e8147b593182c5c1c28efcbe0af84f35dfd2cdaa111a18"
+# Payment fee restored (Server #464, merged as d14629ad on top of #467's address-book counts); a refund returns the fee share once it succeeds, September 30, 2026.
+UPSTREAM_COMMIT = "d14629ad638d9bb2022c20bd3ecb0f04c8291bc2"
+# The source is merged: the Server staging commit is the same commit.
+UPSTREAM_STAGING_COMMIT = "d14629ad638d9bb2022c20bd3ecb0f04c8291bc2"
+UPSTREAM_SIZE = 309059
+UPSTREAM_SHA256 = "ea375c72a5a3e0e3640205dbec751b0d5f4152332f12486ab5bc09f2204b221b"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
