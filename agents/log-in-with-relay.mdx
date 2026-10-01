@@ -29,7 +29,7 @@ Open your agent's **OAuth2** tab in [Relay Console](/console/agents), or run `re
     Add every address Relay may send people back to. The `redirect_uri` of a login must match one exactly. Use `https`; `http` is allowed only on `localhost`. An agent has up to 10.
   </Step>
   <Step title="Choose scopes">
-    `openid` and `profile` are always on. Turn on `email` or `phone` to ask for them; the person still chooses whether to share.
+    `openid` and `profile` are always on. Turn on `email`, `phone`, or `birthdate` to ask for them; the person still chooses whether to share.
   </Step>
 </Steps>
 
@@ -164,13 +164,28 @@ Use the `state` and `nonce` your login set (the button does), and treat a Relay 
 
 | Scope | Claims | Present |
 | --- | --- | --- |
-| `openid` | `sub`: the person's Relay user ID | Always |
+| `openid` | `sub`: the person's Relay login ID | Always |
 | `profile` | `name`, `preferred_username` (their @handle, without the @), `picture` | Always |
+| `openid` and `profile` | `https://relayapp.im/user_id`: the person's `id` in chats | Only when the person has a Relay profile |
 | `email` | `email`, `email_verified` | Only when the person shares it |
 | `phone` | `phone_number` (E.164), `phone_number_verified` | Only when the person shares it |
+| `birthdate` | `birthdate`: `YYYY-MM-DD`, or `0000-MM-DD` when the person gave no year | Only from UserInfo, and only when the person has a birthday and shares it |
 | `offline_access` | A refresh token | When you ask for it |
 
-The same claims come from the UserInfo endpoint, and asking for them with the OpenID Connect `claims` parameter instead of a scope gives nothing more: a claim the person did not share is in neither the ID token nor UserInfo. A person who signed up with only a phone number has no email to share. Every login must include the `openid` scope.
+The same claims come from the UserInfo endpoint, except `birthdate`, which is never in the ID token. Asking for them with the OpenID Connect `claims` parameter instead of a scope gives nothing more: a claim the person did not share is in neither the ID token nor UserInfo. A person who signed up with only a phone number has no email to share. Every login must include the `openid` scope.
+
+### Match a login to a person in a chat
+
+`https://relayapp.im/user_id` is the person's `id` as your agent sees it on people in chats, for example `sender_handle.id` on [`message.received`](/events/message-received). Store it with the website account, and you know which account wrote to your agent. `sub` is a different ID and never appears in chats.
+
+```json
+{
+  "preferred_username": "ana",
+  "https://relayapp.im/user_id": "0199a3c4-5b6d-7e8f-9a0b-1c2d3e4f5a6b"
+}
+```
+
+Relay gives this claim in the ID token and from UserInfo, only to a Log in with Relay client, only when `openid` and `profile` are granted, and only when the person has a Relay profile.
 
 ## When it fails
 

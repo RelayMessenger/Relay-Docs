@@ -242,7 +242,7 @@ pip install "git+https://github.com/RelayMessenger/Relay-SDK@staging#subdirector
 ```
 </CodeGroup>
 
-The Python SDK installs from the Relay SDK repository, needs Python 3.10 or newer, and its methods are `async`. It covers chats (`relay.chats.create`, `retrieve`, `list_chats`, `messages.list`, `messages.send`), events over the [WebSocket](/websocket) (`relay.websocket.run`), and [cards](/interactions/cards) (`relaymessenger.a2ui`). To verify webhook signatures, use the TypeScript SDK or [verify them yourself](/webhooks/verify-signatures).
+The Python SDK installs from the Relay SDK repository, needs Python 3.10 or newer, and its methods are `async`. It covers chats (`relay.chats.create`, `retrieve`, `list_chats`, `messages.list`, `messages.send`) and events over the [WebSocket](/websocket) (`relay.websocket.run`). To verify webhook signatures, use the TypeScript SDK or [verify them yourself](/webhooks/verify-signatures).
 
 ## Create a client
 
@@ -2628,12 +2628,6 @@ Only an agent can send an interaction. The app draws it, the person acts on it, 
   <Card title="Form" href="/interactions/form">
     Collect text, choices, and dates across pages, then receive answers keyed by field ID.
   </Card>
-  <Card title="Cards" href="/interactions/cards">
-    Send a card built from A2UI components, read each tap, and change the card in place.
-  </Card>
-  <Card title="Browser" href="/interactions/browser">
-    Show your agent's live browser in a card. The person watches it work and takes control when it needs them.
-  </Card>
   <Card title="Payments" href="/interactions/payments">
     Ask the person to pay with a Pay card, on your organization's own Stripe account.
   </Card>
@@ -2647,8 +2641,6 @@ New interactions are added here as parts, never as endpoints.
 - [Selection](/interactions/selection)
 - [Rich cards](/interactions/rich-cards)
 - [Form](/interactions/form)
-- [Cards](/interactions/cards)
-- [Browser](/interactions/browser)
 - [Payments](/interactions/payments)
 - [Send a message](/messages/send)
 
@@ -3680,813 +3672,6 @@ Keep the same body and idempotency key when retrying an uncertain submission. A 
 - [Replies](/messages/replies)
 - [Receive webhook events](/webhooks/index)
 
-# Cards
-
-> Send a card built from A2UI components, read the person's taps, and change the card in place.
-
-Source: https://docs.staging.relayapp.im/interactions/cards.md
-
-import { A2uiPreview } from "/snippets/a2ui-preview.jsx";
-
-A card is an [A2UI](https://a2ui.org) v0.9.1 surface sent as a `data` part: `{"type":"data","media_type":"application/a2ui+json","data":[…]}`. The `data` array holds A2UI messages in order. Relay draws the card in the chat, and each tap on one of its buttons comes back to your agent as a Message.
-
-Pick a ride, tap **Review ride**, then tap the new button to book it. Under the card, the preview names each tap your agent receives, and it applies each [update](#update-or-remove-a-card) in place. It stays in your browser and sends no request.
-
-<Tabs>
-  <Tab title="Preview">
-    <A2uiPreview label="A ride card: pick a ride, tap Review ride, then book it"
-      messages={[
-        {"version":"v0.9.1","createSurface":{"surfaceId":"ride-1042","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
-        {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[{"id":"root","component":"Card","child":"body"},{"id":"body","component":"Column","children":["title","rides","review"]},{"id":"title","component":"Text","text":"Rides to SFO, Terminal 2","variant":"h3"},{"id":"rides","component":"ChoicePicker","label":"Ride","variant":"mutuallyExclusive","options":[{"label":"UberX, $42, 4 min away","value":"uberx"},{"label":"Comfort, $51, 6 min away","value":"comfort"}],"value":{"path":"/ride"}},{"id":"review_label","component":"Text","text":"Review ride"},{"id":"review","component":"Button","child":"review_label","variant":"primary","action":{"event":{"name":"review_ride","context":{"ride":{"path":"/ride"}}}}}]}},
-        {"version":"v0.9.1","updateDataModel":{"surfaceId":"ride-1042","value":{"ride":["uberx"]}}}
-      ]}
-      reply={{
-        "review_ride": {
-          "comfort": [
-            {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[{"id":"body","component":"Column","children":["title","request"]},{"id":"request_label","component":"Text","text":"Request Comfort for $51"},{"id":"request","component":"Button","child":"request_label","variant":"primary","action":{"event":{"name":"request_ride","context":{"ride":"comfort"}}}}]}}
-          ],
-          "uberx": [
-            {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[{"id":"body","component":"Column","children":["title","request"]},{"id":"request_label","component":"Text","text":"Request UberX for $42"},{"id":"request","component":"Button","child":"request_label","variant":"primary","action":{"event":{"name":"request_ride","context":{"ride":"uberx"}}}}]}}
-          ]
-        },
-        "request_ride": {
-          "comfort": [
-            {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[{"id":"body","component":"Column","children":["title","booked"]},{"id":"booked","component":"Text","text":"Your Comfort ride is booked. Marco arrives in 6 minutes."}]}}
-          ],
-          "uberx": [
-            {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[{"id":"body","component":"Column","children":["title","booked"]},{"id":"booked","component":"Text","text":"Your UberX ride is booked. Marco arrives in 4 minutes."}]}}
-          ]
-        }
-      }} />
-  </Tab>
-  <Tab title="JSON">
-    ```json
-    {
-      "message": {
-        "parts": [{
-          "type": "data",
-          "media_type": "application/a2ui+json",
-          "data": [
-            {"version":"v0.9.1","createSurface":{"surfaceId":"ride-1042","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
-            {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[
-              {"id":"root","component":"Card","child":"body"},
-              {"id":"body","component":"Column","children":["title","rides","review"]},
-              {"id":"title","component":"Text","text":"Rides to SFO, Terminal 2","variant":"h3"},
-              {"id":"rides","component":"ChoicePicker","label":"Ride","variant":"mutuallyExclusive","options":[{"label":"UberX, $42, 4 min away","value":"uberx"},{"label":"Comfort, $51, 6 min away","value":"comfort"}],"value":{"path":"/ride"}},
-              {"id":"review_label","component":"Text","text":"Review ride"},
-              {"id":"review","component":"Button","child":"review_label","variant":"primary","action":{"event":{"name":"review_ride","context":{"ride":{"path":"/ride"}}}}}
-            ]}},
-            {"version":"v0.9.1","updateDataModel":{"surfaceId":"ride-1042","value":{"ride":["uberx"]}}}
-          ]
-        }],
-        "idempotency_key": "ride-1042-card"
-      }
-    }
-    ```
-
-    ```json Your agent receives
-    [
-      {"version":"v0.9.1","action":{"name":"review_ride","surfaceId":"ride-1042","sourceComponentId":"review","timestamp":"2026-09-26T00:45:07.452Z","context":{"ride":["uberx"]}}}
-    ]
-    ```
-  </Tab>
-</Tabs>
-
-## Send a card
-
-A new card is one `createSurface`, one `updateComponents` and, optionally, one `updateDataModel`. The first `updateComponents` must hold the component with the id `root`. `catalogId` names a catalog Relay draws: Relay's catalog (the A2UI basic catalog plus `PaymentRequest` and [`Browser`](/interactions/browser)) or the A2UI basic catalog.
-
-This card offers two rides and a button that sends the choice back:
-
-<CodeGroup>
-```typescript TypeScript SDK
-import Relay, { RELAY_A2UI_CATALOG_ID, sendA2uiSurface } from "@relaymessenger/sdk";
-
-const relay = new Relay({
-  apiKey: process.env.RELAY_AGENT_TOKEN!,
-  baseURL: "https://api.staging.relayapp.im",
-});
-
-await sendA2uiSurface(relay, "CHAT_ID", {
-  surfaceId: "ride-1042",
-  catalogId: RELAY_A2UI_CATALOG_ID,
-  components: [
-    { id: "root", component: "Card", child: "body" },
-    { id: "body", component: "Column", children: ["title", "rides", "review"] },
-    { id: "title", component: "Text", text: "Rides to SFO, Terminal 2", variant: "h3" },
-    {
-      id: "rides",
-      component: "ChoicePicker",
-      label: "Ride",
-      variant: "mutuallyExclusive",
-      options: [
-        { label: "UberX, $42, 4 min away", value: "uberx" },
-        { label: "Comfort, $51, 6 min away", value: "comfort" },
-      ],
-      value: { path: "/ride" },
-    },
-    { id: "review_label", component: "Text", text: "Review ride" },
-    {
-      id: "review",
-      component: "Button",
-      child: "review_label",
-      variant: "primary",
-      action: { event: { name: "review_ride", context: { ride: { path: "/ride" } } } },
-    },
-  ],
-  dataModel: { ride: ["uberx"] },
-}, { idempotency_key: "ride-1042-card" });
-```
-
-```python Python SDK
-import asyncio
-import os
-
-from relaymessenger import Relay
-from relaymessenger.a2ui import send_a2ui_surface
-
-relay = Relay(os.environ["RELAY_AGENT_TOKEN"], base_url="https://api.staging.relayapp.im")
-
-RIDE_CARD = [
-    {"id": "root", "component": "Card", "child": "body"},
-    {"id": "body", "component": "Column", "children": ["title", "rides", "review"]},
-    {"id": "title", "component": "Text", "text": "Rides to SFO, Terminal 2", "variant": "h3"},
-    {
-        "id": "rides",
-        "component": "ChoicePicker",
-        "label": "Ride",
-        "variant": "mutuallyExclusive",
-        "options": [
-            {"label": "UberX, $42, 4 min away", "value": "uberx"},
-            {"label": "Comfort, $51, 6 min away", "value": "comfort"},
-        ],
-        "value": {"path": "/ride"},
-    },
-    {"id": "review_label", "component": "Text", "text": "Review ride"},
-    {
-        "id": "review",
-        "component": "Button",
-        "child": "review_label",
-        "variant": "primary",
-        "action": {"event": {"name": "review_ride", "context": {"ride": {"path": "/ride"}}}},
-    },
-]
-
-asyncio.run(
-    send_a2ui_surface(
-        relay,
-        "CHAT_ID",
-        "ride-1042",
-        RIDE_CARD,
-        data_model={"ride": ["uberx"]},
-        idempotency_key="ride-1042-card",
-    )
-)
-```
-
-```bash HTTPS
-curl -sS "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": {
-      "parts": [{
-        "type": "data",
-        "media_type": "application/a2ui+json",
-        "data": [
-          {"version":"v0.9.1","createSurface":{"surfaceId":"ride-1042","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
-          {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[
-            {"id":"root","component":"Card","child":"body"},
-            {"id":"body","component":"Column","children":["title","rides","review"]},
-            {"id":"title","component":"Text","text":"Rides to SFO, Terminal 2","variant":"h3"},
-            {"id":"rides","component":"ChoicePicker","label":"Ride","variant":"mutuallyExclusive",
-             "options":[{"label":"UberX, $42, 4 min away","value":"uberx"},{"label":"Comfort, $51, 6 min away","value":"comfort"}],
-             "value":{"path":"/ride"}},
-            {"id":"review_label","component":"Text","text":"Review ride"},
-            {"id":"review","component":"Button","child":"review_label","variant":"primary",
-             "action":{"event":{"name":"review_ride","context":{"ride":{"path":"/ride"}}}}}
-          ]}},
-          {"version":"v0.9.1","updateDataModel":{"surfaceId":"ride-1042","value":{"ride":["uberx"]}}}
-        ]
-      }],
-      "idempotency_key": "ride-1042-card"
-    }
-  }'
-```
-</CodeGroup>
-
-The send returns `202` with the card's Message:
-
-```http
-HTTP/1.1 202 Accepted
-```
-
-Keep the `surfaceId`: every later change to the card names it. The Python SDK installs from the Relay SDK repository with `pip install "git+https://github.com/RelayMessenger/Relay-SDK@staging#subdirectory=python/relaymessenger"` and needs Python 3.10 or newer.
-
-## Receive a tap
-
-A tap reaches your agent as [`message.received`](/events/message-received), through its webhook or the Agent WebSocket. The Message holds a `data` part with the A2UI `action`: the Button's event name, the surface, and the context with every binding resolved.
-
-```json
-{
-  "event_type": "message.received",
-  "data": {
-    "parts": [
-      {"type":"data","media_type":"application/a2ui+json","data":[
-        {"version":"v0.9.1","action":{"name":"review_ride","surfaceId":"ride-1042","sourceComponentId":"review","timestamp":"2026-09-26T00:45:07.452Z","context":{"ride":["comfort"]}}}
-      ],"reactions":null}
-    ]
-  }
-}
-```
-
-Read the tap with `readA2uiAction` or `read_a2ui_action`; each returns nothing for a Message without one:
-
-<CodeGroup>
-```typescript TypeScript SDK
-import { readA2uiAction, type RelayWebhookEvent } from "@relaymessenger/sdk";
-
-export async function onEvent(event: RelayWebhookEvent) {
-  if (event.event_type !== "message.received") return;
-  const tap = readA2uiAction(event);
-  if (tap?.action.name !== "review_ride") return;
-  const [ride] = tap.action.context.ride as string[];
-  // ride is "comfort"; update the card, as shown below.
-}
-```
-
-```python Python SDK
-from relaymessenger.a2ui import read_a2ui_action
-
-
-async def on_event(event: dict) -> None:
-    tap = read_a2ui_action(event)
-    if tap is None or tap.name != "review_ride":
-        return
-    ride = tap.context["ride"][0]
-    # ride is "comfort"; update the card, as shown below.
-```
-</CodeGroup>
-
-A tap reaches only the person who tapped and the agent that created the card. When the card's `createSurface` sets `sendDataModel: true`, each tap also carries the card's data model, and it goes only to that same agent. `readA2uiAction` returns it as `dataModel`; in Python it is `tap.data_model`.
-
-## Update or remove a card
-
-`updateA2uiSurface` changes the same card in place for everyone in the chat and adds no Message. Components replace their namesakes by `id`. Inside the tap handler, this update turns the choice into a review step with one button that commits. The JSON tab also shows the next update, which answers that button's `request_ride` tap: it books the ride and removes the button.
-
-<Tabs>
-  <Tab title="Preview">
-    <A2uiPreview label="The ride card after the update: tap Request Comfort for $51 to book it"
-      messages={[
-        {"version":"v0.9.1","createSurface":{"surfaceId":"ride-1042","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
-        {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[{"id":"root","component":"Card","child":"body"},{"id":"body","component":"Column","children":["title","rides","review"]},{"id":"title","component":"Text","text":"Rides to SFO, Terminal 2","variant":"h3"},{"id":"rides","component":"ChoicePicker","label":"Ride","variant":"mutuallyExclusive","options":[{"label":"UberX, $42, 4 min away","value":"uberx"},{"label":"Comfort, $51, 6 min away","value":"comfort"}],"value":{"path":"/ride"}},{"id":"review_label","component":"Text","text":"Review ride"},{"id":"review","component":"Button","child":"review_label","variant":"primary","action":{"event":{"name":"review_ride","context":{"ride":{"path":"/ride"}}}}}]}},
-        {"version":"v0.9.1","updateDataModel":{"surfaceId":"ride-1042","value":{"ride":["uberx"]}}},
-        {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[{"id":"body","component":"Column","children":["title","request"]},{"id":"request_label","component":"Text","text":"Request Comfort for $51"},{"id":"request","component":"Button","child":"request_label","variant":"primary","action":{"event":{"name":"request_ride","context":{"ride":"comfort"}}}}]}}
-      ]}
-      reply={{
-        "request_ride": [
-          {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[{"id":"body","component":"Column","children":["title","booked"]},{"id":"booked","component":"Text","text":"Your Comfort ride is booked. Marco arrives in 6 minutes."}]}}
-        ]
-      }} />
-  </Tab>
-  <Tab title="JSON">
-    ```json
-    {
-      "message": {
-        "parts": [{
-          "type": "data",
-          "media_type": "application/a2ui+json",
-          "data": [
-            {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[
-              {"id":"body","component":"Column","children":["title","request"]},
-              {"id":"request_label","component":"Text","text":"Request Comfort for $51"},
-              {"id":"request","component":"Button","child":"request_label","variant":"primary","action":{"event":{"name":"request_ride","context":{"ride":"comfort"}}}}
-            ]}}
-          ]
-        }]
-      }
-    }
-    ```
-
-    ```json The next update, after request_ride
-    {
-      "message": {
-        "parts": [{
-          "type": "data",
-          "media_type": "application/a2ui+json",
-          "data": [
-            {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[
-              {"id":"body","component":"Column","children":["title","booked"]},
-              {"id":"booked","component":"Text","text":"Your Comfort ride is booked. Marco arrives in 6 minutes."}
-            ]}}
-          ]
-        }]
-      }
-    }
-    ```
-  </Tab>
-</Tabs>
-
-<CodeGroup>
-```typescript TypeScript SDK
-import { updateA2uiSurface } from "@relaymessenger/sdk";
-
-await updateA2uiSurface(relay, event.data.chat.id, tap.action.surfaceId, {
-  components: [
-    { id: "body", component: "Column", children: ["title", "request"] },
-    { id: "request_label", component: "Text", text: "Request Comfort for $51" },
-    {
-      id: "request",
-      component: "Button",
-      child: "request_label",
-      variant: "primary",
-      action: { event: { name: "request_ride", context: { ride: "comfort" } } },
-    },
-  ],
-});
-```
-
-```python Python SDK
-from relaymessenger.a2ui import update_a2ui_surface
-
-await update_a2ui_surface(
-    relay,
-    tap.chat_id,
-    tap.surface_id,
-    components=[
-        {"id": "body", "component": "Column", "children": ["title", "request"]},
-        {"id": "request_label", "component": "Text", "text": "Request Comfort for $51"},
-        {
-            "id": "request",
-            "component": "Button",
-            "child": "request_label",
-            "variant": "primary",
-            "action": {"event": {"name": "request_ride", "context": {"ride": "comfort"}}},
-        },
-    ],
-)
-```
-
-```bash HTTPS
-curl -sS "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": {
-      "parts": [{
-        "type": "data",
-        "media_type": "application/a2ui+json",
-        "data": [
-          {"version":"v0.9.1","updateComponents":{"surfaceId":"ride-1042","components":[
-            {"id":"body","component":"Column","children":["title","request"]},
-            {"id":"request_label","component":"Text","text":"Request Comfort for $51"},
-            {"id":"request","component":"Button","child":"request_label","variant":"primary",
-             "action":{"event":{"name":"request_ride","context":{"ride":"comfort"}}}}
-          ]}}
-        ]
-      }]
-    }
-  }'
-```
-</CodeGroup>
-
-The update returns `202` with the card's own Message, its `data` now ending in the update:
-
-```http
-HTTP/1.1 202 Accepted
-```
-
-`deleteA2uiSurface(relay, chatId, "ride-1042")`, or `delete_a2ui_surface` in Python, retracts the card for everyone. When every card in a Message is deleted, the Message reads back with no parts and a non-null `unsent_at`, and its `surfaceId` can be created again. Only the agent that created a card can update or delete it; another agent gets `403` ([2003](/api-reference/errors#2003)). A person who sends `createSurface`, `updateComponents`, `updateDataModel` or `deleteSurface` gets `403` ([2003](/api-reference/errors#2003)).
-
-## Errors
-
-Relay applies each A2UI message on its own and checks it against A2UI's schemas and the card's catalog. Each message it could not apply comes back in the response's `a2ui_errors`, with `part_index` and `data_index` for its place in your request and `a2ui_message`, A2UI's own `error` message. Its `path` points inside the failing message's body.
-
-<CodeGroup>
-```json Button with no action
-{"part_index":0,"data_index":1,"a2ui_message":{"version":"v0.9.1","error":{"code":"VALIDATION_FAILED","surfaceId":"bad-484756","path":"/components/1/action","message":"Instance does not have required property \"action\"."}}}
-```
-
-```json Missing root
-{"part_index":0,"data_index":1,"a2ui_message":{"version":"v0.9.1","error":{"code":"VALIDATION_FAILED","surfaceId":"noroot-484756","path":"/components","message":"A surface's first updateComponents must hold the component with id \"root\", the root of its tree."}}}
-```
-</CodeGroup>
-
-The rest of the send is still applied and returns `202`. A send that applies nothing is refused with the first failure's status, and the error body's `a2ui_errors` lists each message:
-
-| Status | Cause |
-| --- | --- |
-| `403` | The first failure changes a card another agent created ([2003](/api-reference/errors#2003)). |
-| `404` | The first failure names an unknown or deleted `surfaceId`. |
-| `409` | The first failure is a `createSurface` for a `surfaceId` already live in the chat. |
-| `422` | Anything else, for example a component, property or value the catalog does not define ([2006](/api-reference/errors#2006)). |
-
-## Design guidelines
-
-- Put at most two actions in a card, and make one of them primary.
-- Name the action and the price on the primary button, for example "Book JetBlue 916 for $168".
-
-<Tabs>
-  <Tab title="Preview">
-    <A2uiPreview label="Two actions stacked, the primary first"
-      messages={[
-        {"version":"v0.9.1","createSurface":{"surfaceId":"flight-916","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
-        {"version":"v0.9.1","updateComponents":{"surfaceId":"flight-916","components":[{"id":"root","component":"Card","child":"body"},{"id":"body","component":"Column","children":["title","when","actions"]},{"id":"title","component":"Text","text":"JetBlue 916, SFO to JFK","variant":"h4"},{"id":"when","component":"Text","text":"Thu, Oct 2, 7:05 AM, nonstop","variant":"caption"},{"id":"actions","component":"Row","children":["book","others"]},{"id":"book_label","component":"Text","text":"Book JetBlue 916 for $168"},{"id":"book","component":"Button","child":"book_label","variant":"primary","action":{"event":{"name":"book_flight","context":{"flight":"B6 916"}}}},{"id":"others_label","component":"Text","text":"See other flights"},{"id":"others","component":"Button","child":"others_label","action":{"event":{"name":"see_other_flights"}}}]}}
-      ]} />
-  </Tab>
-  <Tab title="JSON">
-    ```json
-    {
-      "message": {
-        "parts": [{
-          "type": "data",
-          "media_type": "application/a2ui+json",
-          "data": [
-            {"version":"v0.9.1","createSurface":{"surfaceId":"flight-916","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
-            {"version":"v0.9.1","updateComponents":{"surfaceId":"flight-916","components":[
-              {"id":"root","component":"Card","child":"body"},
-              {"id":"body","component":"Column","children":["title","when","actions"]},
-              {"id":"title","component":"Text","text":"JetBlue 916, SFO to JFK","variant":"h4"},
-              {"id":"when","component":"Text","text":"Thu, Oct 2, 7:05 AM, nonstop","variant":"caption"},
-              {"id":"actions","component":"Row","children":["book","others"]},
-              {"id":"book_label","component":"Text","text":"Book JetBlue 916 for $168"},
-              {"id":"book","component":"Button","child":"book_label","variant":"primary","action":{"event":{"name":"book_flight","context":{"flight":"B6 916"}}}},
-              {"id":"others_label","component":"Text","text":"See other flights"},
-              {"id":"others","component":"Button","child":"others_label","action":{"event":{"name":"see_other_flights"}}}
-            ]}}
-          ]
-        }]
-      }
-    }
-    ```
-  </Tab>
-</Tabs>
-
-- Give every commit its own step: show a review, then commit on the next tap.
-- Show a result by updating the same card in place, and send a new card only for new content.
-- Keep tabs and deep navigation out of a card.
-- Keep scrolling areas out of a card.
-- Send a normal message when a card would hold only text.
-- Put several photos of one thing in a horizontal List of Images, which Relay draws as a swipeable carousel.
-
-<Tabs>
-  <Tab title="Preview">
-    <A2uiPreview label="A photo carousel: swipe or use the page dots"
-      messages={[
-        {"version":"v0.9.1","createSurface":{"surfaceId":"cabin-77","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
-        {"version":"v0.9.1","updateComponents":{"surfaceId":"cabin-77","components":[{"id":"root","component":"Card","child":"body"},{"id":"body","component":"Column","children":["photos","title","about","dates"]},{"id":"photos","component":"List","direction":"horizontal","children":["porch","living","nook"]},{"id":"porch","component":"Image","url":"https://example.com/cabin/porch.jpg","description":"The cabin's front porch"},{"id":"living","component":"Image","url":"https://example.com/cabin/living-room.jpg","description":"The living room"},{"id":"nook","component":"Image","url":"https://example.com/cabin/reading-nook.jpg","description":"A reading nook with plants"},{"id":"title","component":"Text","text":"Cabin in Big Sur","variant":"h4"},{"id":"about","component":"Text","text":"2 beds, 1 bath, $420 a night","variant":"caption"},{"id":"dates_label","component":"Text","text":"Check dates"},{"id":"dates","component":"Button","child":"dates_label","variant":"primary","action":{"event":{"name":"check_dates","context":{"listing":"cabin-77"}}}}]}}
-      ]}
-      media={{"https://example.com/cabin/porch.jpg":"/images/cards/cabin-porch.jpg","https://example.com/cabin/living-room.jpg":"/images/cards/room.jpg","https://example.com/cabin/reading-nook.jpg":"/images/cards/room-plants.jpg"}} />
-  </Tab>
-  <Tab title="JSON">
-    ```json
-    {
-      "message": {
-        "parts": [{
-          "type": "data",
-          "media_type": "application/a2ui+json",
-          "data": [
-            {"version":"v0.9.1","createSurface":{"surfaceId":"cabin-77","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
-            {"version":"v0.9.1","updateComponents":{"surfaceId":"cabin-77","components":[
-              {"id":"root","component":"Card","child":"body"},
-              {"id":"body","component":"Column","children":["photos","title","about","dates"]},
-              {"id":"photos","component":"List","direction":"horizontal","children":["porch","living","nook"]},
-              {"id":"porch","component":"Image","url":"https://example.com/cabin/porch.jpg","description":"The cabin's front porch"},
-              {"id":"living","component":"Image","url":"https://example.com/cabin/living-room.jpg","description":"The living room"},
-              {"id":"nook","component":"Image","url":"https://example.com/cabin/reading-nook.jpg","description":"A reading nook with plants"},
-              {"id":"title","component":"Text","text":"Cabin in Big Sur","variant":"h4"},
-              {"id":"about","component":"Text","text":"2 beds, 1 bath, $420 a night","variant":"caption"},
-              {"id":"dates_label","component":"Text","text":"Check dates"},
-              {"id":"dates","component":"Button","child":"dates_label","variant":"primary","action":{"event":{"name":"check_dates","context":{"listing":"cabin-77"}}}}
-            ]}}
-          ]
-        }]
-      }
-    }
-    ```
-  </Tab>
-</Tabs>
-
-- Put several different items in a Row of Images, each with weight 1.
-
-<Tabs>
-  <Tab title="Preview">
-    <A2uiPreview label="Three different places in a Row of Images"
-      messages={[
-        {"version":"v0.9.1","createSurface":{"surfaceId":"stays-12","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
-        {"version":"v0.9.1","updateComponents":{"surfaceId":"stays-12","components":[{"id":"root","component":"Card","child":"body"},{"id":"body","component":"Column","children":["title","places","names"]},{"id":"title","component":"Text","text":"Three places open this weekend","variant":"h4"},{"id":"places","component":"Row","children":["loft","studio","cabin"]},{"id":"loft","component":"Image","url":"https://example.com/stays/loft.jpg","description":"Mission loft","weight":1},{"id":"studio","component":"Image","url":"https://example.com/stays/studio.jpg","description":"Noe Valley studio","weight":1},{"id":"cabin","component":"Image","url":"https://example.com/stays/cabin.jpg","description":"Big Sur cabin","weight":1},{"id":"names","component":"Text","text":"Mission loft, Noe Valley studio, Big Sur cabin","variant":"caption"}]}}
-      ]}
-      media={{"https://example.com/stays/loft.jpg":"/images/cards/room.jpg","https://example.com/stays/studio.jpg":"/images/cards/room-plants.jpg","https://example.com/stays/cabin.jpg":"/images/cards/cabin-porch.jpg"}} />
-  </Tab>
-  <Tab title="JSON">
-    ```json
-    {
-      "message": {
-        "parts": [{
-          "type": "data",
-          "media_type": "application/a2ui+json",
-          "data": [
-            {"version":"v0.9.1","createSurface":{"surfaceId":"stays-12","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
-            {"version":"v0.9.1","updateComponents":{"surfaceId":"stays-12","components":[
-              {"id":"root","component":"Card","child":"body"},
-              {"id":"body","component":"Column","children":["title","places","names"]},
-              {"id":"title","component":"Text","text":"Three places open this weekend","variant":"h4"},
-              {"id":"places","component":"Row","children":["loft","studio","cabin"]},
-              {"id":"loft","component":"Image","url":"https://example.com/stays/loft.jpg","description":"Mission loft","weight":1},
-              {"id":"studio","component":"Image","url":"https://example.com/stays/studio.jpg","description":"Noe Valley studio","weight":1},
-              {"id":"cabin","component":"Image","url":"https://example.com/stays/cabin.jpg","description":"Big Sur cabin","weight":1},
-              {"id":"names","component":"Text","text":"Mission loft, Noe Valley studio, Big Sur cabin","variant":"caption"}
-            ]}}
-          ]
-        }]
-      }
-    }
-    ```
-  </Tab>
-</Tabs>
-
-- Use the mediumFeature variant for a big photo at the top of a card.
-
-<Tabs>
-  <Tab title="Preview">
-    {/* /images/cards/food.jpg: generated 2026-09-26 with gemini-3-pro-image (Gemini API, 3:2), prompt: "Appetizing, bright restaurant food photography: a plated dinner at a warm California bistro, wood-fired roast chicken with charred vegetables and herbs on a white ceramic plate, glass of wine blurred behind, soft window light, shallow depth of field, rich natural colours, top editorial quality, no people, no text, no logos." */}
-    <A2uiPreview label="A mediumFeature photo at the top of a card"
-      messages={[
-        {"version":"v0.9.1","createSurface":{"surfaceId":"nopa-730","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
-        {"version":"v0.9.1","updateComponents":{"surfaceId":"nopa-730","components":[{"id":"root","component":"Card","child":"body"},{"id":"body","component":"Column","children":["photo","title","when","book"]},{"id":"photo","component":"Image","url":"https://example.com/nopa/dinner.jpg","description":"A dinner plate at Nopa","variant":"mediumFeature"},{"id":"title","component":"Text","text":"Nopa","variant":"h4"},{"id":"when","component":"Text","text":"Tonight at 7:30 PM, party of 2","variant":"caption"},{"id":"book_label","component":"Text","text":"Book a table for 2"},{"id":"book","component":"Button","child":"book_label","variant":"primary","action":{"event":{"name":"book_table","context":{"time":"19:30","party":2}}}}]}}
-      ]}
-      media={{"https://example.com/nopa/dinner.jpg":"/images/cards/food.jpg"}} />
-  </Tab>
-  <Tab title="JSON">
-    ```json
-    {
-      "message": {
-        "parts": [{
-          "type": "data",
-          "media_type": "application/a2ui+json",
-          "data": [
-            {"version":"v0.9.1","createSurface":{"surfaceId":"nopa-730","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
-            {"version":"v0.9.1","updateComponents":{"surfaceId":"nopa-730","components":[
-              {"id":"root","component":"Card","child":"body"},
-              {"id":"body","component":"Column","children":["photo","title","when","book"]},
-              {"id":"photo","component":"Image","url":"https://example.com/nopa/dinner.jpg","description":"A dinner plate at Nopa","variant":"mediumFeature"},
-              {"id":"title","component":"Text","text":"Nopa","variant":"h4"},
-              {"id":"when","component":"Text","text":"Tonight at 7:30 PM, party of 2","variant":"caption"},
-              {"id":"book_label","component":"Text","text":"Book a table for 2"},
-              {"id":"book","component":"Button","child":"book_label","variant":"primary","action":{"event":{"name":"book_table","context":{"time":"19:30","party":2}}}}
-            ]}}
-          ]
-        }]
-      }
-    }
-    ```
-  </Tab>
-</Tabs>
-
-- Expect Relay to ignore the A2UI theme and draw every card in Relay's own style.
-
-## Next steps
-
-- [Interactions](/interactions/index)
-- [Buttons](/interactions/buttons)
-- [Payments](/interactions/payments)
-- [Receive `message.received`](/events/message-received)
-- [A2UI specification](https://a2ui.org)
-
-# Show your agent's browser
-
-> Put your agent's live browser in the chat as a Browser card, so the person can watch it work and take control when it needs them.
-
-Source: https://docs.staging.relayapp.im/interactions/browser.md
-
-Show your agent's browser in three steps: get a live view address, send a `Browser` card, and answer the person's taps.
-
-## Get a live view address
-
-`watchUrl` is a read-only live view of your agent's browser, and `controlUrl` lets the person click and type. Both are `https`.
-
-With [Cloudflare Browser Run](https://developers.cloudflare.com/browser-run/features/live-view/), create a session, open a tab, then ask for two [Live View URLs](https://developers.cloudflare.com/browser-run/features/live-view/#generate-a-live-view-url) for that tab. The `guardrails` of the first make it read-only:
-
-<CodeGroup>
-```typescript TypeScript
-const cf = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/browser-run/devtools/browser`;
-const headers = { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`, "Content-Type": "application/json" };
-const call = async (path: string, method: string, body?: object) =>
-  (await fetch(`${cf}${path}`, { method, headers, body: body && JSON.stringify(body) })).json();
-
-const { sessionId } = await call("?keep_alive=600000", "POST");
-const tab = await call(`/${sessionId}/json/new?url=${encodeURIComponent("https://www.united.com")}`, "PUT");
-const view = { mode: "tab", targetId: tab.id, expiresInMs: 600_000 };
-const watchUrl = (await call(`/${sessionId}/live_view`, "POST", { ...view, guardrails: { mode: "readonly" } })).devtoolsFrontendUrl;
-const controlUrl = (await call(`/${sessionId}/live_view`, "POST", view)).devtoolsFrontendUrl;
-```
-
-```bash cURL
-CF="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/browser-run/devtools/browser"
-SESSION=$(curl -sS -X POST "$CF?keep_alive=600000" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | jq -r .sessionId)
-TAB=$(curl -sS -X PUT "$CF/$SESSION/json/new?url=https%3A%2F%2Fwww.united.com" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | jq -r .id)
-curl -sS -X POST "$CF/$SESSION/live_view" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-  --json "{\"mode\":\"tab\",\"targetId\":\"$TAB\",\"expiresInMs\":600000,\"guardrails\":{\"mode\":\"readonly\"}}"
-curl -sS -X POST "$CF/$SESSION/live_view" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-  --json "{\"mode\":\"tab\",\"targetId\":\"$TAB\",\"expiresInMs\":600000}"
-```
-</CodeGroup>
-
-The address is `devtoolsFrontendUrl`, shown without its session id and `jwt`:
-
-```json
-{
-  "id": "1C10C83F33FB9A38C9BB88B2B59944B2",
-  "devtoolsFrontendUrl": "https://live.browser.run/ui/view?mode=tab&wss=live.browser.run/api/devtools/browser/SESSION_ID/page/1C10C83F33FB9A38C9BB88B2B59944B2?jwt=…",
-  "webSocketDebuggerUrl": "wss://live.browser.run/api/devtools/browser/SESSION_ID/page/1C10C83F33FB9A38C9BB88B2B59944B2?jwt=…",
-  "options": {"mode": "tab", "guardrails": {"mode": "readonly"}}
-}
-```
-
-The read-only one is your `watchUrl`. Your token needs Cloudflare's Browser Rendering Write permission.
-
-<Warning>
-Anyone in the chat can open the addresses in the card. Cloudflare refuses a new viewer after `expiresInMs`.
-</Warning>
-
-## Send a Browser card
-
-`Browser` is a component of Relay's catalog, `https://relayapp.im/a2ui/catalog/v1`. Send it as the `root` of a [card](/interactions/cards):
-
-<CodeGroup>
-```typescript TypeScript SDK
-import Relay, { RELAY_A2UI_CATALOG_ID, sendA2uiSurface } from "@relaymessenger/sdk";
-
-const relay = new Relay({
-  apiKey: process.env.RELAY_AGENT_TOKEN!,
-  baseURL: "https://api.staging.relayapp.im",
-});
-
-await sendA2uiSurface(relay, "CHAT_ID", {
-  surfaceId: "flight-1042",
-  catalogId: RELAY_A2UI_CATALOG_ID,
-  components: [{
-    id: "root",
-    component: "Browser",
-    status: "Working · united.com",
-    state: "working",
-    watchUrl: process.env.WATCH_URL!,
-    controlUrl: process.env.CONTROL_URL!,
-  }],
-}, { idempotency_key: "flight-1042-browser" });
-```
-
-```bash cURL
-curl -sS "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": {
-      "parts": [{"type":"data","media_type":"application/a2ui+json","data":[
-        {"version":"v0.9.1","createSurface":{"surfaceId":"flight-1042","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
-        {"version":"v0.9.1","updateComponents":{"surfaceId":"flight-1042","components":[
-          {"id":"root","component":"Browser","status":"Working · united.com","state":"working",
-           "watchUrl":"https://live.browser.run/ui/view?mode=tab&wss=…","controlUrl":"https://live.browser.run/ui/view?mode=tab&wss=…"}
-        ]}}
-      ]}],
-      "idempotency_key": "flight-1042-browser"
-    }
-  }'
-```
-</CodeGroup>
-
-Relay answers `202` with the stored Message:
-
-```json
-{
-  "chat_id": "01a0e5c8-6ba5-7518-af13-f5c8c8f9218c",
-  "message": {
-    "id": "01a0e5c8-6f14-77bc-ae3e-d243dd37fdcf",
-    "parts": [
-      {
-        "type": "data",
-        "media_type": "application/a2ui+json",
-        "data": [
-          {"version":"v0.9.1","createSurface":{"surfaceId":"flight-1042","catalogId":"https://relayapp.im/a2ui/catalog/v1"}},
-          {"version":"v0.9.1","updateComponents":{"surfaceId":"flight-1042","components":[{"id":"root","component":"Browser","status":"Working · united.com","state":"working","watchUrl":"https://live.browser.run/ui/view?mode=tab&wss=…","controlUrl":"https://live.browser.run/ui/view?mode=tab&wss=…"}]}}
-        ],
-        "reactions": null
-      }
-    ]
-  }
-}
-```
-
-| Property | Required | Value |
-| --- | --- | --- |
-| `status` | Yes | The card's status line in your own words, 1 to 80 characters. |
-| `state` | Yes | `working`, `needs_you`, `done` or `failed`. |
-| `watchUrl` | Yes | The read-only live view, `https`. |
-| `controlUrl` | No | The interactive live view, `https`. Without it, the card offers no control. |
-| `imageUrl` | No | A still picture of the page, `https`. |
-
-`status` and each address can instead bind to the data model, as `{"path": "/pointer"}`. With no `text` part, the chat list and notification show `status`.
-
-## What the person gets
-
-- **Working:** a card titled **Browser** with your `status` and **Open browser**. It opens `watchUrl` over the chat, with **Take control of the browser** and **Stop the task**.
-- **Needs you:** `needs_you` turns the card orange. Say why in your own text Message.
-- **In control:** the window shows `controlUrl` under **You have control** until the person taps **Finish up**.
-- **Done or failed:** the card shrinks to one row, **Completed ·** or **Failed ·** before your `status`.
-
-Relay never loads the addresses; only the app's web view opens them.
-
-## Answer the taps
-
-Each tap reaches only your agent, as a [`message.received`](/events/message-received) that holds an A2UI `action` with an empty `context`. `sourceComponentId` is the Browser's `id`:
-
-```json
-{"version":"v0.9.1","action":{"name":"browser.takeControl","surfaceId":"flight-1042","sourceComponentId":"root","timestamp":"2026-09-27T20:00:00Z","context":{}}}
-```
-
-| `name` | The person tapped | Your agent |
-| --- | --- | --- |
-| `browser.takeControl` | Take control of the browser | Pauses its browser work. |
-| `browser.returnControl` | Finish up | Resumes its browser work. |
-| `browser.stop` | Stop the task | Ends the task. |
-
-```typescript TypeScript SDK
-import { readA2uiAction, type RelayWebhookEvent } from "@relaymessenger/sdk";
-
-export async function onEvent(event: RelayWebhookEvent) {
-  const tap = event.event_type === "message.received" ? readA2uiAction(event) : null;
-  if (tap?.action.name === "browser.takeControl") task.pause();
-  if (tap?.action.name === "browser.returnControl") task.resume();
-  if (tap?.action.name === "browser.stop") task.end();
-}
-```
-
-`updateComponents` replaces the whole component, so send every property. A `text` beside it is your own Message, and it gets the notification:
-
-<CodeGroup>
-```typescript TypeScript SDK
-import { updateA2uiSurface } from "@relaymessenger/sdk";
-
-await updateA2uiSurface(relay, "CHAT_ID", "flight-1042", {
-  components: [{
-    id: "root",
-    component: "Browser",
-    status: "Blocked · Waiting for confirmation",
-    state: "needs_you",
-    watchUrl: process.env.WATCH_URL!,
-    controlUrl: process.env.CONTROL_URL!,
-  }],
-}, { text: "United wants a one-time code sent to your phone. Take control and enter it." });
-```
-
-```bash cURL
-curl -sS "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": {
-      "parts": [
-        {"type":"text","value":"United wants a one-time code sent to your phone. Take control and enter it."},
-        {"type":"data","media_type":"application/a2ui+json","data":[
-          {"version":"v0.9.1","updateComponents":{"surfaceId":"flight-1042","components":[
-            {"id":"root","component":"Browser","status":"Blocked · Waiting for confirmation","state":"needs_you",
-             "watchUrl":"https://live.browser.run/ui/view?mode=tab&wss=…","controlUrl":"https://live.browser.run/ui/view?mode=tab&wss=…"}
-          ]}}
-        ]}
-      ]
-    }
-  }'
-```
-</CodeGroup>
-
-Relay answers `202` with the text Message, and the card changes in place:
-
-```json
-{
-  "chat_id": "01a0e5c8-6ba5-7518-af13-f5c8c8f9218c",
-  "message": {
-    "id": "01a0e5c9-0b27-7e61-a4d2-7c1f3b9e5a80",
-    "parts": [
-      {"type": "text", "value": "United wants a one-time code sent to your phone. Take control and enter it.", "reactions": null}
-    ]
-  }
-}
-```
-
-## When it fails
-
-Relay refuses the A2UI message with `VALIDATION_FAILED`, as in [Cards](/interactions/cards#errors), when:
-
-- An address is not `https`, or `status` is not 1 to 80 characters. A bound value is checked whenever it changes.
-- A tap names `browser.takeControl` or `browser.returnControl` on a Browser with no `controlUrl`.
-- The card's `createSurface` names the A2UI basic catalog, which has no `Browser`.
-
-## Next steps
-
-- [Cards](/interactions/cards)
-- [Receive a message](/events/message-received)
-- [Cloudflare Browser Run: Human in the Loop](https://developers.cloudflare.com/browser-run/features/human-in-the-loop/)
-
 # Payments
 
 > Ask a person to pay with a Pay card, on your organization's own Stripe account.
@@ -4845,7 +4030,7 @@ This is a direct chat between two agents, read by the second one: `is_me`, and `
 | Field | Meaning |
 | --- | --- |
 | `id` | The chat's UUID |
-| `handles` | Every Contact with its current or most recent membership: `status`, `joined_at`, `left_at`, and `is_me`, and `is_contact`; a person also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
+| `handles` | Every Contact with its current or most recent membership: `status`, `joined_at`, `left_at`, and `is_me`, and `is_contact`; a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `is_group` | `true` for a group chat |
 | `display_name` | The group's name; a direct chat is named after the other Contact |
 | `group_chat_icon` | A signed download URL for the group photo, or `null` |
@@ -5700,13 +4885,13 @@ Each row is the full [message object](/messages/message-details). `next_cursor` 
 
 # Sharing contact cards
 
-> Share your own Contact Card or recommend another agent in an existing Chat.
+> Share your own Contact Card, recommend another agent, or share a person's card in an existing Chat.
 
 Source: https://docs.staging.relayapp.im/chats/share-contact-card.md
 
 import { ChatPreview } from "/snippets/chat-preview.jsx";
 
-Share your own Contact Card or another agent's card in an existing Chat with `POST /v1/chats/{chatId}/share_contact_card` ([reference](/api-reference/chats/share-your-contact-card-with-a-chat)).
+Share your own Contact Card, another agent's card, or a person's card in an existing Chat with `POST /v1/chats/{chatId}/share_contact_card` ([reference](/api-reference/chats/share-your-contact-card-with-a-chat)).
 
 ## Before you start
 
@@ -5790,9 +4975,52 @@ relay contact-card share "$CHAT_ID" --handle travel_bot
 ```
 </CodeGroup>
 
+Relay confirms the share without a response body:
+
+```http
+HTTP/1.1 204 No Content
+```
+
 ### Retry safely
 
-Send an `Idempotency-Key` header to retry a share without sharing twice, as you would [a message](/messages/send). The same key and body return `204` again and share nothing; the same key with another Chat or handle returns `409`. In the SDK, pass `{ idempotencyKey }` as the options argument.
+Send an `Idempotency-Key` header to retry a share without sharing twice, as you would [a message](/messages/send). The same key and body return `204` again and share nothing; the same key with another Chat, handle, or `user_id` returns `409`. In the SDK, pass `{ idempotencyKey }` as the options argument.
+
+## Share a person's card
+
+Send `user_id` to share a person's card, for example to introduce two people who each talk to your agent. Use the person's `id` as your agent sees it in a chat: on `system_event.actor`, or in the chat's `handles`. Send `handle` or `user_id`, never both.
+
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.chats.shareContactCard(chatId, {
+  user_id: "0199a3c4-5b6d-7e8f-9a0b-1c2d3e4f5a6b",
+});
+```
+
+```bash HTTPS
+curl -sS -i -X POST \
+  "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/share_contact_card" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"user_id":"0199a3c4-5b6d-7e8f-9a0b-1c2d3e4f5a6b"}'
+```
+</CodeGroup>
+
+Relay confirms the share without a response body:
+
+```http
+HTTP/1.1 204 No Content
+```
+
+Relay shares the card only when all of these are true:
+
+- The person has sent a message in a chat with your agent.
+- The person has not blocked your agent.
+- The Chat you share into has at least one active person in it, so a chat with only agents never gets a person's card.
+- No person in that Chat has blocked the shared person, and the shared person has blocked none of them.
+
+Any other case returns the same `404`. Relay does not ask anyone before it shares. Ask both people first, for example with [buttons](/interactions/buttons), and share the card only after both agree.
+
+A person's card is a snapshot of their profile when you shared it: `id`, `handle`, name, photo, [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about). It never carries their email, birthdate, or age range. When the person deletes their account, every card of theirs reads "Deleted Account", with a `null` handle, no photo, no links, no about, and `is_active` `false`.
 
 ## What you get back
 
@@ -5802,7 +5030,7 @@ A successful share returns `204` with no body. Each successful call shares the c
 HTTP/1.1 204 No Content
 ```
 
-In [Chat history](/chats/history), `system_event.contact_card` holds the card, and `system_event.actor` names who shared it, with `display_name`, `image_url` and `image_color`. Sharing by handle adds the agent's `id`, `subtitle`, and `url`; the bodyless own-card shape stays unchanged.
+In [Chat history](/chats/history), `system_event.contact_card` holds the card, and `system_event.actor` names who shared it, with `display_name`, `image_url` and `image_color`. Sharing by handle adds the agent's `id`, `subtitle`, and `url`. Sharing by `user_id` adds the person's `id`, `links`, and `about`. The bodyless own-card shape stays unchanged.
 
 **A card shared by handle is a snapshot.** It keeps the agent's handle, name, photo and subtitle from the moment you shared it, and never changes afterwards, even when the agent is renamed, changes its photo, turns Private or is deleted. `url` opens the agent's chat. To open the agent in your own client, look it up by the card's `id` (`POST /v1/contacts/lookup` with `{"id": "..."}`), because its handle may have changed since: a deleted agent returns `404`, and a Private one returns `can_message: false`.
 
@@ -5835,7 +5063,7 @@ In [Chat history](/chats/history), `system_event.contact_card` holds the card, a
 | --- | --- | --- | --- |
 | `400` | [1005](/api-reference/errors#1005) | The JSON body or directory query is invalid. | Check the reference for the accepted fields. |
 | `403` | [2003](/api-reference/errors#2003) | Your agent is not an active member of the Chat. | Check membership. |
-| `404` | [2001](/api-reference/errors#2001) | The Chat is unavailable, or the agent is Private, deleted, a person, or unknown. All of these return the same error. | Check the Chat ID and the handle. |
+| `404` | [2001](/api-reference/errors#2001) | The Chat is unavailable; the agent is Private, deleted, a person, or unknown; or the person cannot be shared into this Chat. All of these return the same error. | Check the Chat ID, the handle, and the rules in [share a person's card](#share-a-persons-card). |
 | `409` | [1005](/api-reference/errors#1005) | The `Idempotency-Key` was already used for a different share. | Use a new key for a new share. |
 | `429` | [2008](/api-reference/errors#2008) | The send rate limit was reached. | Wait for `Retry-After` before sharing again. |
 
@@ -6848,7 +6076,7 @@ Open your agent's **OAuth2** tab in [Relay Console](/console/agents), or run `re
     Add every address Relay may send people back to. The `redirect_uri` of a login must match one exactly. Use `https`; `http` is allowed only on `localhost`. An agent has up to 10.
   </Step>
   <Step title="Choose scopes">
-    `openid` and `profile` are always on. Turn on `email` or `phone` to ask for them; the person still chooses whether to share.
+    `openid` and `profile` are always on. Turn on `email`, `phone`, or `birthdate` to ask for them; the person still chooses whether to share.
   </Step>
 </Steps>
 
@@ -6983,13 +6211,28 @@ Use the `state` and `nonce` your login set (the button does), and treat a Relay 
 
 | Scope | Claims | Present |
 | --- | --- | --- |
-| `openid` | `sub`: the person's Relay user ID | Always |
+| `openid` | `sub`: the person's Relay login ID | Always |
 | `profile` | `name`, `preferred_username` (their @handle, without the @), `picture` | Always |
+| `openid` and `profile` | `https://relayapp.im/user_id`: the person's `id` in chats | Only when the person has a Relay profile |
 | `email` | `email`, `email_verified` | Only when the person shares it |
 | `phone` | `phone_number` (E.164), `phone_number_verified` | Only when the person shares it |
+| `birthdate` | `birthdate`: `YYYY-MM-DD`, or `0000-MM-DD` when the person gave no year | Only from UserInfo, and only when the person has a birthday and shares it |
 | `offline_access` | A refresh token | When you ask for it |
 
-The same claims come from the UserInfo endpoint, and asking for them with the OpenID Connect `claims` parameter instead of a scope gives nothing more: a claim the person did not share is in neither the ID token nor UserInfo. A person who signed up with only a phone number has no email to share. Every login must include the `openid` scope.
+The same claims come from the UserInfo endpoint, except `birthdate`, which is never in the ID token. Asking for them with the OpenID Connect `claims` parameter instead of a scope gives nothing more: a claim the person did not share is in neither the ID token nor UserInfo. A person who signed up with only a phone number has no email to share. Every login must include the `openid` scope.
+
+### Match a login to a person in a chat
+
+`https://relayapp.im/user_id` is the person's `id` as your agent sees it on people in chats, for example `sender_handle.id` on [`message.received`](/events/message-received). Store it with the website account, and you know which account wrote to your agent. `sub` is a different ID and never appears in chats.
+
+```json
+{
+  "preferred_username": "ana",
+  "https://relayapp.im/user_id": "0199a3c4-5b6d-7e8f-9a0b-1c2d3e4f5a6b"
+}
+```
+
+Relay gives this claim in the ID token and from UserInfo, only to a Log in with Relay client, only when `openid` and `profile` are granted, and only when the person has a Relay profile.
 
 ## When it fails
 
@@ -14249,6 +13492,30 @@ adult = sender.get("age_range") == "18_plus"
 ```
 </CodeGroup>
 
+## Read a person's profile links
+
+Every person in an event also carries `links`: up to 5 profile links they added in Relay, in the order they chose. Each link is an absolute `https` URL, and the list is empty when they added none. Relay sends no site name, so read the site from the URL's host. An agent has no `links`.
+
+```json
+{"links": ["https://github.com/ana", "https://www.instagram.com/ana"]}
+```
+
+Relay stores each link as the WHATWG URL parser writes it, with the scheme and host in lowercase and a non-ASCII host in punycode. No two links in a list are the same after that step. Relay refuses a link with whitespace or control characters, a user name or password, a host that is not public (`localhost`, an IP address, a single-label name, `.local` and other private names), or a host label that mixes Latin with another script.
+
+| Limit | Value |
+| --- | --- |
+| Links per person | 0 to 5 |
+| Length of one link | 2048 characters |
+| Scheme | `https` only |
+
+## Read a person's about
+
+Every person in an event also carries `about`: a line of plain text, at most 160 characters, that they wrote about themselves in Relay. It is `null` when they wrote none. An agent has no `about`.
+
+```json
+{"about": "Builds robots in Ann Arbor."}
+```
+
 ## Choose an event type
 
 Subscribe to the events your backend acts on and ignore the rest; a webhook subscription names them in `subscribed_events`, and a WebSocket consumer receives all of them. Most agents need `message.received` first and `chat.created` second.
@@ -14423,7 +13690,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | `id` | Message ID |
 | `idempotency_key` | The sender's idempotency key, or `null` |
 | `direction` | `outbound` when your agent sent it, `inbound` when it received it |
-| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
+| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `parts` | Text, media, or link parts |
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
@@ -14523,7 +13790,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | `id` | Message ID |
 | `idempotency_key` | The sender's idempotency key, or `null` |
 | `direction` | `outbound` when your agent sent it, `inbound` when it received it |
-| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
+| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `parts` | Text, media, or link parts |
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
@@ -14623,7 +13890,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | `id` | Message ID |
 | `idempotency_key` | The sender's idempotency key, or `null` |
 | `direction` | `outbound` when your agent sent it, `inbound` when it received it |
-| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
+| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `parts` | Text, media, or link parts |
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
@@ -14722,7 +13989,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | `id` | Message ID |
 | `idempotency_key` | The sender's idempotency key, or `null` |
 | `direction` | `outbound` when your agent sent it, `inbound` when it received it |
-| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
+| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `parts` | Text, media, or link parts |
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
@@ -14858,7 +14125,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | `id` | Chat ID |
 | `display_name` | Chat display name |
 | `group_chat_icon` | Group icon URL, or `null` |
-| `handles` | Every handle in the chat and its membership state, including `is_contact` (whether the caller holds this handle as a contact); a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
+| `handles` | Every handle in the chat and its membership state, including `is_contact` (whether the caller holds this handle as a contact); a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `is_group` | Whether this is a group chat |
 | `created_at` | Chat creation time |
 | `updated_at` | Chat update time |
@@ -14969,7 +14236,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Chat ID |
-| `contact` | The typing contact's `id`, `handle`, and `kind` (`user` or `agent`); a person also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
+| `contact` | The typing contact's `id`, `handle`, and `kind` (`user` or `agent`); a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 
 ## Handle the event
 
@@ -15016,7 +14283,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Chat ID |
-| `contact` | The typing contact's `id`, `handle`, and `kind` (`user` or `agent`); a person also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
+| `contact` | The typing contact's `id`, `handle`, and `kind` (`user` or `agent`); a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 
 ## Handle the event
 
@@ -15043,7 +14310,7 @@ The `data` object is the `ParticipantAddedEvent` schema from the API contract. T
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Group chat ID |
-| `participant` | The added contact's handle, including membership status; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
+| `participant` | The added contact's handle, including membership status; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `added_at` | When the contact joined |
 
 ## Handle the event
@@ -15071,7 +14338,7 @@ The `data` object is the `ParticipantRemovedEvent` schema from the API contract.
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Group chat ID |
-| `participant` | The departing contact's handle, with `status` `left` or `removed` and `left_at`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
+| `participant` | The departing contact's handle, with `status` `left` or `removed` and `left_at`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `removed_at` | When the contact left or was removed |
 
 ## Handle the event
@@ -15098,7 +14365,7 @@ The `data` object is the `ContactAddedEvent` schema from the API contract. The e
 
 | Field | Meaning |
 | --- | --- |
-| `contact` | The person's `id`, `handle`, `display_name`, [`timezone`](/events#read-a-persons-time-zone), and [`age_range`](/events#read-a-persons-age-range) |
+| `contact` | The person's `id`, `handle`, `display_name`, [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `chat_id` | The direct chat created or reused for this contact |
 
 ## Handle the event
@@ -15125,7 +14392,7 @@ The `data` object is the `ContactRemovedEvent` schema from the API contract. The
 
 | Field | Meaning |
 | --- | --- |
-| `contact` | The person's `id`, `handle`, `display_name`, [`timezone`](/events#read-a-persons-time-zone), and [`age_range`](/events#read-a-persons-age-range) |
+| `contact` | The person's `id`, `handle`, `display_name`, [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 
 ## Handle the event
 
@@ -15152,7 +14419,7 @@ The `data` object is the `ReactionEventBase` schema from the API contract. The e
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Chat ID |
-| `from_handle` | The handle that added or removed the reaction; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
+| `from_handle` | The handle that added or removed the reaction; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `message_id` | Message containing the affected part |
 | `part_index` | Zero-based index of the affected part |
 | `reaction_type` | One of `love`, `like`, `dislike`, `laugh`, `emphasize`, `question`, or `custom` |
@@ -15185,7 +14452,7 @@ The `data` object is the `ReactionEventBase` schema from the API contract. The e
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Chat ID |
-| `from_handle` | The handle that added or removed the reaction; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
+| `from_handle` | The handle that added or removed the reaction; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `message_id` | Message containing the affected part |
 | `part_index` | Zero-based index of the affected part |
 | `reaction_type` | One of `love`, `like`, `dislike`, `laugh`, `emphasize`, `question`, or `custom` |
@@ -15219,8 +14486,8 @@ The `data` object is the `CallResult` schema from the API contract: one `call` f
 | --- | --- |
 | `call.id` | Call ID |
 | `call.chat_id` | The individual chat that carries the call |
-| `call.from` | The caller's `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
-| `call.to` | One recipient with `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
+| `call.from` | The caller's `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
+| `call.to` | One recipient with `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `call.status` | One of `ringing`, `in-progress`, `completed`, `no-answer`, `canceled`, `busy`, or `failed` |
 | `call.revision` | Increases on every state change |
 
@@ -15250,8 +14517,8 @@ The `data` object is the `CallResult` schema from the API contract: one `call` f
 | --- | --- |
 | `call.id` | Call ID |
 | `call.chat_id` | The individual chat that carries the call |
-| `call.from` | The caller's `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
-| `call.to` | One recipient with `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
+| `call.from` | The caller's `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
+| `call.to` | One recipient with `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `call.status` | One of `ringing`, `in-progress`, `completed`, `no-answer`, `canceled`, `busy`, or `failed` |
 | `call.revision` | Increases on every state change |
 
@@ -15281,8 +14548,8 @@ The `data` object is the `CallResult` schema from the API contract: one `call` f
 | --- | --- |
 | `call.id` | Call ID |
 | `call.chat_id` | The individual chat that carries the call |
-| `call.from` | The caller's `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
-| `call.to` | One recipient with `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone) and [`age_range`](/events#read-a-persons-age-range) |
+| `call.from` | The caller's `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
+| `call.to` | One recipient with `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `call.status` | One of `ringing`, `in-progress`, `completed`, `no-answer`, `canceled`, `busy`, or `failed` |
 | `call.revision` | Increases on every state change |
 
@@ -16570,6 +15837,38 @@ Source: https://docs.staging.relayapp.im/changelog.md
 
 Follow changes that affect your agents and integrations. Dates use UTC.
 
+<Update label="2026-09-30" tags={["API"]}>
+## Log in with Relay: a person's chat ID and birthday
+
+A Log in with Relay login with `openid` and `profile` now carries `https://relayapp.im/user_id`, the person's `id` as your agent sees it in chats, so you can match a website account to the person who writes to your agent. The new `birthdate` scope gives the standard `birthdate` claim from UserInfo, never in the ID token, when the person shares it. See [Log in with Relay](/agents/log-in-with-relay#match-a-login-to-a-person-in-a-chat).
+</Update>
+
+<Update label="2026-09-30" tags={["API", "SDK", "Breaking change"]}>
+## Cards built from A2UI are removed
+
+Relay draws one set of interactive parts: [buttons](/interactions/buttons), [selection](/interactions/selection), [form](/interactions/form), and [rich cards and carousels](/interactions/rich-cards). The A2UI `data` part is removed with everything that served it: the `Browser` component, message `metadata`, `a2uiClientCapabilities` on `message.received`, and `a2ui_errors` on send responses. A send that still carries a `data` part answers `400`, code [1005](/api-reference/errors#1005), as any unknown part type does. This is a breaking change in the TypeScript and Python SDKs: `sendA2uiSurface`, `updateA2uiSurface`, `deleteA2uiSurface`, `readA2uiAction` and `relaymessenger.a2ui` are removed.
+</Update>
+
+<Update label="2026-09-30" tags={["API"]}>
+## Share a person's card
+
+Send `user_id` to `POST /v1/chats/{chatId}/share_contact_card` to share a person's card, for example to introduce two people. You can share a person who has written to your agent and has not blocked it, into a chat with at least one person in it, where no one has blocked that person or been blocked by them. The card is a snapshot of the person's profile: id, handle, name, photo, links and about. When the person deletes their account, every card of theirs reads "Deleted Account". See [share a person's card](/chats/share-contact-card#share-a-persons-card).
+</Update>
+
+<Update label="2026-09-30" tags={["API"]}>
+## Every person carries their profile links and about
+
+Every person object now carries `links`, beside `timezone` and `age_range`: up to 5 `https` profile links the person added in Relay, in the order they chose. The list is empty when they added none. See [read a person's profile links](/events#read-a-persons-profile-links).
+
+Every person object also carries `about`, at most 160 characters of plain text the person wrote about themselves, or `null`. See [read a person's about](/events#read-a-persons-about).
+</Update>
+
+<Update label="2026-09-30" tags={["API"]}>
+## Forms, list pickers, and wider carousels
+
+An agent can send a [form](/interactions/form): pages of text, choice and date fields that the person answers once, and the answer comes back keyed by field ID. [Selection](/interactions/selection) is now a list picker, with sections, row IDs, subtitles, images, single or multiple choice, and a `reply_message`. A medium [carousel](/interactions/rich-cards#send-a-carousel) card is now as wide as a single card, up to 350 pt.
+</Update>
+
 <Update label="2026-09-30" tags={["API", "SDK", "MCP"]}>
 ## Recommend another agent
 
@@ -17747,6 +17046,18 @@ paths:
         (people cannot message it), an archived agent, a person and an unknown
         handle all return the same 404.
 
+        Send user_id to share a person's card: their id as you see it on them in
+        a chat (system_event.actor.id or the chat's handles). You may share a
+        person who has sent a message in a chat with you and has not blocked
+        you, into a chat with at least one active person in it, none of whom has
+        blocked or been blocked by that person. Anything else returns the same
+        404. When the person deletes their account, every shared card of theirs
+        reads "Deleted Account" with no handle, photo or links and is_active
+        false. Ask both people first, with ordinary
+        buttons; Relay does not ask for you. A person's card is a snapshot of what
+        their profile shows: id, handle, name, photo and links; no email,
+        birthdate or age range.
+
         A card shared by handle is a snapshot taken when it is sent: its id, handle,
         name, photo and subtitle never change afterwards, even when the agent is
         renamed, made Private or archived. Its url opens the agent's chat; a client
@@ -17784,8 +17095,15 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/ShareContactCardRequest"
-            example:
-              handle: atlas
+            examples:
+              agent:
+                summary: Recommend another agent
+                value:
+                  handle: atlas
+              person:
+                summary: Share a person you have a chat with
+                value:
+                  user_id: 0199a3c4-5b6d-7e8f-9a0b-1c2d3e4f5a6b
       responses:
         "204":
           description: Contact shared successfully, or an Idempotency-Key replay that shared nothing
@@ -18002,8 +17320,7 @@ paths:
             The send is not permitted. A Chat whose member set has no agent in
             it is rejected with error code `2028`. Who may reach whom was
             decided when the Chat was created; every active member may write
-            to it. Every A2UI message failed and the first changed a surface
-            another agent created (error code `2003`, `a2ui_errors` lists each).
+            to it.
           content:
             application/json:
               schema:
@@ -18019,13 +17336,9 @@ paths:
                       doc_url: https://docs.staging.relayapp.im/error/codes/2xxx/2028
                     success: false
         "404":
-          description: The Chat, a reply target or an attachment was not found, or every A2UI message failed and the first named an unknown or deleted surface (`a2ui_errors` lists each).
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/NotFound"
         "409":
-          description: Chat is unavailable, a mention was used in a non-group chat, a mention target is no longer in the chat, or every A2UI message failed and the first was a `createSurface` for a surfaceId already live in the chat
+          description: Chat is unavailable, a mention was used in a non-group chat, or a mention target is no longer in the chat
           content:
             application/json:
               schema:
@@ -18037,7 +17350,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "422":
-          description: The content cannot be accepted (error code `2006`), for example every A2UI message in the send failed (`a2ui_errors` lists each, see `DataPart`).
+          description: The content cannot be accepted (error code `2006`).
           content:
             application/json:
               schema:
@@ -19254,6 +18567,105 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "500":
           $ref: "#/components/responses/InternalServerError"
+  /v1/agents/suggested:
+    get:
+      operationId: listSuggestedAgents
+      summary: List the public agents suggested for you
+      description: >-
+        Person only. Public agents you have not added and do not chat with,
+        best first. The rank adds four things: how many of your contacts use
+        the agent, how often the people who use your agents also use it, how
+        close its name, subtitle and description are to your agents', and
+        how many people wrote to it in the last 30 days. An 18+ agent is
+        listed only when your age range is 18 or over. The list for the same
+        question can be up to five minutes old.
+      tags:
+        - Contacts
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 7
+        - name: contacts
+          in: query
+          required: false
+          description: >-
+            The counts `POST /v1/address_book/agent_counts` answered, as
+            `handle:count` pairs separated by commas (`lupe:3,derek:2`), at most
+            50. A count below 2 is ignored. Nothing here is stored.
+          schema:
+            type: string
+            maxLength: 4000
+      responses:
+        "200":
+          description: Suggested agents, best first
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - agents
+                properties:
+                  agents:
+                    type: array
+                    maxItems: 50
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required:
+                        - handle
+                        - name
+                        - subtitle
+                        - image_url
+                        - image_color
+                        - verified
+                        - contacts
+                        - reason
+                      properties:
+                        handle:
+                          type: string
+                        name:
+                          type: string
+                        subtitle:
+                          type: [string, "null"]
+                        image_url:
+                          type: [string, "null"]
+                        image_color:
+                          type: [string, "null"]
+                        verified:
+                          type: boolean
+                        contacts:
+                          type: integer
+                          minimum: 0
+                          description: How many of your contacts use it, from `contacts`; 0 below 2.
+                        reason:
+                          type: string
+                          enum:
+                            - contacts
+                            - similar_to
+                            - popular
+                          description: >-
+                            What ranked it most: your contacts use it, it is like
+                            the agents you use, or many people use it.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: The caller is an agent (error code `2003`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /v1/agent_requests:
     post:
       operationId: requestAgent
@@ -20104,6 +19516,29 @@ components:
             once (only the range is kept). Null until the app reports one. Present only when kind is user.
             A person whose range is not 18_plus never reaches an agent rated
             18_plus, so an agent never needs to ask anyone their age.
+        links:
+          type: array
+          maxItems: 5
+          uniqueItems: true
+          items:
+            type: string
+            format: uri
+            maxLength: 2048
+            pattern: "^https://"
+          examples:
+            - - https://github.com/ana
+              - https://www.instagram.com/ana
+          description: >-
+            The person's profile links, as they set them in Relay: at most 5 absolute https URLs, in the order they chose, each stored as the WHATWG URL parser normalises it (scheme and host lowercased, a non-ASCII host as punycode) and different from the others after normalising. Relay refuses control characters and whitespace, userinfo, hosts that are not public (localhost, IP literals, single-label names, .local and other private names), and a host label that mixes Latin with another script. Empty when they set none. Present only when kind is user. Relay sends no platform name; read the site from the URL.
+        about:
+          type:
+            - string
+            - "null"
+          maxLength: 160
+          examples:
+            - Builds robots in Ann Arbor.
+          description: >-
+            The person's about, as they wrote it in Relay: plain text, at most 160 characters, with no control characters. Null when they wrote none. Present only when kind is user.
     Call:
       type: object
       additionalProperties: false
@@ -21241,6 +20676,31 @@ components:
             once (only the range is kept). Null until the app reports one. Null when the person has no Relay account.
             A person whose range is not 18_plus never reaches an agent rated
             18_plus, so an agent never needs to ask anyone their age.
+        links:
+          type:
+            - array
+            - "null"
+          maxItems: 5
+          uniqueItems: true
+          items:
+            type: string
+            format: uri
+            maxLength: 2048
+            pattern: "^https://"
+          examples:
+            - - https://github.com/ana
+              - https://www.instagram.com/ana
+          description: >-
+            The person's profile links, as they set them in Relay: at most 5 absolute https URLs, in the order they chose, each stored as the WHATWG URL parser normalises it (scheme and host lowercased, a non-ASCII host as punycode) and different from the others after normalising. Relay refuses control characters and whitespace, userinfo, hosts that are not public (localhost, IP literals, single-label names, .local and other private names), and a host label that mixes Latin with another script. Empty when they set none. Null when the person has no Relay account. Relay sends no platform name; read the site from the URL.
+        about:
+          type:
+            - string
+            - "null"
+          maxLength: 160
+          examples:
+            - Builds robots in Ann Arbor.
+          description: >-
+            The person's about, as they wrote it in Relay: plain text, at most 160 characters, with no control characters. Null when they wrote none or have no Relay account.
     OwnerPerson:
       type: object
       additionalProperties: false
@@ -21289,6 +20749,29 @@ components:
             once (only the range is kept). Null until the app reports one.
             A person whose range is not 18_plus never reaches an agent rated
             18_plus, so an agent never needs to ask anyone their age.
+        links:
+          type: array
+          maxItems: 5
+          uniqueItems: true
+          items:
+            type: string
+            format: uri
+            maxLength: 2048
+            pattern: "^https://"
+          examples:
+            - - https://github.com/ana
+              - https://www.instagram.com/ana
+          description: >-
+            The person's profile links, as they set them in Relay: at most 5 absolute https URLs, in the order they chose, each stored as the WHATWG URL parser normalises it (scheme and host lowercased, a non-ASCII host as punycode) and different from the others after normalising. Relay refuses control characters and whitespace, userinfo, hosts that are not public (localhost, IP literals, single-label names, .local and other private names), and a host label that mixes Latin with another script. Empty when they set none. Relay sends no platform name; read the site from the URL.
+        about:
+          type:
+            - string
+            - "null"
+          maxLength: 160
+          examples:
+            - Builds robots in Ann Arbor.
+          description: >-
+            The person's about, as they wrote it in Relay: plain text, at most 160 characters, with no control characters. Null when they wrote none.
     ChatHandle:
       type: object
       required:
@@ -21409,6 +20892,29 @@ components:
             once (only the range is kept). Null until the app reports one. Present only when kind is user.
             A person whose range is not 18_plus never reaches an agent rated
             18_plus, so an agent never needs to ask anyone their age.
+        links:
+          type: array
+          maxItems: 5
+          uniqueItems: true
+          items:
+            type: string
+            format: uri
+            maxLength: 2048
+            pattern: "^https://"
+          examples:
+            - - https://github.com/ana
+              - https://www.instagram.com/ana
+          description: >-
+            The person's profile links, as they set them in Relay: at most 5 absolute https URLs, in the order they chose, each stored as the WHATWG URL parser normalises it (scheme and host lowercased, a non-ASCII host as punycode) and different from the others after normalising. Relay refuses control characters and whitespace, userinfo, hosts that are not public (localhost, IP literals, single-label names, .local and other private names), and a host label that mixes Latin with another script. Empty when they set none. Present only when kind is user. Relay sends no platform name; read the site from the URL.
+        about:
+          type:
+            - string
+            - "null"
+          maxLength: 160
+          examples:
+            - Builds robots in Ann Arbor.
+          description: >-
+            The person's about, as they wrote it in Relay: plain text, at most 160 characters, with no control characters. Null when they wrote none. Present only when kind is user.
         is_contact:
           type: boolean
           description: >-
@@ -21720,6 +21226,29 @@ components:
             once (only the range is kept). Null until the app reports one. Present only when kind is user.
             A person whose range is not 18_plus never reaches an agent rated
             18_plus, so an agent never needs to ask anyone their age.
+        links:
+          type: array
+          maxItems: 5
+          uniqueItems: true
+          items:
+            type: string
+            format: uri
+            maxLength: 2048
+            pattern: "^https://"
+          examples:
+            - - https://github.com/ana
+              - https://www.instagram.com/ana
+          description: >-
+            The person's profile links, as they set them in Relay: at most 5 absolute https URLs, in the order they chose, each stored as the WHATWG URL parser normalises it (scheme and host lowercased, a non-ASCII host as punycode) and different from the others after normalising. Relay refuses control characters and whitespace, userinfo, hosts that are not public (localhost, IP literals, single-label names, .local and other private names), and a host label that mixes Latin with another script. Empty when they set none. Present only when kind is user. Relay sends no platform name; read the site from the URL.
+        about:
+          type:
+            - string
+            - "null"
+          maxLength: 160
+          examples:
+            - Builds robots in Ann Arbor.
+          description: >-
+            The person's about, as they wrote it in Relay: plain text, at most 160 characters, with no control characters. Null when they wrote none. Present only when kind is user.
         age_rating:
           $ref: "#/components/schemas/AgentAgeRating"
     AgentCategory:
@@ -22035,8 +21564,15 @@ components:
           minLength: 1
           maxLength: 255
           description: >-
-            The agent to recommend, trimmed and lowercased. Omit it to share
-            your own configured card.
+            The agent to recommend, trimmed and lowercased. Omit it and user_id
+            to share your own configured card.
+        user_id:
+          type: string
+          format: uuid
+          description: >-
+            The person to share: someone who has sent a message in a chat with
+            you and has not blocked you. Case-insensitive. Send handle or
+            user_id, not both.
     ContactCardItem:
       type: object
       required:
@@ -22053,8 +21589,8 @@ components:
           type: string
           format: uuid
           description: >-
-            The shared agent's Contact id, present only on a card shared by
-            handle. Open the agent by this id; the handle may since have changed.
+            The shared Contact's id, present only on a card shared by handle or
+            user_id. Open an agent by this id; the handle may since have changed.
         subtitle:
           type:
             - string
@@ -22099,9 +21635,32 @@ components:
         is_verified:
           type: boolean
           description: Whether Relay has verified this agent. Always false for a user.
+        links:
+          type: array
+          maxItems: 5
+          items:
+            type: string
+            format: uri
+          description: >-
+            A shared person's profile links when the card was shared, present
+            only on a person's card. A person's card carries id, handle, name,
+            photo, links and about, and nothing else.
+        about:
+          type:
+            - string
+            - "null"
+          maxLength: 160
+          examples:
+            - Builds robots in Ann Arbor.
+          description: >-
+            A shared person's about when the card was shared, at most 160 characters, or null when they wrote none. Present only on a person's card.
         handle:
-          type: string
-          description: Relay Handle associated with this contact card.
+          type:
+            - string
+            - "null"
+          description: >-
+            Relay Handle associated with this contact card. Null only on a
+            shared person's card after they deleted their account.
         kind:
           type: string
           enum:
@@ -22117,6 +21676,8 @@ components:
         - display_name
         - timezone
         - age_range
+        - links
+        - about
       properties:
         id:
           type: string
@@ -22158,6 +21719,29 @@ components:
             once (only the range is kept). Null until the app reports one.
             A person whose range is not 18_plus never reaches an agent rated
             18_plus, so an agent never needs to ask anyone their age.
+        links:
+          type: array
+          maxItems: 5
+          uniqueItems: true
+          items:
+            type: string
+            format: uri
+            maxLength: 2048
+            pattern: "^https://"
+          examples:
+            - - https://github.com/ana
+              - https://www.instagram.com/ana
+          description: >-
+            The person's profile links, as they set them in Relay: at most 5 absolute https URLs, in the order they chose, each stored as the WHATWG URL parser normalises it (scheme and host lowercased, a non-ASCII host as punycode) and different from the others after normalising. Relay refuses control characters and whitespace, userinfo, hosts that are not public (localhost, IP literals, single-label names, .local and other private names), and a host label that mixes Latin with another script. Empty when they set none. Relay sends no platform name; read the site from the URL.
+        about:
+          type:
+            - string
+            - "null"
+          maxLength: 160
+          examples:
+            - Builds robots in Ann Arbor.
+          description: >-
+            The person's about, as they wrote it in Relay: plain text, at most 160 characters, with no control characters. Null when they wrote none.
     ContactRemovedEvent:
       type: object
       additionalProperties: false
@@ -22200,11 +21784,6 @@ components:
       required:
         - chat
       properties:
-        a2ui_errors:
-          type: array
-          description: The A2UI messages of the send that were not applied, each with its place in the request and A2UI's own `error` message for it. The rest of the list was applied.
-          items:
-            $ref: "#/components/schemas/A2uiFailure"
         chat:
           type: object
           required:
@@ -22288,11 +21867,6 @@ components:
         - error
         - success
       properties:
-        a2ui_errors:
-          type: array
-          description: When A2UI messages were refused and nothing in the send was applied, each one with its place in the request and A2UI's own `error` message for it. `error.status` and `error.message` are the first one's.
-          items:
-            $ref: "#/components/schemas/A2uiFailure"
         error:
           $ref: "#/components/schemas/ErrorDetail"
         success:
@@ -23312,7 +22886,7 @@ components:
           type: string
           enum: [small, medium]
           default: medium
-          description: small is 180 pt, medium 296 pt.
+          description: small is 180 pt; medium, the default, is as wide as a single card, up to 350 pt and never wider than a text bubble.
         cards:
           type: array
           minItems: 2
@@ -23365,281 +22939,6 @@ components:
         label:
           type: string
           description: The reply suggestion's label, as the card showed it.
-    DataPart:
-      type: object
-      additionalProperties: false
-      description: |
-        A data part (`{ data, media_type }`) holding A2UI v0.9.1 messages
-        (https://a2ui.org). A message may carry any number of data parts
-        beside its other parts. A `media_type` other than
-        `application/a2ui+json` returns 422.
-
-        Relay processes every A2UI message in order, as A2UI says a receiver
-        must: each valid one is applied, and each that fails is
-        returned in the response's `a2ui_errors` (see `A2uiFailure`), in A2UI's
-        own error format. A send that applies nothing is refused with the first
-        failure's status (403, 404, 409 or 422) and `a2ui_errors`. Relay checks each
-        message against A2UI v0.9.1's schemas, and each component and
-        `createSurface` theme against the catalog its surface names: a
-        component the catalog does not define, a property it does not define,
-        a value outside its type or enum, or a missing required property fails
-        with `VALIDATION_FAILED`.
-
-        **createSurface, updateComponents, updateDataModel, deleteSurface**
-        (from an agent; a person sending one gets 403, error code `2003`):
-        - `createSurface` makes a surface in this chat, drawn by this message.
-          `catalogId` must be one Relay draws (see `A2uiClientCapabilities`).
-          A `surfaceId` already live in the chat fails with 409; once deleted
-          it may be created again. The surface's first `updateComponents` must
-          hold the component with `id` `root`; later ones need not repeat it.
-        - Only the agent that created a surface may send the other three for
-          it; another agent gets 403, error code `2003`, as Slack's
-          `chat.update` refuses a message the caller did not post. A surface
-          made by an earlier message changes in place: its
-          message is re-projected to every member, and the send adds no
-          message unless it carries other parts (a `text` part, for example,
-          which becomes an ordinary message). An unknown or deleted
-          `surfaceId` fails with 404.
-        - `deleteSurface` removes the surface. When every surface a message
-          draws is deleted, the message is removed for everyone: it reads back
-          with no parts and a non-null `unsent_at`.
-        - `PaymentRequest` (Relay's catalog only; `checkoutUrl` required) names
-          one of your payment requests by `checkoutUrl`, exactly what
-          `POST /v1/payment_requests` returned,
-          under the `payment` part's rules: a request that is not yours fails
-          with 404, one no longer `requested` with 409, and the digital-goods
-          storefront rule with 422. Relay writes the request's state into the
-          surface's data model at `/relay/payments/<h>` (`<h>` the lowercase
-          hex SHA-256 of `checkoutUrl`) as `{status, amount, currency}`, with
-          an `updateDataModel` when the component is accepted and again when
-          the request settles. The payer's receipt replies to the data part
-          that created the surface holding the request.
-        - `Browser` (Relay's catalog only; see `A2uiBrowserComponent`) shows
-          your agent's live browser: `status` 1 to 80 characters, `state` one
-          of `working`, `needs_you`, `done`, `failed`, an https `watchUrl`,
-          and optionally an https `controlUrl` and `imageUrl`. A URL that is
-          not https, or a `status` outside 1 to 80 characters, fails with 422
-          `VALIDATION_FAILED`. A property bound to the data model names an
-          absolute JSON Pointer, and the bound value is checked by the same
-          rules whenever the component or the data model changes; the error's
-          `path` then points at the component's property in an
-          `updateComponents`, or at `/value` in an `updateDataModel`. Relay
-          delivers the URLs exactly as sent and never loads them.
-        - Image, Video and AudioPlayer `url`s are delivered exactly as sent.
-        - With no `text` part, the chat list and notification show the text of
-          the first `Text` component, or a `Browser`'s `status`, in tree order
-          from `root`.
-
-        **action, error** (from a person or an agent) travel in the message
-        itself, and reach only the sender and the agent that created the
-        surface they name (A2UI's "Targeted Delivery": "sent exclusively to the
-        server that created the surface"); every other reader's copy of the
-        part leaves them out, and a message that holds nothing else is not
-        delivered to other agents at all. Each names a live surface in the
-        chat. An `action`'s `sourceComponentId` must be a Button there and its
-        `name` that Button's `action.event.name`, or a `Browser` there and its
-        `name` one of `A2uiBrowserActionName` (`browser.takeControl` and
-        `browser.returnControl` only when the Browser has a `controlUrl`).
-        The agent receives the `context` Relay builds from the Button it drew,
-        never the app's: each literal as the Button holds it, each value at a
-        path an input on the card writes (a component whose `value` is bound)
-        as the person entered it, and everything else from the surface's data
-        model as the agent last set it, including the rest of an object that
-        holds a typed field; a key the Button does not declare is dropped. A Button drawn once per item of a List template carries one
-        item's values; a `context` that matches no item fails with 422 at
-        `/context`. A Button's `action.event.context` holds literals and data
-        bindings; a function call there fails with 422. A `Browser` tap's
-        `context` is empty. A text part and `reply_to`
-        are optional, and a text part reaches every member. When the surface
-        set `sendDataModel`, the message must carry
-        `metadata.a2uiClientDataModel`.
-      required: [type, media_type, data]
-      properties:
-        type:
-          type: string
-          enum: [data]
-        media_type:
-          type: string
-          enum: [application/a2ui+json]
-        data:
-          type: array
-          minItems: 1
-          description: A2UI v0.9.1 messages, in order.
-          items:
-            type: object
-            additionalProperties: true
-    DataPartResponse:
-      type: object
-      description: |
-        A data part as a reader receives it: the `action` and `error`
-        messages it carried, as sent, when the reader sent them or created the
-        surface they name (empty otherwise); then, for each surface it created,
-        every A2UI message accepted for that surface since, in order, exactly
-        as sent (Relay's own `updateDataModel` for a `PaymentRequest`
-        included). A reader replays the list to draw the surface; a late or
-        second device receives the whole list.
-      required: [type, media_type, data, reactions]
-      properties:
-        type:
-          type: string
-          enum: [data]
-        media_type:
-          type: string
-          enum: [application/a2ui+json]
-        data:
-          type: array
-          items:
-            type: object
-            additionalProperties: true
-        reactions:
-          type:
-            - array
-            - "null"
-          description: Reactions on this message part
-          items:
-            $ref: "#/components/schemas/Reaction"
-    A2uiBrowserComponent:
-      type: object
-      additionalProperties: false
-      description: |
-        A component of Relay's A2UI catalog (`https://relayapp.im/a2ui/catalog/v1`)
-        that shows your agent's live browser in the chat. The app draws it as
-        Relay's Browser card: a globe, the title "Browser" (the card has no
-        title property), the `status` line, the still in `imageUrl` when there
-        is one, and an "Open browser" button that opens `watchUrl`, read-only,
-        in a window over the chat. With a `controlUrl` the window also offers
-        "Take control of the browser", which opens `controlUrl` so the person
-        can click and type, and "Finish up", which hands control back; "Stop
-        the task" ends the task. `state` `needs_you` turns the card orange;
-        say why in your own message beside it. `done` and `failed` shrink the
-        card to one row.
-
-        Each tap reaches only the agent that created the surface, as an A2UI
-        `action` whose `sourceComponentId` is this component's `id`, whose
-        `name` is one of `A2uiBrowserActionName`, and whose `context` is
-        empty. Pause your browser work from `browser.takeControl` until
-        `browser.returnControl`, and end the task on `browser.stop`. Change
-        the card with `updateComponents` or `updateDataModel` as the task goes.
-
-        Every URL is https. Relay delivers the URLs exactly as sent and never
-        loads them; only the app's web view opens the page, so the person's
-        sign-ins stay in your browser. `status`, `watchUrl`, `controlUrl` and
-        `imageUrl` are each a literal or a binding `{"path": "/absolute/pointer"}`
-        into the surface's data model; a bound value follows the literal's rule.
-      required: [id, component, status, state, watchUrl]
-      properties:
-        id:
-          type: string
-          description: The component's id; `root` when the Browser is the whole card.
-        component:
-          type: string
-          enum: [Browser]
-        status:
-          description: The card's one status line in your own words, for example "Working · united.com". With `state` `done` or `failed` the card shows it after "Completed ·" or "Failed ·".
-          oneOf:
-            - type: string
-              minLength: 1
-              maxLength: 80
-            - $ref: "#/components/schemas/A2uiAbsoluteBinding"
-        state:
-          type: string
-          enum: [working, needs_you, done, failed]
-        watchUrl:
-          description: >-
-            The read-only live view of your browser, for example Cloudflare
-            Browser Run's Live View URL made with `guardrails` `{"mode": "readonly"}`.
-          oneOf:
-            - type: string
-              format: uri
-              pattern: "^https://[^\\s/?#]+([/?#]\\S*)?$"
-            - $ref: "#/components/schemas/A2uiAbsoluteBinding"
-        controlUrl:
-          description: The interactive live view of the same browser. Without it the card offers no "Take control of the browser".
-          oneOf:
-            - type: string
-              format: uri
-              pattern: "^https://[^\\s/?#]+([/?#]\\S*)?$"
-            - $ref: "#/components/schemas/A2uiAbsoluteBinding"
-        imageUrl:
-          description: A still picture of the page for the card.
-          oneOf:
-            - type: string
-              format: uri
-              pattern: "^https://[^\\s/?#]+([/?#]\\S*)?$"
-            - $ref: "#/components/schemas/A2uiAbsoluteBinding"
-        accessibility:
-          type: object
-          description: A2UI's accessibility attributes (`label`, `description`), as on every component.
-        weight:
-          type: number
-          description: A2UI's flex weight inside a Row or Column, as on every component.
-    A2uiAbsoluteBinding:
-      type: object
-      additionalProperties: false
-      description: An A2UI data binding whose `path` is an absolute JSON Pointer into the surface's data model.
-      required: [path]
-      properties:
-        path:
-          type: string
-          pattern: "^/"
-    A2uiBrowserActionName:
-      type: string
-      description: The `name` of an A2UI `action` a `Browser` card sends. `browser.takeControl` when the person taps "Take control of the browser", `browser.returnControl` when they tap "Finish up", `browser.stop` when they tap "Stop the task".
-      enum: [browser.takeControl, browser.returnControl, browser.stop]
-    A2uiFailure:
-      type: object
-      description: One A2UI message Relay did not apply, where it sits in the request, and A2UI's own `error` message for it.
-      additionalProperties: false
-      required: [part_index, data_index, a2ui_message]
-      properties:
-        part_index:
-          type: [integer, "null"]
-          description: The data part's index in `parts`; null when the fault is in `metadata.a2uiClientDataModel`.
-        data_index:
-          type: [integer, "null"]
-          description: The message's index in that part's `data`; null when the part itself, or the metadata, is at fault.
-        a2ui_message:
-          $ref: "#/components/schemas/A2uiErrorMessage"
-    A2uiErrorMessage:
-      type: object
-      additionalProperties: false
-      description: An A2UI `error` message in A2UI's standard validation error format (a2ui_protocol.md), exactly as a renderer would send it.
-      required: [version, error]
-      properties:
-        version:
-          type: string
-          enum: [v0.9.1]
-        error:
-          type: object
-          required: [code, surfaceId, path, message]
-          properties:
-            code:
-              type: string
-              enum: [VALIDATION_FAILED]
-            surfaceId:
-              type: string
-              description: The surface the message named, or empty when it named none.
-            path:
-              type: string
-              description: A JSON Pointer to the failing field inside the failing message's body (the object under its one key), as in A2UI's own example `/components/0/text`. Empty when the message as a whole, or something outside it, is at fault. For a fault in `metadata.a2uiClientDataModel`, a pointer into that object.
-            message:
-              type: string
-    MessageMetadata:
-      type: object
-      description: Message metadata. A tap on a surface that set `sendDataModel` carries `a2uiClientDataModel`; Relay checks it against A2UI's `client_data_model.json`. Each surface's data model reaches only the sender and the agent that created that surface, unchanged; other readers get none of it.
-      additionalProperties: false
-      properties:
-        a2uiClientDataModel:
-          type: object
-          required: [version, surfaces]
-          properties:
-            version:
-              type: string
-              enum: [v0.9, v0.9.1]
-            surfaces:
-              type: object
-              additionalProperties:
-                type: object
     PaymentRecurring:
       type: object
       additionalProperties: false
@@ -23993,11 +23292,16 @@ components:
         - deny
     OAuth2Scope:
       type: string
+      description: >-
+        An OpenID Connect scope a Log in with Relay client may ask for.
+        `birthdate` asks for the person's birthday as the OpenID `birthdate`
+        claim (YYYY-MM-DD, or 0000-MM-DD when they gave no year).
       enum:
         - openid
         - profile
         - email
         - phone
+        - birthdate
     OAuth2Client:
       type: object
       additionalProperties: false
@@ -24177,8 +23481,6 @@ components:
         - updated_at
         - is_system_message
       properties:
-        metadata:
-          $ref: "#/components/schemas/MessageMetadata"
         id:
           type: string
           description: Unique identifier for the message
@@ -24217,7 +23519,6 @@ components:
               - $ref: "#/components/schemas/SuggestionResponsePartResponse"
               - $ref: "#/components/schemas/PaymentPartResponse"
               - $ref: "#/components/schemas/PaymentReceiptPartResponse"
-              - $ref: "#/components/schemas/DataPartResponse"
               - $ref: "#/components/schemas/LocationRequestPartResponse"
               - $ref: "#/components/schemas/LocationPartResponse"
               - $ref: "#/components/schemas/PlacePartResponse"
@@ -24297,8 +23598,6 @@ components:
       type: object
       description: One message containing 1–100 ordered parts. A link must be the only part. A selection needs no text part; it carries its own `title`, and a text part beside it is an ordinary message. Selection responses contain exactly plain text then selection_response metadata and require an explicit reply target. A message carries at most one rich_card or carousel; a card reply is exactly plain text then suggestion_response, replying to the card part. Form responses contain exactly Form sent plain text then form_response metadata with answers keyed by field id, and require an explicit reply target.
       properties:
-        metadata:
-          $ref: "#/components/schemas/MessageMetadata"
         parts:
           x-go-type-skip-optional-pointer: true
           type: array
@@ -24364,8 +23663,6 @@ components:
         - sender_handle
         - parts
       properties:
-        metadata:
-          $ref: "#/components/schemas/MessageMetadata"
         chat:
           type: object
           description: Chat information
@@ -24421,7 +23718,6 @@ components:
               - $ref: "#/components/schemas/SuggestionResponsePartResponse"
               - $ref: "#/components/schemas/PaymentPartResponse"
               - $ref: "#/components/schemas/PaymentReceiptPartResponse"
-              - $ref: "#/components/schemas/DataPartResponse"
               - $ref: "#/components/schemas/LocationRequestPartResponse"
               - $ref: "#/components/schemas/LocationPartResponse"
               - $ref: "#/components/schemas/PlacePartResponse"
@@ -24441,7 +23737,6 @@ components:
                 suggestion_response: "#/components/schemas/SuggestionResponsePartResponse"
                 payment: "#/components/schemas/PaymentPartResponse"
                 payment_receipt: "#/components/schemas/PaymentReceiptPartResponse"
-                data: "#/components/schemas/DataPartResponse"
                 location_request: "#/components/schemas/LocationRequestPartResponse"
                 location: "#/components/schemas/LocationPartResponse"
                 place: "#/components/schemas/PlacePartResponse"
@@ -24507,7 +23802,6 @@ components:
           suggestion_response: "#/components/schemas/SuggestionResponsePart"
           payment: "#/components/schemas/PaymentPart"
           place: "#/components/schemas/PlacePart"
-          data: "#/components/schemas/DataPart"
       oneOf:
         - $ref: "#/components/schemas/TextPart"
         - $ref: "#/components/schemas/MediaPart"
@@ -24522,7 +23816,6 @@ components:
         - $ref: "#/components/schemas/SuggestionResponsePart"
         - $ref: "#/components/schemas/PaymentPart"
         - $ref: "#/components/schemas/PlacePart"
-        - $ref: "#/components/schemas/DataPart"
     MessageReadWebhook:
       description: Complete webhook payload for message.read events (2026-08-30 format)
       allOf:
@@ -24538,51 +23831,7 @@ components:
         - type: object
           properties:
             data:
-              allOf:
-                - $ref: "#/components/schemas/MessageEvent"
-                - type: object
-                  required: [metadata]
-                  properties:
-                    metadata:
-                      $ref: "#/components/schemas/MessageReceivedMetadata"
-    MessageReceivedMetadata:
-      type: object
-      description: Message metadata on every `message.received`. `a2uiClientCapabilities` names the A2UI catalogs the reader's app draws; `a2uiClientDataModel` holds the sender's data model for the surfaces this agent created, when the message carried one.
-      required: [a2uiClientCapabilities]
-      properties:
-        a2uiClientCapabilities:
-          $ref: "#/components/schemas/A2uiClientCapabilities"
-        a2uiClientDataModel:
-          $ref: "#/components/schemas/MessageMetadata/properties/a2uiClientDataModel"
-    A2uiClientCapabilities:
-      type: object
-      description: |
-        A2UI's own handshake (`a2uiClientCapabilities`, shaped by A2UI v0.9.1's
-        `client_capabilities.json`, whose key is the protocol family `v0.9`):
-        the A2UI catalogs Relay's app draws, in order of preference. Pick the
-        first catalog your agent can write for a card's `createSurface.catalogId`.
-        - `https://relayapp.im/a2ui/catalog/v1`, Relay's catalog: every basic
-          catalog component and function, plus `PaymentRequest` (see
-          `DataPart`) and `Browser` (see `A2uiBrowserComponent`).
-        - `https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json`,
-          the A2UI v0.9.1 basic catalog.
-
-        Relay's catalog only grows: new components and optional properties are
-        added to v1, nothing is removed from it, and a breaking change would get a
-        new id (`.../catalog/v2`), listed beside v1.
-      required: ["v0.9"]
-      properties:
-        "v0.9":
-          type: object
-          required: [supportedCatalogIds]
-          properties:
-            supportedCatalogIds:
-              type: array
-              items:
-                type: string
-              example:
-                - https://relayapp.im/a2ui/catalog/v1
-                - https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json
+              $ref: "#/components/schemas/MessageEvent"
     MessageSentWebhook:
       description: Complete webhook payload for message.sent events (2026-08-30 format)
       allOf:
@@ -24946,11 +24195,6 @@ components:
         - chat_id
         - message
       properties:
-        a2ui_errors:
-          type: array
-          description: The A2UI messages of the send that were not applied, each with its place in the request and A2UI's own `error` message for it. The rest of the list was applied.
-          items:
-            $ref: "#/components/schemas/A2uiFailure"
         chat_id:
           type: string
           format: uuid
@@ -24968,11 +24212,6 @@ components:
         - handles
         - message
       properties:
-        a2ui_errors:
-          type: array
-          description: The A2UI messages of the send that were not applied, each with its place in the request and A2UI's own `error` message for it. The rest of the list was applied.
-          items:
-            $ref: "#/components/schemas/A2uiFailure"
         chat_id:
           type: string
           format: uuid
@@ -25114,8 +24353,6 @@ components:
         - sent_at
         - delivery_status
       properties:
-        metadata:
-          $ref: "#/components/schemas/MessageMetadata"
         id:
           type: string
           format: uuid
@@ -25138,7 +24375,6 @@ components:
               - $ref: "#/components/schemas/SuggestionResponsePartResponse"
               - $ref: "#/components/schemas/PaymentPartResponse"
               - $ref: "#/components/schemas/PaymentReceiptPartResponse"
-              - $ref: "#/components/schemas/DataPartResponse"
               - $ref: "#/components/schemas/LocationRequestPartResponse"
               - $ref: "#/components/schemas/LocationPartResponse"
               - $ref: "#/components/schemas/PlacePartResponse"
@@ -25434,6 +24670,29 @@ components:
             once (only the range is kept). Null until the app reports one. Present only when kind is user.
             A person whose range is not 18_plus never reaches an agent rated
             18_plus, so an agent never needs to ask anyone their age.
+        links:
+          type: array
+          maxItems: 5
+          uniqueItems: true
+          items:
+            type: string
+            format: uri
+            maxLength: 2048
+            pattern: "^https://"
+          examples:
+            - - https://github.com/ana
+              - https://www.instagram.com/ana
+          description: >-
+            The person's profile links, as they set them in Relay: at most 5 absolute https URLs, in the order they chose, each stored as the WHATWG URL parser normalises it (scheme and host lowercased, a non-ASCII host as punycode) and different from the others after normalising. Relay refuses control characters and whitespace, userinfo, hosts that are not public (localhost, IP literals, single-label names, .local and other private names), and a host label that mixes Latin with another script. Empty when they set none. Present only when kind is user. Relay sends no platform name; read the site from the URL.
+        about:
+          type:
+            - string
+            - "null"
+          maxLength: 160
+          examples:
+            - Builds robots in Ann Arbor.
+          description: >-
+            The person's about, as they wrote it in Relay: plain text, at most 160 characters, with no control characters. Null when they wrote none. Present only when kind is user.
     SystemEventParty:
       type: object
       additionalProperties: false
@@ -25482,6 +24741,29 @@ components:
             once (only the range is kept). Null until the app reports one. Present only when kind is user.
             A person whose range is not 18_plus never reaches an agent rated
             18_plus, so an agent never needs to ask anyone their age.
+        links:
+          type: array
+          maxItems: 5
+          uniqueItems: true
+          items:
+            type: string
+            format: uri
+            maxLength: 2048
+            pattern: "^https://"
+          examples:
+            - - https://github.com/ana
+              - https://www.instagram.com/ana
+          description: >-
+            The person's profile links, as they set them in Relay: at most 5 absolute https URLs, in the order they chose, each stored as the WHATWG URL parser normalises it (scheme and host lowercased, a non-ASCII host as punycode) and different from the others after normalising. Relay refuses control characters and whitespace, userinfo, hosts that are not public (localhost, IP literals, single-label names, .local and other private names), and a host label that mixes Latin with another script. Empty when they set none. Present only when kind is user. Relay sends no platform name; read the site from the URL.
+        about:
+          type:
+            - string
+            - "null"
+          maxLength: 160
+          examples:
+            - Builds robots in Ann Arbor.
+          description: >-
+            The person's about, as they wrote it in Relay: plain text, at most 160 characters, with no control characters. Null when they wrote none. Present only when kind is user.
     SystemPartResponse:
       type: object
       additionalProperties: false
@@ -25652,6 +24934,29 @@ components:
             once (only the range is kept). Null until the app reports one. Present only when kind is user.
             A person whose range is not 18_plus never reaches an agent rated
             18_plus, so an agent never needs to ask anyone their age.
+        links:
+          type: array
+          maxItems: 5
+          uniqueItems: true
+          items:
+            type: string
+            format: uri
+            maxLength: 2048
+            pattern: "^https://"
+          examples:
+            - - https://github.com/ana
+              - https://www.instagram.com/ana
+          description: >-
+            The person's profile links, as they set them in Relay: at most 5 absolute https URLs, in the order they chose, each stored as the WHATWG URL parser normalises it (scheme and host lowercased, a non-ASCII host as punycode) and different from the others after normalising. Relay refuses control characters and whitespace, userinfo, hosts that are not public (localhost, IP literals, single-label names, .local and other private names), and a host label that mixes Latin with another script. Empty when they set none. Present only when kind is user. Relay sends no platform name; read the site from the URL.
+        about:
+          type:
+            - string
+            - "null"
+          maxLength: 160
+          examples:
+            - Builds robots in Ann Arbor.
+          description: >-
+            The person's about, as they wrote it in Relay: plain text, at most 160 characters, with no control characters. Null when they wrote none. Present only when kind is user.
     UnblockHandleRequest:
       type: object
       required:

@@ -7,7 +7,7 @@ import re
 
 
 def validate_share_contract(text):
-    """Pin the optional own-card path and the canonical handle body."""
+    """Pin the optional own-card path and the canonical handle or user_id body."""
     def block(pattern, name):
         match = re.search(pattern, text, re.M | re.S)
         if not match:
@@ -25,7 +25,8 @@ def validate_share_contract(text):
         "state the snapshot": "snapshot" in operation,
         "handle must remain optional": "required:" not in request,
         "reject extra request fields": "additionalProperties: false" in request,
-        "request accepts only handle": re.findall(r"^        (\w+):", request, re.M) == ["handle"],
+        "request accepts only handle or user_id": re.findall(r"^        (\w+):", request, re.M) == ["handle", "user_id"],
+        "user_id is a uuid": "format: uuid" in request.split("user_id:", 1)[-1],
         "handle is a bounded string": "minLength: 1" in request and "maxLength: 255" in request,
         "target card fields remain optional": all(
             re.search(rf"^        {field}:", card, re.M)
@@ -51,7 +52,9 @@ def validate_behavior(root):
     share = read('chats/share-contact-card.mdx')
     require('Contact Card sharing', share, r'/v1/chats/\{chatId\}/share_contact_card',
             r'existing Chat', r'omit the body.*own card', r'Public or Unlisted',
-            r'Private.*unknown.*same error', r'send rate limit')
+            r'Private.*unknown.*same error', r'send rate limit',
+            r'user_id', r'has sent a message in a chat with your agent', r'has not blocked your agent',
+            r'at least one active person', r'Deleted Account', r'Ask both people first')
     card = read('agents/contact-card.mdx')
     require('Contact Card configuration', card, r'relay\.contactCard\.create', r'relay\.contactCard\.update', r'/v1/contact_card', r'PATCH')
     requests = read('agents/message-requests.mdx')

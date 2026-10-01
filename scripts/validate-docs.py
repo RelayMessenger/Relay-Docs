@@ -562,8 +562,10 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server bf085edc (PR 463, merged); share another agent's Contact Card as a snapshot, Idempotency-Key, lookup by id, system_event.actor name and picture, September 30, 2026.
 # Source authority: Relay-Server 34943159 (PR 466, merged); the list picker upgrade of selection, September 30, 2026.
 # Source authority: Relay-Server 744d715a (PR 465, form candidate on top of PR 470 and PR 471), not yet merged, September 30, 2026.
+# Source authority: Relay-Server 65c26f16 (PRs 465, 473, 476, 475, 474 and 477, merged); forms, suggested agents, a person's Contact Card by user_id, profile links, A2UI and the data part removed, September 30, 2026.
+# Source authority: Relay-Server fe702db3 (PR 479, merged); a person's about on every person object and Contact Card, and the birthdate scope in OAuth2Scope, October 1, 2026.
 expected_openapi_sha256 = (
-    "a95379e4f993fe329d589a64e456f59ec9676617eb40d8e57f6dea67cb0bd51e"
+    "f9da83bb862879aa86834e1a6d9d93cd1011c4c88a3a4b041edad00d18c35d58"
 )
 # Local candidate provenance is shared with the guide and contract gates;
 # it does not relabel the historical Server release as selection-capable.
@@ -735,6 +737,7 @@ expected_operation_ids = {
     "deleteAgentRating",
     "listAgentRatings",
     "countAgentsInAddressBook",
+    "listSuggestedAgents",
     "requestAgent",
     "getMessage",
     "getMessages",
@@ -914,9 +917,6 @@ all_contract_text = handwritten_text + "\n" + openapi_text
 # The contract cites PayPal Orders v2 for the payment categories; that is
 # PayPal's route, not Relay's, so route-version checks read around it.
 PAYPAL_ORDERS_CITATION = "developer.paypal.com/docs/api/orders/v2/"
-# Cloudflare's own API is v4; interactions/browser.mdx calls it to get a live
-# view address (Relay-Server PR 418, the Browser component).
-CLOUDFLARE_API_CITATION = "api.cloudflare.com/client/v4/"
 if target() == "production" and STAGING_INSTRUCTION_REFERENCE.search(handwritten_text):
     raise SystemExit("staging installation or credential guidance returned to production")
 generated_paths = [root / "llms.txt", root / "llms-full.txt"]
@@ -950,7 +950,7 @@ for field, expected in [
             )
 route_versions = set(re.findall(
     r"/v([0-9]+)/",
-    published_contract_text.replace(PAYPAL_ORDERS_CITATION, "").replace(CLOUDFLARE_API_CITATION, ""),
+    published_contract_text.replace(PAYPAL_ORDERS_CITATION, ""),
 ))
 if route_versions != {"1"}:
     raise SystemExit(
