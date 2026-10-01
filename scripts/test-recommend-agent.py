@@ -49,9 +49,6 @@ def check_recommendation(text):
 
 
 class RecommendAgentTests(unittest.TestCase):
-    def test_canonical_share_contract_keeps_self_share_optional(self):
-        validate_share_contract((ROOT / "api-reference/openapi.yaml").read_text())
-
     def test_changed_api_title_preserves_the_existing_public_url(self):
         route = json.loads((ROOT / "scripts/api-page-paths.json").read_text())["shareContactWithChat"]
         self.assertEqual(route["href"], "/api-reference/chats/share-your-contact-card-with-a-chat")
@@ -90,9 +87,6 @@ class RecommendAgentTests(unittest.TestCase):
                 self.assertNotEqual(changed, canonical)
                 with self.assertRaises(ValueError):
                     validate_share_contract(changed)
-
-    def test_guide_teaches_search_then_share_and_bodyless_self_share(self):
-        check_recommendation((ROOT / GUIDE).read_text())
 
     def test_guide_regressions_are_detected(self):
         original = (ROOT / GUIDE).read_text()

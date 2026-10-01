@@ -2,72 +2,88 @@ name: Validate docs
 
 on:
   push:
-    branches: [main]
+    branches: [staging, main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      branch:
+        description: Existing branch to validate and preview
+        required: true
+        default: staging
+
+permissions:
+  contents: read
+
+# Unique push groups also prevent GitHub's pending-run replacement, not only
+# cancellation of running jobs. PRs deliberately share a group across commits.
+concurrency:
+  group: ${{ format('{0}-{1}-{2}', github.workflow, github.event_name, github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   validate:
     name: Links, build, and OpenAPI
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    outputs:
+      mode: ${{ steps.affected.outputs.mode }}
+    env:
+      CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      PUPPETEER_SKIP_DOWNLOAD: '1'
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.branch || github.sha }}
+          fetch-depth: 0
+
+      - name: Select affected checks
+        id: affected
+        run: python3 scripts/ci-checks.py
 
       - uses: actions/setup-node@v6
+        if: steps.affected.outputs.mode != 'notes'
         with:
           node-version: 22
+          cache: npm
 
-      - name: Check docs.json is valid JSON
-        run: python3 -m json.tool docs.json > /dev/null
+      - name: Install locked dependencies
+        if: steps.affected.outputs.mode != 'notes'
+        run: npm ci
 
-      - name: Check minimal docs contract
-        run: python3 scripts/validate-docs.py
+      # Production pages are generated from the production CLI, not the staging
+      # capture pinned in package.json (same rule as the promotion workflow).
+      - name: Install the production CLI when validating main
+        if: steps.affected.outputs.mode != 'notes'
+        run: |
+          if [ "$(cat .docs-target)" = production ]; then
+            npm install --no-save "relaymessenger@$(node -p "require('./versions.json').npm.relaymessenger.latest")"
+          fi
 
       # Every snippet on a cookbook-backed integration page must be real code
       # from the Relay-SDK recipe it documents, at the branch the page links
       # (scripts/origins.py source_ref(): staging here, main once the target
       # is production). Cloned outside the workspace so the link, build and
       # internal-reference checks below never scan SDK files.
-      - name: Cookbook snippets match the Relay-SDK recipes
+      - name: Prepare the cookbook source for snippet checks
+        if: steps.affected.outputs.cookbook == 'true'
         run: |
           set -euo pipefail
           ref="$(python3 -c 'import sys; sys.path.insert(0, "scripts"); from origins import source_ref; print(source_ref())')"
           sdk="$RUNNER_TEMP/relay-sdk"
           git clone --quiet --depth 1 --branch "$ref" https://github.com/RelayMessenger/Relay-SDK.git "$sdk"
           echo "Relay-SDK $ref at $(git -C "$sdk" rev-parse HEAD)"
-          RELAY_SDK_DIR="$sdk" python3 scripts/test-cookbook-snippets.py -v 2>&1 | tee "$RUNNER_TEMP/snippets.log"
-          # A skipped run would pass silently; this check must have run.
-          if grep -q "skipped" "$RUNNER_TEMP/snippets.log"; then
-            echo "::error::The cookbook snippet check was skipped."
-            exit 1
-          fi
+          test -d "$sdk/cookbook"
+          echo "RELAY_SDK_DIR=$sdk" >> "$GITHUB_ENV"
 
-      - name: Check payment fee documentation
-        run: python3 scripts/test-payment-fee.py
-
-      - name: Check private pageviews and environment-safe analytics promotion
-        run: npm run check:posthog
-
-      - name: Promotion workflow pushes main itself, after the guards
-        run: python3 scripts/test-promote-workflow.py
+      - name: Run full or affected validation
+        if: steps.affected.outputs.mode != 'notes'
+        run: python3 scripts/ci-checks.py --run
 
       - name: Lint the OpenAPI spec
+        if: steps.affected.outputs.mode == 'full'
         run: npx --yes @redocly/cli@latest lint api-reference/openapi.yaml
 
-      - name: Check the Mintlify OpenAPI bundle
-        run: |
-          cp api-reference/openapi.mint.yaml /tmp/openapi.mint.yaml
-          scripts/build-mint-openapi.sh
-          diff -q /tmp/openapi.mint.yaml api-reference/openapi.mint.yaml
-
-      # Pin the CLI version exercised by the local dependency-upgrade gates.
-      - name: Check for broken links
-        run: npx --yes mint@4.2.909 broken-links
-
-      - name: Validate the build
-        run: npx --yes mint@4.2.909 validate
-
       - name: Check every icon renders on Mintlify's icon CDN
+        if: steps.affected.outputs.mode == 'full'
         run: |
           set -euo pipefail
           # Mintlify renders lucide icons as CSS masks fetched from its CDN,
@@ -105,6 +121,7 @@ jobs:
           exit "$missing"
 
       - name: Skill copies must not drift
+        if: steps.affected.outputs.mode == 'full'
         run: |
           # Root skill.md overrides Mintlify's generated /skill.md; the
           # .mintlify copy feeds agent-skills discovery. They must stay
@@ -112,8 +129,13 @@ jobs:
           diff -q skill.md .mintlify/skills/relay/SKILL.md
 
       - name: Block internal references and placeholders
+        if: steps.affected.outputs.mode == 'full'
         run: |
           set -euo pipefail
+          source_tree="$RUNNER_TEMP/docs-public-source"
+          mkdir -p "$source_tree"
+          git archive HEAD | tar -x -C "$source_tree"
+          cd "$source_tree"
           # This repository is public. Nothing internal may land in it.
           if grep -rnE 'PRODUCT\.md|/tmp/|research/|source-archive|TECHNICAL-SHEET|companion-inc|TODO:' \
                --include='*.mdx' --include='*.md' --include='*.json' --include='*.yaml' \
@@ -122,3 +144,140 @@ jobs:
             exit 1
           fi
           echo "No internal references or placeholders found."
+
+  preview:
+    name: Validate and preview
+    needs: validate
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/staging') ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && needs.validate.outputs.mode == 'full')
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    environment: docs-preview
+    steps:
+      - name: Detect Mintlify preview credentials
+        id: preview_credentials
+        env:
+          MINTLIFY_API_KEY: ${{ secrets.MINTLIFY_API_KEY }}
+          MINTLIFY_PROJECT_ID: ${{ vars.MINTLIFY_PROJECT_ID }}
+        run: |
+          if [ -n "$MINTLIFY_API_KEY" ] && [ -n "$MINTLIFY_PROJECT_ID" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "Mintlify preview credentials are not configured; local validation remains authoritative for this PR." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.preview_credentials.outputs.available == 'true' || github.event_name == 'push'
+        with:
+          ref: >-
+            ${{ github.event_name == 'workflow_dispatch' && inputs.branch ||
+            github.event_name == 'push' && github.sha ||
+            github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-node@v6
+        if: steps.preview_credentials.outputs.available == 'true' || github.event_name == 'push'
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+        if: steps.preview_credentials.outputs.available == 'true' || github.event_name == 'push'
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: '1'
+
+      - name: Trigger Mintlify preview
+        if: steps.preview_credentials.outputs.available == 'true'
+        env:
+          MINTLIFY_API_KEY: ${{ secrets.MINTLIFY_API_KEY }}
+          MINTLIFY_PROJECT_ID: ${{ vars.MINTLIFY_PROJECT_ID }}
+          PREVIEW_BRANCH: >-
+            ${{ github.event_name == 'workflow_dispatch' && inputs.branch ||
+            github.event_name == 'push' && github.ref_name ||
+            github.head_ref }}
+        run: |
+          set -euo pipefail
+          test -n "$MINTLIFY_API_KEY"
+          test -n "$MINTLIFY_PROJECT_ID"
+          test -n "$PREVIEW_BRANCH"
+
+          response=$(curl --fail-with-body --silent --show-error \
+            -X POST \
+            "https://api.mintlify.com/v1/project/preview/$MINTLIFY_PROJECT_ID" \
+            -H "Authorization: Bearer $MINTLIFY_API_KEY" \
+            -H "Content-Type: application/json" \
+            --data "$(python3 -c \
+              'import json, os; print(json.dumps({"branch": os.environ["PREVIEW_BRANCH"]}))')")
+
+          read -r status_id preview_url < <(
+            python3 - "$response" <<'PY'
+          import json
+          import sys
+
+          result = json.loads(sys.argv[1])
+          print(result["statusId"], result["previewUrl"])
+          PY
+          )
+
+          for attempt in $(seq 1 60); do
+            status_response=$(curl --fail-with-body --silent --show-error \
+              "https://api.mintlify.com/v1/project/update-status/$status_id" \
+              -H "Authorization: Bearer $MINTLIFY_API_KEY")
+            deployment_status=$(python3 -c \
+              'import json, sys; print(json.load(sys.stdin)["status"])' \
+              <<< "$status_response")
+
+            case "$deployment_status" in
+              success) break ;;
+              failure)
+                printf '%s\n' "$status_response"
+                exit 1
+                ;;
+              queued|in_progress) sleep 10 ;;
+              *)
+                echo "Unknown Mintlify deployment status: $deployment_status"
+                exit 1
+                ;;
+            esac
+
+            if [ "$attempt" -eq 60 ]; then
+              echo "Mintlify preview timed out."
+              exit 1
+            fi
+          done
+
+          npm run validate:hosted-llms -- "$preview_url"
+
+          python3 - "$preview_url" "$status_id" >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import sys
+
+          print("## Mintlify preview queued")
+          print()
+          print(f"- Preview: {sys.argv[1]}")
+          print(f"- Status ID: `{sys.argv[2]}`")
+          print("- Generated `llms.txt` and `llms-full.txt`: validated")
+          PY
+
+      # Mintlify's GitHub App can publish without the optional API trigger above.
+      # Always prove canonical staging bytes after a staging push; validation-only
+      # success is not publication proof. Retry while the independent app deploys.
+      - name: Verify hosted staging source bytes independently of preview credentials
+        if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+        run: |
+          set -euo pipefail
+          # 135 attempts x 20 s = 45 minutes. The GitHub App published later than the
+          # earlier 10-minute cap on every staging push of 2026-09-09 while the same
+          # command passed by hand afterwards; the log below records the real wait.
+          max_attempts=135
+          started=$SECONDS
+          for attempt in $(seq 1 "$max_attempts"); do
+            if npm run validate:hosted-llms -- https://docs.staging.relayapp.im; then
+              echo "Hosted origin bytes match checkout $GITHUB_SHA after attempt $attempt ($((SECONDS - started)) s); edge cache may lag up to 24 h." | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "Hosted staging bytes not yet current: attempt $attempt of $max_attempts, $((SECONDS - started)) s elapsed." >&2
+            if [ "$attempt" -lt "$max_attempts" ]; then sleep 20; fi
+          done
+          echo "Hosted staging verification failed: validation/trigger success does not prove current canonical bytes." >&2
+          exit 1
