@@ -56,6 +56,38 @@ Your agent can show a [Rive](https://rive.app) file during a call: a character, 
     </Tabs>
 
     If Relay cannot open the channel, `rive()` fails with the code `media_unavailable`, and the call goes on.
+
+    <Accordion title="Receive Rive in a person-side client">
+      **The person's client must send `{"type":"rive"}` on its call-room socket to opt into receiving.** The agent sends the same frame to publish. Use the person's connected `socket` and `pc` from the [call room](/api-reference/calls/join-a-call-room).
+
+      Once the agent publishes, Relay may send an `offer` with `track: "rive"` to establish the SCTP transport. Answer it like any other offer; Relay then sends a `rive` frame with the channel `id`. Add these cases to your existing serialized room-frame handler:
+
+      ```javascript Person-side WebRTC
+      async function onRoomFrame(frame) {
+        if (frame.type === "offer") {
+          await pc.setRemoteDescription(frame.session_description);
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          socket.send(JSON.stringify({
+            type: "answer",
+            session_description: { type: answer.type, sdp: answer.sdp },
+          }));
+        } else if (frame.type === "rive") {
+          const channel = pc.createDataChannel("rive", {
+            negotiated: true,
+            id: frame.id,
+            ordered: false,
+            maxRetransmits: 0,
+          });
+          channel.onmessage = ({ data }) => { /* Apply JSON.parse(data) to Rive. */ };
+        }
+      }
+
+      socket.send(JSON.stringify({ type: "rive" }));
+      ```
+
+      After a restart onto a new Session, Relay sends a new `id`. Open the channel again with that id on the current peer connection.
+    </Accordion>
   </Step>
   <Step title="Change the file and hear the person">
     `set` writes View Model properties by name or path, `trigger` fires a trigger, and `show` switches to another Relay-hosted file with optional starting values. The phone sends back what the person changes.
