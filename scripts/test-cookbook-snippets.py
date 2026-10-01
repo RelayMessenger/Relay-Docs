@@ -20,8 +20,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 FENCE = re.compile(r"^```(ts|typescript|python)[^\n]*\n(.*?)^```[ \t]*$", re.M | re.S)
 PAGES = {
-    "integrations/xai-grok.mdx": ("cookbook/grok-voice-agent", "cookbook/grok-imagine-agent"),
-    "integrations/elevenlabs.mdx": ("cookbook/elevenlabs-voice-agent", "cookbook/elevenlabs-agents-call"),
+    "integrations/pipecat.mdx": (
+        "cookbook/grok-voice-agent", "cookbook/grok-imagine-agent",
+        "cookbook/elevenlabs-voice-agent", "cookbook/elevenlabs-agents-call",
+    ),
+    "integrations/livekit.mdx": ("python/relaymessenger-livekit/examples",),
 }
 SUFFIXES = {".ts", ".py"}
 

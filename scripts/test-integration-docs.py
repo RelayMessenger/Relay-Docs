@@ -417,7 +417,11 @@ class IntegrationDocsTests(unittest.TestCase):
                 )
                 self.assertNotRegex(text, r"(?i)test:live|hosted.proof|lockfile|registry integrity|sha(?:256|512)-")
                 self.assertNotRegex(text, r"(?im)^## (?:Package versions|Package status)\s*$")
-                self.assertNotRegex(text, r"(?i)\bcoming[- ]soon\b|\bsource[- ]only\b")
+                # The direct ElevenLabs package exists in SDK PR 441 but is
+                # not published yet. Its availability is pinned explicitly by
+                # test-integration-architecture, not hidden behind a runnable install.
+                if path.relative_to(ROOT).as_posix() != "integrations/elevenlabs.mdx":
+                    self.assertNotRegex(text, r"(?i)\bcoming[- ]soon\b|\bsource[- ]only\b")
         self.assertLink("integrations/chat-sdk.mdx", "/messages/attachments")
         self.assertNotRegex(
             normalized(read("integrations/chat-sdk.mdx")),

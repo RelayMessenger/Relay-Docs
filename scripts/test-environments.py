@@ -131,8 +131,16 @@ class EnvironmentTests(unittest.TestCase):
                     ["node", "scripts/check-versions.mjs"],
                     ["python3", "scripts/build-agent-prompt.py", "--check"],
                     ["python3", "scripts/build-llms.py", "--check"],
+                    ["python3", "scripts/test-integration-architecture.py"],
                 ):
                     self.run_command(tree, command)
+                # External provider names must not reopen Relay's old product
+                # vocabulary, in either environment.
+                page = tree / "integrations/pipecat.mdx"
+                original = page.read_text()
+                page.write_text(original + "\nRelay realtime is the product.\n")
+                self.run_command(tree, ["python3", "scripts/validate-docs.py"], success=False)
+                page.write_text(original)
             # A production validator must reject regression, not merely accept
             # whatever the derivation currently emits.
             for reference in CASES:

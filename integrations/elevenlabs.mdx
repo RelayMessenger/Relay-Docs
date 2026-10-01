@@ -1,119 +1,62 @@
 ---
 title: "ElevenLabs"
-description: "Answer Relay calls with an ElevenLabs voice, or put an ElevenLabs Agent on the call."
-keywords: ["Relay", "ElevenLabs", "voice", "calls", "Pipecat", "ElevenLabs Agents", "text to speech"]
+description: "Connect an ElevenLabs Agent directly to a Relay call with the @relaymessenger/elevenlabs WebSocket bridge."
+keywords: ["Relay", "ElevenLabs", "ElevenLabs Agents", "direct integration", "@relaymessenger/elevenlabs", "WebSocket", "voice", "calls", "Rive"]
 ---
 
-Answer a Relay call in two ways: your Pipecat bot speaks with an ElevenLabs voice, or an ElevenLabs Agent runs the whole call.
+Connect an ElevenLabs Agent to a Relay call through the direct `@relaymessenger/elevenlabs` package and the ElevenLabs Agents WebSocket.
+
+**ElevenLabs runs the dialogue; the Relay package carries the audio.** This direct path uses Relay's call transport rather than a Pipecat pipeline or LiveKit session.
+
+<Note>
+The direct package is **coming soon**. Its [source](https://github.com/RelayMessenger/Relay-SDK/tree/11a913638ac52b8d1e0e4a497c4a7c2b44354c87/packages/elevenlabs) is available; the npm package is not published yet.
+</Note>
 
 ## Before you start
 
-- Python 3.11 or newer and [uv](https://docs.astral.sh/uv/).
+- Node.js `22.22.3` or newer.
 - An Agent Token in `RELAY_AGENT_TOKEN`.
-- An ElevenLabs API key in `ELEVENLABS_API_KEY`.
-- For the voice bot, an xAI API key in `XAI_API_KEY`.
+- An ElevenLabs agent ID in `ELEVENLABS_AGENT_ID`, and `ELEVENLABS_API_KEY` for a private agent.
+- An agent configured with `pcm_16000` input audio. [Audio formats](/calls/elevenlabs#before-you-start) lists the supported output rates.
 
 ## Connect
 
-Clone the cookbook and choose a recipe:
+The package's [answer-calls example](https://github.com/RelayMessenger/Relay-SDK/blob/11a913638ac52b8d1e0e4a497c4a7c2b44354c87/packages/elevenlabs/examples/answer-calls.ts) listens for `call.created` and passes the call ID to `ElevenLabsCall.connect`.
 
-```bash
-git clone --branch staging https://github.com/RelayMessenger/Relay-SDK.git
-cd Relay-SDK/cookbook
-```
+The bridge joins the Relay call, gets a signed ElevenLabs URL for a private agent, and opens the Agents WebSocket. It sends the caller's audio as `user_audio_chunk` and plays ElevenLabs' `audio` events back into the call.
 
-### Speak with an ElevenLabs voice
-
-The bot hears the caller with ElevenLabs Scribe, answers with Grok (`grok-4.20-0309-non-reasoning`, for a reply in under a second) on xAI's Responses API, and speaks with ElevenLabs. It waits for `call.created` on the Agent WebSocket and joins that call with `RelayTransport`:
-
-```bash
-cd elevenlabs-voice-agent
-uv run bot.py
-```
-
-The bot runs these Pipecat services between Relay's input and output:
-
-```python
-stt = ElevenLabsRealtimeSTTService(api_key=elevenlabs_key)
-llm = OpenAIResponsesHttpLLMService(
-    api_key=xai_key,
-    base_url=XAI_BASE_URL,
-    settings=OpenAIResponsesHttpLLMService.Settings(
-        model=GROK_MODEL,
-        system_instruction=PERSONA,
-    ),
-)
-tts = ElevenLabsTTSService(
-    api_key=elevenlabs_key,
-    settings=ElevenLabsTTSService.Settings(
-        voice=VOICE_ID,
-        model="eleven_flash_v2_5",
-        stability=0.3,
-        similarity_boost=0.75,
-        style=0.0,
-        use_speaker_boost=True,
-        speed=1.2,
-    ),
-)
-```
-
-The default voice is `SOYHLrjzK2X1ezoPC6cr`, ElevenLabs' premade voice "Harry", tuned high and fast for a cartoon character. Set `ELEVENLABS_VOICE_ID` to use another voice.
-
-### Put an ElevenLabs Agent on the call
-
-ElevenLabs runs speech recognition, the model, the voice and turn-taking. The bot carries audio over the [ElevenLabs Agents WebSocket API](https://elevenlabs.io/docs/eleven-agents/libraries/web-sockets), the path ElevenLabs lists for custom integrations:
-
-```bash
-cd elevenlabs-agents-call
-uv run create_agent.py
-ELEVENLABS_AGENT_ID=<agent_id> uv run bot.py
-```
-
-The bridge follows ElevenLabs' own Python SDK. It drops audio from a reply the caller interrupted, answers each ping at once, and ends the Relay call when ElevenLabs closes its socket:
-
-```python
-elif kind == "audio":
-    event = message["audio_event"]
-    # Audio from a response the caller already interrupted is stale.
-    if int(event["event_id"]) <= self._last_interrupt_id:
-        return
-    audio = base64.b64decode(event["audio_base_64"])
-    await self.push_frame(OutputAudioRawFrame(audio=audio, sample_rate=SAMPLE_RATE, num_channels=1))
-elif kind == "interruption":
-    # The caller talked over the agent: drop the agent's queued audio.
-    self._last_interrupt_id = int(message["interruption_event"]["event_id"])
-    await self.broadcast_interruption()
-elif kind == "ping":
-    await self._ws.send(json.dumps({"type": "pong", "event_id": message["ping_event"]["event_id"]}))
-```
-
-An agent you made in the ElevenLabs dashboard works too. Keep its input and output audio formats at PCM 16000 Hz.
-
-The source is in [cookbook](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook): `elevenlabs-voice-agent` and `elevenlabs-agents-call`.
+Use [Answer calls with an ElevenLabs Agent](/calls/elevenlabs) for the package API and connection example when the package is available.
 
 ## Send it a message
 
-Open Relay on your phone, open the agent's chat, and start a voice call. The bot answers within the ring, and you hear the agent's voice in the call.
+Once the direct package is available, run its answer-calls example, open the agent's chat in Relay and start a voice call.
 
 ## What it can do
 
-| Relay feature | ElevenLabs voice bot | ElevenLabs Agent |
-| --- | --- | --- |
-| Answer a call | Yes | Yes |
-| Stop talking when the caller talks over it | Yes | Yes, on the `interruption` event |
-| Greet the caller | Yes, in the model's own words | No. The agent has no first message and waits for the caller |
-| Voice Library and Voice Design voices | Paid ElevenLabs plans | Paid ElevenLabs plans |
-| Video in the call | Not in these recipes | No |
-| Text messages in the chat | No, calls only | No, calls only |
+| Relay feature | Direct bridge |
+| --- | --- |
+| Answer a call | `ElevenLabsCall.connect` joins the Relay call and starts the ElevenLabs session. |
+| Run the dialogue | ElevenLabs owns speech recognition, the model, the voice and turn-taking. |
+| Handle interruption | Clears queued audio and drops stale audio by `event_id`. |
+| Keep the session alive | Answers `ping` with `pong` and the same `event_id`. |
+| Receive events | Passes transcripts, responses and tool calls to `onEvent`. |
+| End the call | Ends the Relay call when ElevenLabs ends the session; closes the session when the Relay call ends. |
+| Animate a character | Audio alignment drives the [Rive character](/calls/rive) on the phone. |
+
+### Use ElevenLabs as a provider
+
+To give your own model an ElevenLabs voice, choose [Pipecat's ElevenLabs recipes](/integrations/pipecat#elevenlabs-voices-and-agents) or the [LiveKit voice provider](/integrations/livekit#providers).
+
+The Python `elevenlabs-voice-agent` and `elevenlabs-agents-call` recipes, including their setup, code samples, feature comparison and troubleshooting, are together on the Pipecat page.
 
 ## When it fails
 
-- The call rings out: start the bot before you call. It must join within the 32-second ring.
-- ElevenLabs answers `402 paid_plan_required`: the voice is a Voice Library voice, which needs a paid plan. Use a premade voice.
-- The agent is silent: check that both audio formats are `pcm_16000`.
+- The package cannot be installed: use the source linked above while the npm release is pending.
+- The call rings out: start the example before you call; it must join within the 32-second ring.
+- The audio formats differ: match the agent's input to `inputSampleRate` and choose a [supported output format](/calls/elevenlabs#when-it-fails).
 
 ## Next steps
 
-- [Grok on Relay](/integrations/xai-grok)
-- [Calls](/calls/index)
+- [Answer calls with an ElevenLabs Agent](/calls/elevenlabs)
+- [Use ElevenLabs in Pipecat](/integrations/pipecat#elevenlabs-voices-and-agents)
 - [Connect your runtime](/integrations/index)
