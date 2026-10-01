@@ -1025,7 +1025,11 @@ for name, pattern in {
     "mobile product namespace": r"\bmobile(?: API| namespace| endpoint| boundary)?\b",
     "realtime product name": r"\breal[ -]?time\b",
 }.items():
-    if re.search(pattern, handwritten_text, re.I):
+    # Provider names and a verbatim framework API are not Relay product names.
+    # Keep this exact-name exception local to the realtime vocabulary guard.
+    scanned = (re.sub(r"\bOpenAI Realtime\b|\bgoogle\.realtime\.RealtimeModel\b", "", handwritten_text)
+               if name == "realtime product name" else handwritten_text)
+    if re.search(pattern, scanned, re.I):
         raise SystemExit(f"stale {name}")
 
 for stale_hook in ["Implement this in the agent backend's connection flow", "## Backend connection greeting"]:
