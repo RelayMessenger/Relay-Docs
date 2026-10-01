@@ -38,6 +38,42 @@ EVENT_TAB_GROUPS = [
     ("Location", ["events/location-sharing-started", "events/location-sharing-stopped"]),
 ]
 assert sorted(page for _, pages in EVENT_TAB_GROUPS for page in pages) == sorted(EVENT_PAGES)
+# Owner rulings 2026-10-01 ("only search agents should be public"; people rate
+# agents, agents never rate): person-only routes stay out of the developer
+# docs. The generated Mintlify bundle and llms-full.txt drop their paths, so no
+# page is built and their URLs return 404. Keep scripts/prepare-mint-openapi.mjs
+# in step; validate-docs.py checks the bundle.
+HIDDEN_OPERATIONS = {
+    "countAgentsInAddressBook", "listSuggestedAgents", "requestAgent",
+    "rateAgent", "deleteAgentRating",
+}
+
+
+def hidden_endpoints():
+    return {entry["endpoint"] for operation, entry in page_paths().items() if operation in HIDDEN_OPERATIONS}
+
+
+def strip_hidden_paths(text):
+    """The OpenAPI text without the path blocks of person-only operations.
+
+    Every hidden operation's path must be hidden whole: a path that mixes
+    hidden and public methods would need method-level surgery, so it fails.
+    """
+    import re
+    hidden = hidden_endpoints()
+    paths = {}
+    for endpoint in hidden:
+        method, path = endpoint.split(" ", 1)
+        paths.setdefault(path, set()).add(method.lower())
+    for path, methods in paths.items():
+        match = re.search(rf"^  {re.escape(path)}:\n(?:(?:    .*|)\n)*?(?=^  \S|^\S|\Z)", text, re.M)
+        if match is None:
+            raise ValueError(f"hidden path missing from OpenAPI: {path}")
+        present = set(re.findall(r"^    (get|post|put|patch|delete):$", match.group(0), re.M))
+        if present != methods:
+            raise ValueError(f"{path} mixes hidden and public methods: {sorted(present)}")
+        text = text[:match.start()] + text[match.end():]
+    return text
 
 
 def walk_pages(items, parents=()):
@@ -78,7 +114,7 @@ def validate_api_navigation(config):
     entries = list(walk_pages(groups))
     methods = ("GET ", "POST ", "PUT ", "PATCH ", "DELETE ")
     endpoints = [(parents, page) for parents, page in entries if page.startswith(methods)]
-    expected = {entry["endpoint"]: entry for entry in page_paths().values()}
+    expected = {entry["endpoint"]: entry for operation, entry in page_paths().items() if operation not in HIDDEN_OPERATIONS}
     found = [page for _, page in endpoints]
     if len(found) != len(set(found)) or set(found) != set(expected):
         raise ValueError("API navigation must contain every endpoint exactly once")

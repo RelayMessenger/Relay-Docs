@@ -1,0 +1,109 @@
+---
+title: "Send and receive audio"
+description: "Hear the person on a call as PCM16, speak back, wait for playout, stop on interruption, and mute."
+keywords: ["call audio", "PCM16", "writeAudio", "write_audio", "waitForPlayout", "clearAudio", "sample rate", "Opus"]
+---
+
+Your agent hears the person as PCM16 frames and speaks by writing PCM16 frames back. The transport encodes Opus and sends one packet every 20 ms, like a live microphone, so you can write a whole reply at once and the wire keeps its pace.
+
+## Hear the person
+
+Each `audio` event carries interleaved signed 16-bit samples. The default is 48 kHz stereo; ask for the format your speech-to-text wants when you build the transport.
+
+<CodeGroup>
+```typescript TypeScript
+const transport = new RelayCallTransport({
+  relay,
+  callId,
+  inboundAudio: { sampleRate: 16_000, channelCount: 1 }, // 8000, 12000, 16000, 24000 or 48000; 1 or 2 channels
+});
+
+transport.on("audio", ({ samples, sampleRate, channelCount }) => {
+  speechToText.push(samples); // Int16Array
+});
+```
+
+```python Python
+from relaymessenger.calls import RelayAudioFrame, RelayCallTransport, RelayInboundAudioFormat
+
+call = RelayCallTransport(
+    api_key=os.environ["RELAY_AGENT_TOKEN"],
+    call_id=call_id,
+    base_url="https://api.staging.relayapp.im",
+    inbound_audio=RelayInboundAudioFormat(sample_rate=16_000, channel_count=1),
+)
+
+
+@call.on("audio")
+def heard(frame: RelayAudioFrame) -> None:
+    speech_to_text.push(frame.samples)  # int16 NumPy array
+```
+</CodeGroup>
+
+Pipecat delivers the same audio as `InputAudioRawFrame`s at the pipeline's `audio_in_sample_rate`. LiveKit Agents receives 24 kHz mono, the format of a LiveKit room.
+
+## Speak to the person
+
+Write PCM16 at any sample rate. `writeAudio` returns once the audio is queued; `waitForPlayout` returns when the queue is empty and the last packet has left.
+
+<CodeGroup>
+```typescript TypeScript
+await transport.writeAudio({ samples: speech, sampleRate: 24_000, channelCount: 1 });
+await transport.waitForPlayout();
+console.log(transport.queuedAudioMs()); // 0
+```
+
+```python Python
+await call.write_audio(RelayAudioFrame(speech, 24_000, 1))
+await call.wait_for_playout()
+print(call.queued_audio_ms())  # 0
+```
+</CodeGroup>
+
+Until the person is receiving your agent's audio, what you write is held in order and silence goes out. It then plays from the start, so a hello written before the person's phone is ready is heard whole. To start talking only once the person's audio has arrived, wait for it first:
+
+<CodeGroup>
+```typescript TypeScript
+await transport.waitForPeerAudio(15_000);
+```
+
+```python Python
+await call.wait_for_peer_audio(15_000)
+```
+</CodeGroup>
+
+## Stop talking when interrupted
+
+When the person starts speaking over your agent, drop what has not left yet. `clearAudio` empties the queue, and a pending `waitForPlayout` returns at once.
+
+<CodeGroup>
+```typescript TypeScript
+transport.clearAudio();
+```
+
+```python Python
+call.clear_audio()
+```
+</CodeGroup>
+
+Pipecat and LiveKit Agents do this for you: an interruption clears the transport's queue, and LiveKit reports the reply as interrupted at the position that actually played.
+
+## Mute your agent
+
+`setMuted(true)` publishes your agent's mute state to the room as a `userUpdate` frame, and every participant's `roomState` then reports it. Stop writing audio as well.
+
+<CodeGroup>
+```typescript TypeScript
+transport.setMuted(true);
+```
+
+```python Python
+call.set_muted(True)
+```
+</CodeGroup>
+
+## See also
+
+- [Answer a call](/calls/index#answer-a-call)
+- [Video calls](/calls/video)
+- [Call events and connection](/calls/events)

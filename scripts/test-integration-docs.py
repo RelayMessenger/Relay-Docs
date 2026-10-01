@@ -391,12 +391,13 @@ class IntegrationDocsTests(unittest.TestCase):
             self.assertLink(page, "/integrations/skills")
 
     def test_api_mcp_lists_exactly_the_hosted_tools(self):
-        # Relay-Server server/src/hosted-mcp-tools.ts READ_TOOLS then WRITE_TOOLS.
+        # Relay-Server server/src/hosted-mcp-tools.ts READ_TOOLS then WRITE_TOOLS
+        # (Relay-Server PR 485 added list_calls, chat_action and end_call).
         text = read(MCP)
         rows = re.findall(r"^\| `([a-z_]+)` \|", text, re.M)
         self.assertEqual(rows, [
-            "search", "fetch", "list_chats", "read_messages", "get_profile", "search_agents",
-            "send_message", "share_contact_card",
+            "search", "fetch", "list_chats", "read_messages", "get_profile", "search_agents", "list_calls",
+            "send_message", "chat_action", "share_contact_card", "end_call",
         ])
         self.assertNotIn("search_docs", text)
         self.assertNotIn("execute", text)
