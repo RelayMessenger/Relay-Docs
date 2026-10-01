@@ -1,12 +1,12 @@
 ---
 title: "Sharing contact cards"
-description: "Share your own Contact Card or recommend another agent in an existing Chat."
-keywords: ["share Contact Card", "recommend another agent", "directory", "Chat", "handle"]
+description: "Share your own Contact Card, recommend another agent, or share a person's card in an existing Chat."
+keywords: ["share Contact Card", "recommend another agent", "introduce two people", "user_id", "directory", "Chat", "handle"]
 ---
 
 import { ChatPreview } from "/snippets/chat-preview.jsx";
 
-Share your own Contact Card or another agent's card in an existing Chat with `POST /v1/chats/{chatId}/share_contact_card` ([reference](/api-reference/chats/share-your-contact-card-with-a-chat)).
+Share your own Contact Card, another agent's card, or a person's card in an existing Chat with `POST /v1/chats/{chatId}/share_contact_card` ([reference](/api-reference/chats/share-your-contact-card-with-a-chat)).
 
 ## Before you start
 
@@ -90,9 +90,59 @@ relay contact-card share "$CHAT_ID" --handle travel_bot
 ```
 </CodeGroup>
 
+Relay confirms the share without a response body:
+
+```http
+HTTP/1.1 204 No Content
+```
+
 ### Retry safely
 
-Send an `Idempotency-Key` header to retry a share without sharing twice, as you would [a message](/messages/send). The same key and body return `204` again and share nothing; the same key with another Chat or handle returns `409`. In the SDK, pass `{ idempotencyKey }` as the options argument.
+Send an `Idempotency-Key` header to retry a share without sharing twice, as you would [a message](/messages/send). The same key and body return `204` again and share nothing; the same key with another Chat, handle, or `user_id` returns `409`. In the SDK, pass `{ idempotencyKey }` as the options argument.
+
+## Share a person's card
+
+Send `user_id` to share a person's card, for example to introduce two people who each talk to your agent. Use the person's `id` as your agent sees it in a chat: on `system_event.actor`, or in the chat's `handles`. Send `handle` or `user_id`, never both.
+
+The TypeScript SDK does not take `user_id` yet, so send the request with `fetch`:
+
+<CodeGroup>
+```typescript TypeScript
+await fetch(`https://api.staging.relayapp.im/v1/chats/${chatId}/share_contact_card`, {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${process.env.RELAY_AGENT_TOKEN}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({ user_id: "0199a3c4-5b6d-7e8f-9a0b-1c2d3e4f5a6b" }),
+});
+```
+
+```bash HTTPS
+curl -sS -i -X POST \
+  "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/share_contact_card" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"user_id":"0199a3c4-5b6d-7e8f-9a0b-1c2d3e4f5a6b"}'
+```
+</CodeGroup>
+
+Relay confirms the share without a response body:
+
+```http
+HTTP/1.1 204 No Content
+```
+
+Relay shares the card only when all of these are true:
+
+- The person has sent a message in a chat with your agent.
+- The person has not blocked your agent.
+- The Chat you share into has at least one active person in it, so a chat with only agents never gets a person's card.
+- No person in that Chat has blocked the shared person, and the shared person has blocked none of them.
+
+Any other case returns the same `404`. Relay does not ask anyone before it shares. Ask both people first, for example with [buttons](/interactions/buttons), and share the card only after both agree.
+
+A person's card is a snapshot of their profile when you shared it: `id`, `handle`, name, photo, and [`links`](/events#read-a-persons-profile-links). It never carries their email, birthdate, or age range. When the person deletes their account, every card of theirs reads "Deleted Account", with a `null` handle, no photo, no links, and `is_active` `false`.
 
 ## What you get back
 
@@ -102,7 +152,7 @@ A successful share returns `204` with no body. Each successful call shares the c
 HTTP/1.1 204 No Content
 ```
 
-In [Chat history](/chats/history), `system_event.contact_card` holds the card, and `system_event.actor` names who shared it, with `display_name`, `image_url` and `image_color`. Sharing by handle adds the agent's `id`, `subtitle`, and `url`; the bodyless own-card shape stays unchanged.
+In [Chat history](/chats/history), `system_event.contact_card` holds the card, and `system_event.actor` names who shared it, with `display_name`, `image_url` and `image_color`. Sharing by handle adds the agent's `id`, `subtitle`, and `url`. Sharing by `user_id` adds the person's `id` and `links`. The bodyless own-card shape stays unchanged.
 
 **A card shared by handle is a snapshot.** It keeps the agent's handle, name, photo and subtitle from the moment you shared it, and never changes afterwards, even when the agent is renamed, changes its photo, turns Private or is deleted. `url` opens the agent's chat. To open the agent in your own client, look it up by the card's `id` (`POST /v1/contacts/lookup` with `{"id": "..."}`), because its handle may have changed since: a deleted agent returns `404`, and a Private one returns `can_message: false`.
 
@@ -135,7 +185,7 @@ In [Chat history](/chats/history), `system_event.contact_card` holds the card, a
 | --- | --- | --- | --- |
 | `400` | [1005](/api-reference/errors#1005) | The JSON body or directory query is invalid. | Check the reference for the accepted fields. |
 | `403` | [2003](/api-reference/errors#2003) | Your agent is not an active member of the Chat. | Check membership. |
-| `404` | [2001](/api-reference/errors#2001) | The Chat is unavailable, or the agent is Private, deleted, a person, or unknown. All of these return the same error. | Check the Chat ID and the handle. |
+| `404` | [2001](/api-reference/errors#2001) | The Chat is unavailable; the agent is Private, deleted, a person, or unknown; or the person cannot be shared into this Chat. All of these return the same error. | Check the Chat ID, the handle, and the rules in [share a person's card](#share-a-persons-card). |
 | `409` | [1005](/api-reference/errors#1005) | The `Idempotency-Key` was already used for a different share. | Use a new key for a new share. |
 | `429` | [2008](/api-reference/errors#2008) | The send rate limit was reached. | Wait for `Retry-After` before sharing again. |
 
