@@ -1,0 +1,101 @@
+---
+title: "xAI Grok"
+description: "Answer Relay calls with Grok Voice, and send pictures and videos made with Grok Imagine."
+keywords: ["Relay", "xAI", "Grok", "Grok Voice", "Grok Imagine", "calls", "images", "video", "Pipecat"]
+---
+
+Run Grok on Relay in two ways: Grok Voice answers calls, and a Grok chat agent sends pictures and videos it makes with Grok Imagine.
+
+## Before you start
+
+- An Agent Token in `RELAY_AGENT_TOKEN`.
+- An xAI API key in `XAI_API_KEY`.
+- For calls, Python 3.11 or newer and [uv](https://docs.astral.sh/uv/).
+- For the chat agent, Node.js `22.22.3` or newer.
+
+## Connect
+
+Clone the cookbook and choose a recipe:
+
+```bash
+git clone --branch staging https://github.com/RelayMessenger/Relay-SDK.git
+cd Relay-SDK/cookbook
+```
+
+### Answer calls with Grok Voice
+
+Grok Voice is one speech-to-speech model: it hears the caller, takes turns, and speaks back. The bot joins each call with `RelayTransport` and connects it to Pipecat's `GrokRealtimeLLMService`:
+
+```bash
+cd grok-voice-agent
+uv run bot.py
+```
+
+The whole pipeline is the call's audio, Grok Voice, and the call's audio again:
+
+```python
+llm = GrokRealtimeLLMService(
+    api_key=os.environ["XAI_API_KEY"],
+    settings=GrokRealtimeLLMService.Settings(
+        system_instruction=PERSONA,
+        session_properties=events.SessionProperties(voice="eve"),
+    ),
+)
+pipeline = Pipeline([transport.input(), aggregators.user(), llm,
+                     transport.output(), aggregators.assistant()])
+```
+
+`XAI_VOICE` picks another of xAI's voices. To pair Grok with an ElevenLabs voice instead, see [ElevenLabs](/integrations/elevenlabs).
+
+### Send pictures and videos with Grok Imagine
+
+The chat agent answers each message with Grok. Grok has two tools, `send_picture` and `send_video`, and decides when to use them:
+
+```bash
+cd grok-imagine-agent
+npm install
+REFERENCE_IMAGE=./character.png npm start
+```
+
+Each picture is a Grok Imagine edit of the reference picture, so the character looks the same every time. The agent uploads it and sends it as a media part:
+
+```ts
+const picture = await xai.picture(reference, picturePrompt(scene, caption)); // Grok Imagine image edit
+const media = name === "send_video"
+  ? await xai.video(picture, action)                                         // Grok Imagine image to video
+  : picture;
+await relay.chats.messages.send(chatId, {
+  message: { parts: [{ type: "media", attachment_id: await upload(relay, media) }], idempotency_key },
+});
+```
+
+On start, the agent also makes a profile picture and sets it with `relay.contactCard.update({ handle, attachment_id })`.
+
+The source is in [cookbook](https://github.com/RelayMessenger/Relay-SDK/tree/staging/cookbook): `grok-voice-agent` and `grok-imagine-agent`.
+
+## Send it a message
+
+Open Relay on your phone and message the chat agent, or ask it for a selfie. To test Grok Voice, start a voice call with the voice agent.
+
+## What it can do
+
+| Relay feature | Grok Voice agent | Grok Imagine chat agent |
+| --- | --- | --- |
+| Answer a call | Yes | No |
+| Reply in the chat | No, calls only | Yes, in text |
+| Send a picture | No | Yes, `grok-imagine-image-2.0` |
+| Send a video | No | Yes, 6 seconds, `grok-imagine-video-1.5` |
+| Set its profile picture | No | Yes, on start |
+| Group chats | No | No, direct chats only |
+
+## When it fails
+
+- The call rings out: start the bot before you call. It must join within the 32-second ring.
+- A video takes about a minute: the agent sends it when Grok Imagine finishes.
+- A picture fails: Grok reads the error from its tool and answers in text.
+
+## Next steps
+
+- [ElevenLabs on Relay](/integrations/elevenlabs)
+- [Send attachments](/messages/attachments)
+- [Calls](/calls/index)
