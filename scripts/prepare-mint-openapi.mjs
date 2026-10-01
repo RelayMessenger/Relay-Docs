@@ -85,8 +85,8 @@ const sidebarTitles = {
 };
 
 // Person-only routes (owner ruling 2026-10-01); keep in step with
-// HIDDEN_OPERATIONS in scripts/api_navigation.py. Mintlify's `x-hidden` builds
-// the page but leaves it out of the navigation.
+// HIDDEN_OPERATIONS in scripts/api_navigation.py. Mintlify's `x-excluded` builds no page;
+// a direct URL finds nothing.
 const hiddenOperations = new Set(["countAgentsInAddressBook", "listSuggestedAgents", "requestAgent"]);
 
 for (const [operationId, sidebarTitle] of Object.entries(sidebarTitles)) {
@@ -105,7 +105,7 @@ for (const [operationId, sidebarTitle] of Object.entries(sidebarTitles)) {
       x-mint:
         metadata:
           sidebarTitle: ${sidebarTitle}
-        href: ${pagePaths[operationId].href}${hiddenOperations.has(operationId) ? "\n      x-hidden: true" : ""}`,
+        href: ${pagePaths[operationId].href}${hiddenOperations.has(operationId) ? "\n      x-excluded: true" : ""}`,
   );
 }
 

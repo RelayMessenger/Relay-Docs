@@ -40,8 +40,8 @@ EVENT_TAB_GROUPS = [
 assert sorted(page for _, pages in EVENT_TAB_GROUPS for page in pages) == sorted(EVENT_PAGES)
 # Owner ruling 2026-10-01 ("only search agents should be public"): routes only a
 # person can call answer an Agent Token with 403 (error code 2003), so the
-# developer docs leave them out of the navigation. Mintlify still builds their
-# pages, marked `x-hidden` in the generated bundle, at their stable URLs.
+# developer docs leave them out: `x-excluded` in the generated Mintlify bundle
+# builds no page, so their URLs return 404.
 HIDDEN_OPERATIONS = {"countAgentsInAddressBook", "listSuggestedAgents", "requestAgent"}
 
 

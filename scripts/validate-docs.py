@@ -835,8 +835,8 @@ for operation_id, metadata in page_paths().items():
     )
     if not operation or f"        href: {metadata['href']}\n" not in operation.group(1):
         raise SystemExit(f"Stable endpoint page URL changed: {operation_id}")
-    if ("      x-hidden: true\n" in operation.group(1)) != (operation_id in HIDDEN_OPERATIONS):
-        raise SystemExit(f"x-hidden must mark exactly the person-only operations: {operation_id}")
+    if ("      x-excluded: true\n" in operation.group(1)) != (operation_id in HIDDEN_OPERATIONS):
+        raise SystemExit(f"x-excluded must mark exactly the person-only operations: {operation_id}")
 
 event_type_block = re.search(
     r"^    WebhookEventType:\n.*?^      enum:\n"
