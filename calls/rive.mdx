@@ -1,0 +1,116 @@
+---
+title: "Show Rive in a call"
+description: "Name a Rive file on your agent's Contact Card, then drive it live during a call: set View Model values, fire triggers, switch files, time changes to your agent's speech, and hear what the person changes."
+keywords: ["Rive", "data binding", "View Model", "triggers", "rive channel", "visemes", "lip sync", "calls", "RelayRiveProcessor", "RelayRive"]
+---
+
+Your agent can show a [Rive](https://rive.app) file during a call: a character, a quiz, a game or a chart. The person's phone draws it whenever no video from your agent is arriving, and your agent changes it live through Rive data binding.
+
+## Before you start
+
+| Input | Requirement |
+| --- | --- |
+| Relay | An Agent Token, and a `call.created` event to answer ([answer a call](/calls/index#answer-a-call)) |
+| Rive file | A `.riv` of at most 10 MB with every image and font embedded, and a View Model whose properties and triggers your agent drives |
+
+## Show and drive the file
+
+<Steps>
+  <Step title="Put the file on your Contact Card">
+    Upload the `.riv` with the [Attachments API](/api-reference/resources/attachments/overview), the same way as a [profile photo](/agents/profile-photos). Then set it with the upload's id. The names select what the phone draws; leave one out to use the file's default.
+
+    <CodeGroup>
+    ```typescript TypeScript SDK
+    await relay.contactCard.update({
+      handle: "my_assistant",
+      rive: { attachment_id: upload.id, artboard: "Call", state_machine: "Main", view_model: "Main" },
+    });
+    ```
+
+    ```bash cURL
+    curl -sS -X PATCH 'https://api.staging.relayapp.im/v1/contact_card?handle=<agent handle>' \
+      -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+      -H 'Content-Type: application/json' \
+      -d '{"rive":{"attachment_id":"<upload id>","artboard":"Call","state_machine":"Main","view_model":"Main"}}'
+    ```
+    </CodeGroup>
+
+    The card, your agent's chat handles and the Call object then carry `rive.file`, the URL where Relay hosts the file, so the phone loads it while the call rings. Send `{"rive": {"file": "<that URL>", "artboard": "Quiz"}}` to change only the names, or `"rive": null` to remove the file.
+  </Step>
+  <Step title="Open the rive channel in the call">
+    After `connect()`, open the channel. Every later call returns the same handle.
+
+    <Tabs>
+      <Tab title="TypeScript">
+        ```typescript
+        await transport.connect();
+        const rive = await transport.rive();
+        ```
+      </Tab>
+      <Tab title="Python">
+        ```python
+        await call.connect()
+        rive = await call.rive()
+        ```
+      </Tab>
+    </Tabs>
+
+    If Relay cannot open the channel, `rive()` fails with the code `media_unavailable`, and the call goes on.
+  </Step>
+  <Step title="Change the file and hear the person">
+    `set` writes View Model properties by name or path, `trigger` fires a trigger, and `show` switches to another Relay-hosted file with optional starting values. The phone sends back what the person changes.
+
+    ```typescript
+    rive.set({ mood: "happy", "score/value": 3 });
+    rive.trigger("wave");
+    rive.on("view_model", (values) => { /* the person changed { answer: "B" } */ });
+    rive.on("trigger", (name) => { /* the person fired a trigger */ });
+    ```
+
+    Python uses the same names: `rive.set({...})`, `rive.trigger("wave")`, `rive.on("view_model", handler)`.
+  </Step>
+  <Step title="Time changes to your agent's speech">
+    `writeAudio` resolves with where that audio starts on your agent's audio track, in milliseconds. Pass that time plus an offset inside the audio as `at`, and the phone applies the change when that sample plays. Audio held until the person can hear it gets its real start too.
+
+    ```typescript
+    import { visemesFromAlignment } from "@relaymessenger/sdk/calls";
+
+    const start = await transport.writeAudio(frame);
+    if (start !== undefined) {
+      // Character timings for that audio, such as ElevenLabs' `alignment`.
+      for (const cue of visemesFromAlignment(alignment)) {
+        rive.set({ viseme: cue.viseme }, { at: start + cue.t });
+      }
+    }
+    ```
+
+    `visemesFromAlignment` turns character timings into Preston Blair's ten mouth shapes, from `0` (rest) to `9` (W and Q), for a `viseme` number in your file. In Python, `write_audio` returns the start once the person receives your agent's audio, and `None` before that.
+  </Step>
+</Steps>
+
+## Let your framework drive the mouth
+
+| Framework | What sends the timing |
+| --- | --- |
+| Pipecat | `RelayRiveProcessor(transport)`, placed right after text-to-speech, turns word timestamps into `viseme` and the bot's speaking frames into `speaking`. |
+| LiveKit Agents, Python | `await RelayRive().start(session, call)` sets `speaking` for each reply. With `AgentSession(use_tts_aligned_transcript=True)` and a text-to-speech service that reports word times, it also sends `viseme`. |
+| LiveKit Agents, TypeScript | `await new RelayRive().start(session, call)` sets `speaking` for each reply. Send `viseme` yourself with `rive.set`. |
+| ElevenLabs Agents | [`@relaymessenger/elevenlabs`](/calls/elevenlabs) sends `viseme` and `speaking` from each reply's alignment. |
+
+## Messages
+
+Each message is JSON of at most 1 KB. The channel is unordered and does not resend, so a lost message is gone. A `set` replaces only the properties it names: a later value for the same property corrects a lost one, and nothing resends a lost trigger. After a media restart the transport opens the channel again and resends the last `show` and the latest value of every property.
+
+| Message | Meaning |
+| --- | --- |
+| `{"t": 1840, "view_model": {"viseme": 3, "speaking": true}}` | Set View Model properties when your agent's audio reaches 1840 ms. |
+| `{"trigger": "nod"}` | Fire a trigger at once. |
+| `{"file": "<Relay-hosted .riv>", "artboard": "Quiz", "view_model": {"question": "Capital of France?"}}` | Show another file with starting values. |
+| `{"view_model": {"answer": "B"}}` | From the phone: a value the person changed. |
+| `{"trigger": "tapped_start"}` | From the phone: a trigger the person fired. |
+
+## Next steps
+
+- [Answer calls with an ElevenLabs Agent](/calls/elevenlabs)
+- [Send and receive audio](/calls/audio)
+- [Video calls](/calls/video)

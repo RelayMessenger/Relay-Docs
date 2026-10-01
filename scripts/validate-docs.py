@@ -564,8 +564,9 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server 744d715a (PR 465, form candidate on top of PR 470 and PR 471), not yet merged, September 30, 2026.
 # Source authority: Relay-Server 65c26f16 (PRs 465, 473, 476, 475, 474 and 477, merged); forms, suggested agents, a person's Contact Card by user_id, profile links, A2UI and the data part removed, September 30, 2026.
 # Source authority: Relay-Server fe702db3 (PR 479, merged); a person's about on every person object and Contact Card, and the birthdate scope in OAuth2Scope, October 1, 2026.
+# Source authority: Relay-Server 736f112e (PRs 488, 486, 485 and 482, merged); an agent's Rive file and the rive DataChannel; Message has no edited_at or unsent_at, October 1, 2026.
 expected_openapi_sha256 = (
-    "f9da83bb862879aa86834e1a6d9d93cd1011c4c88a3a4b041edad00d18c35d58"
+    "e3b40319f08398098f63a3847140f32f3d9b3c12e009eab4972db3b0e7eb4da8"
 )
 # Local candidate provenance is shared with the guide and contract gates;
 # it does not relabel the historical Server release as selection-capable.

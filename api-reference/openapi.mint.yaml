@@ -901,11 +901,13 @@ paths:
         you, into a chat with at least one active person in it, none of whom has
         blocked or been blocked by that person. Anything else returns the same
         404. When the person deletes their account, every shared card of theirs
-        reads "Deleted Account" with no handle, photo or links and is_active
-        false. Ask both people first, with ordinary
+        keeps its id and reads first_name "Deleted Account" with handle,
+        last_name, image_url, image_color and about null, links empty, and
+        is_active false. Ask both people first, with ordinary
         buttons; Relay does not ask for you. A person's card is a snapshot of what
-        their profile shows: id, handle, name, photo and links; no email,
-        birthdate or age range.
+        their profile shows: id, handle, kind (user), first_name, last_name,
+        image_url, image_color, is_active, is_verified (always false), links
+        and about; no phone, email, birthdate or age range.
 
         A card shared by handle is a snapshot taken when it is sent: its id, handle,
         name, photo and subtitle never change afterwards, even when the agent is
@@ -2983,7 +2985,7 @@ paths:
         - Calls
       security:
         - BearerAuth: []
-      description: 'Upgrade to a WebSocket as either Contact in a live Call. This socket is signaling only: every frame is JSON text and media never passes through it. Each participant sends `join` when the socket opens, and again after any reconnect; the callee answers a ringing Call by sending `join`. Relay answers every `join` with `iceServers`, the STUN and TURN servers for the RTCPeerConnection, then `roomState`. Each participant then sends an `offer` publishing a WebRTC track named `audio`, and later one adding a track named `video` the first time its camera turns on; Relay returns `answer`. After applying that answer, send `connected` only when the RTCPeerConnection connectionState is `connected`. Once both participants have published and reported connected, Relay pulls every track each participant has published into the other Cloudflare SFU Session, one at a time, and sends that participant an `offer` naming the track; answer it with `answer` to complete renegotiation. A participant whose PeerConnection is dead sends `offer` with `restart: true` from a new PeerConnection: Relay moves it onto a new SFU Session, the Call stays in progress, and both directions are pulled again after it sends `connected`. The room is scoped to the Call and accepts only its authenticated user or agent Contact.'
+      description: 'Upgrade to a WebSocket as either Contact in a live Call. This socket is signaling only: every frame is JSON text and media never passes through it. Each participant sends `join` when the socket opens, and again after any reconnect; the callee answers a ringing Call by sending `join`. Relay answers every `join` with `iceServers`, the STUN and TURN servers for the RTCPeerConnection, then `roomState`. Each participant then sends an `offer` publishing a WebRTC track named `audio`, and later one adding a track named `video` the first time its camera turns on; Relay returns `answer`. After applying that answer, send `connected` only when the RTCPeerConnection connectionState is `connected`. Once both participants have published and reported connected, Relay pulls every track each participant has published into the other Cloudflare SFU Session, one at a time, and sends that participant an `offer` naming the track; answer it with `answer` to complete renegotiation. A participant whose PeerConnection is dead sends `offer` with `restart: true` from a new PeerConnection: Relay moves it onto a new SFU Session, the Call stays in progress, and both directions are pulled again after it sends `connected`. The room is scoped to the Call and accepts only its authenticated user or agent Contact. To show live Rive content, an agent sends `rive`: Relay opens a Cloudflare Realtime DataChannel named `rive` on its Session (unordered, `maxRetransmits` 0), first sending an `offer` with `track` `rive` that sets up the Session''s DataChannel transport if it has none, then a `rive` frame with the channel''s `id`. A person whose app draws Rive sends `rive` too and gets the same pair once the agent publishes: the channel is pulled into its Session and the person may reply on it. Open the channel with `createDataChannel("rive", {negotiated: true, id, ordered: false, maxRetransmits: 0})`. After a restart onto a new Session, Relay opens it again with a new `id`.'
       parameters:
         - name: callId
           in: path
@@ -3132,6 +3134,90 @@ components:
           examples:
             - Builds robots in Ann Arbor.
           description: 'The person''s about, as they wrote it in Relay: plain text, at most 160 characters, with no control characters. Null when they wrote none. Present only when kind is user.'
+        rive:
+          description: The Rive file this agent shows in its calls, so the app can load it before the call connects. Null when it has none. Present only when kind is agent.
+          anyOf:
+            - $ref: '#/components/schemas/RiveFile'
+            - type: 'null'
+    RiveFile:
+      type: object
+      additionalProperties: false
+      required:
+        - file
+        - artboard
+        - state_machine
+        - view_model
+      description: 'A Rive file an agent shows in its calls: a character, a quiz, a game, a chart. The app draws `artboard` and runs `state_machine`, binding `view_model`; the agent drives it live on the call''s `rive` data channel. Names are Rive''s own; a null name means the file''s default.'
+      properties:
+        file:
+          type: string
+          format: uri
+          description: 'The .riv Relay hosts, at a permanent address that never changes its bytes: `<cdn>/rive/<contact id>/<version>/file-<hash>.riv`.'
+          examples:
+            - https://cdn.relayapp.im/rive/0199a000-0000-7000-8000-00000000000b/1790000000000/file-0123456789abcdef.riv
+        artboard:
+          type:
+            - string
+            - 'null'
+          maxLength: 255
+          examples:
+            - Call
+        state_machine:
+          type:
+            - string
+            - 'null'
+          maxLength: 255
+          examples:
+            - Main
+        view_model:
+          type:
+            - string
+            - 'null'
+          maxLength: 255
+          examples:
+            - Main
+    RiveFileInput:
+      type: object
+      additionalProperties: false
+      description: Send `attachment_id` for a new file, or `file` with the address the card already holds to change only the names. The names you send replace all three; an omitted or null name means the file's default.
+      oneOf:
+        - required:
+            - attachment_id
+          not:
+            required:
+              - file
+        - required:
+            - file
+          not:
+            required:
+              - attachment_id
+      properties:
+        attachment_id:
+          type: string
+          format: uuid
+          description: 'This agent''s completed upload from the Attachments API, as for the profile picture: a Rive file (it starts with the bytes `RIVE`) of at most 10 MB. Relay copies it to permanent public storage. Embed every image and font in the file: the app does not fetch Rive''s hosted assets.'
+        file:
+          type: string
+          format: uri
+          description: The `file` address this card already holds.
+        artboard:
+          type:
+            - string
+            - 'null'
+          minLength: 1
+          maxLength: 255
+        state_machine:
+          type:
+            - string
+            - 'null'
+          minLength: 1
+          maxLength: 255
+        view_model:
+          type:
+            - string
+            - 'null'
+          minLength: 1
+          maxLength: 255
     Call:
       type: object
       additionalProperties: false
@@ -3267,14 +3353,15 @@ components:
           description: '`audio` after this participant has published its local WebRTC audio track.'
         tracks:
           type: array
-          maxItems: 2
+          maxItems: 3
           uniqueItems: true
           items:
             type: string
             enum:
               - audio
               - video
-          description: The local tracks this participant has published, `audio` first.
+              - rive
+          description: The local tracks this participant has published, `audio` first, and `rive` once an agent's `rive` DataChannel is open.
         muted:
           type: boolean
         video:
@@ -3285,14 +3372,15 @@ components:
           description: True after this participant reported RTCPeerConnection connectionState `connected` for its initial publication.
         receiving:
           type: array
-          maxItems: 2
+          maxItems: 3
           uniqueItems: true
           items:
             type: string
             enum:
               - audio
               - video
-          description: 'The other participant''s tracks this participant is receiving now: Relay pulled the track into its Session, it answered that `offer`, and it has reported `connected`. `[]` until then; emptied when either participant restarts, and rebuilt as the tracks are pulled again. Relay sends `roomState` each time it changes. Hold generated audio until the other participant''s `receiving` contains `audio`, then play it from the start.'
+              - rive
+          description: 'The other participant''s tracks this participant is receiving now: Relay pulled the track into its Session, it answered that `offer`, and it has reported `connected`. `[]` until then; emptied when either participant restarts, and rebuilt as the tracks are pulled again. Relay sends `roomState` each time it changes. Hold generated audio until the other participant''s `receiving` contains `audio`, then play it from the start. `rive` is there once the agent''s `rive` DataChannel is pulled into this participant''s Session.'
     CallRoomJoinFrame:
       type: object
       additionalProperties: false
@@ -3502,7 +3590,33 @@ components:
           enum:
             - audio
             - video
-          description: The other participant's track this offer pulls.
+            - rive
+          description: The other participant's track this offer pulls. `rive` sets up this Session's DataChannel transport (one SCTP section); answer it like any other.
+    CallRoomRiveFrame:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+      description: 'Agent: publish the `rive` DataChannel. Person: receive the agent''s. Sent again with the channel open, Relay repeats its `id`.'
+      properties:
+        type:
+          type: string
+          const: rive
+    CallRoomRiveChannelFrame:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+      description: 'The `rive` DataChannel is open on this participant''s Session. Create it with `createDataChannel("rive", {negotiated: true, id, ordered: false, maxRetransmits: 0})`. Messages are JSON text of at most 1 KB.'
+      properties:
+        type:
+          type: string
+          const: rive
+        id:
+          type: integer
+          minimum: 0
+          maximum: 65534
     CallRoomEndedFrame:
       type: object
       additionalProperties: false
@@ -4496,6 +4610,11 @@ components:
           anyOf:
             - $ref: '#/components/schemas/HandleOwner'
             - type: 'null'
+        rive:
+          description: The Rive file this agent shows in its calls, so the app can load it before the call connects. Null when it has none. Present only when kind is agent.
+          anyOf:
+            - $ref: '#/components/schemas/RiveFile'
+            - type: 'null'
         timezone:
           type:
             - string
@@ -5187,6 +5306,11 @@ components:
         - image_url
         - image_color
       properties:
+        rive:
+          description: The Rive file this agent shows in its calls, or null. Set it with PATCH `rive`.
+          anyOf:
+            - $ref: '#/components/schemas/RiveFile'
+            - type: 'null'
         id:
           type: string
           format: uuid
@@ -5235,7 +5359,7 @@ components:
           items:
             type: string
             format: uri
-          description: A shared person's profile links when the card was shared, present only on a person's card. A person's card carries id, handle, name, photo, links and about, and nothing else.
+          description: A shared person's profile links when the card was shared, present only on a person's card. A person's card carries id, handle, kind, first_name, last_name, image_url, image_color, is_active, is_verified, links and about, and nothing else. Empty after the person deleted their account.
         about:
           type:
             - string
@@ -5243,7 +5367,7 @@ components:
           maxLength: 160
           examples:
             - Builds robots in Ann Arbor.
-          description: A shared person's about when the card was shared, at most 160 characters, or null when they wrote none. Present only on a person's card.
+          description: A shared person's about when the card was shared, at most 160 characters, or null when they wrote none or deleted their account. Present only on a person's card.
         handle:
           type:
             - string
@@ -7361,18 +7485,6 @@ components:
             - 'null'
           format: date-time
           description: When the message was read
-        edited_at:
-          type:
-            - string
-            - 'null'
-          format: date-time
-          description: When the message was last edited, or null if it was never edited.
-        unsent_at:
-          type:
-            - string
-            - 'null'
-          format: date-time
-          description: When the sender unsent the message, or null. An unsent Message keeps its place in the transcript and carries no parts.
         silent:
           type: boolean
           description: Whether the sender sent this Message silently, so the recipient's device showed no banner and played no sound.
@@ -8237,6 +8349,11 @@ components:
         - image_url
         - image_color
       properties:
+        rive:
+          description: The Rive file this agent shows in its calls, or null. Set it with PATCH `rive`.
+          anyOf:
+            - $ref: '#/components/schemas/RiveFile'
+            - type: 'null'
         description:
           type:
             - string
@@ -8771,6 +8888,11 @@ components:
         image_recipe:
           $ref: '#/components/schemas/AgentImageRecipe'
           description: Existing native redraw recipe accompanying image_url or attachment_id.
+        rive:
+          description: The Rive file this agent shows in its calls. Null removes it. If omitted, the existing file is kept.
+          anyOf:
+            - $ref: '#/components/schemas/RiveFileInput'
+            - type: 'null'
     UpdateWebhookSubscriptionRequest:
       type: object
       properties:
@@ -9584,6 +9706,8 @@ x-relay-call-room-frames:
       $ref: '#/components/schemas/CallRoomEndFrame'
     heartbeat:
       $ref: '#/components/schemas/CallRoomHeartbeatFrame'
+    rive:
+      $ref: '#/components/schemas/CallRoomRiveFrame'
   server:
     ice_servers:
       $ref: '#/components/schemas/CallRoomIceServersFrame'
@@ -9593,6 +9717,8 @@ x-relay-call-room-frames:
       $ref: '#/components/schemas/CallRoomServerAnswerFrame'
     subscription_offer:
       $ref: '#/components/schemas/CallRoomSubscriptionOfferFrame'
+    rive_channel:
+      $ref: '#/components/schemas/CallRoomRiveChannelFrame'
     ended:
       $ref: '#/components/schemas/CallRoomEndedFrame'
     error:

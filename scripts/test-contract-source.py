@@ -40,10 +40,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # List picker: sections, row ids, subtitles and images, multiple, the card subtitle and reply_message (Server #466, merged as 34943159 on top of #463), September 30, 2026.
 # Forms (Server #465, merged as ce3a45f5); suggested agents (#473); a person's Contact Card by user_id (#476); profile links on every person (#475); A2UI and the data part removed (#474), September 30, 2026.
 # Carried from Server staging fe702db3: #479 adds a person's about and the birthdate scope (#477 and #478 change no contract byte).
-UPSTREAM_COMMIT = "fe702db3e3948f27c764bc6ad1f7605d54eb2148"
-UPSTREAM_STAGING_COMMIT = "fe702db3e3948f27c764bc6ad1f7605d54eb2148"
-UPSTREAM_SIZE = 343728
-UPSTREAM_SHA256 = "f9da83bb862879aa86834e1a6d9d93cd1011c4c88a3a4b041edad00d18c35d58"
+# Carried from Server staging 736f112e: #488 an agent's Rive file (rive on Contact Card, chat handles and calls) and the rive DataChannel; #486 Message drops edited_at and unsent_at; #482 and #485 change no public schema they do not list, October 1, 2026.
+UPSTREAM_COMMIT = "736f112e78703f94751f8e5f36f0ae6fdf18ddd4"
+UPSTREAM_STAGING_COMMIT = "736f112e78703f94751f8e5f36f0ae6fdf18ddd4"
+UPSTREAM_SIZE = 349634
+UPSTREAM_SHA256 = "e3b40319f08398098f63a3847140f32f3d9b3c12e009eab4972db3b0e7eb4da8"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
