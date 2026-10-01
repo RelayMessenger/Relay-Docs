@@ -31,25 +31,25 @@ cd grok-voice-agent
 uv run bot.py
 ```
 
-The whole pipeline is the call's audio, Grok Voice, and the call's audio again:
+The whole pipeline is the call's audio, Grok Voice, and the call's audio again. The persona is the system instruction, and a developer message cues Grok to greet the caller in its own words:
 
 ```python
 llm = GrokRealtimeLLMService(
-    api_key=os.environ["XAI_API_KEY"],
+    api_key=api_key,
     settings=GrokRealtimeLLMService.Settings(
         system_instruction=PERSONA,
-        session_properties=events.SessionProperties(voice="eve"),
+        session_properties=events.SessionProperties(voice=os.environ.get("XAI_VOICE", "eve")),
     ),
 )
-pipeline = Pipeline([transport.input(), aggregators.user(), llm,
-                     transport.output(), aggregators.assistant()])
+
+GREETING_CUE = {"role": "developer", "content": "The caller just picked up. Greet them."}
 ```
 
 `XAI_VOICE` picks another of xAI's voices. To pair Grok with an ElevenLabs voice instead, see [ElevenLabs](/integrations/elevenlabs).
 
 ### Send pictures and videos with Grok Imagine
 
-The chat agent answers each message with Grok. Grok has two tools, `send_picture` and `send_video`, and decides when to use them:
+The chat agent answers each message with `grok-4.7` on xAI's Responses API. Grok has three tools, `send_picture`, `send_video` and `stay_silent`, and decides when to use them:
 
 ```bash
 cd grok-imagine-agent
@@ -57,15 +57,20 @@ npm install
 REFERENCE_IMAGE=./character.png npm start
 ```
 
-Each picture is a Grok Imagine edit of the reference picture, so the character looks the same every time. The agent uploads it through the Attachments API and sends it as a media part:
+Each picture is a Grok Imagine edit of the reference picture, so the character looks the same every time. The agent keeps what Grok Imagine made, uploads it through the Attachments API, and sends it as a media part:
 
 ```ts
-const still = await xai.picture(reference, picturePrompt(args.scene, args.caption)); // Grok Imagine image edit
-const media = call.function.name === "send_video"
-  ? await xai.video(still, args.action)                                               // Grok Imagine image to video
+const still = await made(deps, `${key}:still`, () =>
+  deps.xai.picture(deps.reference, picturePrompt(args.scene ?? "", args.caption)));
+media = call.name === "send_video"
+  ? await made(deps, `${key}:video`, () => deps.xai.video(still, `${args.action ?? ""} Static camera. ${SAME_LOOK}`))
   : still;
-await send([{ type: "media", attachment_id: await upload(relay, media) }]);
+attachmentId = await upload(deps.relay, media);
+deps.store.saveUpload(key, attachmentId);
+await send(deps, incoming.chatId, key, [{ type: "media", attachment_id: attachmentId }]);
 ```
+
+The agent saves each step in a local SQLite file (`RELAY_STATE_PATH`). When Relay delivers a message again, the agent resumes from the last saved step: it does not ask Grok again, make the picture again, or add the message twice.
 
 On start, the agent also makes a profile picture and sets it with `relay.contactCard.update({ handle, attachment_id })`.
 
@@ -80,17 +85,18 @@ Open Relay on your phone and message the chat agent, or ask it for a selfie. To 
 | Relay feature | Grok Voice agent | Grok Imagine chat agent |
 | --- | --- | --- |
 | Answer a call | Yes | No |
-| Reply in the chat | No, calls only | Yes, in text |
+| Reply in the chat | No, calls only | Yes, in text, with `grok-4.7` |
 | Send a picture | No | Yes, `grok-imagine-image-2.0` |
 | Send a video | No | Yes, 6 seconds, `grok-imagine-video-1.5` |
 | Set its profile picture | No | Yes, on start |
-| Group chats | No | No, direct chats only |
+| Group chats | No | Yes. Grok answers when the message is for it, and calls `stay_silent` otherwise |
 
 ## When it fails
 
 - The call rings out: start the bot before you call. It must join within the 32-second ring.
 - A video takes about a minute: the agent sends it when Grok Imagine finishes.
-- A picture fails: Grok reads the error from its tool and answers in text.
+- Grok Imagine fails: Grok reads the error from its tool and answers in text.
+- A send to Relay fails: the agent does not acknowledge the event. Relay delivers it again, and the agent resumes from the last saved step.
 
 ## Next steps
 

@@ -1314,30 +1314,40 @@ cd Relay-SDK/cookbook
 
 ### Speak with an ElevenLabs voice
 
-The bot hears the caller with ElevenLabs Scribe, answers with Grok, and speaks with ElevenLabs. It waits for `call.created` on the Agent WebSocket and joins that call with `RelayTransport`:
+The bot hears the caller with ElevenLabs Scribe, answers with Grok on xAI's Responses API, and speaks with ElevenLabs. It waits for `call.created` on the Agent WebSocket and joins that call with `RelayTransport`:
 
 ```bash
 cd elevenlabs-voice-agent
 uv run bot.py
 ```
 
-The pipeline is Pipecat's own services between Relay's input and output:
+The bot runs these Pipecat services between Relay's input and output:
 
 ```python
-stt = ElevenLabsRealtimeSTTService(api_key=os.environ["ELEVENLABS_API_KEY"])
-llm = GrokLLMService(
-    api_key=os.environ["XAI_API_KEY"],
-    settings=GrokLLMService.Settings(model="grok-4.20-non-reasoning", system_instruction=PERSONA),
-)
-tts = ElevenLabsTTSService(
-    api_key=os.environ["ELEVENLABS_API_KEY"],
-    settings=ElevenLabsTTSService.Settings(
-        voice=VOICE_ID, model="eleven_flash_v2_5",
-        stability=0.3, similarity_boost=0.75, style=0.0, use_speaker_boost=True, speed=1.2,
+stt = ElevenLabsRealtimeSTTService(api_key=elevenlabs_key)
+llm = OpenAIResponsesHttpLLMService(
+    api_key=xai_key,
+    base_url=XAI_BASE_URL,
+    settings=OpenAIResponsesHttpLLMService.Settings(
+        model=GROK_MODEL,
+        system_instruction=PERSONA,
+        # grok-4.7 reasons at "high" by default; "low" (its lowest documented
+        # effort) keeps a spoken answer quick.
+        reasoning=OpenAIResponsesReasoningConfig(effort="low"),
     ),
 )
-pipeline = Pipeline([transport.input(), stt, aggregators.user(), llm, tts,
-                     transport.output(), aggregators.assistant()])
+tts = ElevenLabsTTSService(
+    api_key=elevenlabs_key,
+    settings=ElevenLabsTTSService.Settings(
+        voice=VOICE_ID,
+        model="eleven_flash_v2_5",
+        stability=0.3,
+        similarity_boost=0.75,
+        style=0.0,
+        use_speaker_boost=True,
+        speed=1.2,
+    ),
+)
 ```
 
 The default voice is `SOYHLrjzK2X1ezoPC6cr`, ElevenLabs' premade voice "Harry", tuned high and fast for a cartoon character. Set `ELEVENLABS_VOICE_ID` to use another voice.
@@ -1352,14 +1362,22 @@ uv run create_agent.py
 ELEVENLABS_AGENT_ID=<agent_id> uv run bot.py
 ```
 
-The bridge sends the caller's audio and plays the agent's audio, both as 16 kHz PCM:
+The bridge follows ElevenLabs' own Python SDK. It drops audio from a reply the caller interrupted, answers each ping at once, and ends the Relay call when ElevenLabs closes its socket:
 
 ```python
-await ws.send(json.dumps({"user_audio_chunk": base64.b64encode(frame.audio).decode()}))
-
-if kind == "audio":
-    audio = base64.b64decode(message["audio_event"]["audio_base_64"])
-    await self.push_frame(OutputAudioRawFrame(audio=audio, sample_rate=16_000, num_channels=1))
+elif kind == "audio":
+    event = message["audio_event"]
+    # Audio from a response the caller already interrupted is stale.
+    if int(event["event_id"]) <= self._last_interrupt_id:
+        return
+    audio = base64.b64decode(event["audio_base_64"])
+    await self.push_frame(OutputAudioRawFrame(audio=audio, sample_rate=SAMPLE_RATE, num_channels=1))
+elif kind == "interruption":
+    # The caller talked over the agent: drop the agent's queued audio.
+    self._last_interrupt_id = int(message["interruption_event"]["event_id"])
+    await self.broadcast_interruption()
+elif kind == "ping":
+    await self._ws.send(json.dumps({"type": "pong", "event_id": message["ping_event"]["event_id"]}))
 ```
 
 An agent you made in the ElevenLabs dashboard works too. Keep its input and output audio formats at PCM 16000 Hz.
@@ -1375,7 +1393,8 @@ Open Relay on your phone, open the agent's chat, and start a voice call. The bot
 | Relay feature | ElevenLabs voice bot | ElevenLabs Agent |
 | --- | --- | --- |
 | Answer a call | Yes | Yes |
-| Greet the caller | Yes, in the model's own words | When the agent has a first message |
+| Stop talking when the caller talks over it | Yes | Yes, on the `interruption` event |
+| Greet the caller | Yes, in the model's own words | No. The agent has no first message and waits for the caller |
 | Voice Library and Voice Design voices | Paid ElevenLabs plans | Paid ElevenLabs plans |
 | Video in the call | Not in these recipes | No |
 | Text messages in the chat | No, calls only | No, calls only |
@@ -1425,25 +1444,25 @@ cd grok-voice-agent
 uv run bot.py
 ```
 
-The whole pipeline is the call's audio, Grok Voice, and the call's audio again:
+The whole pipeline is the call's audio, Grok Voice, and the call's audio again. The persona is the system instruction, and a developer message cues Grok to greet the caller in its own words:
 
 ```python
 llm = GrokRealtimeLLMService(
-    api_key=os.environ["XAI_API_KEY"],
+    api_key=api_key,
     settings=GrokRealtimeLLMService.Settings(
         system_instruction=PERSONA,
-        session_properties=events.SessionProperties(voice="eve"),
+        session_properties=events.SessionProperties(voice=os.environ.get("XAI_VOICE", "eve")),
     ),
 )
-pipeline = Pipeline([transport.input(), aggregators.user(), llm,
-                     transport.output(), aggregators.assistant()])
+
+GREETING_CUE = {"role": "developer", "content": "The caller just picked up. Greet them."}
 ```
 
 `XAI_VOICE` picks another of xAI's voices. To pair Grok with an ElevenLabs voice instead, see [ElevenLabs](/integrations/elevenlabs).
 
 ### Send pictures and videos with Grok Imagine
 
-The chat agent answers each message with Grok. Grok has two tools, `send_picture` and `send_video`, and decides when to use them:
+The chat agent answers each message with `grok-4.7` on xAI's Responses API. Grok has three tools, `send_picture`, `send_video` and `stay_silent`, and decides when to use them:
 
 ```bash
 cd grok-imagine-agent
@@ -1451,15 +1470,20 @@ npm install
 REFERENCE_IMAGE=./character.png npm start
 ```
 
-Each picture is a Grok Imagine edit of the reference picture, so the character looks the same every time. The agent uploads it through the Attachments API and sends it as a media part:
+Each picture is a Grok Imagine edit of the reference picture, so the character looks the same every time. The agent keeps what Grok Imagine made, uploads it through the Attachments API, and sends it as a media part:
 
 ```ts
-const still = await xai.picture(reference, picturePrompt(args.scene, args.caption)); // Grok Imagine image edit
-const media = call.function.name === "send_video"
-  ? await xai.video(still, args.action)                                               // Grok Imagine image to video
+const still = await made(deps, `${key}:still`, () =>
+  deps.xai.picture(deps.reference, picturePrompt(args.scene ?? "", args.caption)));
+media = call.name === "send_video"
+  ? await made(deps, `${key}:video`, () => deps.xai.video(still, `${args.action ?? ""} Static camera. ${SAME_LOOK}`))
   : still;
-await send([{ type: "media", attachment_id: await upload(relay, media) }]);
+attachmentId = await upload(deps.relay, media);
+deps.store.saveUpload(key, attachmentId);
+await send(deps, incoming.chatId, key, [{ type: "media", attachment_id: attachmentId }]);
 ```
+
+The agent saves each step in a local SQLite file (`RELAY_STATE_PATH`). When Relay delivers a message again, the agent resumes from the last saved step: it does not ask Grok again, make the picture again, or add the message twice.
 
 On start, the agent also makes a profile picture and sets it with `relay.contactCard.update({ handle, attachment_id })`.
 
@@ -1474,17 +1498,18 @@ Open Relay on your phone and message the chat agent, or ask it for a selfie. To 
 | Relay feature | Grok Voice agent | Grok Imagine chat agent |
 | --- | --- | --- |
 | Answer a call | Yes | No |
-| Reply in the chat | No, calls only | Yes, in text |
+| Reply in the chat | No, calls only | Yes, in text, with `grok-4.7` |
 | Send a picture | No | Yes, `grok-imagine-image-2.0` |
 | Send a video | No | Yes, 6 seconds, `grok-imagine-video-1.5` |
 | Set its profile picture | No | Yes, on start |
-| Group chats | No | No, direct chats only |
+| Group chats | No | Yes. Grok answers when the message is for it, and calls `stay_silent` otherwise |
 
 ## When it fails
 
 - The call rings out: start the bot before you call. It must join within the 32-second ring.
 - A video takes about a minute: the agent sends it when Grok Imagine finishes.
-- A picture fails: Grok reads the error from its tool and answers in text.
+- Grok Imagine fails: Grok reads the error from its tool and answers in text.
+- A send to Relay fails: the agent does not acknowledge the event. Relay delivers it again, and the agent resumes from the last saved step.
 
 ## Next steps
 

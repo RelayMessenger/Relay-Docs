@@ -24,30 +24,40 @@ cd Relay-SDK/cookbook
 
 ### Speak with an ElevenLabs voice
 
-The bot hears the caller with ElevenLabs Scribe, answers with Grok, and speaks with ElevenLabs. It waits for `call.created` on the Agent WebSocket and joins that call with `RelayTransport`:
+The bot hears the caller with ElevenLabs Scribe, answers with Grok on xAI's Responses API, and speaks with ElevenLabs. It waits for `call.created` on the Agent WebSocket and joins that call with `RelayTransport`:
 
 ```bash
 cd elevenlabs-voice-agent
 uv run bot.py
 ```
 
-The pipeline is Pipecat's own services between Relay's input and output:
+The bot runs these Pipecat services between Relay's input and output:
 
 ```python
-stt = ElevenLabsRealtimeSTTService(api_key=os.environ["ELEVENLABS_API_KEY"])
-llm = GrokLLMService(
-    api_key=os.environ["XAI_API_KEY"],
-    settings=GrokLLMService.Settings(model="grok-4.20-non-reasoning", system_instruction=PERSONA),
-)
-tts = ElevenLabsTTSService(
-    api_key=os.environ["ELEVENLABS_API_KEY"],
-    settings=ElevenLabsTTSService.Settings(
-        voice=VOICE_ID, model="eleven_flash_v2_5",
-        stability=0.3, similarity_boost=0.75, style=0.0, use_speaker_boost=True, speed=1.2,
+stt = ElevenLabsRealtimeSTTService(api_key=elevenlabs_key)
+llm = OpenAIResponsesHttpLLMService(
+    api_key=xai_key,
+    base_url=XAI_BASE_URL,
+    settings=OpenAIResponsesHttpLLMService.Settings(
+        model=GROK_MODEL,
+        system_instruction=PERSONA,
+        # grok-4.7 reasons at "high" by default; "low" (its lowest documented
+        # effort) keeps a spoken answer quick.
+        reasoning=OpenAIResponsesReasoningConfig(effort="low"),
     ),
 )
-pipeline = Pipeline([transport.input(), stt, aggregators.user(), llm, tts,
-                     transport.output(), aggregators.assistant()])
+tts = ElevenLabsTTSService(
+    api_key=elevenlabs_key,
+    settings=ElevenLabsTTSService.Settings(
+        voice=VOICE_ID,
+        model="eleven_flash_v2_5",
+        stability=0.3,
+        similarity_boost=0.75,
+        style=0.0,
+        use_speaker_boost=True,
+        speed=1.2,
+    ),
+)
 ```
 
 The default voice is `SOYHLrjzK2X1ezoPC6cr`, ElevenLabs' premade voice "Harry", tuned high and fast for a cartoon character. Set `ELEVENLABS_VOICE_ID` to use another voice.
@@ -62,14 +72,22 @@ uv run create_agent.py
 ELEVENLABS_AGENT_ID=<agent_id> uv run bot.py
 ```
 
-The bridge sends the caller's audio and plays the agent's audio, both as 16 kHz PCM:
+The bridge follows ElevenLabs' own Python SDK. It drops audio from a reply the caller interrupted, answers each ping at once, and ends the Relay call when ElevenLabs closes its socket:
 
 ```python
-await ws.send(json.dumps({"user_audio_chunk": base64.b64encode(frame.audio).decode()}))
-
-if kind == "audio":
-    audio = base64.b64decode(message["audio_event"]["audio_base_64"])
-    await self.push_frame(OutputAudioRawFrame(audio=audio, sample_rate=16_000, num_channels=1))
+elif kind == "audio":
+    event = message["audio_event"]
+    # Audio from a response the caller already interrupted is stale.
+    if int(event["event_id"]) <= self._last_interrupt_id:
+        return
+    audio = base64.b64decode(event["audio_base_64"])
+    await self.push_frame(OutputAudioRawFrame(audio=audio, sample_rate=SAMPLE_RATE, num_channels=1))
+elif kind == "interruption":
+    # The caller talked over the agent: drop the agent's queued audio.
+    self._last_interrupt_id = int(message["interruption_event"]["event_id"])
+    await self.broadcast_interruption()
+elif kind == "ping":
+    await self._ws.send(json.dumps({"type": "pong", "event_id": message["ping_event"]["event_id"]}))
 ```
 
 An agent you made in the ElevenLabs dashboard works too. Keep its input and output audio formats at PCM 16000 Hz.
@@ -85,7 +103,8 @@ Open Relay on your phone, open the agent's chat, and start a voice call. The bot
 | Relay feature | ElevenLabs voice bot | ElevenLabs Agent |
 | --- | --- | --- |
 | Answer a call | Yes | Yes |
-| Greet the caller | Yes, in the model's own words | When the agent has a first message |
+| Stop talking when the caller talks over it | Yes | Yes, on the `interruption` event |
+| Greet the caller | Yes, in the model's own words | No. The agent has no first message and waits for the caller |
 | Voice Library and Voice Design voices | Paid ElevenLabs plans | Paid ElevenLabs plans |
 | Video in the call | Not in these recipes | No |
 | Text messages in the chat | No, calls only | No, calls only |
