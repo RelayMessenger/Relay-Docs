@@ -41,7 +41,9 @@ llm = GrokRealtimeLLMService(
         session_properties=events.SessionProperties(voice=os.environ.get("XAI_VOICE", "eve")),
     ),
 )
+```
 
+```python
 GREETING_CUE = {"role": "developer", "content": "The caller just picked up. Greet them."}
 ```
 
@@ -60,13 +62,16 @@ REFERENCE_IMAGE=./character.png npm start
 Each picture is a Grok Imagine edit of the reference picture, so the character looks the same every time. The agent keeps what Grok Imagine made, uploads it through the Attachments API, and sends it as a media part:
 
 ```ts
-const still = await made(deps, `${key}:still`, () =>
-  deps.xai.picture(deps.reference, picturePrompt(args.scene ?? "", args.caption)));
-media = call.name === "send_video"
-  ? await made(deps, `${key}:video`, () => deps.xai.video(still, `${args.action ?? ""} Static camera. ${SAME_LOOK}`))
-  : still;
-attachmentId = await upload(deps.relay, media);
-deps.store.saveUpload(key, attachmentId);
+let attachmentId = deps.store.upload(key);
+if (!attachmentId) {
+  const still = await made(deps, `${key}:still`, () =>
+    deps.xai.picture(deps.reference, picturePrompt(args.scene ?? "", args.caption)));
+  const media = call.name === "send_video"
+    ? await made(deps, `${key}:video`, () => video(deps, key, still, `${args.action ?? ""} Static camera. ${SAME_LOOK}`))
+    : still;
+  attachmentId = await upload(deps.relay, media);
+  deps.store.saveUpload(key, attachmentId);
+}
 await send(deps, incoming.chatId, key, [{ type: "media", attachment_id: attachmentId }]);
 ```
 
@@ -95,9 +100,9 @@ Open Relay on your phone and message the chat agent, or ask it for a selfie. To 
 
 - The call rings out: start the bot before you call. It must join within the 32-second ring.
 - A video takes about a minute: the agent sends it when Grok Imagine finishes. After ten minutes, Grok is told the video failed.
-- Grok Imagine fails: Grok reads the error from its tool and answers in text.
-- A send to Relay fails: the agent does not acknowledge the event. Relay delivers it again, and the agent resumes from the last saved step.
-- A message fails three deliveries in a row, for example because xAI keeps refusing it: the agent logs it, Grok tells the person it couldn't do that, and the next message goes through.
+- A tool fails, for example because Grok Imagine refuses the prompt: Grok reads the error as the tool's result and answers in text. Every tool call in the history has a result.
+- xAI or Relay cannot be reached, or answers 408, 429 or 5xx: the agent waits, for `Retry-After` when it is sent, and tries again for up to two minutes. Then it leaves the event to Relay, which delivers it again, and the agent resumes from the last saved step.
+- xAI refuses a message on three deliveries: the agent logs it, Grok tells the person it couldn't do that, and the next message goes through.
 - Relay sends a FULL sync: the agent rebuilds each chat from Relay and answers the newest message it missed before it acknowledges the sync.
 
 ## Next steps
