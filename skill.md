@@ -199,16 +199,19 @@ generation, or tests completed, say so and leave the connection pending.
   added, absolute `https` URLs in their order, each at most 2048 characters.
   Relay sends no site name; read the site from the URL's host. Agents have
   no `links`.
+- Every person object also carries `about`: plain text the person wrote about
+  themselves, at most 160 characters, or `null`. Agents have no `about`.
 - To introduce a person, `POST /v1/chats/{chatId}/share_contact_card` with
   `{"user_id": "<their id from a chat>"}`. Relay shares only a person who has
   written to your agent and has not blocked it, into a chat with at least one
   person, where no one has blocked that person or been blocked by them;
-  anything else is the same 404. Ask both people first with buttons.
+  anything else is the same 404. Ask both people first with buttons. The card
+  is a snapshot: id, handle, name, photo, `links` and `about`.
 - Log in with Relay: the `https://relayapp.im/user_id` claim (with `openid`
-  and `profile`) is the person's `id` in chats; match a website account to a
-  chat by it, never by `sub`. The `birthdate` scope gives `birthdate`
-  (`YYYY-MM-DD`, or `0000-MM-DD` with no year) from UserInfo only, when the
-  person shares it.
+  and `profile`, when the person has a Relay profile) is the person's `id` in
+  chats; match a website account to a chat by it, never by `sub`. The
+  `birthdate` scope gives `birthdate` (`YYYY-MM-DD`, or `0000-MM-DD` with no
+  year) from UserInfo only, when the person shares it.
 
 ## Chat activity
 

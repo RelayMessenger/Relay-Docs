@@ -39,11 +39,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # #463, merged as bf085edc on top of #468's age range), September 30, 2026.
 # List picker: sections, row ids, subtitles and images, multiple, the card subtitle and reply_message (Server #466, merged as 34943159 on top of #463), September 30, 2026.
 # Forms (Server #465, merged as ce3a45f5); suggested agents (#473); a person's Contact Card by user_id (#476); profile links on every person (#475); A2UI and the data part removed (#474), September 30, 2026.
-# Carried from Server staging 65c26f16 (#477 changes no contract byte after 671d347e).
-UPSTREAM_COMMIT = "65c26f166e1011be50205737b6f9273a50f08ee0"
-UPSTREAM_STAGING_COMMIT = "65c26f166e1011be50205737b6f9273a50f08ee0"
-UPSTREAM_SIZE = 339872
-UPSTREAM_SHA256 = "106c738d4152b65be03f32938d89d9a433f87156478b0c8ce65abbd70ad6a1c9"
+# Carried from Server staging fe702db3: #479 adds a person's about and the birthdate scope (#477 and #478 change no contract byte).
+UPSTREAM_COMMIT = "fe702db3e3948f27c764bc6ad1f7605d54eb2148"
+UPSTREAM_STAGING_COMMIT = "fe702db3e3948f27c764bc6ad1f7605d54eb2148"
+UPSTREAM_SIZE = 343728
+UPSTREAM_SHA256 = "f9da83bb862879aa86834e1a6d9d93cd1011c4c88a3a4b041edad00d18c35d58"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",

@@ -4030,7 +4030,7 @@ This is a direct chat between two agents, read by the second one: `is_me`, and `
 | Field | Meaning |
 | --- | --- |
 | `id` | The chat's UUID |
-| `handles` | Every Contact with its current or most recent membership: `status`, `joined_at`, `left_at`, and `is_me`, and `is_contact`; a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), and [`links`](/events#read-a-persons-profile-links) |
+| `handles` | Every Contact with its current or most recent membership: `status`, `joined_at`, `left_at`, and `is_me`, and `is_contact`; a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `is_group` | `true` for a group chat |
 | `display_name` | The group's name; a direct chat is named after the other Contact |
 | `group_chat_icon` | A signed download URL for the group photo, or `null` |
@@ -4989,17 +4989,10 @@ Send an `Idempotency-Key` header to retry a share without sharing twice, as you 
 
 Send `user_id` to share a person's card, for example to introduce two people who each talk to your agent. Use the person's `id` as your agent sees it in a chat: on `system_event.actor`, or in the chat's `handles`. Send `handle` or `user_id`, never both.
 
-The TypeScript SDK does not take `user_id` yet, so send the request with `fetch`:
-
 <CodeGroup>
-```typescript TypeScript
-await fetch(`https://api.staging.relayapp.im/v1/chats/${chatId}/share_contact_card`, {
-  method: "POST",
-  headers: {
-    Authorization: `Bearer ${process.env.RELAY_AGENT_TOKEN}`,
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({ user_id: "0199a3c4-5b6d-7e8f-9a0b-1c2d3e4f5a6b" }),
+```typescript TypeScript SDK
+await relay.chats.shareContactCard(chatId, {
+  user_id: "0199a3c4-5b6d-7e8f-9a0b-1c2d3e4f5a6b",
 });
 ```
 
@@ -5027,7 +5020,7 @@ Relay shares the card only when all of these are true:
 
 Any other case returns the same `404`. Relay does not ask anyone before it shares. Ask both people first, for example with [buttons](/interactions/buttons), and share the card only after both agree.
 
-A person's card is a snapshot of their profile when you shared it: `id`, `handle`, name, photo, and [`links`](/events#read-a-persons-profile-links). It never carries their email, birthdate, or age range. When the person deletes their account, every card of theirs reads "Deleted Account", with a `null` handle, no photo, no links, and `is_active` `false`.
+A person's card is a snapshot of their profile when you shared it: `id`, `handle`, name, photo, [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about). It never carries their email, birthdate, or age range. When the person deletes their account, every card of theirs reads "Deleted Account", with a `null` handle, no photo, no links, no about, and `is_active` `false`.
 
 ## What you get back
 
@@ -5037,7 +5030,7 @@ A successful share returns `204` with no body. Each successful call shares the c
 HTTP/1.1 204 No Content
 ```
 
-In [Chat history](/chats/history), `system_event.contact_card` holds the card, and `system_event.actor` names who shared it, with `display_name`, `image_url` and `image_color`. Sharing by handle adds the agent's `id`, `subtitle`, and `url`. Sharing by `user_id` adds the person's `id` and `links`. The bodyless own-card shape stays unchanged.
+In [Chat history](/chats/history), `system_event.contact_card` holds the card, and `system_event.actor` names who shared it, with `display_name`, `image_url` and `image_color`. Sharing by handle adds the agent's `id`, `subtitle`, and `url`. Sharing by `user_id` adds the person's `id`, `links`, and `about`. The bodyless own-card shape stays unchanged.
 
 **A card shared by handle is a snapshot.** It keeps the agent's handle, name, photo and subtitle from the moment you shared it, and never changes afterwards, even when the agent is renamed, changes its photo, turns Private or is deleted. `url` opens the agent's chat. To open the agent in your own client, look it up by the card's `id` (`POST /v1/contacts/lookup` with `{"id": "..."}`), because its handle may have changed since: a deleted agent returns `404`, and a Private one returns `can_message: false`.
 
@@ -6219,7 +6212,8 @@ Use the `state` and `nonce` your login set (the button does), and treat a Relay 
 | Scope | Claims | Present |
 | --- | --- | --- |
 | `openid` | `sub`: the person's Relay login ID | Always |
-| `profile` | `name`, `preferred_username` (their @handle, without the @), `picture`, and `https://relayapp.im/user_id` | Always |
+| `profile` | `name`, `preferred_username` (their @handle, without the @), `picture` | Always |
+| `openid` and `profile` | `https://relayapp.im/user_id`: the person's `id` in chats | Only when the person has a Relay profile |
 | `email` | `email`, `email_verified` | Only when the person shares it |
 | `phone` | `phone_number` (E.164), `phone_number_verified` | Only when the person shares it |
 | `birthdate` | `birthdate`: `YYYY-MM-DD`, or `0000-MM-DD` when the person gave no year | Only from UserInfo, and only when the person has a birthday and shares it |
@@ -6238,7 +6232,7 @@ The same claims come from the UserInfo endpoint, except `birthdate`, which is ne
 }
 ```
 
-Relay gives this claim in the ID token and from UserInfo, only to a Log in with Relay client, and only when `openid` and `profile` are granted.
+Relay gives this claim in the ID token and from UserInfo, only to a Log in with Relay client, only when `openid` and `profile` are granted, and only when the person has a Relay profile.
 
 ## When it fails
 
@@ -13514,6 +13508,14 @@ Relay stores each link as the WHATWG URL parser writes it, with the scheme and h
 | Length of one link | 2048 characters |
 | Scheme | `https` only |
 
+## Read a person's about
+
+Every person in an event also carries `about`: a line of plain text, at most 160 characters, that they wrote about themselves in Relay. It is `null` when they wrote none. An agent has no `about`.
+
+```json
+{"about": "Builds robots in Ann Arbor."}
+```
+
 ## Choose an event type
 
 Subscribe to the events your backend acts on and ignore the rest; a webhook subscription names them in `subscribed_events`, and a WebSocket consumer receives all of them. Most agents need `message.received` first and `chat.created` second.
@@ -13688,7 +13690,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | `id` | Message ID |
 | `idempotency_key` | The sender's idempotency key, or `null` |
 | `direction` | `outbound` when your agent sent it, `inbound` when it received it |
-| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), and [`links`](/events#read-a-persons-profile-links) |
+| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `parts` | Text, media, or link parts |
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
@@ -13788,7 +13790,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | `id` | Message ID |
 | `idempotency_key` | The sender's idempotency key, or `null` |
 | `direction` | `outbound` when your agent sent it, `inbound` when it received it |
-| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), and [`links`](/events#read-a-persons-profile-links) |
+| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `parts` | Text, media, or link parts |
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
@@ -13888,7 +13890,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | `id` | Message ID |
 | `idempotency_key` | The sender's idempotency key, or `null` |
 | `direction` | `outbound` when your agent sent it, `inbound` when it received it |
-| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), and [`links`](/events#read-a-persons-profile-links) |
+| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `parts` | Text, media, or link parts |
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
@@ -13987,7 +13989,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | `id` | Message ID |
 | `idempotency_key` | The sender's idempotency key, or `null` |
 | `direction` | `outbound` when your agent sent it, `inbound` when it received it |
-| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), and [`links`](/events#read-a-persons-profile-links) |
+| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `parts` | Text, media, or link parts |
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
@@ -14123,7 +14125,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | `id` | Chat ID |
 | `display_name` | Chat display name |
 | `group_chat_icon` | Group icon URL, or `null` |
-| `handles` | Every handle in the chat and its membership state, including `is_contact` (whether the caller holds this handle as a contact); a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), and [`links`](/events#read-a-persons-profile-links) |
+| `handles` | Every handle in the chat and its membership state, including `is_contact` (whether the caller holds this handle as a contact); a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `is_group` | Whether this is a group chat |
 | `created_at` | Chat creation time |
 | `updated_at` | Chat update time |
@@ -14234,7 +14236,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Chat ID |
-| `contact` | The typing contact's `id`, `handle`, and `kind` (`user` or `agent`); a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), and [`links`](/events#read-a-persons-profile-links) |
+| `contact` | The typing contact's `id`, `handle`, and `kind` (`user` or `agent`); a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 
 ## Handle the event
 
@@ -14281,7 +14283,7 @@ This is a complete envelope as the staging agent received it. The `data` object 
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Chat ID |
-| `contact` | The typing contact's `id`, `handle`, and `kind` (`user` or `agent`); a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), and [`links`](/events#read-a-persons-profile-links) |
+| `contact` | The typing contact's `id`, `handle`, and `kind` (`user` or `agent`); a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 
 ## Handle the event
 
@@ -14308,7 +14310,7 @@ The `data` object is the `ParticipantAddedEvent` schema from the API contract. T
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Group chat ID |
-| `participant` | The added contact's handle, including membership status; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), and [`links`](/events#read-a-persons-profile-links) |
+| `participant` | The added contact's handle, including membership status; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `added_at` | When the contact joined |
 
 ## Handle the event
@@ -14336,7 +14338,7 @@ The `data` object is the `ParticipantRemovedEvent` schema from the API contract.
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Group chat ID |
-| `participant` | The departing contact's handle, with `status` `left` or `removed` and `left_at`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), and [`links`](/events#read-a-persons-profile-links) |
+| `participant` | The departing contact's handle, with `status` `left` or `removed` and `left_at`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `removed_at` | When the contact left or was removed |
 
 ## Handle the event
@@ -14363,7 +14365,7 @@ The `data` object is the `ContactAddedEvent` schema from the API contract. The e
 
 | Field | Meaning |
 | --- | --- |
-| `contact` | The person's `id`, `handle`, `display_name`, [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), and [`links`](/events#read-a-persons-profile-links) |
+| `contact` | The person's `id`, `handle`, `display_name`, [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `chat_id` | The direct chat created or reused for this contact |
 
 ## Handle the event
@@ -14390,7 +14392,7 @@ The `data` object is the `ContactRemovedEvent` schema from the API contract. The
 
 | Field | Meaning |
 | --- | --- |
-| `contact` | The person's `id`, `handle`, `display_name`, [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), and [`links`](/events#read-a-persons-profile-links) |
+| `contact` | The person's `id`, `handle`, `display_name`, [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 
 ## Handle the event
 
@@ -14417,7 +14419,7 @@ The `data` object is the `ReactionEventBase` schema from the API contract. The e
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Chat ID |
-| `from_handle` | The handle that added or removed the reaction; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), and [`links`](/events#read-a-persons-profile-links) |
+| `from_handle` | The handle that added or removed the reaction; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `message_id` | Message containing the affected part |
 | `part_index` | Zero-based index of the affected part |
 | `reaction_type` | One of `love`, `like`, `dislike`, `laugh`, `emphasize`, `question`, or `custom` |
@@ -14450,7 +14452,7 @@ The `data` object is the `ReactionEventBase` schema from the API contract. The e
 | Field | Meaning |
 | --- | --- |
 | `chat_id` | Chat ID |
-| `from_handle` | The handle that added or removed the reaction; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), and [`links`](/events#read-a-persons-profile-links) |
+| `from_handle` | The handle that added or removed the reaction; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `message_id` | Message containing the affected part |
 | `part_index` | Zero-based index of the affected part |
 | `reaction_type` | One of `love`, `like`, `dislike`, `laugh`, `emphasize`, `question`, or `custom` |
@@ -14484,8 +14486,8 @@ The `data` object is the `CallResult` schema from the API contract: one `call` f
 | --- | --- |
 | `call.id` | Call ID |
 | `call.chat_id` | The individual chat that carries the call |
-| `call.from` | The caller's `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), and [`links`](/events#read-a-persons-profile-links) |
-| `call.to` | One recipient with `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), and [`links`](/events#read-a-persons-profile-links) |
+| `call.from` | The caller's `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
+| `call.to` | One recipient with `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `call.status` | One of `ringing`, `in-progress`, `completed`, `no-answer`, `canceled`, `busy`, or `failed` |
 | `call.revision` | Increases on every state change |
 
@@ -14515,8 +14517,8 @@ The `data` object is the `CallResult` schema from the API contract: one `call` f
 | --- | --- |
 | `call.id` | Call ID |
 | `call.chat_id` | The individual chat that carries the call |
-| `call.from` | The caller's `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), and [`links`](/events#read-a-persons-profile-links) |
-| `call.to` | One recipient with `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), and [`links`](/events#read-a-persons-profile-links) |
+| `call.from` | The caller's `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
+| `call.to` | One recipient with `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `call.status` | One of `ringing`, `in-progress`, `completed`, `no-answer`, `canceled`, `busy`, or `failed` |
 | `call.revision` | Increases on every state change |
 
@@ -14546,8 +14548,8 @@ The `data` object is the `CallResult` schema from the API contract: one `call` f
 | --- | --- |
 | `call.id` | Call ID |
 | `call.chat_id` | The individual chat that carries the call |
-| `call.from` | The caller's `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), and [`links`](/events#read-a-persons-profile-links) |
-| `call.to` | One recipient with `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), and [`links`](/events#read-a-persons-profile-links) |
+| `call.from` | The caller's `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
+| `call.to` | One recipient with `id`, `handle`, and `kind`; a person also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
 | `call.status` | One of `ringing`, `in-progress`, `completed`, `no-answer`, `canceled`, `busy`, or `failed` |
 | `call.revision` | Increases on every state change |
 
@@ -15850,13 +15852,15 @@ Relay draws one set of interactive parts: [buttons](/interactions/buttons), [sel
 <Update label="2026-09-30" tags={["API"]}>
 ## Share a person's card
 
-Send `user_id` to `POST /v1/chats/{chatId}/share_contact_card` to share a person's card, for example to introduce two people. You can share a person who has written to your agent and has not blocked it, into a chat with at least one person in it, where no one has blocked that person or been blocked by them. The card is a snapshot of the person's profile: id, handle, name, photo and links. When the person deletes their account, every card of theirs reads "Deleted Account". See [share a person's card](/chats/share-contact-card#share-a-persons-card).
+Send `user_id` to `POST /v1/chats/{chatId}/share_contact_card` to share a person's card, for example to introduce two people. You can share a person who has written to your agent and has not blocked it, into a chat with at least one person in it, where no one has blocked that person or been blocked by them. The card is a snapshot of the person's profile: id, handle, name, photo, links and about. When the person deletes their account, every card of theirs reads "Deleted Account". See [share a person's card](/chats/share-contact-card#share-a-persons-card).
 </Update>
 
 <Update label="2026-09-30" tags={["API"]}>
-## Every person carries their profile links
+## Every person carries their profile links and about
 
 Every person object now carries `links`, beside `timezone` and `age_range`: up to 5 `https` profile links the person added in Relay, in the order they chose. The list is empty when they added none. See [read a person's profile links](/events#read-a-persons-profile-links).
+
+Every person object also carries `about`, at most 160 characters of plain text the person wrote about themselves, or `null`. See [read a person's about](/events#read-a-persons-about).
 </Update>
 
 <Update label="2026-09-30" tags={["API"]}>
@@ -19526,6 +19530,15 @@ components:
               - https://www.instagram.com/ana
           description: >-
             The person's profile links, as they set them in Relay: at most 5 absolute https URLs, in the order they chose, each stored as the WHATWG URL parser normalises it (scheme and host lowercased, a non-ASCII host as punycode) and different from the others after normalising. Relay refuses control characters and whitespace, userinfo, hosts that are not public (localhost, IP literals, single-label names, .local and other private names), and a host label that mixes Latin with another script. Empty when they set none. Present only when kind is user. Relay sends no platform name; read the site from the URL.
+        about:
+          type:
+            - string
+            - "null"
+          maxLength: 160
+          examples:
+            - Builds robots in Ann Arbor.
+          description: >-
+            The person's about, as they wrote it in Relay: plain text, at most 160 characters, with no control characters. Null when they wrote none. Present only when kind is user.
     Call:
       type: object
       additionalProperties: false
@@ -20679,6 +20692,15 @@ components:
               - https://www.instagram.com/ana
           description: >-
             The person's profile links, as they set them in Relay: at most 5 absolute https URLs, in the order they chose, each stored as the WHATWG URL parser normalises it (scheme and host lowercased, a non-ASCII host as punycode) and different from the others after normalising. Relay refuses control characters and whitespace, userinfo, hosts that are not public (localhost, IP literals, single-label names, .local and other private names), and a host label that mixes Latin with another script. Empty when they set none. Null when the person has no Relay account. Relay sends no platform name; read the site from the URL.
+        about:
+          type:
+            - string
+            - "null"
+          maxLength: 160
+          examples:
+            - Builds robots in Ann Arbor.
+          description: >-
+            The person's about, as they wrote it in Relay: plain text, at most 160 characters, with no control characters. Null when they wrote none or have no Relay account.
     OwnerPerson:
       type: object
       additionalProperties: false
@@ -20741,6 +20763,15 @@ components:
               - https://www.instagram.com/ana
           description: >-
             The person's profile links, as they set them in Relay: at most 5 absolute https URLs, in the order they chose, each stored as the WHATWG URL parser normalises it (scheme and host lowercased, a non-ASCII host as punycode) and different from the others after normalising. Relay refuses control characters and whitespace, userinfo, hosts that are not public (localhost, IP literals, single-label names, .local and other private names), and a host label that mixes Latin with another script. Empty when they set none. Relay sends no platform name; read the site from the URL.
+        about:
+          type:
+            - string
+            - "null"
+          maxLength: 160
+          examples:
+            - Builds robots in Ann Arbor.
+          description: >-
+            The person's about, as they wrote it in Relay: plain text, at most 160 characters, with no control characters. Null when they wrote none.
     ChatHandle:
       type: object
       required:
@@ -20875,6 +20906,15 @@ components:
               - https://www.instagram.com/ana
           description: >-
             The person's profile links, as they set them in Relay: at most 5 absolute https URLs, in the order they chose, each stored as the WHATWG URL parser normalises it (scheme and host lowercased, a non-ASCII host as punycode) and different from the others after normalising. Relay refuses control characters and whitespace, userinfo, hosts that are not public (localhost, IP literals, single-label names, .local and other private names), and a host label that mixes Latin with another script. Empty when they set none. Present only when kind is user. Relay sends no platform name; read the site from the URL.
+        about:
+          type:
+            - string
+            - "null"
+          maxLength: 160
+          examples:
+            - Builds robots in Ann Arbor.
+          description: >-
+            The person's about, as they wrote it in Relay: plain text, at most 160 characters, with no control characters. Null when they wrote none. Present only when kind is user.
         is_contact:
           type: boolean
           description: >-
@@ -21200,6 +21240,15 @@ components:
               - https://www.instagram.com/ana
           description: >-
             The person's profile links, as they set them in Relay: at most 5 absolute https URLs, in the order they chose, each stored as the WHATWG URL parser normalises it (scheme and host lowercased, a non-ASCII host as punycode) and different from the others after normalising. Relay refuses control characters and whitespace, userinfo, hosts that are not public (localhost, IP literals, single-label names, .local and other private names), and a host label that mixes Latin with another script. Empty when they set none. Present only when kind is user. Relay sends no platform name; read the site from the URL.
+        about:
+          type:
+            - string
+            - "null"
+          maxLength: 160
+          examples:
+            - Builds robots in Ann Arbor.
+          description: >-
+            The person's about, as they wrote it in Relay: plain text, at most 160 characters, with no control characters. Null when they wrote none. Present only when kind is user.
         age_rating:
           $ref: "#/components/schemas/AgentAgeRating"
     AgentCategory:
@@ -21595,7 +21644,16 @@ components:
           description: >-
             A shared person's profile links when the card was shared, present
             only on a person's card. A person's card carries id, handle, name,
-            photo and links, and nothing else.
+            photo, links and about, and nothing else.
+        about:
+          type:
+            - string
+            - "null"
+          maxLength: 160
+          examples:
+            - Builds robots in Ann Arbor.
+          description: >-
+            A shared person's about when the card was shared, at most 160 characters, or null when they wrote none. Present only on a person's card.
         handle:
           type:
             - string
@@ -21619,6 +21677,7 @@ components:
         - timezone
         - age_range
         - links
+        - about
       properties:
         id:
           type: string
@@ -21674,6 +21733,15 @@ components:
               - https://www.instagram.com/ana
           description: >-
             The person's profile links, as they set them in Relay: at most 5 absolute https URLs, in the order they chose, each stored as the WHATWG URL parser normalises it (scheme and host lowercased, a non-ASCII host as punycode) and different from the others after normalising. Relay refuses control characters and whitespace, userinfo, hosts that are not public (localhost, IP literals, single-label names, .local and other private names), and a host label that mixes Latin with another script. Empty when they set none. Relay sends no platform name; read the site from the URL.
+        about:
+          type:
+            - string
+            - "null"
+          maxLength: 160
+          examples:
+            - Builds robots in Ann Arbor.
+          description: >-
+            The person's about, as they wrote it in Relay: plain text, at most 160 characters, with no control characters. Null when they wrote none.
     ContactRemovedEvent:
       type: object
       additionalProperties: false
@@ -23224,11 +23292,16 @@ components:
         - deny
     OAuth2Scope:
       type: string
+      description: >-
+        An OpenID Connect scope a Log in with Relay client may ask for.
+        `birthdate` asks for the person's birthday as the OpenID `birthdate`
+        claim (YYYY-MM-DD, or 0000-MM-DD when they gave no year).
       enum:
         - openid
         - profile
         - email
         - phone
+        - birthdate
     OAuth2Client:
       type: object
       additionalProperties: false
@@ -24611,6 +24684,15 @@ components:
               - https://www.instagram.com/ana
           description: >-
             The person's profile links, as they set them in Relay: at most 5 absolute https URLs, in the order they chose, each stored as the WHATWG URL parser normalises it (scheme and host lowercased, a non-ASCII host as punycode) and different from the others after normalising. Relay refuses control characters and whitespace, userinfo, hosts that are not public (localhost, IP literals, single-label names, .local and other private names), and a host label that mixes Latin with another script. Empty when they set none. Present only when kind is user. Relay sends no platform name; read the site from the URL.
+        about:
+          type:
+            - string
+            - "null"
+          maxLength: 160
+          examples:
+            - Builds robots in Ann Arbor.
+          description: >-
+            The person's about, as they wrote it in Relay: plain text, at most 160 characters, with no control characters. Null when they wrote none. Present only when kind is user.
     SystemEventParty:
       type: object
       additionalProperties: false
@@ -24673,6 +24755,15 @@ components:
               - https://www.instagram.com/ana
           description: >-
             The person's profile links, as they set them in Relay: at most 5 absolute https URLs, in the order they chose, each stored as the WHATWG URL parser normalises it (scheme and host lowercased, a non-ASCII host as punycode) and different from the others after normalising. Relay refuses control characters and whitespace, userinfo, hosts that are not public (localhost, IP literals, single-label names, .local and other private names), and a host label that mixes Latin with another script. Empty when they set none. Present only when kind is user. Relay sends no platform name; read the site from the URL.
+        about:
+          type:
+            - string
+            - "null"
+          maxLength: 160
+          examples:
+            - Builds robots in Ann Arbor.
+          description: >-
+            The person's about, as they wrote it in Relay: plain text, at most 160 characters, with no control characters. Null when they wrote none. Present only when kind is user.
     SystemPartResponse:
       type: object
       additionalProperties: false
@@ -24857,6 +24948,15 @@ components:
               - https://www.instagram.com/ana
           description: >-
             The person's profile links, as they set them in Relay: at most 5 absolute https URLs, in the order they chose, each stored as the WHATWG URL parser normalises it (scheme and host lowercased, a non-ASCII host as punycode) and different from the others after normalising. Relay refuses control characters and whitespace, userinfo, hosts that are not public (localhost, IP literals, single-label names, .local and other private names), and a host label that mixes Latin with another script. Empty when they set none. Present only when kind is user. Relay sends no platform name; read the site from the URL.
+        about:
+          type:
+            - string
+            - "null"
+          maxLength: 160
+          examples:
+            - Builds robots in Ann Arbor.
+          description: >-
+            The person's about, as they wrote it in Relay: plain text, at most 160 characters, with no control characters. Null when they wrote none. Present only when kind is user.
     UnblockHandleRequest:
       type: object
       required:

@@ -104,17 +104,10 @@ Send an `Idempotency-Key` header to retry a share without sharing twice, as you 
 
 Send `user_id` to share a person's card, for example to introduce two people who each talk to your agent. Use the person's `id` as your agent sees it in a chat: on `system_event.actor`, or in the chat's `handles`. Send `handle` or `user_id`, never both.
 
-The TypeScript SDK does not take `user_id` yet, so send the request with `fetch`:
-
 <CodeGroup>
-```typescript TypeScript
-await fetch(`https://api.staging.relayapp.im/v1/chats/${chatId}/share_contact_card`, {
-  method: "POST",
-  headers: {
-    Authorization: `Bearer ${process.env.RELAY_AGENT_TOKEN}`,
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({ user_id: "0199a3c4-5b6d-7e8f-9a0b-1c2d3e4f5a6b" }),
+```typescript TypeScript SDK
+await relay.chats.shareContactCard(chatId, {
+  user_id: "0199a3c4-5b6d-7e8f-9a0b-1c2d3e4f5a6b",
 });
 ```
 
@@ -142,7 +135,7 @@ Relay shares the card only when all of these are true:
 
 Any other case returns the same `404`. Relay does not ask anyone before it shares. Ask both people first, for example with [buttons](/interactions/buttons), and share the card only after both agree.
 
-A person's card is a snapshot of their profile when you shared it: `id`, `handle`, name, photo, and [`links`](/events#read-a-persons-profile-links). It never carries their email, birthdate, or age range. When the person deletes their account, every card of theirs reads "Deleted Account", with a `null` handle, no photo, no links, and `is_active` `false`.
+A person's card is a snapshot of their profile when you shared it: `id`, `handle`, name, photo, [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about). It never carries their email, birthdate, or age range. When the person deletes their account, every card of theirs reads "Deleted Account", with a `null` handle, no photo, no links, no about, and `is_active` `false`.
 
 ## What you get back
 
@@ -152,7 +145,7 @@ A successful share returns `204` with no body. Each successful call shares the c
 HTTP/1.1 204 No Content
 ```
 
-In [Chat history](/chats/history), `system_event.contact_card` holds the card, and `system_event.actor` names who shared it, with `display_name`, `image_url` and `image_color`. Sharing by handle adds the agent's `id`, `subtitle`, and `url`. Sharing by `user_id` adds the person's `id` and `links`. The bodyless own-card shape stays unchanged.
+In [Chat history](/chats/history), `system_event.contact_card` holds the card, and `system_event.actor` names who shared it, with `display_name`, `image_url` and `image_color`. Sharing by handle adds the agent's `id`, `subtitle`, and `url`. Sharing by `user_id` adds the person's `id`, `links`, and `about`. The bodyless own-card shape stays unchanged.
 
 **A card shared by handle is a snapshot.** It keeps the agent's handle, name, photo and subtitle from the moment you shared it, and never changes afterwards, even when the agent is renamed, changes its photo, turns Private or is deleted. `url` opens the agent's chat. To open the agent in your own client, look it up by the card's `id` (`POST /v1/contacts/lookup` with `{"id": "..."}`), because its handle may have changed since: a deleted agent returns `404`, and a Private one returns `can_message: false`.
 
