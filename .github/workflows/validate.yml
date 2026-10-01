@@ -23,6 +23,25 @@ jobs:
       - name: Check minimal docs contract
         run: python3 scripts/validate-docs.py
 
+      # Every snippet on a cookbook-backed integration page must be real code
+      # from the Relay-SDK recipe it documents, at the branch the page links
+      # (scripts/origins.py source_ref(): staging here, main once the target
+      # is production). Cloned outside the workspace so the link, build and
+      # internal-reference checks below never scan SDK files.
+      - name: Cookbook snippets match the Relay-SDK recipes
+        run: |
+          set -euo pipefail
+          ref="$(python3 -c 'import sys; sys.path.insert(0, "scripts"); from origins import source_ref; print(source_ref())')"
+          sdk="$RUNNER_TEMP/relay-sdk"
+          git clone --quiet --depth 1 --branch "$ref" https://github.com/RelayMessenger/Relay-SDK.git "$sdk"
+          echo "Relay-SDK $ref at $(git -C "$sdk" rev-parse HEAD)"
+          RELAY_SDK_DIR="$sdk" python3 scripts/test-cookbook-snippets.py -v 2>&1 | tee "$RUNNER_TEMP/snippets.log"
+          # A skipped run would pass silently; this check must have run.
+          if grep -q "skipped" "$RUNNER_TEMP/snippets.log"; then
+            echo "::error::The cookbook snippet check was skipped."
+            exit 1
+          fi
+
       - name: Check payment fee documentation
         run: python3 scripts/test-payment-fee.py
 
