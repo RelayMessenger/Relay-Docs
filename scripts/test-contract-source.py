@@ -39,11 +39,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # share, contact lookup by id, system_event.actor name and picture (Server
 # #463, merged as bf085edc on top of #468's age range), September 30, 2026.
 # List picker: sections, row ids, subtitles and images, multiple, the card subtitle and reply_message (Server #466, merged as 34943159 on top of #463), September 30, 2026.
-UPSTREAM_COMMIT = "349431592ca866731a95407ab8836611989371d2"
-# The source is merged: the Server staging commit is the same commit.
-UPSTREAM_STAGING_COMMIT = "349431592ca866731a95407ab8836611989371d2"
-UPSTREAM_SIZE = 328145
-UPSTREAM_SHA256 = "1721df340bf291aa1d5a12578fb4918209cba7525622dd5fb3af2ca68cbc77fc"
+# Form candidate (Server #465, 744d715a, on top of Server staging 7b796dc2 with #470 and #471); not yet merged, September 30, 2026.
+UPSTREAM_COMMIT = "744d715ad95f0064d3392d4cd8e67680d72ea619"
+UPSTREAM_STAGING_COMMIT = "7b796dc2855b02149498fe7e6342c1d6633c6d95"
+UPSTREAM_SIZE = 344588
+UPSTREAM_SHA256 = "a95379e4f993fe329d589a64e456f59ec9676617eb40d8e57f6dea67cb0bd51e"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
