@@ -6083,7 +6083,7 @@ Open your agent's **OAuth2** tab in [Relay Console](/console/agents), or run `re
     Add every address Relay may send people back to. The `redirect_uri` of a login must match one exactly. Use `https`; `http` is allowed only on `localhost`. An agent has up to 10.
   </Step>
   <Step title="Choose scopes">
-    `openid` and `profile` are always on. Turn on `email` or `phone` to ask for them; the person still chooses whether to share.
+    `openid` and `profile` are always on. Turn on `email` or `phone` to ask for them; the person still chooses whether to share. To ask for the person's birthday, add `birthdate` to the client's `scopes` with your Agent Token, as below; the Console tab does not list it yet.
   </Step>
 </Steps>
 
@@ -6218,13 +6218,27 @@ Use the `state` and `nonce` your login set (the button does), and treat a Relay 
 
 | Scope | Claims | Present |
 | --- | --- | --- |
-| `openid` | `sub`: the person's Relay user ID | Always |
-| `profile` | `name`, `preferred_username` (their @handle, without the @), `picture` | Always |
+| `openid` | `sub`: the person's Relay login ID | Always |
+| `profile` | `name`, `preferred_username` (their @handle, without the @), `picture`, and `https://relayapp.im/user_id` | Always |
 | `email` | `email`, `email_verified` | Only when the person shares it |
 | `phone` | `phone_number` (E.164), `phone_number_verified` | Only when the person shares it |
+| `birthdate` | `birthdate`: `YYYY-MM-DD`, or `0000-MM-DD` when the person gave no year | Only from UserInfo, and only when the person has a birthday and shares it |
 | `offline_access` | A refresh token | When you ask for it |
 
-The same claims come from the UserInfo endpoint, and asking for them with the OpenID Connect `claims` parameter instead of a scope gives nothing more: a claim the person did not share is in neither the ID token nor UserInfo. A person who signed up with only a phone number has no email to share. Every login must include the `openid` scope.
+The same claims come from the UserInfo endpoint, except `birthdate`, which is never in the ID token. Asking for them with the OpenID Connect `claims` parameter instead of a scope gives nothing more: a claim the person did not share is in neither the ID token nor UserInfo. A person who signed up with only a phone number has no email to share. Every login must include the `openid` scope.
+
+### Match a login to a person in a chat
+
+`https://relayapp.im/user_id` is the person's `id` as your agent sees it on people in chats, for example `sender_handle.id` on [`message.received`](/events/message-received). Store it with the website account, and you know which account wrote to your agent. `sub` is a different ID and never appears in chats.
+
+```json
+{
+  "preferred_username": "ana",
+  "https://relayapp.im/user_id": "0199a3c4-5b6d-7e8f-9a0b-1c2d3e4f5a6b"
+}
+```
+
+Relay gives this claim in the ID token and from UserInfo, only to a Log in with Relay client, and only when `openid` and `profile` are granted.
 
 ## When it fails
 
@@ -15820,6 +15834,12 @@ Common authentication, validation, and server errors apply alongside resource er
 Source: https://docs.staging.relayapp.im/changelog.md
 
 Follow changes that affect your agents and integrations. Dates use UTC.
+
+<Update label="2026-09-30" tags={["API"]}>
+## Log in with Relay: a person's chat ID and birthday
+
+A Log in with Relay login with `openid` and `profile` now carries `https://relayapp.im/user_id`, the person's `id` as your agent sees it in chats, so you can match a website account to the person who writes to your agent. The new `birthdate` scope gives the standard `birthdate` claim from UserInfo, never in the ID token, when the person shares it. See [Log in with Relay](/agents/log-in-with-relay#match-a-login-to-a-person-in-a-chat).
+</Update>
 
 <Update label="2026-09-30" tags={["API", "SDK", "Breaking change"]}>
 ## Cards built from A2UI are removed

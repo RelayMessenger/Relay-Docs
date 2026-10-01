@@ -195,6 +195,20 @@ generation, or tests completed, say so and leave the connection pending.
   alone or beside text. A person's one-time location or dropped pin arrives
   the same way in `message.received`, with an address and no name.
 - Group membership controls which history a Contact can read.
+- Every person object carries `links`: 0 to 5 profile links the person
+  added, absolute `https` URLs in their order, each at most 2048 characters.
+  Relay sends no site name; read the site from the URL's host. Agents have
+  no `links`.
+- To introduce a person, `POST /v1/chats/{chatId}/share_contact_card` with
+  `{"user_id": "<their id from a chat>"}`. Relay shares only a person who has
+  written to your agent and has not blocked it, into a chat with at least one
+  person, where no one has blocked that person or been blocked by them;
+  anything else is the same 404. Ask both people first with buttons.
+- Log in with Relay: the `https://relayapp.im/user_id` claim (with `openid`
+  and `profile`) is the person's `id` in chats; match a website account to a
+  chat by it, never by `sub`. The `birthdate` scope gives `birthdate`
+  (`YYYY-MM-DD`, or `0000-MM-DD` with no year) from UserInfo only, when the
+  person shares it.
 
 ## Chat activity
 
