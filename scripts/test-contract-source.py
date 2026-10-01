@@ -40,10 +40,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # List picker: sections, row ids, subtitles and images, multiple, the card subtitle and reply_message (Server #466, merged as 34943159 on top of #463), September 30, 2026.
 # Forms (Server #465, merged as ce3a45f5); suggested agents (#473); a person's Contact Card by user_id (#476); profile links on every person (#475); A2UI and the data part removed (#474), September 30, 2026.
 # Carried from Server staging fe702db3: #479 adds a person's about and the birthdate scope (#477 and #478 change no contract byte).
-UPSTREAM_COMMIT = "fe702db3e3948f27c764bc6ad1f7605d54eb2148"
-UPSTREAM_STAGING_COMMIT = "fe702db3e3948f27c764bc6ad1f7605d54eb2148"
-UPSTREAM_SIZE = 343728
-UPSTREAM_SHA256 = "f9da83bb862879aa86834e1a6d9d93cd1011c4c88a3a4b041edad00d18c35d58"
+# Carried from Server staging 736f112e: #488 an agent's Rive file (rive on Contact Card, chat handles and calls) and the rive DataChannel; #486 Message drops edited_at and unsent_at; #482 and #485 change no public schema they do not list, October 1, 2026.
+UPSTREAM_COMMIT = "736f112e78703f94751f8e5f36f0ae6fdf18ddd4"
+UPSTREAM_STAGING_COMMIT = "736f112e78703f94751f8e5f36f0ae6fdf18ddd4"
+UPSTREAM_SIZE = 349634
+UPSTREAM_SHA256 = "e3b40319f08398098f63a3847140f32f3d9b3c12e009eab4972db3b0e7eb4da8"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
@@ -141,6 +142,75 @@ class ContractSourceTests(unittest.TestCase):
                      "api-reference/resources/messages/overview.mdx"):
             self.assertNotIn("call_ended", (ROOT / name).read_text())
         self.assertIn('system_event.type: "call"', (ROOT / "calls/index.mdx").read_text())
+
+    def test_rive_person_receive_setup_and_restart(self):
+        # Relay-Server origin/staging 68e001ed, read 2026-10-01:
+        # contracts/developer/openapi.yaml:3197-3207,3782-3808;
+        # server/src/call-room.ts:936-975,1272-1284;
+        # server/test-worker/call-room.spec.ts:1488-1575.
+        guide = (ROOT / "calls/rive.mdx").read_text()
+        receiver = re.search(
+            r'<Accordion title="Receive Rive in a person-side client">(.*?)</Accordion>',
+            guide, re.S,
+        )
+        self.assertIsNotNone(receiver, "Document PERSON opt-in beside the agent setup")
+        text = " ".join(receiver[1].split())
+        self.assertRegex(text, r"person's client must send.*rive.*opt into receiving")
+        self.assertIn("agent sends the same frame to publish", text)
+        self.assertIn("Once the agent publishes", text)
+        self.assertRegex(text, r'may send an `offer` with `track: "rive"`.*SCTP')
+        self.assertIn("Answer it like any other offer", text)
+        self.assertRegex(text, r"restart onto a new Session.*new `id`.*Open the channel again")
+        example = re.search(r"```javascript Person-side WebRTC\n(.*?)```", receiver[1], re.S)
+        self.assertIsNotNone(example, "Keep a runnable person-side signaling example")
+        # Execute the documented example with only fake WebRTC and signaling.
+        # No SDK, browser, credentials, live room, or paid API is involved.
+        result = subprocess.run(
+            ["node", "--input-type=module", "-e", r"""
+import assert from "node:assert/strict";
+import vm from "node:vm";
+const sent = [], channels = [], negotiation = [];
+const answer = { type: "answer", sdp: "fake-answer" };
+const pc = {
+  async setRemoteDescription(value) { negotiation.push(["remote", value]); },
+  async createAnswer() { negotiation.push(["answer"]); return answer; },
+  async setLocalDescription(value) { negotiation.push(["local", value]); },
+  createDataChannel(name, options) {
+    const channel = { name, options };
+    channels.push(channel);
+    return channel;
+  },
+};
+const context = vm.createContext({
+  pc, socket: { send(value) { sent.push(JSON.parse(value)); } },
+});
+vm.runInContext(process.argv[1], context, { timeout: 1000 });
+assert.deepEqual(sent, [{ type: "rive" }], "PERSON must opt into receiving");
+assert.equal(channels.length, 0, "Wait for Relay's channel id");
+for (const track of ["audio", "rive"]) {
+  const offer = { type: "offer", sdp: `fake-${track}-offer` };
+  await context.onRoomFrame({ type: "offer", track, session_description: offer });
+  assert.deepEqual(negotiation.splice(0), [
+    ["remote", offer], ["answer"], ["local", answer],
+  ]);
+  assert.deepEqual(sent.at(-1), { type: "answer", session_description: answer });
+}
+assert.equal(channels.length, 0, "An SCTP offer is not a channel id");
+for (const id of [2, 4]) {
+  // The second frame represents the new channel after a Session restart.
+  await context.onRoomFrame({ type: "rive", id });
+  const channel = channels.at(-1);
+  assert.equal(channel.name, "rive");
+  assert.deepEqual(JSON.parse(JSON.stringify(channel.options)), {
+    negotiated: true, id, ordered: false, maxRetransmits: 0,
+  });
+  assert.equal(typeof channel.onmessage, "function");
+}
+assert.equal(channels.length, 2, "Open again for the new id after a restart");
+""", example[1]],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_chat_activity_guide_and_generated_navigation_match_the_contract(self):
         canonical = (ROOT / "api-reference/openapi.yaml").read_text()

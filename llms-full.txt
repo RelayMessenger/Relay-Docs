@@ -2860,15 +2860,11 @@ Call `GET /v1/messages/{messageId}` ([reference](/api-reference/messages/get-a-m
 | `delivery_status` | `sent`, `delivered`, or `read` |
 | `created_at` | When Relay stored the message |
 | `delivered_at`, `read_at` | Aggregate receipt times, or `null` |
-| `edited_at` | When the sender last edited it, or `null` |
-| `unsent_at` | When the sender unsent it, or `null` |
 | `deliveries` | Per-recipient Delivered and Read times |
 | `is_system_message` | `true` for a chat event such as a participant joining or a call |
 | `system_event` | [Event type and fields](/api-reference/resources/messages/overview#system-events), including `call` and its `call` object |
 
 The marker exists from the moment the call is placed; `call.status` carries its state.
-
-`edited_at` and `unsent_at` carry a time only on messages from before message editing and unsending were retired. On every message since, both are `null`.
 
 To list many messages at once, page through [message history](/chats/history).
 
@@ -5441,8 +5437,6 @@ const page = await relay.chats.messages.list(chatId, { limit: 50 });
       "sent_at": "2026-08-30T10:08:27.179Z",
       "delivered_at": "2026-08-30T10:08:27.179Z",
       "read_at": null,
-      "edited_at": null,
-      "unsent_at": null,
       "deliveries": [
         {
           "contact": {
@@ -5876,6 +5870,18 @@ Each package below joins the room and runs the WebRTC connection for you, so you
 
 The person's audio reaches your agent once both sides are connected. Your agent's first words are held until the person can hear them, so nothing your agent says early is cut off. [Send and receive audio](/calls/audio) covers formats, playout and interruption; [video calls](/calls/video) covers the camera.
 
+## Show video or Rive in a call
+
+Your agent can show the person something while it talks. It sends live video, or it names a Rive file that the person's phone draws and your agent drives. When video from your agent is arriving, the phone shows the video; otherwise it shows the Rive file.
+
+### Video
+
+Publish a camera track and capture frames into it with `transport.publishTrack(LocalVideoTrack)` and `VideoSource.captureFrame`. [Video calls](/calls/video) covers frame formats, rates and bitrates. [Show a talking avatar](/calls/avatars) turns your agent's speech into a lip-synced face with Simli.
+
+### Rive
+
+Set a `.riv` file on your agent's Contact Card, then open the call's `rive` channel with `transport.rive()` to set View Model values, fire triggers and switch files, timed to your agent's speech. [Show Rive in a call](/calls/rive) walks through it.
+
 ## Decline a call
 
 To decline a ringing call, end it without joining. A call your agent ends while it rings becomes `no-answer`.
@@ -5989,6 +5995,8 @@ Relay writes one system message into the chat with `is_system_message: true` and
 - [Call events and connection](/calls/events)
 - [Call a person](/calls/call-a-person)
 - [Show a talking avatar](/calls/avatars)
+- [Show Rive in a call](/calls/rive)
+- [Answer calls with an ElevenLabs Agent](/calls/elevenlabs)
 
 # Call a person
 
@@ -6563,6 +6571,240 @@ LiveKit's avatar plugins publish into LiveKit rooms, and LemonSlice into LiveKit
 - [Video calls](/calls/video)
 - [Answer a call](/calls/index#answer-a-call)
 - [Pipecat's `SimliVideoService` reference](https://docs.pipecat.ai/api-reference/server/services/video/simli)
+
+# Show Rive in a call
+
+> Name a Rive file on your agent's Contact Card, then drive it live during a call: set View Model values, fire triggers, switch files, time changes to your agent's speech, and hear what the person changes.
+
+Source: https://docs.staging.relayapp.im/calls/rive.md
+
+Your agent can show a [Rive](https://rive.app) file during a call: a character, a quiz, a game or a chart. The person's phone draws it whenever no video from your agent is arriving, and your agent changes it live through Rive data binding.
+
+## Before you start
+
+| Input | Requirement |
+| --- | --- |
+| Relay | An Agent Token, and a `call.created` event to answer ([answer a call](/calls/index#answer-a-call)) |
+| Rive file | A `.riv` of at most 10 MB with every image and font embedded, and a View Model whose properties and triggers your agent drives |
+
+## Show and drive the file
+
+<Steps>
+  <Step title="Put the file on your Contact Card">
+    Upload the `.riv` with the [Attachments API](/api-reference/resources/attachments/overview), the same way as a [profile photo](/agents/profile-photos). Then set it with the upload's id. The names select what the phone draws; leave one out to use the file's default.
+
+    <CodeGroup>
+    ```typescript TypeScript SDK
+    await relay.contactCard.update({
+      handle: "my_assistant",
+      rive: { attachment_id: upload.id, artboard: "Call", state_machine: "Main", view_model: "Main" },
+    });
+    ```
+
+    ```bash cURL
+    curl -sS -X PATCH 'https://api.staging.relayapp.im/v1/contact_card?handle=<agent handle>' \
+      -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+      -H 'Content-Type: application/json' \
+      -d '{"rive":{"attachment_id":"<upload id>","artboard":"Call","state_machine":"Main","view_model":"Main"}}'
+    ```
+    </CodeGroup>
+
+    The card, your agent's chat handles and the Call object then carry `rive.file`, the URL where Relay hosts the file, so the phone loads it while the call rings. Send `{"rive": {"file": "<that URL>", "artboard": "Quiz"}}` to change only the names, or `"rive": null` to remove the file.
+  </Step>
+  <Step title="Open the rive channel in the call">
+    After `connect()`, open the channel. Every later call returns the same handle.
+
+    <Tabs>
+      <Tab title="TypeScript">
+        ```typescript
+        await transport.connect();
+        const rive = await transport.rive();
+        ```
+      </Tab>
+      <Tab title="Python">
+        ```python
+        await call.connect()
+        rive = await call.rive()
+        ```
+      </Tab>
+    </Tabs>
+
+    If Relay cannot open the channel, `rive()` fails with the code `media_unavailable`, and the call goes on.
+
+    <Accordion title="Receive Rive in a person-side client">
+      **The person's client must send `{"type":"rive"}` on its call-room socket to opt into receiving.** The agent sends the same frame to publish. Use the person's connected `socket` and `pc` from the [call room](/api-reference/calls/join-a-call-room).
+
+      Once the agent publishes, Relay may send an `offer` with `track: "rive"` to establish the SCTP transport. Answer it like any other offer; Relay then sends a `rive` frame with the channel `id`. Add these cases to your existing serialized room-frame handler:
+
+      ```javascript Person-side WebRTC
+      async function onRoomFrame(frame) {
+        if (frame.type === "offer") {
+          await pc.setRemoteDescription(frame.session_description);
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          socket.send(JSON.stringify({
+            type: "answer",
+            session_description: { type: answer.type, sdp: answer.sdp },
+          }));
+        } else if (frame.type === "rive") {
+          const channel = pc.createDataChannel("rive", {
+            negotiated: true,
+            id: frame.id,
+            ordered: false,
+            maxRetransmits: 0,
+          });
+          channel.onmessage = ({ data }) => { /* Apply JSON.parse(data) to Rive. */ };
+        }
+      }
+
+      socket.send(JSON.stringify({ type: "rive" }));
+      ```
+
+      After a restart onto a new Session, Relay sends a new `id`. Open the channel again with that id on the current peer connection.
+    </Accordion>
+  </Step>
+  <Step title="Change the file and hear the person">
+    `set` writes View Model properties by name or path, `trigger` fires a trigger, and `show` switches to another Relay-hosted file with optional starting values. The phone sends back what the person changes.
+
+    ```typescript
+    rive.set({ mood: "happy", "score/value": 3 });
+    rive.trigger("wave");
+    rive.on("view_model", (values) => { /* the person changed { answer: "B" } */ });
+    rive.on("trigger", (name) => { /* the person fired a trigger */ });
+    ```
+
+    Python uses the same names: `rive.set({...})`, `rive.trigger("wave")`, `rive.on("view_model", handler)`.
+  </Step>
+  <Step title="Time changes to your agent's speech">
+    `writeAudio` resolves with where that audio starts on your agent's audio track, in milliseconds. Pass that time plus an offset inside the audio as `at`, and the phone applies the change when that sample plays. Audio held until the person can hear it gets its real start too.
+
+    ```typescript
+    import { visemesFromAlignment } from "@relaymessenger/sdk/calls";
+
+    const start = await transport.writeAudio(frame);
+    if (start !== undefined) {
+      // Character timings for that audio, such as ElevenLabs' `alignment`.
+      for (const cue of visemesFromAlignment(alignment)) {
+        rive.set({ viseme: cue.viseme }, { at: start + cue.t });
+      }
+    }
+    ```
+
+    `visemesFromAlignment` turns character timings into Preston Blair's ten mouth shapes, from `0` (rest) to `9` (W and Q), for a `viseme` number in your file. In Python, `write_audio` returns the start once the person receives your agent's audio, and `None` before that.
+  </Step>
+</Steps>
+
+## Let your framework drive the mouth
+
+| Framework | What sends the timing |
+| --- | --- |
+| Pipecat | `RelayRiveProcessor(transport)`, placed right after text-to-speech, turns word timestamps into `viseme` and the bot's speaking frames into `speaking`. |
+| LiveKit Agents, Python | `await RelayRive().start(session, call)` sets `speaking` for each reply. With `AgentSession(use_tts_aligned_transcript=True)` and a text-to-speech service that reports word times, it also sends `viseme`. |
+| LiveKit Agents, TypeScript | `await new RelayRive().start(session, call)` sets `speaking` for each reply. Send `viseme` yourself with `rive.set`. |
+| ElevenLabs Agents | [`@relaymessenger/elevenlabs`](/calls/elevenlabs) sends `viseme` and `speaking` from each reply's alignment. |
+
+## Messages
+
+Each message is JSON of at most 1 KB. The channel is unordered and does not resend, so a lost message is gone. A `set` replaces only the properties it names: a later value for the same property corrects a lost one, and nothing resends a lost trigger. After a media restart the transport opens the channel again and resends the last `show` and the latest value of every property.
+
+| Message | Meaning |
+| --- | --- |
+| `{"t": 1840, "view_model": {"viseme": 3, "speaking": true}}` | Set View Model properties when your agent's audio reaches 1840 ms. |
+| `{"trigger": "nod"}` | Fire a trigger at once. |
+| `{"file": "<Relay-hosted .riv>", "artboard": "Quiz", "view_model": {"question": "Capital of France?"}}` | Show another file with starting values. |
+| `{"view_model": {"answer": "B"}}` | From the phone: a value the person changed. |
+| `{"trigger": "tapped_start"}` | From the phone: a trigger the person fired. |
+
+## Next steps
+
+- [Answer calls with an ElevenLabs Agent](/calls/elevenlabs)
+- [Send and receive audio](/calls/audio)
+- [Video calls](/calls/video)
+
+# Answer calls with an ElevenLabs Agent
+
+> Bridge each Relay call to an ElevenLabs Agent over the ElevenLabs Agents WebSocket with @relaymessenger/elevenlabs, and drive a Rive character's mouth from its voice.
+
+Source: https://docs.staging.relayapp.im/calls/elevenlabs.md
+
+`@relaymessenger/elevenlabs` answers a Relay call with an [ElevenLabs Agent](https://elevenlabs.io/docs/eleven-agents). ElevenLabs runs the talking: speech recognition, the model, the voice and turn-taking. The package joins the call and carries the audio both ways over the ElevenLabs Agents WebSocket.
+
+## Before you start
+
+| Input | Requirement |
+| --- | --- |
+| Relay | An Agent Token, and a `call.created` event to answer ([answer a call](/calls/index#answer-a-call)) |
+| ElevenLabs | An agent ID, and an API key for a private agent |
+| Audio formats | The agent's `user_input_audio_format` is `pcm_16000` (the default) or the rate you pass as `inputSampleRate`; its output is `pcm_8000`, `pcm_16000`, `pcm_24000`, `pcm_44100` or `pcm_48000` |
+
+```bash
+npm install @relaymessenger/sdk@staging @relaymessenger/elevenlabs@staging
+```
+
+## Answer a call
+
+Call `ElevenLabsCall.connect` from your `call.created` handler. It joins the call (joining answers it), gets a signed URL with your API key, and opens the ElevenLabs session.
+
+```typescript
+import Relay from "@relaymessenger/sdk";
+import { ElevenLabsCall } from "@relaymessenger/elevenlabs";
+
+const relay = new Relay({ apiKey: process.env.RELAY_AGENT_TOKEN!, baseURL: "https://api.staging.relayapp.im" });
+
+// In your call.created handler:
+const call = await ElevenLabsCall.connect({
+  relay,
+  callId: event.data.call.id,
+  elevenlabs: { apiKey: process.env.ELEVENLABS_API_KEY!, agentId: process.env.ELEVENLABS_AGENT_ID! },
+  onEvent: (message) => {
+    if (message.type === "user_transcript") console.log(message.user_transcription_event);
+  },
+});
+await call.closed;
+```
+
+`connect` resolves once the call's media and the ElevenLabs session are both up. `call.conversationId` is ElevenLabs' ID for that session.
+
+To keep your API key on another server, mint the URL there with `getSignedUrl({ apiKey, agentId })` and pass `elevenlabs: { agentId, signedUrl }`. A public agent needs only `agentId`.
+
+`initiationData` is sent as `conversation_initiation_client_data`, for overrides and dynamic variables.
+
+## What the bridge does
+
+| ElevenLabs event | Bridge |
+| --- | --- |
+| `audio` | Plays `audio_base_64` into the call. Audio from a reply the person already interrupted is dropped by `event_id`. |
+| `interruption` | Drops your agent's audio that has not played yet. |
+| `ping` | Answers with `pong` and the same `event_id`. |
+| Any event | Passes it to `onEvent`: transcripts, responses, tool calls. |
+
+The person's voice goes to ElevenLabs as `user_audio_chunk`. When ElevenLabs ends the session, the bridge ends the call; when the call ends, the bridge closes the session. `call.end()` ends the call for both sides, and `call.close()` leaves it without ending it.
+
+## Give the voice a face
+
+If your agent's Contact Card has a [Rive file](/calls/rive), the phone draws it during the call. Each `audio` event's `alignment` becomes a `viseme` number on the file's View Model, from `0` (rest) to `9` (W and Q), timed so the mouth moves when the words are heard. `speaking` is `true` while your agent talks.
+
+Rename the properties with `rive: { viseme: "mouth", speaking: "talking" }`, pass `null` for one you do not use, or pass `rive: false` to send nothing.
+
+`call.rive` is set once the channel opens, a moment after `connect` resolves, and stays unset if the channel fails or with `rive: false`. To set other values or fire triggers right away, use `await call.transport.rive()`.
+
+## When it fails
+
+| Failure | What happens |
+| --- | --- |
+| The agent's formats differ from `inputSampleRate`, or it speaks `pcm_22050` or `ulaw_8000` | `connect` rejects and leaves the call; change the agent's formats in ElevenLabs. |
+| ElevenLabs will not issue a signed URL | `connect` rejects with the HTTP status of `get-signed-url`. |
+| ElevenLabs refuses the WebSocket | `connect` rejects because the socket failed to open or closed before the session started, with the close code when there is one. |
+| The person hangs up while the session starts | `connect` rejects and leaves the call. |
+| Relay cannot open the Rive channel | The call goes on without mouth shapes, and `onWarning` says why. |
+
+## Next steps
+
+- [Show Rive in a call](/calls/rive)
+- [ElevenLabs recipes in Python](/integrations/elevenlabs)
+- [Calls](/calls/index)
+- [Send and receive audio](/calls/audio)
+- [ElevenLabs Agent WebSockets](https://elevenlabs.io/docs/eleven-agents/libraries/web-sockets)
 
 # Call events and connection
 
@@ -16818,13 +17060,9 @@ Read multipart messages, replies, reactions, and delivery state.
 | `sent_at` (optional) | string or null | When the message was sent |
 | `delivered_at` (optional) | string or null | When Relay accepted and stored the Message. For a committed Message, this is the same instant as created_at. |
 | `read_at` (optional) | string or null | When the message was read |
-| `edited_at` (optional) | string or null | When the message was last edited, or null if it was never edited. |
-| `unsent_at` (optional) | string or null | When the sender unsent the message, or null. An unsent Message keeps its place in the transcript and carries no parts. |
 | `deliveries` (optional) | array | Per-recipient Delivered and Read truth for direct and group Chats. Relay derives this because it controls every recipient endpoint. |
 | `is_system_message` | boolean | Whether this timeline item is a visible Chat event. |
 | `system_event` (optional) | object | [System event](#system-events). |
-
-`edited_at` and `unsent_at` carry a time only on messages from before message editing and unsending were retired. On every message since, both are `null`.
 
 ### System events
 
@@ -16887,8 +17125,6 @@ Example response from `GET /v1/messages/{messageId}`:
   "sent_at": "2026-08-30T10:08:27.179Z",
   "delivered_at": "2026-08-30T10:08:27.179Z",
   "read_at": null,
-  "edited_at": null,
-  "unsent_at": null,
   "deliveries": [
     {
       "contact": {
@@ -17222,6 +17458,18 @@ Common authentication, validation, and server errors apply alongside resource er
 Source: https://docs.staging.relayapp.im/changelog.md
 
 Follow changes that affect your agents and integrations. Dates use UTC.
+
+<Update label="2026-10-01" tags={["API", "SDK"]}>
+## Show Rive in a call
+
+An agent can name a Rive file on its Contact Card with `rive`, and the person's phone draws it during a call whenever no video from the agent is arriving. In the call, the agent opens the `rive` channel to set View Model values, fire triggers and switch files, timed to its own speech, and hears what the person changes. See [Show Rive in a call](/calls/rive). [`@relaymessenger/elevenlabs`](/calls/elevenlabs) answers calls with an ElevenLabs Agent and moves a Rive character's mouth with its voice.
+</Update>
+
+<Update label="2026-10-01" tags={["API", "Breaking change"]}>
+## Message has no edited_at or unsent_at
+
+Relay has no message editing or unsending, so the [Message object](/api-reference/resources/messages/overview) no longer carries `edited_at` or `unsent_at`. The TypeScript SDK drops both fields.
+</Update>
 
 <Update label="2026-10-01" tags={["Docs"]}>
 ## Calls guides for every runtime, and runnable examples
@@ -18444,11 +18692,13 @@ paths:
         you, into a chat with at least one active person in it, none of whom has
         blocked or been blocked by that person. Anything else returns the same
         404. When the person deletes their account, every shared card of theirs
-        reads "Deleted Account" with no handle, photo or links and is_active
-        false. Ask both people first, with ordinary
+        keeps its id and reads first_name "Deleted Account" with handle,
+        last_name, image_url, image_color and about null, links empty, and
+        is_active false. Ask both people first, with ordinary
         buttons; Relay does not ask for you. A person's card is a snapshot of what
-        their profile shows: id, handle, name, photo and links; no email,
-        birthdate or age range.
+        their profile shows: id, handle, kind (user), first_name, last_name,
+        image_url, image_color, is_active, is_verified (always false), links
+        and about; no phone, email, birthdate or age range.
 
         A card shared by handle is a snapshot taken when it is sent: its id, handle,
         name, photo and subtitle never change afterwards, even when the agent is
@@ -20421,7 +20671,17 @@ paths:
         new PeerConnection: Relay moves it onto a new SFU Session, the Call stays
         in progress, and both directions are pulled again after it sends
         `connected`. The room is scoped to the Call and accepts only its
-        authenticated user or agent Contact.
+        authenticated user or agent Contact. To show live Rive content, an
+        agent sends `rive`: Relay opens a Cloudflare Realtime DataChannel
+        named `rive` on its Session (unordered, `maxRetransmits` 0), first
+        sending an `offer` with `track` `rive` that sets up the Session's
+        DataChannel transport if it has none, then a `rive` frame with the
+        channel's `id`. A person whose app draws Rive sends `rive` too and
+        gets the same pair once the agent publishes: the channel is pulled
+        into its Session and the person may reply on it. Open the channel
+        with `createDataChannel("rive", {negotiated: true, id, ordered: false,
+        maxRetransmits: 0})`. After a restart onto a new Session, Relay opens
+        it again with a new `id`.
       parameters:
         - name: callId
           in: path
@@ -20573,6 +20833,82 @@ components:
             - Builds robots in Ann Arbor.
           description: >-
             The person's about, as they wrote it in Relay: plain text, at most 160 characters, with no control characters. Null when they wrote none. Present only when kind is user.
+        rive:
+          description: >-
+            The Rive file this agent shows in its calls, so the app can load it
+            before the call connects. Null when it has none. Present only when
+            kind is agent.
+          anyOf:
+            - $ref: "#/components/schemas/RiveFile"
+            - type: "null"
+    RiveFile:
+      type: object
+      additionalProperties: false
+      required: [file, artboard, state_machine, view_model]
+      description: >-
+        A Rive file an agent shows in its calls: a character, a quiz, a game,
+        a chart. The app draws `artboard` and runs `state_machine`, binding
+        `view_model`; the agent drives it live on the call's `rive` data
+        channel. Names are Rive's own; a null name means the file's default.
+      properties:
+        file:
+          type: string
+          format: uri
+          description: >-
+            The .riv Relay hosts, at a permanent address that never changes
+            its bytes: `<cdn>/rive/<contact id>/<version>/file-<hash>.riv`.
+          examples:
+            - https://cdn.relayapp.im/rive/0199a000-0000-7000-8000-00000000000b/1790000000000/file-0123456789abcdef.riv
+        artboard:
+          type: ["string", "null"]
+          maxLength: 255
+          examples: [Call]
+        state_machine:
+          type: ["string", "null"]
+          maxLength: 255
+          examples: [Main]
+        view_model:
+          type: ["string", "null"]
+          maxLength: 255
+          examples: [Main]
+    RiveFileInput:
+      type: object
+      additionalProperties: false
+      description: >-
+        Send `attachment_id` for a new file, or `file` with the address the
+        card already holds to change only the names. The names you send
+        replace all three; an omitted or null name means the file's default.
+      oneOf:
+        - required: [attachment_id]
+          not: { required: [file] }
+        - required: [file]
+          not: { required: [attachment_id] }
+      properties:
+        attachment_id:
+          type: string
+          format: uuid
+          description: >-
+            This agent's completed upload from the Attachments API, as for
+            the profile picture: a Rive file (it starts with the bytes
+            `RIVE`) of at most 10 MB. Relay copies it to permanent public
+            storage. Embed every image and font in the file: the app does not
+            fetch Rive's hosted assets.
+        file:
+          type: string
+          format: uri
+          description: The `file` address this card already holds.
+        artboard:
+          type: ["string", "null"]
+          minLength: 1
+          maxLength: 255
+        state_machine:
+          type: ["string", "null"]
+          minLength: 1
+          maxLength: 255
+        view_model:
+          type: ["string", "null"]
+          minLength: 1
+          maxLength: 255
     Call:
       type: object
       additionalProperties: false
@@ -20694,12 +21030,14 @@ components:
           description: "`audio` after this participant has published its local WebRTC audio track."
         tracks:
           type: array
-          maxItems: 2
+          maxItems: 3
           uniqueItems: true
           items:
             type: string
-            enum: [audio, video]
-          description: The local tracks this participant has published, `audio` first.
+            enum: [audio, video, rive]
+          description: >-
+            The local tracks this participant has published, `audio` first,
+            and `rive` once an agent's `rive` DataChannel is open.
         muted:
           type: boolean
         video:
@@ -20710,11 +21048,11 @@ components:
           description: True after this participant reported RTCPeerConnection connectionState `connected` for its initial publication.
         receiving:
           type: array
-          maxItems: 2
+          maxItems: 3
           uniqueItems: true
           items:
             type: string
-            enum: [audio, video]
+            enum: [audio, video, rive]
           description: >-
             The other participant's tracks this participant is receiving now:
             Relay pulled the track into its Session, it answered that `offer`,
@@ -20722,7 +21060,8 @@ components:
             participant restarts, and rebuilt as the tracks are pulled again.
             Relay sends `roomState` each time it changes. Hold generated audio
             until the other participant's `receiving` contains `audio`, then play
-            it from the start.
+            it from the start. `rive` is there once the agent's `rive`
+            DataChannel is pulled into this participant's Session.
     CallRoomJoinFrame:
       type: object
       additionalProperties: false
@@ -20912,8 +21251,38 @@ components:
               maxLength: 65536
         track:
           type: string
-          enum: [audio, video]
-          description: The other participant's track this offer pulls.
+          enum: [audio, video, rive]
+          description: >-
+            The other participant's track this offer pulls. `rive` sets up
+            this Session's DataChannel transport (one SCTP section); answer it
+            like any other.
+    CallRoomRiveFrame:
+      type: object
+      additionalProperties: false
+      required: [type]
+      description: >-
+        Agent: publish the `rive` DataChannel. Person: receive the agent's.
+        Sent again with the channel open, Relay repeats its `id`.
+      properties:
+        type:
+          type: string
+          const: rive
+    CallRoomRiveChannelFrame:
+      type: object
+      additionalProperties: false
+      required: [type, id]
+      description: >-
+        The `rive` DataChannel is open on this participant's Session. Create
+        it with `createDataChannel("rive", {negotiated: true, id, ordered:
+        false, maxRetransmits: 0})`. Messages are JSON text of at most 1 KB.
+      properties:
+        type:
+          type: string
+          const: rive
+        id:
+          type: integer
+          minimum: 0
+          maximum: 65534
     CallRoomEndedFrame:
       type: object
       additionalProperties: false
@@ -21896,6 +22265,14 @@ components:
           anyOf:
             - $ref: "#/components/schemas/HandleOwner"
             - type: "null"
+        rive:
+          description: >-
+            The Rive file this agent shows in its calls, so the app can load it
+            before the call connects. Null when it has none. Present only when
+            kind is agent.
+          anyOf:
+            - $ref: "#/components/schemas/RiveFile"
+            - type: "null"
         timezone:
           type:
             - string
@@ -22619,6 +22996,13 @@ components:
         - image_url
         - image_color
       properties:
+        rive:
+          description: >-
+            The Rive file this agent shows in its calls, or null. Set it with
+            PATCH `rive`.
+          anyOf:
+            - $ref: "#/components/schemas/RiveFile"
+            - type: "null"
         id:
           type: string
           format: uuid
@@ -22677,8 +23061,10 @@ components:
             format: uri
           description: >-
             A shared person's profile links when the card was shared, present
-            only on a person's card. A person's card carries id, handle, name,
-            photo, links and about, and nothing else.
+            only on a person's card. A person's card carries id, handle, kind,
+            first_name, last_name, image_url, image_color, is_active,
+            is_verified, links and about, and nothing else. Empty after the
+            person deleted their account.
         about:
           type:
             - string
@@ -22687,7 +23073,7 @@ components:
           examples:
             - Builds robots in Ann Arbor.
           description: >-
-            A shared person's about when the card was shared, at most 160 characters, or null when they wrote none. Present only on a person's card.
+            A shared person's about when the card was shared, at most 160 characters, or null when they wrote none or deleted their account. Present only on a person's card.
         handle:
           type:
             - string
@@ -24598,19 +24984,6 @@ components:
             - "null"
           format: date-time
           description: When the message was read
-        edited_at:
-          type:
-            - string
-            - "null"
-          format: date-time
-          description: When the message was last edited, or null if it was never edited.
-        unsent_at:
-          type:
-            - string
-            - "null"
-          format: date-time
-          description: When the sender unsent the message, or null. An unsent Message keeps its place in the transcript
-            and carries no parts.
         silent:
           type: boolean
           description: Whether the sender sent this Message silently, so the recipient's device showed no banner and played
@@ -25501,6 +25874,13 @@ components:
         - image_url
         - image_color
       properties:
+        rive:
+          description: >-
+            The Rive file this agent shows in its calls, or null. Set it with
+            PATCH `rive`.
+          anyOf:
+            - $ref: "#/components/schemas/RiveFile"
+            - type: "null"
         description:
           type:
             - string
@@ -26075,6 +26455,13 @@ components:
         image_recipe:
           $ref: "#/components/schemas/AgentImageRecipe"
           description: Existing native redraw recipe accompanying image_url or attachment_id.
+        rive:
+          description: >-
+            The Rive file this agent shows in its calls. Null removes it. If
+            omitted, the existing file is kept.
+          anyOf:
+            - $ref: "#/components/schemas/RiveFileInput"
+            - type: "null"
     UpdateWebhookSubscriptionRequest:
       type: object
       properties:
@@ -26741,6 +27128,8 @@ x-relay-call-room-frames:
       $ref: "#/components/schemas/CallRoomEndFrame"
     heartbeat:
       $ref: "#/components/schemas/CallRoomHeartbeatFrame"
+    rive:
+      $ref: "#/components/schemas/CallRoomRiveFrame"
   server:
     ice_servers:
       $ref: "#/components/schemas/CallRoomIceServersFrame"
@@ -26750,6 +27139,8 @@ x-relay-call-room-frames:
       $ref: "#/components/schemas/CallRoomServerAnswerFrame"
     subscription_offer:
       $ref: "#/components/schemas/CallRoomSubscriptionOfferFrame"
+    rive_channel:
+      $ref: "#/components/schemas/CallRoomRiveChannelFrame"
     ended:
       $ref: "#/components/schemas/CallRoomEndedFrame"
     error:
