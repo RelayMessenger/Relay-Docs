@@ -38,6 +38,15 @@ EVENT_TAB_GROUPS = [
     ("Location", ["events/location-sharing-started", "events/location-sharing-stopped"]),
 ]
 assert sorted(page for _, pages in EVENT_TAB_GROUPS for page in pages) == sorted(EVENT_PAGES)
+# Owner ruling 2026-10-01 ("only search agents should be public"): routes only a
+# person can call answer an Agent Token with 403 (error code 2003), so the
+# developer docs leave them out of the navigation. Mintlify still builds their
+# pages, marked `x-hidden` in the generated bundle, at their stable URLs.
+HIDDEN_OPERATIONS = {"countAgentsInAddressBook", "listSuggestedAgents", "requestAgent"}
+
+
+def hidden_endpoints():
+    return {entry["endpoint"] for operation, entry in page_paths().items() if operation in HIDDEN_OPERATIONS}
 
 
 def walk_pages(items, parents=()):
@@ -78,7 +87,7 @@ def validate_api_navigation(config):
     entries = list(walk_pages(groups))
     methods = ("GET ", "POST ", "PUT ", "PATCH ", "DELETE ")
     endpoints = [(parents, page) for parents, page in entries if page.startswith(methods)]
-    expected = {entry["endpoint"]: entry for entry in page_paths().values()}
+    expected = {entry["endpoint"]: entry for operation, entry in page_paths().items() if operation not in HIDDEN_OPERATIONS}
     found = [page for _, page in endpoints]
     if len(found) != len(set(found)) or set(found) != set(expected):
         raise ValueError("API navigation must contain every endpoint exactly once")

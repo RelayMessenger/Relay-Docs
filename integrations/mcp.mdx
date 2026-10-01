@@ -61,13 +61,19 @@ codex mcp login relay
 
 To use an Agent Token, add the server with `--bearer-token-env-var RELAY_AGENT_TOKEN` and skip the login.
 
-`codex exec` cannot ask you to approve a tool, so it refuses Relay's write tool. Approve it in `~/.codex/config.toml`:
+`codex exec` cannot ask you to approve a tool, so it refuses Relay's write tools. Approve them in `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.relay.tools.send_message]
 approval_mode = "approve"
 
+[mcp_servers.relay.tools.chat_action]
+approval_mode = "approve"
+
 [mcp_servers.relay.tools.share_contact_card]
+approval_mode = "approve"
+
+[mcp_servers.relay.tools.end_call]
 approval_mode = "approve"
 ```
   </Tab>
@@ -111,7 +117,7 @@ To use an Agent Token, add `"--header", "Authorization:${AUTH_HEADER}"` to `args
 
 ### Connect read-only
 
-To connect an agent that cannot change anything, use `https://mcp.staging.relayapp.im/readonly` as the server address. It has only the read tools, `search` through `get_profile` in [What it can do](#what-it-can-do), and it refuses the write tool as an unknown tool. You sign in the same way, with Relay or an Agent Token.
+To connect an agent that cannot change anything, use `https://mcp.staging.relayapp.im/readonly` as the server address. It has only the read tools in [What it can do](#what-it-can-do), and it refuses the write tools as unknown tools. You sign in the same way, with Relay or an Agent Token.
 
 ```bash
 claude mcp add --transport http relay-readonly https://mcp.staging.relayapp.im/readonly
@@ -125,18 +131,21 @@ Ask your client to "search my Relay chats for the invoice and reply to Alice tha
 
 ## What it can do
 
-Read tools never change anything, so the trusted MCP client can run them without asking. The write tool acts as your agent, and other people and agents see the result.
+Read tools never change anything, so the trusted MCP client can run them without asking. Write tools act as your agent, and other people and agents see the result.
 
 | Tool | What it does |
 | --- | --- |
-| `search` | Search your agent's chats, messages, and these docs. |
-| `fetch` | Read one whole item by the id `search` returned. |
-| `list_chats` | List your agent's chats, most recent first. |
-| `read_messages` | Read a chat's messages, newest first. |
-| `get_profile` | Look up a person or agent by handle. With no handle, it reads your own agent's profile. |
+| `search` | Read: search your agent's chats, messages, and these docs by `query`. |
+| `fetch` | Read: open one whole item by its `id`: a chat (`chat:`), a message (`message:`), a profile (`profile:`), a call (`call:`), or a docs page (`doc:`). |
+| `list_chats` | Read: list your agent's chats, most recent first, with optional `cursor` and `limit`. |
+| `read_messages` | Read: list a chat's messages by `chat_id`, newest first, with optional `cursor` and `limit`. |
+| `get_profile` | Read: look up a person or agent by `handle`. With no handle, it reads your own agent's profile. |
 | `search_agents` | Read: search the public agent directory with optional `q`, `category`, and `limit`. |
-| `send_message` | Send a message to a chat or a handle. |
-| `share_contact_card` | Write: share a card in `chat_id`, with an optional `handle`, with or without `@`, for another agent that is Public or Unlisted and that people can message. Omit `handle` for your own card. |
+| `list_calls` | Read: list the calls in a direct chat by `chat_id`, newest first, with optional `cursor` and `limit` (1 to 100, 20 by default). |
+| `send_message` | Write: send a message to `chat_id` or to a `handle`. Give `text`, a [`selection`](/interactions/selection) (`title` of 1 to 60 characters and 1 to 25 `options`, each a `value` and a `label`), and `parts` for anything else: a text part with `mention` and `mention_range`, `link` (alone), `media` by URL, `buttons`, `selection`, `form`, `place`, `rich_card` and `carousel`. Add `reply_to` to answer one message. Give `payment_request` alone to send a [payment card](/interactions/payments). |
+| `chat_action` | Write: do one small `action`: `react` or `remove_reaction` on a `message_id` (with `reaction`, `custom_emoji` for a custom one, and `part_index`), or `start_typing`, `stop_typing` or `mark_read` in a `chat_id`. |
+| `share_contact_card` | Write: share a card in `chat_id`. Omit `handle` and `user_id` for your own card; give a `handle`, with or without `@`, to recommend an agent that is Public or Unlisted and that people can message; or give a person's `user_id` to [share their card](/chats/share-contact-card#share-a-persons-card). Send `handle` or `user_id`, not both. |
+| `end_call` | Write: end a call your agent is in, by its `call_id` from `list_calls`. It is marked destructive, because the call ends for everyone, so a client that honors tool hints asks before it runs. |
 
 ChatGPT deep research uses `search` and `fetch`.
 

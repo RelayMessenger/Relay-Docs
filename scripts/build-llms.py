@@ -3,7 +3,7 @@ import argparse
 import json
 import re
 from pathlib import Path
-from api_navigation import page_paths, walk_pages
+from api_navigation import hidden_endpoints, page_paths, walk_pages
 from origins import origin
 
 
@@ -270,7 +270,7 @@ def main() -> None:
     configured_endpoints = {
         page for _, _, page in entries if ENDPOINT.fullmatch(page)
     }
-    if configured_endpoints != set(operations):
+    if configured_endpoints != set(operations) - hidden_endpoints():
         raise SystemExit(
             "navigation and OpenAPI endpoints differ: "
             f"{sorted(configured_endpoints ^ set(operations))}"

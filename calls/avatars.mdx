@@ -1,0 +1,128 @@
+---
+title: "Show a talking avatar"
+description: "Give your agent a lip-synced face on video calls with Pipecat's Simli service and the Relay Pipecat transport."
+keywords: ["avatar", "talking avatar", "Simli", "SimliVideoService", "Pipecat", "video calls", "lip sync"]
+---
+
+Your agent can appear on a call as a talking face that moves its lips with its voice. Pipecat's `SimliVideoService` turns the bot's speech into video, and `RelayTransport` sends that video into the Relay call as your agent's camera.
+
+## Before you start
+
+| Input | Requirement |
+| --- | --- |
+| Relay | An Agent Token, and a `call.created` event to answer ([answer a call](/calls/index#answer-a-call)) |
+| Simli | An API key and a face ID from [Simli](https://www.simli.com) |
+| Speech and model | Keys for the speech-to-text, model and text-to-speech services you choose; this example uses Deepgram, OpenAI and Cartesia |
+
+Install the Relay packages and Pipecat with its Simli service:
+
+```bash
+pip install \
+  "relaymessenger[calls] @ git+https://github.com/RelayMessenger/Relay-SDK@staging#subdirectory=python/relaymessenger" \
+  "relaymessenger-pipecat @ git+https://github.com/RelayMessenger/Relay-SDK@staging#subdirectory=python/relaymessenger-pipecat" \
+  "pipecat-ai[simli,deepgram,cartesia,openai,silero]"
+```
+
+## Run the avatar bot
+
+This is [Pipecat's own Simli example](https://github.com/pipecat-ai/pipecat/blob/main/examples/video-avatar/video-avatar-simli-video-service.py) with `RelayTransport` in place of its Daily or WebRTC transport. Simli sits after text-to-speech: it takes the bot's audio and emits matching 512x512 video frames and audio, and the transport's output sends both into the call.
+
+```python avatar_bot.py
+import os
+
+from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.frames.frames import LLMRunFrame
+from pipecat.pipeline.pipeline import Pipeline
+from pipecat.pipeline.worker import PipelineParams, PipelineWorker
+from pipecat.processors.aggregators.llm_context import LLMContext
+from pipecat.processors.aggregators.llm_response_universal import (
+    LLMContextAggregatorPair,
+    LLMUserAggregatorParams,
+)
+from pipecat.services.cartesia.tts import CartesiaTTSService
+from pipecat.services.deepgram.stt import DeepgramSTTService
+from pipecat.services.openai.llm import OpenAILLMService
+from pipecat.services.simli.video import SimliVideoService
+from pipecat.workers.runner import WorkerRunner
+from relaymessenger_pipecat import RelayParams, RelayTransport
+
+
+async def answer(call_id: str) -> None:
+    transport = RelayTransport(
+        api_key=os.environ["RELAY_AGENT_TOKEN"],
+        call_id=call_id,
+        base_url="https://api.staging.relayapp.im",
+        params=RelayParams(
+            audio_in_enabled=True,
+            audio_out_enabled=True,
+            video_out_enabled=True,
+            video_out_is_live=True,
+            video_out_width=512,
+            video_out_height=512,
+        ),
+    )
+
+    stt = DeepgramSTTService(api_key=os.environ["DEEPGRAM_API_KEY"])
+    tts = CartesiaTTSService(
+        api_key=os.environ["CARTESIA_API_KEY"],
+        settings=CartesiaTTSService.Settings(voice=os.environ["CARTESIA_VOICE_ID"]),
+    )
+    avatar = SimliVideoService(
+        api_key=os.environ["SIMLI_API_KEY"],
+        face_id=os.environ["SIMLI_FACE_ID"],
+    )
+    llm = OpenAILLMService(
+        api_key=os.environ["OPENAI_API_KEY"],
+        settings=OpenAILLMService.Settings(
+            system_instruction="You are on a video call. Keep answers short and speakable.",
+        ),
+    )
+
+    context = LLMContext()
+    user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
+        context,
+        user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer()),
+    )
+
+    worker = PipelineWorker(
+        Pipeline(
+            [
+                transport.input(),
+                stt,
+                user_aggregator,
+                llm,
+                tts,
+                avatar,  # turns the bot's speech into lip-synced video and audio
+                transport.output(),  # sends both into the Relay call
+                assistant_aggregator,
+            ]
+        ),
+        params=PipelineParams(enable_metrics=True),
+    )
+
+    @transport.event_handler("on_client_connected")
+    async def on_client_connected(transport, client):
+        await worker.queue_frames([LLMRunFrame()])
+
+    @transport.event_handler("on_client_disconnected")
+    async def on_client_disconnected(transport, client):
+        await worker.cancel()
+
+    runner = WorkerRunner()
+    await runner.add_workers(worker)
+    await runner.run()
+```
+
+Call `answer(event["data"]["call"]["id"])` from your `call.created` handler. The person sees the face as your agent's video and hears its voice; until the first frame arrives, they see a black camera.
+
+## Choose another avatar service
+
+Any Pipecat service that emits `OutputImageRawFrame`s in `RGB`, `RGBA`, `BGRA` or `ARGB` works the same way: place it where `SimliVideoService` is, and set `video_out_width` and `video_out_height` to its frame size. [Video calls](/calls/video) covers frame rate and bitrate.
+
+LiveKit's avatar plugins and LemonSlice publish into LiveKit or Daily rooms, so they don't join Relay calls directly.
+
+## See also
+
+- [Video calls](/calls/video)
+- [Answer a call](/calls/index#answer-a-call)
+- [Pipecat's `SimliVideoService` reference](https://docs.pipecat.ai/api-reference/server/services/video/simli)

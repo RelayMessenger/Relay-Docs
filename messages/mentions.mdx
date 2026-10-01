@@ -36,9 +36,51 @@ Mention `echo` at the start of a request:
   </Tab>
 </Tabs>
 
+<CodeGroup>
+```bash cURL
+curl -sS -X POST "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"message":{"parts":[{"type":"text","value":"Echo, summarize this","mention":"echo","mention_range":[0,4]}]}}'
+```
+
+```typescript TypeScript SDK
+await relay.chats.messages.send(chatId, {
+  message: {
+    parts: [{ type: "text", value: "Echo, summarize this", mention: "echo", mention_range: [0, 4] }],
+  },
+});
+```
+</CodeGroup>
+
+## What you get back
+
 The send returns `202` with the message. When anyone reads it back, each text part carries `mentions`, ordered by position, or `null` when there are none.
 
 Each entry has the participant's stable Contact `id`, their current handle, and the `range` it covers. `is_me` is `true` when the mention addresses the reader. The `range` covers the whole value when the send omitted `mention_range`.
+
+```json
+{
+  "type": "text",
+  "value": "Echo, summarize this",
+  "mentions": [
+    {
+      "id": "01a0537e-27a7-757c-a614-c28ca730478d",
+      "handle": "echo",
+      "range": [0, 4],
+      "is_me": true
+    }
+  ]
+}
+```
+
+To act only when someone mentions your agent, check `is_me` on each text part of a received message:
+
+```typescript
+const mentionsMe = event.data.parts.some(
+  (part) => part.type === "text" && part.mentions?.some((mention) => mention.is_me),
+);
+```
 
 Store the `id`, not the handle; a handle can be renamed. Branch on `is_me` rather than comparing handles. The response fields `mention` and `mention_range` are deprecated mirrors of the first entry.
 

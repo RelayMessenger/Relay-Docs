@@ -4,7 +4,7 @@ import hashlib
 import re
 import sys
 from pathlib import Path
-from api_navigation import validate_api_navigation, page_paths
+from api_navigation import validate_api_navigation, page_paths, hidden_endpoints, HIDDEN_OPERATIONS
 from origins import origin, production_text, source_ref, target, STAGING_INSTRUCTION_REFERENCE
 from docs_analytics import validate as validate_analytics
 
@@ -803,11 +803,11 @@ for path_match in re.finditer(
         contract_endpoint_refs.append(f"{method.upper()} {endpoint}")
 if (
     len(configured_endpoint_refs) != len(set(configured_endpoint_refs))
-    or set(configured_endpoint_refs) != set(contract_endpoint_refs)
+    or set(configured_endpoint_refs) != set(contract_endpoint_refs) - hidden_endpoints()
 ):
     raise SystemExit(
         "API Reference endpoint order drifted from OpenAPI: "
-        f"{sorted(set(configured_endpoint_refs) ^ set(contract_endpoint_refs))}"
+        f"{sorted(set(configured_endpoint_refs) ^ (set(contract_endpoint_refs) - hidden_endpoints()))}"
     )
 mint_sidebar_operations = dict(re.findall(
     r"^      operationId: ([A-Za-z0-9]+)\n"
@@ -835,6 +835,8 @@ for operation_id, metadata in page_paths().items():
     )
     if not operation or f"        href: {metadata['href']}\n" not in operation.group(1):
         raise SystemExit(f"Stable endpoint page URL changed: {operation_id}")
+    if ("      x-hidden: true\n" in operation.group(1)) != (operation_id in HIDDEN_OPERATIONS):
+        raise SystemExit(f"x-hidden must mark exactly the person-only operations: {operation_id}")
 
 event_type_block = re.search(
     r"^    WebhookEventType:\n.*?^      enum:\n"

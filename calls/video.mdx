@@ -1,0 +1,223 @@
+---
+title: "Video calls"
+description: "Send your agent's video into a call, read the person's camera frame by frame, and set the frame rate and bitrate."
+keywords: ["video calls", "camera", "VideoSource", "LocalVideoTrack", "VideoStream", "frame rate", "bitrate", "H.264", "publishTrack"]
+---
+
+A Relay call carries video whenever a camera is on, on either side. Your agent publishes a camera track and feeds it frames; it reads the person's camera as a stream of frames. The names copy LiveKit's: `VideoSource`, `LocalVideoTrack`, `VideoFrame`, `VideoStream`.
+
+Video in TypeScript needs the optional `node-webcodecs` package, prebuilt for macOS arm64 and Linux x64 and arm64:
+
+```bash
+npm install @relaymessenger/sdk@staging werift @evan/opus rtp-packet node-webcodecs
+```
+
+Python needs nothing beyond the `calls` extra.
+
+## Send video
+
+Create a source at your frame size, publish it as a track, and capture a frame every time you have one. The frames you capture set the frame rate: capture 30 a second for 30 fps.
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    import {
+      LocalVideoTrack,
+      VideoBufferType,
+      VideoFrame,
+      VideoSource,
+    } from "@relaymessenger/sdk/calls";
+
+    await transport.connect();
+
+    const source = new VideoSource(1280, 720);
+    const track = LocalVideoTrack.createVideoTrack("camera", source);
+    await transport.publishTrack(track);
+
+    // RGBA, BGRA or I420 bytes, tightly packed.
+    setInterval(() => {
+      source.captureFrame(new VideoFrame(render(), 1280, 720, VideoBufferType.RGBA));
+    }, 1000 / 30);
+
+    // Camera off, then on again; the track stays negotiated.
+    await transport.unpublishTrack(track);
+    await transport.publishTrack(track);
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import asyncio
+
+    from relaymessenger.calls import LocalVideoTrack, RelayVideoFrame, VideoSource
+
+    source = VideoSource(1280, 720)
+    await call.publish_track(LocalVideoTrack.create_video_track("camera", source))
+
+    # i420, rgba, bgra, argb, abgr or rgb24 bytes, tightly packed; an av.VideoFrame also works.
+    while True:
+        source.capture_frame(RelayVideoFrame(1280, 720, "rgb24", render()))
+        await asyncio.sleep(1 / 30)
+    ```
+
+    Publish before `connect()` to send the camera with the audio from the first offer; publishing later adds it to the session.
+  </Tab>
+  <Tab title="Pipecat">
+    Set `video_out_enabled` and size the output. Every `OutputImageRawFrame` your pipeline pushes, in `RGB`, `RGBA`, `BGRA` or `ARGB`, goes into the call.
+
+    ```python
+    from pipecat.frames.frames import OutputImageRawFrame
+    from relaymessenger_pipecat import RelayParams, RelayTransport
+
+    transport = RelayTransport(
+        api_key=os.environ["RELAY_AGENT_TOKEN"],
+        call_id=call_id,
+        base_url="https://api.staging.relayapp.im",
+        params=RelayParams(
+            audio_in_enabled=True,
+            audio_out_enabled=True,
+            video_out_enabled=True,
+            video_out_is_live=True,
+            video_out_width=640,
+            video_out_height=360,
+            video_out_framerate=30,
+        ),
+    )
+
+    await worker.queue_frame(OutputImageRawFrame(image=rgb_bytes, size=(640, 360), format="RGB"))
+    ```
+
+    The camera track is published with the audio when the bot joins. The SDK's [`echo_bot.py`](https://github.com/RelayMessenger/Relay-SDK/blob/staging/python/relaymessenger-pipecat/examples/echo_bot.py) is a complete bot that sends a moving test pattern.
+  </Tab>
+  <Tab title="LiveKit">
+    ```python
+    from livekit import rtc
+    from relaymessenger_livekit import LocalVideoTrack, VideoSource
+
+    source = VideoSource(1280, 720)
+    track = LocalVideoTrack.create_video_track("camera", source)
+    await call.transport.publish_track(track)
+
+    # RGBA, BGRA, ARGB, ABGR, RGB24 or I420 bytes, tightly packed.
+    source.capture_frame(rtc.VideoFrame(1280, 720, rtc.VideoBufferType.RGBA, rgba))
+    ```
+
+    The TypeScript LiveKit package carries audio only; publish video through `call.transport`, the same `RelayCallTransport` as the TypeScript tab.
+  </Tab>
+</Tabs>
+
+In Python and Pipecat, a published camera sends one black frame a second until your first frame, because the call's media server forwards only a track that has sent packets.
+
+## Set the frame rate and bitrate
+
+Send up to 1920x1080 at 30 fps. Without settings of your own, each frame size gets LiveKit's camera preset:
+
+| Frame size | Bitrate | Frame rate |
+| --- | --- | --- |
+| 1920x1080 | 3 Mbps | 30 fps |
+| 1280x720 | 1.7 Mbps | 30 fps |
+| 960x540 | 800 kbps | 25 fps |
+| 640x360 | 450 kbps | 20 fps |
+
+To choose your own, pass an encoding when you publish:
+
+<CodeGroup>
+```typescript TypeScript
+await transport.publishTrack(track, {
+  videoEncoding: { maxBitrate: 1_000_000, maxFramerate: 15 },
+});
+```
+
+```python Python
+from relaymessenger.calls import TrackPublishOptions, VideoEncoding
+
+await call.publish_track(
+    track,
+    TrackPublishOptions(video_encoding=VideoEncoding(max_bitrate=1_000_000, max_framerate=15)),
+)
+```
+</CodeGroup>
+
+`maxFramerate` guides the encoder; the rate at which you capture frames is what the person sees. Video goes out as H.264 constrained baseline, with VP8 offered second in TypeScript. In Python, aiortc keeps the bitrate between 500 kbps and 3 Mbps.
+
+## Read the person's camera
+
+The person's camera arrives as a remote track. Open a `VideoStream` on it to decode frames; frames are decoded only while a stream is open.
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    import { VideoBufferType, VideoStream } from "@relaymessenger/sdk/calls";
+
+    transport.on("trackSubscribed", async (track) => {
+      const stream = new VideoStream(track, { format: VideoBufferType.RGBA, capacity: 2 });
+      for await (const { frame, timestampUs } of stream) {
+        // frame.data is width x height x 4 bytes of RGBA.
+      }
+    });
+
+    transport.on("remoteVideo", (on) => {
+      // The person's camera started or stopped sending.
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import asyncio
+
+    from relaymessenger.calls import VideoStream
+
+
+    @call.on("track_subscribed")
+    def camera(track) -> None:
+        async def read() -> None:
+            async for event in VideoStream(track, capacity=2):
+                rgb = event.frame.convert("rgb24")
+
+        asyncio.ensure_future(read())
+
+
+    @call.on("remote_video")
+    def camera_state(on: bool) -> None:
+        ...  # the person's camera started or stopped sending
+    ```
+  </Tab>
+  <Tab title="Pipecat">
+    Set `video_in_enabled=True` in `RelayParams`. The person's camera enters the pipeline as `UserImageRawFrame`s in RGB, so a vision model in the pipeline sees what the person shows.
+  </Tab>
+  <Tab title="LiveKit">
+    `call.attach(session)` sets `session.input.video` to the person's camera, as I420 `rtc.VideoFrame`s. The AgentSession samples it and forwards it to a model that accepts video, such as Gemini Live, so the model sees what the person shows:
+
+    ```python
+    call = await RelayLiveKitCall.connect(
+        api_key=os.environ["RELAY_AGENT_TOKEN"],
+        call_id=call_id,
+        base_url="https://api.staging.relayapp.im",
+    )
+    call.attach(session)  # your AgentSession: audio in, audio out, and the camera
+    await call.wait_for_peer_audio(15_000)
+    await session.start(Agent(instructions="Describe what the caller shows you."))
+    ```
+  </Tab>
+</Tabs>
+
+## Read video statistics
+
+`videoStats()` (`video_stats()` in Python) counts frames captured, sent, decoded and dropped in both directions. Log it when a call ends to see whether video flowed.
+
+<CodeGroup>
+```typescript TypeScript
+transport.on("ended", () => console.log(transport.videoStats()));
+```
+
+```python Python
+@call.on("ended")
+def log_stats(_frame: dict) -> None:
+    print(call.video_stats())
+```
+</CodeGroup>
+
+## See also
+
+- [Show a talking avatar](/calls/avatars)
+- [Send and receive audio](/calls/audio)
+- [Call events and connection](/calls/events)
