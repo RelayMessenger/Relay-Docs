@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { execFileSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 
 const path = new URL("../api-reference/openapi.mint.yaml", import.meta.url);
@@ -84,12 +85,16 @@ const sidebarTitles = {
   cancelPaymentRequest: "Cancel",
 };
 
-// Person-only routes (owner ruling 2026-10-01); keep in step with
-// HIDDEN_OPERATIONS in scripts/api_navigation.py. Mintlify's `x-excluded` builds no page;
-// a direct URL finds nothing.
-const hiddenOperations = new Set(["countAgentsInAddressBook", "listSuggestedAgents", "requestAgent"]);
+// Person-only routes leave the bundle whole, so Mintlify builds no page for
+// them. scripts/api_navigation.py owns the list and the cut.
+const scripts = new URL(".", import.meta.url).pathname;
+const python = (code, input) =>
+  execFileSync("python3", ["-c", `import sys; sys.path.insert(0, sys.argv[1]); ${code}`, scripts], { input, maxBuffer: 1 << 27 }).toString();
+const hiddenOperations = new Set(JSON.parse(python("import json; from api_navigation import HIDDEN_OPERATIONS; print(json.dumps(sorted(HIDDEN_OPERATIONS)))", "")));
+output = python("from api_navigation import strip_hidden_paths; sys.stdout.write(strip_hidden_paths(sys.stdin.read()))", output);
 
 for (const [operationId, sidebarTitle] of Object.entries(sidebarTitles)) {
+  if (hiddenOperations.has(operationId)) continue;
   const marker = `      operationId: ${operationId}`;
   const markerPattern = new RegExp(`^${marker}$`, "gm");
   const matches = output.match(markerPattern)?.length ?? 0;
@@ -105,7 +110,7 @@ for (const [operationId, sidebarTitle] of Object.entries(sidebarTitles)) {
       x-mint:
         metadata:
           sidebarTitle: ${sidebarTitle}
-        href: ${pagePaths[operationId].href}${hiddenOperations.has(operationId) ? "\n      x-excluded: true" : ""}`,
+        href: ${pagePaths[operationId].href}`,
   );
 }
 

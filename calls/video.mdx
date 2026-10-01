@@ -89,7 +89,10 @@ Create a source at your frame size, publish it as a track, and capture a frame e
     The camera track is published with the audio when the bot joins. The SDK's [`echo_bot.py`](https://github.com/RelayMessenger/Relay-SDK/blob/staging/python/relaymessenger-pipecat/examples/echo_bot.py) is a complete bot that sends a moving test pattern.
   </Tab>
   <Tab title="LiveKit">
-    ```python
+    Both packages take LiveKit's own frame types and publish on `call.transport`, with the names of LiveKit's `LocalParticipant.publishTrack`.
+
+    <CodeGroup>
+    ```python Python
     from livekit import rtc
     from relaymessenger_livekit import LocalVideoTrack, VideoSource
 
@@ -101,7 +104,20 @@ Create a source at your frame size, publish it as a track, and capture a frame e
     source.capture_frame(rtc.VideoFrame(1280, 720, rtc.VideoBufferType.RGBA, rgba))
     ```
 
-    The TypeScript LiveKit package carries audio only; publish video through `call.transport`, the same `RelayCallTransport` as the TypeScript tab.
+    ```typescript TypeScript
+    import { VideoBufferType, VideoFrame } from "@livekit/rtc-node";
+    import { LocalVideoTrack, VideoSource } from "@relaymessenger/livekit";
+
+    const source = new VideoSource(1280, 720);
+    const track = LocalVideoTrack.createVideoTrack("camera", source);
+    await call.transport.publishTrack(track);
+
+    // A layout the encoder does not take is converted to I420 first.
+    source.captureFrame(new VideoFrame(rgba, 1280, 720, VideoBufferType.RGBA));
+    ```
+    </CodeGroup>
+
+    The TypeScript package needs `node-webcodecs` for video.
   </Tab>
 </Tabs>
 
@@ -185,9 +201,10 @@ The person's camera arrives as a remote track. Open a `VideoStream` on it to dec
     Set `video_in_enabled=True` in `RelayParams`. The person's camera enters the pipeline as `UserImageRawFrame`s in RGB, so a vision model in the pipeline sees what the person shows.
   </Tab>
   <Tab title="LiveKit">
-    `call.attach(session)` sets `session.input.video` to the person's camera, as I420 `rtc.VideoFrame`s. The AgentSession samples it and forwards it to a model that accepts video, such as Gemini Live, so the model sees what the person shows:
+    In Python, `call.attach(session)` sets `session.input.video` to the person's camera, as I420 `rtc.VideoFrame`s, and the AgentSession forwards it to a model that accepts video, such as Gemini Live. LiveKit Agents for Node has no `session.input.video`, so the TypeScript package gives you the camera as `call.videoInput`: read `latestFrame`, or iterate it. Nothing is decoded until the first read, a slow reader always gets the newest frame, and iteration ends when the call does.
 
-    ```python
+    <CodeGroup>
+    ```python Python
     call = await RelayLiveKitCall.connect(
         api_key=os.environ["RELAY_AGENT_TOKEN"],
         call_id=call_id,
@@ -197,6 +214,24 @@ The person's camera arrives as a remote track. Open a `VideoStream` on it to dec
     await call.wait_for_peer_audio(15_000)
     await session.start(Agent(instructions="Describe what the caller shows you."))
     ```
+
+    ```typescript TypeScript
+    import { llm, voice } from "@livekit/agents";
+
+    // Attach the newest camera frame to each finished user turn.
+    class Assistant extends voice.Agent {
+      override async onUserTurnCompleted(_chatCtx: llm.ChatContext, newMessage: llm.ChatMessage) {
+        const frame = call.videoInput.latestFrame;
+        if (frame) newMessage.content.push(llm.createImageContent({ image: frame }));
+      }
+    }
+
+    // Or read every frame:
+    for await (const frame of call.videoInput) {
+      // frame is an @livekit/rtc-node VideoFrame, I420.
+    }
+    ```
+    </CodeGroup>
   </Tab>
 </Tabs>
 

@@ -3,7 +3,7 @@ import argparse
 import json
 import re
 from pathlib import Path
-from api_navigation import hidden_endpoints, page_paths, walk_pages
+from api_navigation import hidden_endpoints, page_paths, strip_hidden_paths, walk_pages
 from origins import origin
 
 
@@ -238,8 +238,8 @@ def render_full(
                 "",
                 f"HTTP reference: {BASE_URL}/api-reference/openapi.mint.yaml",
                 "",
-                "````yaml api-reference/openapi.staging.yaml",
-                openapi_text.rstrip(),
+                "````yaml api-reference/openapi.staging.yaml (person-only operations left out)",
+                strip_hidden_paths(openapi_text).rstrip(),
                 "````",
             ]
         )

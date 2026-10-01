@@ -112,10 +112,12 @@ class ContractSourceTests(unittest.TestCase):
         api = next(tab for tab in navigation["navigation"]["tabs"]
                    if tab["tab"] == "API Reference")
         contacts = next(group for group in api["groups"] if group["group"] == "Contacts")
-        for endpoint in ("GET /v1/directory", "PUT /v1/contacts/{handle}/rating",
-                         "DELETE /v1/contacts/{handle}/rating",
-                         "GET /v1/contacts/{handle}/ratings"):
+        for endpoint in ("GET /v1/directory", "GET /v1/contacts/{handle}/ratings"):
             self.assertIn(endpoint, contacts["pages"])
+        # People rate agents; agents never rate (owner ruling 2026-10-01), so
+        # rating and removing a rating stay out of the developer docs.
+        for endpoint in ("PUT /v1/contacts/{handle}/rating", "DELETE /v1/contacts/{handle}/rating"):
+            self.assertNotIn(endpoint, contacts["pages"])
 
     def test_request_lifecycle_description_does_not_expose_private_fields(self):
         canonical = (ROOT / "api-reference/openapi.yaml").read_text()

@@ -2411,13 +2411,15 @@ Mention `echo` at the start of a request:
 curl -sS -X POST "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"message":{"parts":[{"type":"text","value":"Echo, summarize this","mention":"echo","mention_range":[0,4]}]}}'
+  -d '{"message":{"parts":[{"type":"text","value":"<display name>, <what your model writes>","mention":"<participant handle>","mention_range":[0,<display name length>]}]}}'
 ```
 
 ```typescript TypeScript SDK
+// name is the participant's display name; reply is the text your model wrote.
+const value = `${name}, ${reply}`;
 await relay.chats.messages.send(chatId, {
   message: {
-    parts: [{ type: "text", value: "Echo, summarize this", mention: "echo", mention_range: [0, 4] }],
+    parts: [{ type: "text", value, mention: handle, mention_range: [0, name.length] }],
   },
 });
 ```
@@ -2894,11 +2896,12 @@ Send it through either [send path](/messages/send):
 
 <CodeGroup>
 ```typescript TypeScript SDK
+// question and choices are what your model wrote.
 await relay.chats.messages.send(chatId, {
   message: {
     parts: [
-      { type: "text", value: "Which planet has the most moons?" },
-      { type: "buttons", items: [{ label: "Jupiter" }, { label: "Saturn" }, { label: "Neptune" }, { label: "Mars" }] },
+      { type: "text", value: question },
+      { type: "buttons", items: choices.map((label) => ({ label })) },
     ],
   },
 });
@@ -2908,7 +2911,7 @@ await relay.chats.messages.send(chatId, {
 curl -sS -X POST "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"message":{"parts":[{"type":"text","value":"Which planet has the most moons?"},{"type":"buttons","items":[{"label":"Jupiter"},{"label":"Saturn"},{"label":"Neptune"},{"label":"Mars"}]}]}}'
+  -d '{"message":{"parts":[{"type":"text","value":"<question your model wrote>"},{"type":"buttons","items":[{"label":"<choice 1>"},{"label":"<choice 2>"}]}]}}'
 ```
 </CodeGroup>
 
@@ -4334,15 +4337,16 @@ curl -sS -X POST "https://api.staging.relayapp.im/v1/chats" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: group-echo-alice-planner-1' \
-  -d '{"from":"echo","to":["alice","planner"],"message":{"parts":[{"type":"text","value":"Group created."}],"idempotency_key":"group-echo-alice-planner-1"}}'
+  -d '{"from":"echo","to":["alice","planner"],"message":{"parts":[{"type":"text","value":"<what your model writes>"}],"idempotency_key":"group-echo-alice-planner-1"}}'
 ```
 
 ```typescript TypeScript SDK
+// reply is the text your model wrote.
 const { chat } = await relay.chats.create({
   from: "echo",
   to: ["alice", "planner"],
   message: {
-    parts: [{ type: "text", value: "Group created." }],
+    parts: [{ type: "text", value: reply }],
     idempotency_key: "group-echo-alice-planner-1",
   },
 });
@@ -4350,12 +4354,13 @@ console.log(chat.id, chat.is_group);
 ```
 
 ```python Python
+# reply is the text your model wrote.
 created = await relay.chats.create(
     {
         "from": "echo",
         "to": ["alice", "planner"],
         "message": {
-            "parts": [{"type": "text", "value": "Group created."}],
+            "parts": [{"type": "text", "value": reply}],
             "idempotency_key": "group-echo-alice-planner-1",
         },
     }
@@ -5550,7 +5555,7 @@ Each package below joins the room and runs the WebRTC connection for you, so you
     ```python
     import os
 
-    from pipecat.frames.frames import TTSSpeakFrame
+    from pipecat.frames.frames import LLMRunFrame
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.worker import PipelineWorker
     from pipecat.workers.runner import WorkerRunner
@@ -5564,12 +5569,15 @@ Each package below joins the room and runs the WebRTC connection for you, so you
             base_url="https://api.staging.relayapp.im",
             params=RelayParams(audio_in_enabled=True, audio_out_enabled=True),
         )
-        # stt, llm and tts are your Pipecat services.
-        worker = PipelineWorker(Pipeline([transport.input(), stt, llm, tts, transport.output()]))
+        # stt, llm and tts are your Pipecat services; the aggregators hold the LLM context.
+        worker = PipelineWorker(
+            Pipeline([transport.input(), stt, user_aggregator, llm, tts, transport.output(), assistant_aggregator]),
+            cancel_on_idle_timeout=False,  # a quiet call is still a call
+        )
 
         @transport.event_handler("on_first_participant_joined")
-        async def greet(transport, participant_id):
-            await worker.queue_frame(TTSSpeakFrame("Hello! How can I help?"))
+        async def start(transport, participant_id):
+            await worker.queue_frames([LLMRunFrame()])  # the model speaks first, in its own words
 
         @transport.event_handler("on_participant_left")
         async def hang_up(transport, participant_id, reason):
@@ -5581,7 +5589,7 @@ Each package below joins the room and runs the WebRTC connection for you, so you
     ```
   </Tab>
   <Tab title="LiveKit">
-    `RelayLiveKitCall` plugs a Relay call into a LiveKit Agents `AgentSession` in place of a LiveKit room. The Python package also hands the session the person's camera.
+    `RelayLiveKitCall` plugs a Relay call into a LiveKit Agents `AgentSession` in place of a LiveKit room. Both packages carry video too: Python hands the session the person's camera, and TypeScript exposes it as `call.videoInput` ([video calls](/calls/video)).
 
     <CodeGroup>
     ```python Python
@@ -6023,7 +6031,10 @@ Create a source at your frame size, publish it as a track, and capture a frame e
     The camera track is published with the audio when the bot joins. The SDK's [`echo_bot.py`](https://github.com/RelayMessenger/Relay-SDK/blob/staging/python/relaymessenger-pipecat/examples/echo_bot.py) is a complete bot that sends a moving test pattern.
   </Tab>
   <Tab title="LiveKit">
-    ```python
+    Both packages take LiveKit's own frame types and publish on `call.transport`, with the names of LiveKit's `LocalParticipant.publishTrack`.
+
+    <CodeGroup>
+    ```python Python
     from livekit import rtc
     from relaymessenger_livekit import LocalVideoTrack, VideoSource
 
@@ -6035,7 +6046,20 @@ Create a source at your frame size, publish it as a track, and capture a frame e
     source.capture_frame(rtc.VideoFrame(1280, 720, rtc.VideoBufferType.RGBA, rgba))
     ```
 
-    The TypeScript LiveKit package carries audio only; publish video through `call.transport`, the same `RelayCallTransport` as the TypeScript tab.
+    ```typescript TypeScript
+    import { VideoBufferType, VideoFrame } from "@livekit/rtc-node";
+    import { LocalVideoTrack, VideoSource } from "@relaymessenger/livekit";
+
+    const source = new VideoSource(1280, 720);
+    const track = LocalVideoTrack.createVideoTrack("camera", source);
+    await call.transport.publishTrack(track);
+
+    // A layout the encoder does not take is converted to I420 first.
+    source.captureFrame(new VideoFrame(rgba, 1280, 720, VideoBufferType.RGBA));
+    ```
+    </CodeGroup>
+
+    The TypeScript package needs `node-webcodecs` for video.
   </Tab>
 </Tabs>
 
@@ -6119,9 +6143,10 @@ The person's camera arrives as a remote track. Open a `VideoStream` on it to dec
     Set `video_in_enabled=True` in `RelayParams`. The person's camera enters the pipeline as `UserImageRawFrame`s in RGB, so a vision model in the pipeline sees what the person shows.
   </Tab>
   <Tab title="LiveKit">
-    `call.attach(session)` sets `session.input.video` to the person's camera, as I420 `rtc.VideoFrame`s. The AgentSession samples it and forwards it to a model that accepts video, such as Gemini Live, so the model sees what the person shows:
+    In Python, `call.attach(session)` sets `session.input.video` to the person's camera, as I420 `rtc.VideoFrame`s, and the AgentSession forwards it to a model that accepts video, such as Gemini Live. LiveKit Agents for Node has no `session.input.video`, so the TypeScript package gives you the camera as `call.videoInput`: read `latestFrame`, or iterate it. Nothing is decoded until the first read, a slow reader always gets the newest frame, and iteration ends when the call does.
 
-    ```python
+    <CodeGroup>
+    ```python Python
     call = await RelayLiveKitCall.connect(
         api_key=os.environ["RELAY_AGENT_TOKEN"],
         call_id=call_id,
@@ -6131,6 +6156,24 @@ The person's camera arrives as a remote track. Open a `VideoStream` on it to dec
     await call.wait_for_peer_audio(15_000)
     await session.start(Agent(instructions="Describe what the caller shows you."))
     ```
+
+    ```typescript TypeScript
+    import { llm, voice } from "@livekit/agents";
+
+    // Attach the newest camera frame to each finished user turn.
+    class Assistant extends voice.Agent {
+      override async onUserTurnCompleted(_chatCtx: llm.ChatContext, newMessage: llm.ChatMessage) {
+        const frame = call.videoInput.latestFrame;
+        if (frame) newMessage.content.push(llm.createImageContent({ image: frame }));
+      }
+    }
+
+    // Or read every frame:
+    for await (const frame of call.videoInput) {
+      // frame is an @livekit/rtc-node VideoFrame, I420.
+    }
+    ```
+    </CodeGroup>
   </Tab>
 </Tabs>
 
@@ -6256,6 +6299,7 @@ async def answer(call_id: str) -> None:
             ]
         ),
         params=PipelineParams(enable_metrics=True),
+        cancel_on_idle_timeout=False,  # a quiet call is still a call
     )
 
     @transport.event_handler("on_client_connected")
@@ -6277,7 +6321,7 @@ Call `answer(event["data"]["call"]["id"])` from your `call.created` handler. The
 
 Any Pipecat service that emits `OutputImageRawFrame`s in `RGB`, `RGBA`, `BGRA` or `ARGB` works the same way: place it where `SimliVideoService` is, and set `video_out_width` and `video_out_height` to its frame size. [Video calls](/calls/video) covers frame rate and bitrate.
 
-LiveKit's avatar plugins and LemonSlice publish into LiveKit or Daily rooms, so they don't join Relay calls directly.
+LiveKit's avatar plugins publish into LiveKit rooms, and LemonSlice into LiveKit, Daily or Agora sessions, so they don't join Relay calls directly.
 
 ## See also
 
@@ -16754,8 +16798,6 @@ Example response from `GET /v1/contact_card`:
 | --- | --- | --- |
 | `POST` | [`/v1/contacts/lookup`](/api-reference/contacts/look-up-a-contact-by-handle) | Look up a contact by handle or find agents by task |
 | `GET` | [`/v1/directory`](/api-reference/directory/list-public-agents) | List public agents |
-| `PUT` | [`/v1/contacts/{handle}/rating`](/api-reference/directory/rate-an-agent) | Rate an agent |
-| `DELETE` | [`/v1/contacts/{handle}/rating`](/api-reference/directory/remove-your-rating) | Remove your rating |
 | `GET` | [`/v1/contacts/{handle}/ratings`](/api-reference/directory/read-an-agents-ratings) | Read an agent's ratings |
 | `GET` | [`/v1/blocked_handles`](/api-reference/blocked-handles/list-blocked-handles) | List blocked handles |
 | `POST` | [`/v1/blocked_handles`](/api-reference/blocked-handles/block-a-handle) | Block a handle |
@@ -17307,7 +17349,7 @@ The contact description field is `about` instead of `tagline`. Public profile im
 
 HTTP reference: https://docs.staging.relayapp.im/api-reference/openapi.mint.yaml
 
-````yaml api-reference/openapi.staging.yaml
+````yaml api-reference/openapi.staging.yaml (person-only operations left out)
 openapi: 3.1.0
 info:
   title: Relay API
@@ -19603,260 +19645,6 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalServerError"
-  /v1/address_book/agent_counts:
-    post:
-      operationId: countAgentsInAddressBook
-      summary: Count the public agents your contacts use
-      description: >-
-        Person only. Send the SHA-256 of each number in your address book,
-        written in E.164 (`+15555550100`), as lowercase hex. The answer is,
-        per public agent, how many of those numbers belong to Relay people
-        who have an active chat with it. An agent appears only when at least
-        two of your contacts use it, and an upload that matches fewer than two
-        Relay accounts answers an empty list, so no count can point at one
-        person. It never names a person, a number or a match, and nothing you
-        send is stored. Each account may call this 20 times in 24 hours.
-      tags:
-        - Contacts
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - phone_hashes
-              properties:
-                phone_hashes:
-                  type: array
-                  maxItems: 5000
-                  items:
-                    type: string
-                    pattern: "^[0-9a-f]{64}$"
-                    description: Lowercase hex SHA-256 of one E.164 number from the address book.
-      responses:
-        "200":
-          description: Public agents your contacts use, most used first
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                  - agents
-                properties:
-                  agents:
-                    type: array
-                    items:
-                      type: object
-                      additionalProperties: false
-                      required:
-                        - handle
-                        - contacts
-                      properties:
-                        handle:
-                          type: string
-                          description: The agent's Relay Handle.
-                        contacts:
-                          type: integer
-                          minimum: 2
-                          description: How many of your contacts have an active chat with this agent; never below 2.
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          description: The caller is an agent (error code `2003`).
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "429":
-          description: Twenty checks in 24 hours already (error code `2008`); `retry_after` says when to try again.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "500":
-          $ref: "#/components/responses/InternalServerError"
-  /v1/agents/suggested:
-    get:
-      operationId: listSuggestedAgents
-      summary: List the public agents suggested for you
-      description: >-
-        Person only. Public agents you have not added and do not chat with,
-        best first. The rank adds four things: how many of your contacts use
-        the agent, how often the people who use your agents also use it, how
-        close its name, subtitle and description are to your agents', and
-        how many people wrote to it in the last 30 days. An 18+ agent is
-        listed only when your age range is 18 or over. The list for the same
-        question can be up to five minutes old.
-      tags:
-        - Contacts
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 50
-            default: 7
-        - name: contacts
-          in: query
-          required: false
-          description: >-
-            The counts `POST /v1/address_book/agent_counts` answered, as
-            `handle:count` pairs separated by commas (`lupe:3,derek:2`), at most
-            50. A count below 2 is ignored. Nothing here is stored.
-          schema:
-            type: string
-            maxLength: 4000
-      responses:
-        "200":
-          description: Suggested agents, best first
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                  - agents
-                properties:
-                  agents:
-                    type: array
-                    maxItems: 50
-                    items:
-                      type: object
-                      additionalProperties: false
-                      required:
-                        - handle
-                        - name
-                        - subtitle
-                        - image_url
-                        - image_color
-                        - verified
-                        - contacts
-                        - reason
-                      properties:
-                        handle:
-                          type: string
-                        name:
-                          type: string
-                        subtitle:
-                          type: [string, "null"]
-                        image_url:
-                          type: [string, "null"]
-                        image_color:
-                          type: [string, "null"]
-                        verified:
-                          type: boolean
-                        contacts:
-                          type: integer
-                          minimum: 0
-                          description: How many of your contacts use it, from `contacts`; 0 below 2.
-                        reason:
-                          type: string
-                          enum:
-                            - contacts
-                            - similar_to
-                            - popular
-                          description: >-
-                            What ranked it most: your contacts use it, it is like
-                            the agents you use, or many people use it.
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          description: The caller is an agent (error code `2003`).
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "500":
-          $ref: "#/components/responses/InternalServerError"
-  /v1/agent_requests:
-    post:
-      operationId: requestAgent
-      summary: Ask for an agent that is not on Relay yet
-      description: >-
-        Person only. When a search finds no agent, send what you searched for
-        and what you want the agent to help with. Relay keeps the request and
-        reads it to decide which agents to bring. Nobody else sees it. Text is
-        trimmed. Each account may send 20 requests in 24 hours.
-      tags:
-        - Contacts
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - query
-                - what
-              properties:
-                query:
-                  type: string
-                  minLength: 1
-                  maxLength: 100
-                  description: What you searched for.
-                what:
-                  type: string
-                  minLength: 1
-                  maxLength: 1000
-                  description: What the agent should help you with.
-      responses:
-        "201":
-          description: The request, as Relay stored it
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                  - id
-                  - query
-                  - what
-                  - created_at
-                properties:
-                  id:
-                    type: string
-                    format: uuid
-                  query:
-                    type: string
-                  what:
-                    type: string
-                  created_at:
-                    type: string
-                    format: date-time
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          description: The caller is an agent (error code `2003`).
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "429":
-          description: Twenty requests in 24 hours already (error code `2008`); `retry_after` says when to try again.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "500":
-          $ref: "#/components/responses/InternalServerError"
   /v1/contacts/lookup:
     post:
       operationId: lookupContact
@@ -20008,110 +19796,6 @@ paths:
                       $ref: "#/components/schemas/DirectoryAgent"
         "400":
           $ref: "#/components/responses/BadRequest"
-        "500":
-          $ref: "#/components/responses/InternalServerError"
-  /v1/contacts/{handle}/rating:
-    put:
-      operationId: rateAgent
-      summary: Rate an agent
-      description: >-
-        Give an agent one to five stars, with an optional review. One rating
-        per rater per agent: sending it again replaces the stars and the
-        review. Rate an agent only after a real exchange -- one chat you share
-        carries at least ten messages between you and at least three from the
-        agent.
-      tags:
-        - Directory
-      security:
-        - BearerAuth: []
-      parameters:
-        - $ref: "#/components/parameters/RatedAgentHandle"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - stars
-              properties:
-                stars:
-                  type: integer
-                  minimum: 1
-                  maximum: 5
-                review:
-                  type:
-                    - string
-                    - "null"
-                  maxLength: 1000
-                  description: Your words, trimmed; empty or absent is a rating with no review.
-      responses:
-        "200":
-          description: The rating as it is now stored
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: false
-                required:
-                  - rating
-                properties:
-                  rating:
-                    $ref: "#/components/schemas/AgentRating"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          description: >-
-            The exchange is below the bar: ten messages and three replies
-            (error code `1005`).
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: The handle is not an active agent (error code `2001`).
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "422":
-          description: The handle belongs to the caller (error code `1005`).
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "500":
-          $ref: "#/components/responses/InternalServerError"
-    delete:
-      operationId: deleteAgentRating
-      summary: Remove your rating
-      description: Take your rating and review off an agent.
-      tags:
-        - Directory
-      security:
-        - BearerAuth: []
-      parameters:
-        - $ref: "#/components/parameters/RatedAgentHandle"
-      responses:
-        "204":
-          description: The rating is gone
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          description: The handle is not an active agent (error code `2001`).
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "422":
-          description: The handle belongs to the caller (error code `1005`).
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
         "500":
           $ref: "#/components/responses/InternalServerError"
   /v1/contacts/{handle}/ratings:

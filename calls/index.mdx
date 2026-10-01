@@ -95,7 +95,7 @@ Each package below joins the room and runs the WebRTC connection for you, so you
     ```python
     import os
 
-    from pipecat.frames.frames import TTSSpeakFrame
+    from pipecat.frames.frames import LLMRunFrame
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.worker import PipelineWorker
     from pipecat.workers.runner import WorkerRunner
@@ -109,12 +109,15 @@ Each package below joins the room and runs the WebRTC connection for you, so you
             base_url="https://api.staging.relayapp.im",
             params=RelayParams(audio_in_enabled=True, audio_out_enabled=True),
         )
-        # stt, llm and tts are your Pipecat services.
-        worker = PipelineWorker(Pipeline([transport.input(), stt, llm, tts, transport.output()]))
+        # stt, llm and tts are your Pipecat services; the aggregators hold the LLM context.
+        worker = PipelineWorker(
+            Pipeline([transport.input(), stt, user_aggregator, llm, tts, transport.output(), assistant_aggregator]),
+            cancel_on_idle_timeout=False,  # a quiet call is still a call
+        )
 
         @transport.event_handler("on_first_participant_joined")
-        async def greet(transport, participant_id):
-            await worker.queue_frame(TTSSpeakFrame("Hello! How can I help?"))
+        async def start(transport, participant_id):
+            await worker.queue_frames([LLMRunFrame()])  # the model speaks first, in its own words
 
         @transport.event_handler("on_participant_left")
         async def hang_up(transport, participant_id, reason):
@@ -126,7 +129,7 @@ Each package below joins the room and runs the WebRTC connection for you, so you
     ```
   </Tab>
   <Tab title="LiveKit">
-    `RelayLiveKitCall` plugs a Relay call into a LiveKit Agents `AgentSession` in place of a LiveKit room. The Python package also hands the session the person's camera.
+    `RelayLiveKitCall` plugs a Relay call into a LiveKit Agents `AgentSession` in place of a LiveKit room. Both packages carry video too: Python hands the session the person's camera, and TypeScript exposes it as `call.videoInput` ([video calls](/calls/video)).
 
     <CodeGroup>
     ```python Python

@@ -817,10 +817,10 @@ mint_sidebar_operations = dict(re.findall(
     mint_openapi_text,
     re.M,
 ))
-if set(mint_sidebar_operations) != expected_operation_ids:
+if set(mint_sidebar_operations) != expected_operation_ids - HIDDEN_OPERATIONS:
     raise SystemExit(
         "concise API sidebar inventory drifted: "
-        f"{sorted(set(mint_sidebar_operations) ^ expected_operation_ids)}"
+        f"{sorted(set(mint_sidebar_operations) ^ (expected_operation_ids - HIDDEN_OPERATIONS))}"
     )
 if re.search(
     r"^      x-mint:\n^        metadata:\n(?:^          .+\n)*^          title:",
@@ -829,14 +829,17 @@ if re.search(
 ):
     raise SystemExit("Mintlify presentation metadata must preserve endpoint H1 titles")
 for operation_id, metadata in page_paths().items():
+    if operation_id in HIDDEN_OPERATIONS:
+        # Person-only: no page, so the bundle must not carry the operation.
+        if re.search(rf"^      operationId: {re.escape(operation_id)}$", mint_openapi_text, re.M):
+            raise SystemExit(f"person-only operation entered the Mintlify bundle: {operation_id}")
+        continue
     operation = re.search(
         rf"^      operationId: {re.escape(operation_id)}\n(.*?)(?=^      summary:)",
         mint_openapi_text, re.M | re.S,
     )
     if not operation or f"        href: {metadata['href']}\n" not in operation.group(1):
         raise SystemExit(f"Stable endpoint page URL changed: {operation_id}")
-    if ("      x-excluded: true\n" in operation.group(1)) != (operation_id in HIDDEN_OPERATIONS):
-        raise SystemExit(f"x-excluded must mark exactly the person-only operations: {operation_id}")
 
 event_type_block = re.search(
     r"^    WebhookEventType:\n.*?^      enum:\n"

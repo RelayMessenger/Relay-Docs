@@ -38,15 +38,42 @@ EVENT_TAB_GROUPS = [
     ("Location", ["events/location-sharing-started", "events/location-sharing-stopped"]),
 ]
 assert sorted(page for _, pages in EVENT_TAB_GROUPS for page in pages) == sorted(EVENT_PAGES)
-# Owner ruling 2026-10-01 ("only search agents should be public"): routes only a
-# person can call answer an Agent Token with 403 (error code 2003), so the
-# developer docs leave them out: `x-excluded` in the generated Mintlify bundle
-# builds no page, so their URLs return 404.
-HIDDEN_OPERATIONS = {"countAgentsInAddressBook", "listSuggestedAgents", "requestAgent"}
+# Owner rulings 2026-10-01 ("only search agents should be public"; people rate
+# agents, agents never rate): person-only routes stay out of the developer
+# docs. The generated Mintlify bundle and llms-full.txt drop their paths, so no
+# page is built and their URLs return 404. Keep scripts/prepare-mint-openapi.mjs
+# in step; validate-docs.py checks the bundle.
+HIDDEN_OPERATIONS = {
+    "countAgentsInAddressBook", "listSuggestedAgents", "requestAgent",
+    "rateAgent", "deleteAgentRating",
+}
 
 
 def hidden_endpoints():
     return {entry["endpoint"] for operation, entry in page_paths().items() if operation in HIDDEN_OPERATIONS}
+
+
+def strip_hidden_paths(text):
+    """The OpenAPI text without the path blocks of person-only operations.
+
+    Every hidden operation's path must be hidden whole: a path that mixes
+    hidden and public methods would need method-level surgery, so it fails.
+    """
+    import re
+    hidden = hidden_endpoints()
+    paths = {}
+    for endpoint in hidden:
+        method, path = endpoint.split(" ", 1)
+        paths.setdefault(path, set()).add(method.lower())
+    for path, methods in paths.items():
+        match = re.search(rf"^  {re.escape(path)}:\n(?:(?:    .*|)\n)*?(?=^  \S|^\S|\Z)", text, re.M)
+        if match is None:
+            raise ValueError(f"hidden path missing from OpenAPI: {path}")
+        present = set(re.findall(r"^    (get|post|put|patch|delete):$", match.group(0), re.M))
+        if present != methods:
+            raise ValueError(f"{path} mixes hidden and public methods: {sorted(present)}")
+        text = text[:match.start()] + text[match.end():]
+    return text
 
 
 def walk_pages(items, parents=()):
