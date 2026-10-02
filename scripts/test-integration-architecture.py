@@ -69,10 +69,12 @@ class IntegrationArchitecture(unittest.TestCase):
         self.assertNotIn('href="/integrations/grok"', text)
         self.assertNotIn('href="/integrations/xai-grok"', text)
 
-    def test_mcp_logo_and_app_blue_remain_present(self):
+    def test_mcp_logo_and_separate_app_blue_remain_present(self):
         self.assertIn('icon="/images/brands/mcp.svg"', read("integrations/index.mdx"))
         self.assertIn('viewBox="0 0 180 180"', read("images/brands/mcp.svg"))
-        self.assertEqual(json.loads(read("docs.json"))["colors"]["primary"].lower(), "#0b75ff")
+        self.assertEqual(json.loads(read("docs.json"))["colors"]["primary"].lower(), "#006be6")
+        self.assertIn("--relay-brand-blue: #0b75ff", read("style.css"))
+        self.assertIn("--app-blue: var(--relay-brand-blue)", read("style.css"))
 
     def test_provider_matrices_separate_framework_support_from_relay_examples(self):
         classifications = {

@@ -49,7 +49,7 @@ try {
       assert.ok(directory.mcpLoaded);
       assert.equal(directory.mcpWidth, 24);
       assert.equal(directory.mcpHeight, 24);
-      assert.equal(directory.primary, "11 117 255");
+      assert.equal(directory.primary, "0 107 230");
       assert.ok(directory.noLogoRows);
       await open("/interactions/rich-cards", width, dark);
       await page.waitForSelector(".rich-preview .native-capsule");
