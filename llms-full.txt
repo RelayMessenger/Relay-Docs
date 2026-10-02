@@ -414,12 +414,12 @@ Choose the integration that matches where your agent runs.
 
 <Columns cols={3}>
   <Card title="Claude Code" href="/integrations/claude-code" horizontal icon="/images/brands/claude.svg" />
-  <Card title="Codex" href="/integrations/codex" horizontal icon="/images/brands/openai.svg" />
   <Card title="Cursor" href="/integrations/cursor" horizontal icon="/images/brands/cursor.svg" />
-  <Card title="Cline" href="/integrations/cline" horizontal icon="/images/brands/cline.svg" />
+  <Card title="Codex" href="/integrations/codex" horizontal icon="/images/brands/openai.svg" />
   <Card title="VS Code" href="/integrations/vs-code" horizontal icon="/images/brands/vscode.svg" />
-  <Card title="OpenCode" href="/integrations/opencode" horizontal icon="/images/brands/opencode.svg" />
   <Card title="Gemini CLI" href="/integrations/gemini-cli" horizontal icon="/images/brands/gemini.svg" />
+  <Card title="Cline" href="/integrations/cline" horizontal icon="/images/brands/cline.svg" />
+  <Card title="OpenCode" href="/integrations/opencode" horizontal icon="/images/brands/opencode.svg" />
   <Card title="Pi" href="/integrations/pi" horizontal icon="/images/brands/pi.svg" />
   <Card title="OpenClaw" href="/integrations/openclaw" horizontal icon="/images/brands/openclaw.svg" />
   <Card title="Hermes" href="/integrations/hermes" horizontal icon="/images/brands/hermes.png" />
@@ -427,15 +427,12 @@ Choose the integration that matches where your agent runs.
 
 </div>
 
-## Build it yourself
+## Frameworks and protocols
 
 <Columns cols={3}>
   <Card title="Chat SDK" href="/integrations/chat-sdk" horizontal icon="/images/brands/vercel.svg" />
   <Card title="Cloudflare Think" href="/integrations/cloudflare-think" horizontal icon="/images/brands/cloudflare.svg" />
-  <Card title="Your own backend" href="/integrations/your-own-backend" horizontal icon="/images/brands/relay.png" />
   <Card title="MCP" href="/integrations/mcp" horizontal icon="/images/brands/mcp.svg" />
-  <Card title="Agent prompt" href="/integrations/agent-prompt" horizontal icon="/images/brands/relay.png" />
-  <Card title="Skills" href="/integrations/skills" horizontal icon="/images/brands/relay.png" />
 </Columns>
 
 ## Voice & video
@@ -446,6 +443,14 @@ Use a framework with swappable providers, or connect an ElevenLabs Agent directl
   <Card title="Pipecat" href="/integrations/pipecat" horizontal icon="/images/brands/pipecat.svg" />
   <Card title="LiveKit" href="/integrations/livekit" horizontal icon="/images/brands/livekit.svg" />
   <Card title="ElevenLabs" href="/integrations/elevenlabs" horizontal icon="/images/brands/elevenlabs.svg" />
+</Columns>
+
+## Build it yourself
+
+<Columns cols={3}>
+  <Card title="Your own backend" href="/integrations/your-own-backend" horizontal />
+  <Card title="Agent prompt" href="/integrations/agent-prompt" horizontal />
+  <Card title="Skills" href="/integrations/skills" horizontal />
 </Columns>
 
 ## Connect a coding agent
@@ -541,6 +546,74 @@ Use the [CLI guide](/cli/index) for prompt, token, and restart errors.
 - [Add Relay guidance](/integrations/skills)
 - [Relay bridge source](https://github.com/RelayMessenger/Relay-SDK/blob/staging/packages/cli/src/claude-bridge.ts)
 
+# Cursor
+
+> Connect Cursor to Relay and check its messaging setup.
+
+Source: https://docs.staging.relayapp.im/integrations/cursor.md
+
+## Before you start
+
+- [Cursor](https://cursor.com/downloads), installed and signed in.
+- Node.js 22.22.3 or newer.
+
+## Connect
+
+Run this in the folder where you work to connect cursor to Relay.
+
+```bash
+npx relaymessenger@staging connect cursor
+```
+
+Follow the prompts to choose or create an agent and approve the change. Leave the command running: it answers each message with Cursor from the folder you ran it in. Control-C stops it. Relay's tools travel through the session, so no MCP file is written.
+
+### Do it by hand
+
+```bash
+ln -s "$PWD/plugins/relay" .cursor/plugins/local/relay
+```
+
+## Send it a message
+
+Open Relay on your phone and message the handle. While connect runs, Cursor answers on its own in the same chat, and each chat keeps its own ACP session.
+
+## What it can do
+
+These come from the connection code for `cursor` and the Relay MCP tool list.
+
+| Relay feature | Cursor |
+| --- | --- |
+| Connect | Connect writes no MCP file; Relay drives Cursor over ACP and its tools travel through the session. |
+| Start | Connect stays running and drives `cursor-agent acp` in its folder, one message at a time. |
+| Wakes when a message arrives | Yes, it answers on its own while connect runs, one message at a time. |
+| Reply in the chat | Yes, text up to 10,000 characters, with a stable idempotency key. |
+| A reply to an earlier Message | Yes. When a person swipe-replies, the agent reads the bubble they swiped, who sent it and what it says, beside their words. |
+| Send attachments | No. The MCP tools send text only. |
+| Receive attachments | Yes. Photos and files are saved under ~/.config/relay/media and their paths are added to the message, so the agent opens them with its own file tools. |
+| Read chat history | Yes, by chat, oldest or newest first, one page at a time. |
+| React, type, mark read | Yes, with reactions, typing indicators, and read marks. |
+| Contact card | Yes, read and set the agent's name and picture. |
+| Buttons | Yes; see [Buttons](/interactions/buttons). A tap comes back as a message whose text is the label. |
+| Link preview | Yes; a URL alone on its own line in the answer goes out as its own link message, drawn as a card; see [Rich link previews](/messages/rich-link-previews). |
+| Tool approvals | Cursor asks with its own settings. Each question goes to the agent's owners as a card in the Relay app; see [Approve tools from your phone](/cli/connect#approve-tools-from-your-phone). |
+
+## When it fails
+
+- `No reply yet. Run: relay watch @<handle>` Connect is not running, or Cursor is still working; run connect again and it answers from there.
+
+Use the [CLI guide](/cli/index) for prompt, token, and restart errors.
+
+[Selection](/interactions/selection). End the final answer with a `selection` JSON fence holding the question as `title` (1 to 60 characters) and the `options`; any words outside the fence go as a normal message above the card. The shared ACP bridge preserves `selected_values`, `reply_to`, and ordered rich parts as data alongside the readable bullet text.
+
+[Payments](/interactions/payments). End the final answer with a `payment` JSON fence holding the payment request's fields, named as in the API. Connect creates the request with its own Relay token, any words before it go out first, and the card follows as its own Message. If Relay refuses the request, the terminal says why and sends no card.
+
+## Next steps
+
+- [Send messages](/messages/send)
+- [Read message history](/chats/history)
+- [Add Relay guidance](/integrations/skills)
+- [Relay plugin source](https://github.com/RelayMessenger/Relay-SDK/tree/staging/plugins/relay)
+
 # Codex
 
 > Connect Codex to Relay and check its messaging setup.
@@ -612,45 +685,93 @@ Use the [CLI guide](/cli/index) for prompt, token, and restart errors.
 - [Add Relay guidance](/integrations/skills)
 - [Relay plugin source](https://github.com/RelayMessenger/Relay-SDK/tree/staging/plugins/relay)
 
-# Cursor
+# VS Code
 
-> Connect Cursor to Relay and check its messaging setup.
+> Connect VS Code to Relay and check its messaging setup.
 
-Source: https://docs.staging.relayapp.im/integrations/cursor.md
+Source: https://docs.staging.relayapp.im/integrations/vs-code.md
 
 ## Before you start
 
-- [Cursor](https://cursor.com/downloads), installed and signed in.
+- [VS Code](https://code.visualstudio.com/docs/setup/mac) with Copilot agent mode on.
 - Node.js 22.22.3 or newer.
 
 ## Connect
 
-Run this in the folder where you work to connect cursor to Relay.
+Run this in the folder where you work to connect vs code to Relay.
 
 ```bash
-npx relaymessenger@staging connect cursor
+npx relaymessenger@staging connect vs-code
 ```
 
-Follow the prompts to choose or create an agent and approve the change. Leave the command running: it answers each message with Cursor from the folder you ran it in. Control-C stops it. Relay's tools travel through the session, so no MCP file is written.
-
-### Do it by hand
-
-```bash
-ln -s "$PWD/plugins/relay" .cursor/plugins/local/relay
-```
+Choose one agent when Relay asks. The first detected agent is the default. If saved agents exist, choose `New agent` or a saved handle. Press Enter at `Continue? (Y/n)` to accept the plan.
 
 ## Send it a message
 
-Open Relay on your phone and message the handle. While connect runs, Cursor answers on its own in the same chat, and each chat keeps its own ACP session.
+Open Relay on your phone and message the handle. VS Code does not wake up on its own, so tell it: `Read my Relay messages and answer them.` It reads the chat and sends its answer there.
 
 ## What it can do
 
-These come from the connection code for `cursor` and the Relay MCP tool list.
+These come from the connection code for `vscode` and the Relay MCP tool list.
 
-| Relay feature | Cursor |
+| Relay feature | VS Code |
 | --- | --- |
-| Connect | Connect writes no MCP file; Relay drives Cursor over ACP and its tools travel through the session. |
-| Start | Connect stays running and drives `cursor-agent acp` in its folder, one message at a time. |
+| Connect | Relay adds one `servers.relay` entry to the user `mcp.json` of your VS Code profile and keeps every other entry. |
+| Start | restart VS Code; connect tells you when. |
+| Wakes when a message arrives | No. It reads the chat when you ask it to. |
+| Reply in the chat | Yes, text up to 10,000 characters, with a stable idempotency key. |
+| Send attachments | No. The MCP tools send text only. |
+| Read chat history | Yes, by chat, oldest or newest first, one page at a time. |
+| React, type, mark read | Yes, with reactions, typing indicators, and read marks. |
+| Contact card | Yes, read and set the agent's name and picture. |
+| Buttons | Yes; see [Buttons](/interactions/buttons). A tap comes back as a message whose text is the label. |
+| Link preview | Yes; a URL alone on its own line in the answer goes out as its own link message, drawn as a card; see [Rich link previews](/messages/rich-link-previews). |
+
+## When it fails
+
+- `No reply yet. Run: relay watch @<handle>` VS Code has not read the chat yet; ask it again.
+
+Use the [CLI guide](/cli/index) for prompt, token, and restart errors.
+
+## Next steps
+
+- [Send messages](/messages/send)
+- [Read message history](/chats/history)
+- [Handle retries](/live/retries)
+
+# Gemini CLI
+
+> Connect Gemini CLI to Relay and check its messaging setup.
+
+Source: https://docs.staging.relayapp.im/integrations/gemini-cli.md
+
+## Before you start
+
+- [Gemini CLI](https://geminicli.com/docs/get-started/installation/), installed and signed in.
+- Node.js 22.22.3 or newer.
+
+## Connect
+
+Run this in the folder where you work to connect gemini cli to Relay.
+
+```bash
+npx relaymessenger@staging connect gemini-cli
+```
+
+Follow the prompts to choose or create an agent and approve the change. Leave the command running: it answers each message with Gemini CLI from the folder you ran it in. Control-C stops it. Relay's tools travel through the session, so no MCP file is written.
+
+## Send it a message
+
+Open Relay on your phone and message the handle. While connect runs, Gemini CLI answers on its own in the same chat, and each chat keeps its own ACP session.
+
+## What it can do
+
+These come from the connection code for `gemini-cli` and the Relay MCP tool list.
+
+| Relay feature | Gemini CLI |
+| --- | --- |
+| Connect | Connect writes no MCP file; Relay drives Gemini CLI over ACP and its tools travel through the session. |
+| Start | Connect stays running and drives `gemini --experimental-acp` in its folder, one message at a time. |
 | Wakes when a message arrives | Yes, it answers on its own while connect runs, one message at a time. |
 | Reply in the chat | Yes, text up to 10,000 characters, with a stable idempotency key. |
 | A reply to an earlier Message | Yes. When a person swipe-replies, the agent reads the bubble they swiped, who sent it and what it says, beside their words. |
@@ -661,11 +782,11 @@ These come from the connection code for `cursor` and the Relay MCP tool list.
 | Contact card | Yes, read and set the agent's name and picture. |
 | Buttons | Yes; see [Buttons](/interactions/buttons). A tap comes back as a message whose text is the label. |
 | Link preview | Yes; a URL alone on its own line in the answer goes out as its own link message, drawn as a card; see [Rich link previews](/messages/rich-link-previews). |
-| Tool approvals | Cursor asks with its own settings. Each question goes to the agent's owners as a card in the Relay app; see [Approve tools from your phone](/cli/connect#approve-tools-from-your-phone). |
+| Tool approvals | Gemini CLI asks with its own settings; Relay's tools run without a card. Each question goes to the agent's owners as a card in the Relay app; see [Approve tools from your phone](/cli/connect#approve-tools-from-your-phone). |
 
 ## When it fails
 
-- `No reply yet. Run: relay watch @<handle>` Connect is not running, or Cursor is still working; run connect again and it answers from there.
+- `No reply yet. Run: relay watch @<handle>` Connect is not running, or Gemini CLI is still working; run connect again and it answers from there.
 
 Use the [CLI guide](/cli/index) for prompt, token, and restart errors.
 
@@ -677,8 +798,7 @@ Use the [CLI guide](/cli/index) for prompt, token, and restart errors.
 
 - [Send messages](/messages/send)
 - [Read message history](/chats/history)
-- [Add Relay guidance](/integrations/skills)
-- [Relay plugin source](https://github.com/RelayMessenger/Relay-SDK/tree/staging/plugins/relay)
+- [Handle retries](/live/retries)
 
 # Cline
 
@@ -741,60 +861,6 @@ Use the [CLI guide](/cli/index) for prompt, token, and restart errors.
 - [Read message history](/chats/history)
 - [Handle retries](/live/retries)
 
-# VS Code
-
-> Connect VS Code to Relay and check its messaging setup.
-
-Source: https://docs.staging.relayapp.im/integrations/vs-code.md
-
-## Before you start
-
-- [VS Code](https://code.visualstudio.com/docs/setup/mac) with Copilot agent mode on.
-- Node.js 22.22.3 or newer.
-
-## Connect
-
-Run this in the folder where you work to connect vs code to Relay.
-
-```bash
-npx relaymessenger@staging connect vs-code
-```
-
-Choose one agent when Relay asks. The first detected agent is the default. If saved agents exist, choose `New agent` or a saved handle. Press Enter at `Continue? (Y/n)` to accept the plan.
-
-## Send it a message
-
-Open Relay on your phone and message the handle. VS Code does not wake up on its own, so tell it: `Read my Relay messages and answer them.` It reads the chat and sends its answer there.
-
-## What it can do
-
-These come from the connection code for `vscode` and the Relay MCP tool list.
-
-| Relay feature | VS Code |
-| --- | --- |
-| Connect | Relay adds one `servers.relay` entry to the user `mcp.json` of your VS Code profile and keeps every other entry. |
-| Start | restart VS Code; connect tells you when. |
-| Wakes when a message arrives | No. It reads the chat when you ask it to. |
-| Reply in the chat | Yes, text up to 10,000 characters, with a stable idempotency key. |
-| Send attachments | No. The MCP tools send text only. |
-| Read chat history | Yes, by chat, oldest or newest first, one page at a time. |
-| React, type, mark read | Yes, with reactions, typing indicators, and read marks. |
-| Contact card | Yes, read and set the agent's name and picture. |
-| Buttons | Yes; see [Buttons](/interactions/buttons). A tap comes back as a message whose text is the label. |
-| Link preview | Yes; a URL alone on its own line in the answer goes out as its own link message, drawn as a card; see [Rich link previews](/messages/rich-link-previews). |
-
-## When it fails
-
-- `No reply yet. Run: relay watch @<handle>` VS Code has not read the chat yet; ask it again.
-
-Use the [CLI guide](/cli/index) for prompt, token, and restart errors.
-
-## Next steps
-
-- [Send messages](/messages/send)
-- [Read message history](/chats/history)
-- [Handle retries](/live/retries)
-
 # OpenCode
 
 > Connect OpenCode to Relay and check its messaging setup.
@@ -843,67 +909,6 @@ These come from the connection code for `opencode` and the Relay MCP tool list.
 ## When it fails
 
 - `No reply yet. Run: relay watch @<handle>` Connect is not running, or OpenCode is still working; run connect again and it answers from there.
-
-Use the [CLI guide](/cli/index) for prompt, token, and restart errors.
-
-[Selection](/interactions/selection). End the final answer with a `selection` JSON fence holding the question as `title` (1 to 60 characters) and the `options`; any words outside the fence go as a normal message above the card. The shared ACP bridge preserves `selected_values`, `reply_to`, and ordered rich parts as data alongside the readable bullet text.
-
-[Payments](/interactions/payments). End the final answer with a `payment` JSON fence holding the payment request's fields, named as in the API. Connect creates the request with its own Relay token, any words before it go out first, and the card follows as its own Message. If Relay refuses the request, the terminal says why and sends no card.
-
-## Next steps
-
-- [Send messages](/messages/send)
-- [Read message history](/chats/history)
-- [Handle retries](/live/retries)
-
-# Gemini CLI
-
-> Connect Gemini CLI to Relay and check its messaging setup.
-
-Source: https://docs.staging.relayapp.im/integrations/gemini-cli.md
-
-## Before you start
-
-- [Gemini CLI](https://geminicli.com/docs/get-started/installation/), installed and signed in.
-- Node.js 22.22.3 or newer.
-
-## Connect
-
-Run this in the folder where you work to connect gemini cli to Relay.
-
-```bash
-npx relaymessenger@staging connect gemini-cli
-```
-
-Follow the prompts to choose or create an agent and approve the change. Leave the command running: it answers each message with Gemini CLI from the folder you ran it in. Control-C stops it. Relay's tools travel through the session, so no MCP file is written.
-
-## Send it a message
-
-Open Relay on your phone and message the handle. While connect runs, Gemini CLI answers on its own in the same chat, and each chat keeps its own ACP session.
-
-## What it can do
-
-These come from the connection code for `gemini-cli` and the Relay MCP tool list.
-
-| Relay feature | Gemini CLI |
-| --- | --- |
-| Connect | Connect writes no MCP file; Relay drives Gemini CLI over ACP and its tools travel through the session. |
-| Start | Connect stays running and drives `gemini --experimental-acp` in its folder, one message at a time. |
-| Wakes when a message arrives | Yes, it answers on its own while connect runs, one message at a time. |
-| Reply in the chat | Yes, text up to 10,000 characters, with a stable idempotency key. |
-| A reply to an earlier Message | Yes. When a person swipe-replies, the agent reads the bubble they swiped, who sent it and what it says, beside their words. |
-| Send attachments | No. The MCP tools send text only. |
-| Receive attachments | Yes. Photos and files are saved under ~/.config/relay/media and their paths are added to the message, so the agent opens them with its own file tools. |
-| Read chat history | Yes, by chat, oldest or newest first, one page at a time. |
-| React, type, mark read | Yes, with reactions, typing indicators, and read marks. |
-| Contact card | Yes, read and set the agent's name and picture. |
-| Buttons | Yes; see [Buttons](/interactions/buttons). A tap comes back as a message whose text is the label. |
-| Link preview | Yes; a URL alone on its own line in the answer goes out as its own link message, drawn as a card; see [Rich link previews](/messages/rich-link-previews). |
-| Tool approvals | Gemini CLI asks with its own settings; Relay's tools run without a card. Each question goes to the agent's owners as a card in the Relay app; see [Approve tools from your phone](/cli/connect#approve-tools-from-your-phone). |
-
-## When it fails
-
-- `No reply yet. Run: relay watch @<handle>` Connect is not running, or Gemini CLI is still working; run connect again and it answers from there.
 
 Use the [CLI guide](/cli/index) for prompt, token, and restart errors.
 
@@ -1317,60 +1322,6 @@ Think uses one durable root state per Relay Chat. Its current burst window is 60
 - [Manage webhook subscriptions](/webhooks/subscriptions)
 - [Handle delivery retries](/webhooks/delivery)
 
-# Your own backend
-
-> Run the code that reads a Relay message and chooses its reply.
-
-Source: https://docs.staging.relayapp.im/integrations/your-own-backend.md
-
-Run the same message handler on your laptop through signed local forwarding and in production through a webhook subscription.
-
-## Before you start
-
-- An Agent Token for the staging agent you will message.
-- A local server for development or a public HTTPS endpoint for deployment.
-- A model, prompts, and tools of your own. Relay carries the Messages.
-
-## Connect
-
-### On your laptop
-
-```bash
-npx relaymessenger@staging listen --forward-to http://localhost:3000/webhooks/relay
-```
-
-The command will POST signed Relay events to your local route. Set the printed signing secret as `RELAY_WEBHOOK_SECRET`, pass the raw request body to your verifier, and then run the same handler you will deploy.
-
-### Deployed
-
-Create one [webhook subscription](/webhooks/subscriptions) for your public HTTPS route and save its signing secret with the backend. Relay posts each subscribed event to that route. Verify the raw body before parsing, commit the event before returning success, and send replies with stable idempotency keys.
-
-Use [Chat SDK](/integrations/chat-sdk) for a Node handler or [Cloudflare Think](/integrations/cloudflare-think) for a Worker with durable model turns.
-
-## Send it a message
-
-Open Relay on your phone and message the agent's Handle. Your local or deployed handler receives the event, runs your model, and sends the reply into the same Chat.
-
-## What it can do
-
-Your backend can call the Relay API to send replies, upload attachments, read history, react, mark a Chat read, and manage the Contact Card. The [WebSocket guide](/websocket) covers the separate long-lived backend transport.
-
-## When it fails
-
-- No event arrives: check the target route and the subscription's selected events.
-- The webhook is rejected: the signing secret or raw request body changed.
-- The event arrives and no reply comes: read your handler logs, then retry the send with the same idempotency key.
-
-[Selection](/interactions/selection). Send text and selection parts with the SDK or HTTPS. Preserve `selected_values`, `reply_to`, and ordered parts in webhook and WebSocket handlers rather than reconstructing them from readable text.
-
-[Payments](/interactions/payments). Create a payment request, then send its `checkout_url` as the only part of a Message with the SDK or HTTPS. Add `payment.succeeded`, `payment.canceled` and `payment.expired` to your webhook subscription to follow its status.
-
-## Next steps
-
-- [Verify webhook signatures](/webhooks/verify-signatures)
-- [Send a reply](/messages/replies)
-- [Debug requests](/live/debugging)
-
 # MCP
 
 > Connect Claude, ChatGPT, Cursor, and other MCP clients to your Relay agent.
@@ -1538,79 +1489,6 @@ To [recommend another agent](/chats/share-contact-card#recommend-another-agent),
 - [Save an Agent Token with the CLI](/cli/auth)
 - [Install Relay guidance](/integrations/skills)
 - [Read the API reference](/api-reference/overview)
-
-# Agent prompt
-
-> Copy a short prompt that sends your coding agent to Relay's maintained onboarding files.
-
-Source: https://docs.staging.relayapp.im/integrations/agent-prompt.md
-
-Copy this prompt to send your coding agent to Relay's maintained onboarding files.
-
-### Relay agent prompt
-
-````text Relay agent prompt
-Connect this project to Relay. Read https://docs.staging.relayapp.im/llms.txt and follow its Agent onboarding section before you run anything. Open https://docs.staging.relayapp.im/llms-full.txt when a step needs a page's full text. Use only the endpoints, commands, and files those documents name; if a step cannot be verified there, stop and say so.
-````
-
-Use the **Copy agent prompt** button in the navigation bar. If copying is unavailable, copy the prompt above.
-
-## Next steps
-
-- Read the [onboarding index](https://docs.staging.relayapp.im/llms.txt).
-- Open the [full documentation index](https://docs.staging.relayapp.im/llms-full.txt) when you need a page's full text.
-- [Install Relay skills](/integrations/skills).
-
-# Skills
-
-> Install Relay guidance in your runtime with the Skills installer.
-
-Source: https://docs.staging.relayapp.im/integrations/skills.md
-
-## Before you start
-
-- Git, and a runtime that loads skills, such as Claude Code or Codex.
-- Node.js 22.22.3 or newer.
-
-## Connect
-
-Clone the SDK and run the standard Skills installer, which copies the skill into the agent's skill folder:
-
-```bash
-git clone --branch staging https://github.com/RelayMessenger/Relay-SDK.git
-npx skills@1.5.24 add ./Relay-SDK/skills/relay --skill relay
-```
-
-Choose the agent and the scope when the installer asks, then confirm that `relay` appears in that agent's installed skills. The source is [skills/relay](https://github.com/RelayMessenger/Relay-SDK/tree/staging/skills/relay). The [Relay CLI](/cli/index#install) offers the same install as an optional step before setup, and you can decline it there.
-
-Mintlify provides documentation search for this site. It is read-only and does not access Relay Chats, Agents, or customer data. Your runtime may use it automatically through its installed skill; there is nothing to authenticate or paste into Relay.
-
-Installing a skill does not connect the optional Relay API MCP. Add that hosted server only when the runtime needs messaging tools.
-
-Some runtime plugins install the Relay skill; see [Integrations](/integrations). Add [Relay API MCP](/integrations/mcp) separately only when the runtime needs to call messaging tools.
-
-| MCP | Credential | What it does |
-| --- | --- | --- |
-| Docs MCP | None | Mintlify-hosted, read-only documentation search. |
-| [Relay API MCP](/integrations/mcp) | Sign in with Relay, or a Relay Agent Token | Hosted messaging tools for one Agent. |
-
-## Send it a message
-
-Ask your runtime to read the Relay skill and explain how to connect an existing agent. A good answer names the token, the two delivery paths, and the CLI command; a bad one invents an endpoint.
-
-## What it can do
-
-The skill teaches the agent the Relay vocabulary, the API contract, the delivery paths, and the CLI. It does not create an agent, save a token, or read a chat; for that, connect the runtime on its own page.
-
-## When it fails
-
-- `relay` is not in the installed skills: run the installer again with the same agent and scope.
-
-## Next steps
-
-- [Create an agent](/agents/create-agent)
-- [Runtimes](/integrations)
-- [Relay API MCP](/integrations/mcp)
 
 # Pipecat
 
@@ -1990,10 +1868,6 @@ Connect an ElevenLabs Agent to a Relay call through the direct `@relaymessenger/
 
 **ElevenLabs runs the dialogue; the Relay package carries the audio.** This direct path uses Relay's call transport rather than a Pipecat pipeline or LiveKit session.
 
-<Note>
-The direct package is **coming soon**. Its [source](https://github.com/RelayMessenger/Relay-SDK/tree/11a913638ac52b8d1e0e4a497c4a7c2b44354c87/packages/elevenlabs) is available; the npm package is not published yet.
-</Note>
-
 ## Before you start
 
 - Node.js `22.22.3` or newer.
@@ -2003,15 +1877,19 @@ The direct package is **coming soon**. Its [source](https://github.com/RelayMess
 
 ## Connect
 
+```bash
+npm install @relaymessenger/sdk@staging @relaymessenger/elevenlabs@staging
+```
+
 The package's [answer-calls example](https://github.com/RelayMessenger/Relay-SDK/blob/11a913638ac52b8d1e0e4a497c4a7c2b44354c87/packages/elevenlabs/examples/answer-calls.ts) listens for `call.created` and passes the call ID to `ElevenLabsCall.connect`.
 
 The bridge joins the Relay call, gets a signed ElevenLabs URL for a private agent, and opens the Agents WebSocket. It sends the caller's audio as `user_audio_chunk` and plays ElevenLabs' `audio` events back into the call.
 
-Use [Answer calls with an ElevenLabs Agent](/calls/elevenlabs) for the package API and connection example when the package is available.
+Use [Answer calls with an ElevenLabs Agent](/calls/elevenlabs) for the package API and connection example.
 
 ## Send it a message
 
-Once the direct package is available, run its answer-calls example, open the agent's chat in Relay and start a voice call.
+Run its answer-calls example, open the agent's chat in Relay and start a voice call.
 
 ## What it can do
 
@@ -2033,7 +1911,6 @@ The Python `elevenlabs-voice-agent` and `elevenlabs-agents-call` recipes, includ
 
 ## When it fails
 
-- The package cannot be installed: use the source linked above while the npm release is pending.
 - The call rings out: start the example before you call; it must join within the 32-second ring.
 - The audio formats differ: match the agent's input to `inputSampleRate` and choose a [supported output format](/calls/elevenlabs#when-it-fails).
 
@@ -2042,6 +1919,133 @@ The Python `elevenlabs-voice-agent` and `elevenlabs-agents-call` recipes, includ
 - [Answer calls with an ElevenLabs Agent](/calls/elevenlabs)
 - [Use ElevenLabs in Pipecat](/integrations/pipecat#elevenlabs-voices-and-agents)
 - [Connect your runtime](/integrations/index)
+
+# Your own backend
+
+> Run the code that reads a Relay message and chooses its reply.
+
+Source: https://docs.staging.relayapp.im/integrations/your-own-backend.md
+
+Run the same message handler on your laptop through signed local forwarding and in production through a webhook subscription.
+
+## Before you start
+
+- An Agent Token for the staging agent you will message.
+- A local server for development or a public HTTPS endpoint for deployment.
+- A model, prompts, and tools of your own. Relay carries the Messages.
+
+## Connect
+
+### On your laptop
+
+```bash
+npx relaymessenger@staging listen --forward-to http://localhost:3000/webhooks/relay
+```
+
+The command will POST signed Relay events to your local route. Set the printed signing secret as `RELAY_WEBHOOK_SECRET`, pass the raw request body to your verifier, and then run the same handler you will deploy.
+
+### Deployed
+
+Create one [webhook subscription](/webhooks/subscriptions) for your public HTTPS route and save its signing secret with the backend. Relay posts each subscribed event to that route. Verify the raw body before parsing, commit the event before returning success, and send replies with stable idempotency keys.
+
+Use [Chat SDK](/integrations/chat-sdk) for a Node handler or [Cloudflare Think](/integrations/cloudflare-think) for a Worker with durable model turns.
+
+## Send it a message
+
+Open Relay on your phone and message the agent's Handle. Your local or deployed handler receives the event, runs your model, and sends the reply into the same Chat.
+
+## What it can do
+
+Your backend can call the Relay API to send replies, upload attachments, read history, react, mark a Chat read, and manage the Contact Card. The [WebSocket guide](/websocket) covers the separate long-lived backend transport.
+
+## When it fails
+
+- No event arrives: check the target route and the subscription's selected events.
+- The webhook is rejected: the signing secret or raw request body changed.
+- The event arrives and no reply comes: read your handler logs, then retry the send with the same idempotency key.
+
+[Selection](/interactions/selection). Send text and selection parts with the SDK or HTTPS. Preserve `selected_values`, `reply_to`, and ordered parts in webhook and WebSocket handlers rather than reconstructing them from readable text.
+
+[Payments](/interactions/payments). Create a payment request, then send its `checkout_url` as the only part of a Message with the SDK or HTTPS. Add `payment.succeeded`, `payment.canceled` and `payment.expired` to your webhook subscription to follow its status.
+
+## Next steps
+
+- [Verify webhook signatures](/webhooks/verify-signatures)
+- [Send a reply](/messages/replies)
+- [Debug requests](/live/debugging)
+
+# Agent prompt
+
+> Copy a short prompt that sends your coding agent to Relay's maintained onboarding files.
+
+Source: https://docs.staging.relayapp.im/integrations/agent-prompt.md
+
+Copy this prompt to send your coding agent to Relay's maintained onboarding files.
+
+### Relay agent prompt
+
+````text Relay agent prompt
+Connect this project to Relay. Read https://docs.staging.relayapp.im/llms.txt and follow its Agent onboarding section before you run anything. Open https://docs.staging.relayapp.im/llms-full.txt when a step needs a page's full text. Use only the endpoints, commands, and files those documents name; if a step cannot be verified there, stop and say so.
+````
+
+Use the **Copy agent prompt** button in the navigation bar. If copying is unavailable, copy the prompt above.
+
+## Next steps
+
+- Read the [onboarding index](https://docs.staging.relayapp.im/llms.txt).
+- Open the [full documentation index](https://docs.staging.relayapp.im/llms-full.txt) when you need a page's full text.
+- [Install Relay skills](/integrations/skills).
+
+# Skills
+
+> Install Relay guidance in your runtime with the Skills installer.
+
+Source: https://docs.staging.relayapp.im/integrations/skills.md
+
+## Before you start
+
+- Git, and a runtime that loads skills, such as Claude Code or Codex.
+- Node.js 22.22.3 or newer.
+
+## Connect
+
+Clone the SDK and run the standard Skills installer, which copies the skill into the agent's skill folder:
+
+```bash
+git clone --branch staging https://github.com/RelayMessenger/Relay-SDK.git
+npx skills@1.5.24 add ./Relay-SDK/skills/relay --skill relay
+```
+
+Choose the agent and the scope when the installer asks, then confirm that `relay` appears in that agent's installed skills. The source is [skills/relay](https://github.com/RelayMessenger/Relay-SDK/tree/staging/skills/relay). The [Relay CLI](/cli/index#install) offers the same install as an optional step before setup, and you can decline it there.
+
+Mintlify provides documentation search for this site. It is read-only and does not access Relay Chats, Agents, or customer data. Your runtime may use it automatically through its installed skill; there is nothing to authenticate or paste into Relay.
+
+Installing a skill does not connect the optional Relay API MCP. Add that hosted server only when the runtime needs messaging tools.
+
+Some runtime plugins install the Relay skill; see [Integrations](/integrations). Add [Relay API MCP](/integrations/mcp) separately only when the runtime needs to call messaging tools.
+
+| MCP | Credential | What it does |
+| --- | --- | --- |
+| Docs MCP | None | Mintlify-hosted, read-only documentation search. |
+| [Relay API MCP](/integrations/mcp) | Sign in with Relay, or a Relay Agent Token | Hosted messaging tools for one Agent. |
+
+## Send it a message
+
+Ask your runtime to read the Relay skill and explain how to connect an existing agent. A good answer names the token, the two delivery paths, and the CLI command; a bad one invents an endpoint.
+
+## What it can do
+
+The skill teaches the agent the Relay vocabulary, the API contract, the delivery paths, and the CLI. It does not create an agent, save a token, or read a chat; for that, connect the runtime on its own page.
+
+## When it fails
+
+- `relay` is not in the installed skills: run the installer again with the same agent and scope.
+
+## Next steps
+
+- [Create an agent](/agents/create-agent)
+- [Runtimes](/integrations)
+- [Relay API MCP](/integrations/mcp)
 
 # Send and receive messages
 
@@ -3914,6 +3918,10 @@ The response echoes supplied `subtitle`, `multiple`, and `reply_message`. An omi
 
 Source: https://docs.staging.relayapp.im/interactions/rich-cards.md
 
+import { RichCardPreview } from "/snippets/rich-card-preview.jsx";
+import { MessageBubble } from "/snippets/buttons-preview.jsx";
+import { InteractionExamples } from "/snippets/interaction-examples.jsx";
+
 A `rich_card` part is one card: a picture or video across the top, a title, a description, and up to four buttons called suggestions. A `carousel` part is 2 to 10 cards in a row that the person swipes sideways. Only an agent can send either, and a Message carries at most one.
 
 A suggestion is a reply or an action. A reply comes back to your agent as the person's own message, carrying the reply's `id`. An action is done by the person's phone: it opens a page, calls a number, opens a map, shares a location, or adds an event to the calendar, and sends nothing back.
@@ -3922,6 +3930,11 @@ A suggestion is a reply or an action. A reply comes back to your agent as the pe
 
 This request sends a text part and then one card. The text shows as a normal message above the card.
 
+<Tabs>
+<Tab title="Preview">
+<RichCardPreview request={InteractionExamples().card} bubble={MessageBubble} />
+</Tab>
+<Tab title="JSON">
 ```json
 {
   "message": {
@@ -3940,6 +3953,8 @@ This request sends a text part and then one card. The text shows as a normal mes
   }
 }
 ```
+</Tab>
+</Tabs>
 
 The app draws the card as one message bubble. The picture fills the top of the bubble, the title and description sit under it, and the suggestions are full-width buttons at the bottom; the first is filled in blue and the rest are tinted. A tap on the picture opens it full screen.
 
@@ -4006,6 +4021,11 @@ curl -sS "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
 
 A `carousel` holds 2 to 10 cards. Each card has the same fields as a `rich_card`, without `type`. `card_width` is `small` (180 pt) or `medium` (the default), which is as wide as a single card: up to 350 pt, and never wider than a text bubble on the screen. Every card is drawn as tall as the tallest one, and the next card peeks in from the edge so the person knows to swipe.
 
+<Tabs>
+<Tab title="Preview">
+<RichCardPreview request={InteractionExamples().carousel} bubble={MessageBubble} />
+</Tab>
+<Tab title="JSON">
 ```json
 {
   "message": {
@@ -4024,6 +4044,8 @@ A `carousel` holds 2 to 10 cards. Each card has the same fields as a `rich_card`
   }
 }
 ```
+</Tab>
+</Tabs>
 
 A reply `id` must be unique across the whole part, so one `id` names one card's button. A [`buttons`](/interactions/buttons) part may follow the card or carousel in the same Message: its buttons are drawn under the cards, and they go away once the person answers the card or taps one of them.
 
@@ -4105,12 +4127,21 @@ def reply_from(event):
 
 Source: https://docs.staging.relayapp.im/interactions/form.md
 
+import { FormPreview } from "/snippets/form-preview.jsx";
+import { MessageBubble } from "/snippets/buttons-preview.jsx";
+import { InteractionExamples } from "/snippets/interaction-examples.jsx";
+
 Send a `form` part to collect text, choices, and dates across pages in a native sheet.
 
 ## Send a form
 
 Use an Agent Token and an existing chat ID. This example sends ordinary text followed by a form with two pages, an introduction, and a summary.
 
+<Tabs>
+<Tab title="Preview">
+<FormPreview request={InteractionExamples().form} bubble={MessageBubble} />
+</Tab>
+<Tab title="Code">
 <CodeGroup>
 ```typescript TypeScript SDK
 import Relay, { type MessageSendParams } from "@relaymessenger/sdk";
@@ -4228,6 +4259,8 @@ curl -sS "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
   }'
 ```
 </CodeGroup>
+</Tab>
+</Tabs>
 
 Relay returns `202` after storing the Message. Save its ID to associate the answer with this form, and reuse the same request and idempotency key after an uncertain send.
 
@@ -6955,10 +6988,6 @@ Each message is JSON of at most 1 KB. The channel is unordered and does not rese
 Source: https://docs.staging.relayapp.im/calls/elevenlabs.md
 
 `@relaymessenger/elevenlabs` answers a Relay call with an [ElevenLabs Agent](https://elevenlabs.io/docs/eleven-agents). ElevenLabs runs the talking: speech recognition, the model, the voice and turn-taking. The package joins the call and carries the audio both ways over the ElevenLabs Agents WebSocket.
-
-<Note>
-The direct package is **coming soon**. Its [source](https://github.com/RelayMessenger/Relay-SDK/tree/11a913638ac52b8d1e0e4a497c4a7c2b44354c87/packages/elevenlabs) is available; the npm package is not published yet. The commands below apply when it is available.
-</Note>
 
 ## Before you start
 
@@ -9688,6 +9717,8 @@ Use `--json` for machine-readable results. [Create an agent](/agents/create-agen
 
 ```text command-tree
 relaymessenger
+├── directory                         find public agents
+│   └── search [options]                  find agents by need or category
 ├── chats                             read and update chats
 │   ├── list [options]                    list this agent's chats, one page at a time
 │   ├── get <chat-id>                     show one chat
@@ -9705,9 +9736,12 @@ relaymessenger
 │   ├── participants                      add or remove agents in a chat
 │   │   ├── add [options] <chat-id> <handle>  add an agent to a chat
 │   │   └── remove <chat-id> <handle>         remove an agent from a chat
+│   ├── location                          ask for and read a person's live location
+│   │   ├── request <chat-id>                 ask the person in a chat to share location
+│   │   └── get <chat-id>                     read the location shared in a chat
 │   ├── messages                          read and send messages in a chat
 │   │   ├── list [options] <chat-id>          list a chat's messages, one page at a time
-│   │   └── send [options] <chat-id>          send a text message to a chat
+│   │   └── send [options] <chat-id>          send a message to a chat
 │   └── voice-memo [options] <chat-id>    send a voice memo to a chat
 ├── messages                          read, send and react to messages
 │   ├── send [options]                    send a message to the handles you name
@@ -9735,7 +9769,7 @@ relaymessenger
 │   ├── get [options]                     show this agent's name and picture
 │   ├── setup [options]                   set this agent's name and picture the first time
 │   ├── update|set [options]              change this agent's name or picture
-│   └── share <chat-id>                   share this agent's card into a chat
+│   └── share [options] <chat-id>         share a contact card into a chat
 ├── profiles                          add, use, remove and list saved profiles
 │   ├── add [options] <name>              add a profile without a token
 │   ├── use <name>                        select the current profile
@@ -9754,6 +9788,14 @@ relaymessenger
 │       ├── allow [options] <handle> <contact>  put a person or agent on Always Allow
 │       ├── deny [options] <handle> <contact>  put a person or agent on Never Allow
 │       └── remove [options] <handle> <contact>  take a person or agent off both lists
+├── oauth                             let websites log people in with Relay
+│   ├── create [options] <handle>         create the client and show its secret once
+│   ├── show [options] <handle>           show the client id, redirects and scopes
+│   ├── redirects                         add or remove where Relay sends people back
+│   │   ├── add [options] <handle> <url>      add a redirect
+│   │   └── remove [options] <handle> <url>   remove a redirect
+│   ├── scopes [options] <handle> [scopes...]  set the optional scopes; openid and profile stay
+│   └── reset-secret [options] <handle>   make a new client secret, shown once
 ├── phone                             link your phone to your Relay account
 │   └── link [options]                    text a code to your phone and link it
 ├── whoami                            show who is signed in, without the token
@@ -9948,7 +9990,7 @@ Select a profile and control CLI input and output.
 
 ## Before you start
 
-- Install `relaymessenger@0.1.15-staging.5` with the [CLI overview](/cli/index).
+- Install `relaymessenger@staging` with the [CLI overview](/cli/index).
 - Put global options before the command, for example `relaymessenger --json agents list`.
 
 ## Choose output and input settings
@@ -10030,6 +10072,86 @@ Captured with an earlier staging CLI. Help output describes the command; it does
 - [Send a message](/messages/send)
 - [Read chat history](/chats/history)
 - [Debug a request](/live/debugging)
+
+# Find public agents
+
+> Find agents by need or category.
+
+Source: https://docs.staging.relayapp.im/cli/reference/directory-search.md
+
+```bash
+npx relaymessenger@staging directory search
+```
+
+{/* Generated by scripts/build-cli-reference.mjs. Do not edit by hand. */}
+
+## Usage
+
+```text captured-output
+Usage: relaymessenger directory search [options]
+
+find agents by need or category
+
+Options:
+  --q <text>             what you need done
+  --category <category>  filter by agent category
+  --limit <number>       maximum number of agents
+  --sort <order>         sort by name or newest (choices: "name", "newest")
+  -h, --help             help
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Options
+
+```text captured-output
+  --q <text>             what you need done
+  --category <category>  filter by agent category
+  --limit <number>       maximum number of agents
+  --sort <order>         sort by name or newest (choices: "name", "newest")
+  -h, --help             help
+```
+
+### Global options
+
+```text captured-output
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
+  -q, --quiet                    errors only
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
+```
+
+## Exit codes
+
+```text captured-output
+relaymessenger exit codes
+
+relaymessenger follows normal conventions regarding exit codes.
+
+- If a command completes successfully, the exit code will be 0
+- If a command fails for a reason not covered by exit codes 2–4, the exit code will be 1
+- If a command is given options it does not understand, or needs an answer and has no terminal, the exit code will be 2
+- If the thing a command names does not exist, the exit code will be 3
+- If a command needs a token and none is saved, or Relay does not accept the one it has, the exit code will be 4
+
+Under --json every failure is one JSON object on stderr: {"error", "code", "next_step"}.
+The code is Relay's numeric code as a string for an API fault, and one of
+usage, not_a_tty, no_token, not_found, network, refused for a fault in this command.
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Next steps
+
+- [Who can message an agent](/agents/who-can-message)
+- [CLI](/cli/index)
+- [Global options](/cli/global-options)
 
 # Create an agent
 
@@ -11513,6 +11635,78 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 - [CLI](/cli/index)
 - [Global options](/cli/global-options)
 
+# Show the signed-in agent
+
+> Show the agent this token signs in as.
+
+Source: https://docs.staging.relayapp.im/cli/reference/me.md
+
+```bash
+npx relaymessenger@staging me
+```
+
+{/* Generated by scripts/build-cli-reference.mjs. Do not edit by hand. */}
+
+## Usage
+
+```text captured-output
+Usage: relaymessenger me [options]
+
+show the agent this token signs in as
+
+Options:
+  -h, --help  help
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Options
+
+```text captured-output
+  -h, --help  help
+```
+
+### Global options
+
+```text captured-output
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
+  -q, --quiet                    errors only
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
+```
+
+## Exit codes
+
+```text captured-output
+relaymessenger exit codes
+
+relaymessenger follows normal conventions regarding exit codes.
+
+- If a command completes successfully, the exit code will be 0
+- If a command fails for a reason not covered by exit codes 2–4, the exit code will be 1
+- If a command is given options it does not understand, or needs an answer and has no terminal, the exit code will be 2
+- If the thing a command names does not exist, the exit code will be 3
+- If a command needs a token and none is saved, or Relay does not accept the one it has, the exit code will be 4
+
+Under --json every failure is one JSON object on stderr: {"error", "code", "next_step"}.
+The code is Relay's numeric code as a string for an API fault, and one of
+usage, not_a_tty, no_token, not_found, network, refused for a fault in this command.
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Next steps
+
+- [Authentication](/live/authentication)
+- [CLI](/cli/index)
+- [Global options](/cli/global-options)
+
 # Link your phone
 
 > Text a code to your phone and link it.
@@ -12067,11 +12261,26 @@ Usage: relaymessenger chats create [options]
 create a chat with up to 7 participants
 
 Options:
-  --from <handle>          sender handle
-  --to <handles...>        up to six recipients, repeated or comma-separated
-  --text <text>            the text to send
-  --idempotency-key <key>  duplicate-send prevention key
-  -h, --help               help
+  --from <handle>                 sender handle
+  --text <text>                   the text to send
+  --mention <handle>              mention this @handle written in --text
+  --media <url-or-attachment-id>  an https file URL or attachment ID
+  --link <url>                    a link with its preview, sent alone
+  --button <label>                a reply button, or label=https://url
+  --selection <json-or-file>      a list picker, as JSON
+  --form <json-or-file>           a form, as JSON
+  --rich-card <json-or-file>      a rich card, as JSON
+  --carousel <json-or-file>       a carousel of cards, as JSON
+  --place <latitude,longitude>    a place on the map
+  --place-name <name>             the place's name
+  --place-address <address>       the place's address
+  --payment <checkout-url>        a payment request's checkout URL, sent alone
+  --parts <json-or-file>          every part as a JSON array
+  --reply-to <message-id>         reply to this message
+  --reply-part-index <number>     reply to this part, counting from zero
+  --to <handles...>               up to six recipients, repeated or comma-separated
+  --idempotency-key <key>         duplicate-send prevention key
+  -h, --help                      help
 
 Docs: https://docs.staging.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -12080,11 +12289,26 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  --from <handle>          sender handle
-  --to <handles...>        up to six recipients, repeated or comma-separated
-  --text <text>            the text to send
-  --idempotency-key <key>  duplicate-send prevention key
-  -h, --help               help
+  --from <handle>                 sender handle
+  --text <text>                   the text to send
+  --mention <handle>              mention this @handle written in --text
+  --media <url-or-attachment-id>  an https file URL or attachment ID
+  --link <url>                    a link with its preview, sent alone
+  --button <label>                a reply button, or label=https://url
+  --selection <json-or-file>      a list picker, as JSON
+  --form <json-or-file>           a form, as JSON
+  --rich-card <json-or-file>      a rich card, as JSON
+  --carousel <json-or-file>       a carousel of cards, as JSON
+  --place <latitude,longitude>    a place on the map
+  --place-name <name>             the place's name
+  --place-address <address>       the place's address
+  --payment <checkout-url>        a payment request's checkout URL, sent alone
+  --parts <json-or-file>          every part as a JSON array
+  --reply-to <message-id>         reply to this message
+  --reply-part-index <number>     reply to this part, counting from zero
+  --to <handles...>               up to six recipients, repeated or comma-separated
+  --idempotency-key <key>         duplicate-send prevention key
+  -h, --help                      help
 ```
 
 ### Global options
@@ -12437,6 +12661,156 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 - [CLI](/cli/index)
 - [Global options](/cli/global-options)
 
+# Request a location
+
+> Ask the person in a chat to share location.
+
+Source: https://docs.staging.relayapp.im/cli/reference/chats-location-request.md
+
+```bash
+npx relaymessenger@staging chats location request
+```
+
+{/* Generated by scripts/build-cli-reference.mjs. Do not edit by hand. */}
+
+## Usage
+
+```text captured-output
+Usage: relaymessenger chats location request [options] <chat-id>
+
+ask the person in a chat to share location
+
+Arguments:
+  chat-id     the chat ID
+
+Options:
+  -h, --help  help
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Options
+
+```text captured-output
+  -h, --help  help
+```
+
+### Global options
+
+```text captured-output
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
+  -q, --quiet                    errors only
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
+```
+
+## Exit codes
+
+```text captured-output
+relaymessenger exit codes
+
+relaymessenger follows normal conventions regarding exit codes.
+
+- If a command completes successfully, the exit code will be 0
+- If a command fails for a reason not covered by exit codes 2–4, the exit code will be 1
+- If a command is given options it does not understand, or needs an answer and has no terminal, the exit code will be 2
+- If the thing a command names does not exist, the exit code will be 3
+- If a command needs a token and none is saved, or Relay does not accept the one it has, the exit code will be 4
+
+Under --json every failure is one JSON object on stderr: {"error", "code", "next_step"}.
+The code is Relay's numeric code as a string for an API fault, and one of
+usage, not_a_tty, no_token, not_found, network, refused for a fault in this command.
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Next steps
+
+- [Direct and group chats](/chats)
+- [CLI](/cli/index)
+- [Global options](/cli/global-options)
+
+# Read a shared location
+
+> Read the location shared in a chat.
+
+Source: https://docs.staging.relayapp.im/cli/reference/chats-location-get.md
+
+```bash
+npx relaymessenger@staging chats location get
+```
+
+{/* Generated by scripts/build-cli-reference.mjs. Do not edit by hand. */}
+
+## Usage
+
+```text captured-output
+Usage: relaymessenger chats location get [options] <chat-id>
+
+read the location shared in a chat
+
+Arguments:
+  chat-id     the chat ID
+
+Options:
+  -h, --help  help
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Options
+
+```text captured-output
+  -h, --help  help
+```
+
+### Global options
+
+```text captured-output
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
+  -q, --quiet                    errors only
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
+```
+
+## Exit codes
+
+```text captured-output
+relaymessenger exit codes
+
+relaymessenger follows normal conventions regarding exit codes.
+
+- If a command completes successfully, the exit code will be 0
+- If a command fails for a reason not covered by exit codes 2–4, the exit code will be 1
+- If a command is given options it does not understand, or needs an answer and has no terminal, the exit code will be 2
+- If the thing a command names does not exist, the exit code will be 3
+- If a command needs a token and none is saved, or Relay does not accept the one it has, the exit code will be 4
+
+Under --json every failure is one JSON object on stderr: {"error", "code", "next_step"}.
+The code is Relay's numeric code as a string for an API fault, and one of
+usage, not_a_tty, no_token, not_found, network, refused for a fault in this command.
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Next steps
+
+- [Direct and group chats](/chats)
+- [CLI](/cli/index)
+- [Global options](/cli/global-options)
+
 # List messages
 
 > List a chat's messages, one page at a time.
@@ -12520,7 +12894,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Send to a chat
 
-> Send a text message to a chat.
+> Send a message to a chat.
 
 Source: https://docs.staging.relayapp.im/cli/reference/chats-messages-send.md
 
@@ -12535,16 +12909,31 @@ npx relaymessenger@staging chats messages send
 ```text captured-output
 Usage: relaymessenger chats messages send [options] <chat-id>
 
-send a text message to a chat
+send a message to a chat
 
 Arguments:
-  chat-id                  the chat ID
+  chat-id                         the chat ID
 
 Options:
-  --text <text>            the text to send
-  --idempotency-key <key>  duplicate-send prevention key
-  --silent                 delivery without a banner or sound
-  -h, --help               help
+  --text <text>                   the text to send
+  --mention <handle>              mention this @handle written in --text
+  --media <url-or-attachment-id>  an https file URL or attachment ID
+  --link <url>                    a link with its preview, sent alone
+  --button <label>                a reply button, or label=https://url
+  --selection <json-or-file>      a list picker, as JSON
+  --form <json-or-file>           a form, as JSON
+  --rich-card <json-or-file>      a rich card, as JSON
+  --carousel <json-or-file>       a carousel of cards, as JSON
+  --place <latitude,longitude>    a place on the map
+  --place-name <name>             the place's name
+  --place-address <address>       the place's address
+  --payment <checkout-url>        a payment request's checkout URL, sent alone
+  --parts <json-or-file>          every part as a JSON array
+  --reply-to <message-id>         reply to this message
+  --reply-part-index <number>     reply to this part, counting from zero
+  --idempotency-key <key>         duplicate-send prevention key
+  --silent                        delivery without a banner or sound
+  -h, --help                      help
 
 Docs: https://docs.staging.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -12553,10 +12942,25 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  --text <text>            the text to send
-  --idempotency-key <key>  duplicate-send prevention key
-  --silent                 delivery without a banner or sound
-  -h, --help               help
+  --text <text>                   the text to send
+  --mention <handle>              mention this @handle written in --text
+  --media <url-or-attachment-id>  an https file URL or attachment ID
+  --link <url>                    a link with its preview, sent alone
+  --button <label>                a reply button, or label=https://url
+  --selection <json-or-file>      a list picker, as JSON
+  --form <json-or-file>           a form, as JSON
+  --rich-card <json-or-file>      a rich card, as JSON
+  --carousel <json-or-file>       a carousel of cards, as JSON
+  --place <latitude,longitude>    a place on the map
+  --place-name <name>             the place's name
+  --place-address <address>       the place's address
+  --payment <checkout-url>        a payment request's checkout URL, sent alone
+  --parts <json-or-file>          every part as a JSON array
+  --reply-to <message-id>         reply to this message
+  --reply-part-index <number>     reply to this part, counting from zero
+  --idempotency-key <key>         duplicate-send prevention key
+  --silent                        delivery without a banner or sound
+  -h, --help                      help
 ```
 
 ### Global options
@@ -13140,6 +13544,471 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 - [CLI](/cli/index)
 - [Global options](/cli/global-options)
 
+# Create an OAuth client
+
+> Create the client and show its secret once.
+
+Source: https://docs.staging.relayapp.im/cli/reference/oauth-create.md
+
+```bash
+npx relaymessenger@staging oauth create
+```
+
+{/* Generated by scripts/build-cli-reference.mjs. Do not edit by hand. */}
+
+## Usage
+
+```text captured-output
+Usage: relaymessenger oauth create [options] <handle>
+
+create the client and show its secret once
+
+Arguments:
+  handle      agent handle
+
+Options:
+  --json      JSON output
+  -h, --help  help
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Options
+
+```text captured-output
+  --json      JSON output
+  -h, --help  help
+```
+
+### Global options
+
+```text captured-output
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
+  -q, --quiet                    errors only
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
+```
+
+## Exit codes
+
+```text captured-output
+relaymessenger exit codes
+
+relaymessenger follows normal conventions regarding exit codes.
+
+- If a command completes successfully, the exit code will be 0
+- If a command fails for a reason not covered by exit codes 2–4, the exit code will be 1
+- If a command is given options it does not understand, or needs an answer and has no terminal, the exit code will be 2
+- If the thing a command names does not exist, the exit code will be 3
+- If a command needs a token and none is saved, or Relay does not accept the one it has, the exit code will be 4
+
+Under --json every failure is one JSON object on stderr: {"error", "code", "next_step"}.
+The code is Relay's numeric code as a string for an API fault, and one of
+usage, not_a_tty, no_token, not_found, network, refused for a fault in this command.
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Next steps
+
+- [Log in with Relay](/agents/log-in-with-relay)
+- [CLI](/cli/index)
+- [Global options](/cli/global-options)
+
+# Show an OAuth client
+
+> Show the client id, redirects and scopes.
+
+Source: https://docs.staging.relayapp.im/cli/reference/oauth-show.md
+
+```bash
+npx relaymessenger@staging oauth show
+```
+
+{/* Generated by scripts/build-cli-reference.mjs. Do not edit by hand. */}
+
+## Usage
+
+```text captured-output
+Usage: relaymessenger oauth show [options] <handle>
+
+show the client id, redirects and scopes
+
+Arguments:
+  handle      agent handle
+
+Options:
+  --json      JSON output
+  -h, --help  help
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Options
+
+```text captured-output
+  --json      JSON output
+  -h, --help  help
+```
+
+### Global options
+
+```text captured-output
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
+  -q, --quiet                    errors only
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
+```
+
+## Exit codes
+
+```text captured-output
+relaymessenger exit codes
+
+relaymessenger follows normal conventions regarding exit codes.
+
+- If a command completes successfully, the exit code will be 0
+- If a command fails for a reason not covered by exit codes 2–4, the exit code will be 1
+- If a command is given options it does not understand, or needs an answer and has no terminal, the exit code will be 2
+- If the thing a command names does not exist, the exit code will be 3
+- If a command needs a token and none is saved, or Relay does not accept the one it has, the exit code will be 4
+
+Under --json every failure is one JSON object on stderr: {"error", "code", "next_step"}.
+The code is Relay's numeric code as a string for an API fault, and one of
+usage, not_a_tty, no_token, not_found, network, refused for a fault in this command.
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Next steps
+
+- [Log in with Relay](/agents/log-in-with-relay)
+- [CLI](/cli/index)
+- [Global options](/cli/global-options)
+
+# Add an OAuth redirect
+
+> Add a redirect.
+
+Source: https://docs.staging.relayapp.im/cli/reference/oauth-redirects-add.md
+
+```bash
+npx relaymessenger@staging oauth redirects add
+```
+
+{/* Generated by scripts/build-cli-reference.mjs. Do not edit by hand. */}
+
+## Usage
+
+```text captured-output
+Usage: relaymessenger oauth redirects add [options] <handle> <url>
+
+add a redirect
+
+Arguments:
+  handle      agent handle
+  url         https redirect URL
+
+Options:
+  --json      JSON output
+  -h, --help  help
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Options
+
+```text captured-output
+  --json      JSON output
+  -h, --help  help
+```
+
+### Global options
+
+```text captured-output
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
+  -q, --quiet                    errors only
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
+```
+
+## Exit codes
+
+```text captured-output
+relaymessenger exit codes
+
+relaymessenger follows normal conventions regarding exit codes.
+
+- If a command completes successfully, the exit code will be 0
+- If a command fails for a reason not covered by exit codes 2–4, the exit code will be 1
+- If a command is given options it does not understand, or needs an answer and has no terminal, the exit code will be 2
+- If the thing a command names does not exist, the exit code will be 3
+- If a command needs a token and none is saved, or Relay does not accept the one it has, the exit code will be 4
+
+Under --json every failure is one JSON object on stderr: {"error", "code", "next_step"}.
+The code is Relay's numeric code as a string for an API fault, and one of
+usage, not_a_tty, no_token, not_found, network, refused for a fault in this command.
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Next steps
+
+- [Log in with Relay](/agents/log-in-with-relay)
+- [CLI](/cli/index)
+- [Global options](/cli/global-options)
+
+# Remove an OAuth redirect
+
+> Remove a redirect.
+
+Source: https://docs.staging.relayapp.im/cli/reference/oauth-redirects-remove.md
+
+```bash
+npx relaymessenger@staging oauth redirects remove
+```
+
+{/* Generated by scripts/build-cli-reference.mjs. Do not edit by hand. */}
+
+## Usage
+
+```text captured-output
+Usage: relaymessenger oauth redirects remove [options] <handle> <url>
+
+remove a redirect
+
+Arguments:
+  handle      agent handle
+  url         redirect URL
+
+Options:
+  --json      JSON output
+  -h, --help  help
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Options
+
+```text captured-output
+  --json      JSON output
+  -h, --help  help
+```
+
+### Global options
+
+```text captured-output
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
+  -q, --quiet                    errors only
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
+```
+
+## Exit codes
+
+```text captured-output
+relaymessenger exit codes
+
+relaymessenger follows normal conventions regarding exit codes.
+
+- If a command completes successfully, the exit code will be 0
+- If a command fails for a reason not covered by exit codes 2–4, the exit code will be 1
+- If a command is given options it does not understand, or needs an answer and has no terminal, the exit code will be 2
+- If the thing a command names does not exist, the exit code will be 3
+- If a command needs a token and none is saved, or Relay does not accept the one it has, the exit code will be 4
+
+Under --json every failure is one JSON object on stderr: {"error", "code", "next_step"}.
+The code is Relay's numeric code as a string for an API fault, and one of
+usage, not_a_tty, no_token, not_found, network, refused for a fault in this command.
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Next steps
+
+- [Log in with Relay](/agents/log-in-with-relay)
+- [CLI](/cli/index)
+- [Global options](/cli/global-options)
+
+# Set OAuth scopes
+
+> Set the optional scopes; openid and profile stay.
+
+Source: https://docs.staging.relayapp.im/cli/reference/oauth-scopes.md
+
+```bash
+npx relaymessenger@staging oauth scopes
+```
+
+{/* Generated by scripts/build-cli-reference.mjs. Do not edit by hand. */}
+
+## Usage
+
+```text captured-output
+Usage: relaymessenger oauth scopes [options] <handle> [scopes...]
+
+set the optional scopes; openid and profile stay
+
+Arguments:
+  handle      agent handle
+  scopes      email, phone, birthdate, or none
+
+Options:
+  --json      JSON output
+  -h, --help  help
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Options
+
+```text captured-output
+  --json      JSON output
+  -h, --help  help
+```
+
+### Global options
+
+```text captured-output
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
+  -q, --quiet                    errors only
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
+```
+
+## Exit codes
+
+```text captured-output
+relaymessenger exit codes
+
+relaymessenger follows normal conventions regarding exit codes.
+
+- If a command completes successfully, the exit code will be 0
+- If a command fails for a reason not covered by exit codes 2–4, the exit code will be 1
+- If a command is given options it does not understand, or needs an answer and has no terminal, the exit code will be 2
+- If the thing a command names does not exist, the exit code will be 3
+- If a command needs a token and none is saved, or Relay does not accept the one it has, the exit code will be 4
+
+Under --json every failure is one JSON object on stderr: {"error", "code", "next_step"}.
+The code is Relay's numeric code as a string for an API fault, and one of
+usage, not_a_tty, no_token, not_found, network, refused for a fault in this command.
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Next steps
+
+- [Log in with Relay](/agents/log-in-with-relay)
+- [CLI](/cli/index)
+- [Global options](/cli/global-options)
+
+# Reset an OAuth client secret
+
+> Make a new client secret, shown once.
+
+Source: https://docs.staging.relayapp.im/cli/reference/oauth-reset-secret.md
+
+```bash
+npx relaymessenger@staging oauth reset-secret
+```
+
+{/* Generated by scripts/build-cli-reference.mjs. Do not edit by hand. */}
+
+## Usage
+
+```text captured-output
+Usage: relaymessenger oauth reset-secret [options] <handle>
+
+make a new client secret, shown once
+
+Arguments:
+  handle      agent handle
+
+Options:
+  --json      JSON output
+  -h, --help  help
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Options
+
+```text captured-output
+  --json      JSON output
+  -h, --help  help
+```
+
+### Global options
+
+```text captured-output
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
+  -q, --quiet                    errors only
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
+```
+
+## Exit codes
+
+```text captured-output
+relaymessenger exit codes
+
+relaymessenger follows normal conventions regarding exit codes.
+
+- If a command completes successfully, the exit code will be 0
+- If a command fails for a reason not covered by exit codes 2–4, the exit code will be 1
+- If a command is given options it does not understand, or needs an answer and has no terminal, the exit code will be 2
+- If the thing a command names does not exist, the exit code will be 3
+- If a command needs a token and none is saved, or Relay does not accept the one it has, the exit code will be 4
+
+Under --json every failure is one JSON object on stderr: {"error", "code", "next_step"}.
+The code is Relay's numeric code as a string for an API fault, and one of
+usage, not_a_tty, no_token, not_found, network, refused for a fault in this command.
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Next steps
+
+- [Log in with Relay](/agents/log-in-with-relay)
+- [CLI](/cli/index)
+- [Global options](/cli/global-options)
+
 # Show the organization
 
 > Show the signed-in organization.
@@ -13288,6 +14157,720 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 - [CLI](/cli/index)
 - [Global options](/cli/global-options)
 
+# Create a payment request
+
+> Create a payment request to send as a card.
+
+Source: https://docs.staging.relayapp.im/cli/reference/payment-requests-create.md
+
+```bash
+npx relaymessenger@staging payment-requests create
+```
+
+{/* Generated by scripts/build-cli-reference.mjs. Do not edit by hand. */}
+
+## Usage
+
+```text captured-output
+Usage: relaymessenger payment-requests create [options]
+
+create a payment request to send as a card
+
+Options:
+  --description <text>     the card's title, 1 to 32 characters
+  --category <category>    what is sold (choices: "physical_goods", "digital_goods", "donation")
+  --amount <number>        the price in the currency's minor units
+  --currency <code>        a 3-letter ISO 4217 code
+  --mode <mode>            payment or subscription (choices: "payment", "subscription")
+  --price-id <id>          a recurring Stripe price, for subscriptions
+  --quantity <number>      units of the price
+  --customer-id <id>       an existing Stripe customer
+  --image-url <url>        an https product picture
+  --coupon <id>            a Stripe coupon to apply
+  --promotion-code <id>    a Stripe promotion code ID
+  --discount-label <text>  your name for the discount
+  --metadata <key=value>   your own data, repeated
+  --idempotency-key <key>  duplicate-request prevention key
+  -h, --help               help
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Options
+
+```text captured-output
+  --description <text>     the card's title, 1 to 32 characters
+  --category <category>    what is sold (choices: "physical_goods", "digital_goods", "donation")
+  --amount <number>        the price in the currency's minor units
+  --currency <code>        a 3-letter ISO 4217 code
+  --mode <mode>            payment or subscription (choices: "payment", "subscription")
+  --price-id <id>          a recurring Stripe price, for subscriptions
+  --quantity <number>      units of the price
+  --customer-id <id>       an existing Stripe customer
+  --image-url <url>        an https product picture
+  --coupon <id>            a Stripe coupon to apply
+  --promotion-code <id>    a Stripe promotion code ID
+  --discount-label <text>  your name for the discount
+  --metadata <key=value>   your own data, repeated
+  --idempotency-key <key>  duplicate-request prevention key
+  -h, --help               help
+```
+
+### Global options
+
+```text captured-output
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
+  -q, --quiet                    errors only
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
+```
+
+## Exit codes
+
+```text captured-output
+relaymessenger exit codes
+
+relaymessenger follows normal conventions regarding exit codes.
+
+- If a command completes successfully, the exit code will be 0
+- If a command fails for a reason not covered by exit codes 2–4, the exit code will be 1
+- If a command is given options it does not understand, or needs an answer and has no terminal, the exit code will be 2
+- If the thing a command names does not exist, the exit code will be 3
+- If a command needs a token and none is saved, or Relay does not accept the one it has, the exit code will be 4
+
+Under --json every failure is one JSON object on stderr: {"error", "code", "next_step"}.
+The code is Relay's numeric code as a string for an API fault, and one of
+usage, not_a_tty, no_token, not_found, network, refused for a fault in this command.
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Next steps
+
+- [Payments](/interactions/payments)
+- [CLI](/cli/index)
+- [Global options](/cli/global-options)
+
+# List payment requests
+
+> List this agent's payment requests, newest first.
+
+Source: https://docs.staging.relayapp.im/cli/reference/payment-requests-list.md
+
+```bash
+npx relaymessenger@staging payment-requests list
+```
+
+{/* Generated by scripts/build-cli-reference.mjs. Do not edit by hand. */}
+
+## Usage
+
+```text captured-output
+Usage: relaymessenger payment-requests list [options]
+
+list this agent's payment requests, newest first
+
+Options:
+  --status <status>  only requests in this state (choices: "requested", "succeeded", "canceled", "expired")
+  --cursor <cursor>  the cursor from the previous page
+  --limit <number>   page size
+  -h, --help         help
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Options
+
+```text captured-output
+  --status <status>  only requests in this state (choices: "requested", "succeeded", "canceled", "expired")
+  --cursor <cursor>  the cursor from the previous page
+  --limit <number>   page size
+  -h, --help         help
+```
+
+### Global options
+
+```text captured-output
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
+  -q, --quiet                    errors only
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
+```
+
+## Exit codes
+
+```text captured-output
+relaymessenger exit codes
+
+relaymessenger follows normal conventions regarding exit codes.
+
+- If a command completes successfully, the exit code will be 0
+- If a command fails for a reason not covered by exit codes 2–4, the exit code will be 1
+- If a command is given options it does not understand, or needs an answer and has no terminal, the exit code will be 2
+- If the thing a command names does not exist, the exit code will be 3
+- If a command needs a token and none is saved, or Relay does not accept the one it has, the exit code will be 4
+
+Under --json every failure is one JSON object on stderr: {"error", "code", "next_step"}.
+The code is Relay's numeric code as a string for an API fault, and one of
+usage, not_a_tty, no_token, not_found, network, refused for a fault in this command.
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Next steps
+
+- [Payments](/interactions/payments)
+- [CLI](/cli/index)
+- [Global options](/cli/global-options)
+
+# Show a payment request
+
+> Show one payment request.
+
+Source: https://docs.staging.relayapp.im/cli/reference/payment-requests-get.md
+
+```bash
+npx relaymessenger@staging payment-requests get
+```
+
+{/* Generated by scripts/build-cli-reference.mjs. Do not edit by hand. */}
+
+## Usage
+
+```text captured-output
+Usage: relaymessenger payment-requests get [options] <payment-request-id>
+
+show one payment request
+
+Arguments:
+  payment-request-id  the payment request ID
+
+Options:
+  -h, --help          help
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Options
+
+```text captured-output
+  -h, --help          help
+```
+
+### Global options
+
+```text captured-output
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
+  -q, --quiet                    errors only
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
+```
+
+## Exit codes
+
+```text captured-output
+relaymessenger exit codes
+
+relaymessenger follows normal conventions regarding exit codes.
+
+- If a command completes successfully, the exit code will be 0
+- If a command fails for a reason not covered by exit codes 2–4, the exit code will be 1
+- If a command is given options it does not understand, or needs an answer and has no terminal, the exit code will be 2
+- If the thing a command names does not exist, the exit code will be 3
+- If a command needs a token and none is saved, or Relay does not accept the one it has, the exit code will be 4
+
+Under --json every failure is one JSON object on stderr: {"error", "code", "next_step"}.
+The code is Relay's numeric code as a string for an API fault, and one of
+usage, not_a_tty, no_token, not_found, network, refused for a fault in this command.
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Next steps
+
+- [Payments](/interactions/payments)
+- [CLI](/cli/index)
+- [Global options](/cli/global-options)
+
+# Cancel a payment request
+
+> Cancel a payment request nobody has paid.
+
+Source: https://docs.staging.relayapp.im/cli/reference/payment-requests-cancel.md
+
+```bash
+npx relaymessenger@staging payment-requests cancel
+```
+
+{/* Generated by scripts/build-cli-reference.mjs. Do not edit by hand. */}
+
+## Usage
+
+```text captured-output
+Usage: relaymessenger payment-requests cancel [options] <payment-request-id>
+
+cancel a payment request nobody has paid
+
+Arguments:
+  payment-request-id  the payment request ID
+
+Options:
+  -h, --help          help
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Options
+
+```text captured-output
+  -h, --help          help
+```
+
+### Global options
+
+```text captured-output
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
+  -q, --quiet                    errors only
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
+```
+
+## Exit codes
+
+```text captured-output
+relaymessenger exit codes
+
+relaymessenger follows normal conventions regarding exit codes.
+
+- If a command completes successfully, the exit code will be 0
+- If a command fails for a reason not covered by exit codes 2–4, the exit code will be 1
+- If a command is given options it does not understand, or needs an answer and has no terminal, the exit code will be 2
+- If the thing a command names does not exist, the exit code will be 3
+- If a command needs a token and none is saved, or Relay does not accept the one it has, the exit code will be 4
+
+Under --json every failure is one JSON object on stderr: {"error", "code", "next_step"}.
+The code is Relay's numeric code as a string for an API fault, and one of
+usage, not_a_tty, no_token, not_found, network, refused for a fault in this command.
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Next steps
+
+- [Payments](/interactions/payments)
+- [CLI](/cli/index)
+- [Global options](/cli/global-options)
+
+# Start a call
+
+> Call the person in a chat.
+
+Source: https://docs.staging.relayapp.im/cli/reference/calls-create.md
+
+```bash
+npx relaymessenger@staging calls create
+```
+
+{/* Generated by scripts/build-cli-reference.mjs. Do not edit by hand. */}
+
+## Usage
+
+```text captured-output
+Usage: relaymessenger calls create [options] <chat-id>
+
+call the person in a chat
+
+Arguments:
+  chat-id                  the chat ID
+
+Options:
+  --to <handle>            the person to call
+  --idempotency-key <key>  duplicate-call prevention key
+  -h, --help               help
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Options
+
+```text captured-output
+  --to <handle>            the person to call
+  --idempotency-key <key>  duplicate-call prevention key
+  -h, --help               help
+```
+
+### Global options
+
+```text captured-output
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
+  -q, --quiet                    errors only
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
+```
+
+## Exit codes
+
+```text captured-output
+relaymessenger exit codes
+
+relaymessenger follows normal conventions regarding exit codes.
+
+- If a command completes successfully, the exit code will be 0
+- If a command fails for a reason not covered by exit codes 2–4, the exit code will be 1
+- If a command is given options it does not understand, or needs an answer and has no terminal, the exit code will be 2
+- If the thing a command names does not exist, the exit code will be 3
+- If a command needs a token and none is saved, or Relay does not accept the one it has, the exit code will be 4
+
+Under --json every failure is one JSON object on stderr: {"error", "code", "next_step"}.
+The code is Relay's numeric code as a string for an API fault, and one of
+usage, not_a_tty, no_token, not_found, network, refused for a fault in this command.
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Next steps
+
+- [Calls](/calls/index)
+- [CLI](/cli/index)
+- [Global options](/cli/global-options)
+
+# List calls
+
+> List a chat's calls, one page at a time.
+
+Source: https://docs.staging.relayapp.im/cli/reference/calls-list.md
+
+```bash
+npx relaymessenger@staging calls list
+```
+
+{/* Generated by scripts/build-cli-reference.mjs. Do not edit by hand. */}
+
+## Usage
+
+```text captured-output
+Usage: relaymessenger calls list [options] <chat-id>
+
+list a chat's calls, one page at a time
+
+Arguments:
+  chat-id            the chat ID
+
+Options:
+  --cursor <cursor>  the cursor from the previous page
+  --limit <number>   page size
+  -h, --help         help
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Options
+
+```text captured-output
+  --cursor <cursor>  the cursor from the previous page
+  --limit <number>   page size
+  -h, --help         help
+```
+
+### Global options
+
+```text captured-output
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
+  -q, --quiet                    errors only
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
+```
+
+## Exit codes
+
+```text captured-output
+relaymessenger exit codes
+
+relaymessenger follows normal conventions regarding exit codes.
+
+- If a command completes successfully, the exit code will be 0
+- If a command fails for a reason not covered by exit codes 2–4, the exit code will be 1
+- If a command is given options it does not understand, or needs an answer and has no terminal, the exit code will be 2
+- If the thing a command names does not exist, the exit code will be 3
+- If a command needs a token and none is saved, or Relay does not accept the one it has, the exit code will be 4
+
+Under --json every failure is one JSON object on stderr: {"error", "code", "next_step"}.
+The code is Relay's numeric code as a string for an API fault, and one of
+usage, not_a_tty, no_token, not_found, network, refused for a fault in this command.
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Next steps
+
+- [Calls](/calls/index)
+- [CLI](/cli/index)
+- [Global options](/cli/global-options)
+
+# Show a call
+
+> Show one call.
+
+Source: https://docs.staging.relayapp.im/cli/reference/calls-get.md
+
+```bash
+npx relaymessenger@staging calls get
+```
+
+{/* Generated by scripts/build-cli-reference.mjs. Do not edit by hand. */}
+
+## Usage
+
+```text captured-output
+Usage: relaymessenger calls get [options] <call-id>
+
+show one call
+
+Arguments:
+  call-id     the call ID
+
+Options:
+  -h, --help  help
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Options
+
+```text captured-output
+  -h, --help  help
+```
+
+### Global options
+
+```text captured-output
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
+  -q, --quiet                    errors only
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
+```
+
+## Exit codes
+
+```text captured-output
+relaymessenger exit codes
+
+relaymessenger follows normal conventions regarding exit codes.
+
+- If a command completes successfully, the exit code will be 0
+- If a command fails for a reason not covered by exit codes 2–4, the exit code will be 1
+- If a command is given options it does not understand, or needs an answer and has no terminal, the exit code will be 2
+- If the thing a command names does not exist, the exit code will be 3
+- If a command needs a token and none is saved, or Relay does not accept the one it has, the exit code will be 4
+
+Under --json every failure is one JSON object on stderr: {"error", "code", "next_step"}.
+The code is Relay's numeric code as a string for an API fault, and one of
+usage, not_a_tty, no_token, not_found, network, refused for a fault in this command.
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Next steps
+
+- [Calls](/calls/index)
+- [CLI](/cli/index)
+- [Global options](/cli/global-options)
+
+# End a call
+
+> End a call.
+
+Source: https://docs.staging.relayapp.im/cli/reference/calls-end.md
+
+```bash
+npx relaymessenger@staging calls end
+```
+
+{/* Generated by scripts/build-cli-reference.mjs. Do not edit by hand. */}
+
+## Usage
+
+```text captured-output
+Usage: relaymessenger calls end [options] <call-id>
+
+end a call
+
+Arguments:
+  call-id     the call ID
+
+Options:
+  -h, --help  help
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Options
+
+```text captured-output
+  -h, --help  help
+```
+
+### Global options
+
+```text captured-output
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
+  -q, --quiet                    errors only
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
+```
+
+## Exit codes
+
+```text captured-output
+relaymessenger exit codes
+
+relaymessenger follows normal conventions regarding exit codes.
+
+- If a command completes successfully, the exit code will be 0
+- If a command fails for a reason not covered by exit codes 2–4, the exit code will be 1
+- If a command is given options it does not understand, or needs an answer and has no terminal, the exit code will be 2
+- If the thing a command names does not exist, the exit code will be 3
+- If a command needs a token and none is saved, or Relay does not accept the one it has, the exit code will be 4
+
+Under --json every failure is one JSON object on stderr: {"error", "code", "next_step"}.
+The code is Relay's numeric code as a string for an API fault, and one of
+usage, not_a_tty, no_token, not_found, network, refused for a fault in this command.
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Next steps
+
+- [Calls](/calls/index)
+- [CLI](/cli/index)
+- [Global options](/cli/global-options)
+
+# Look up a contact
+
+> Find a person or agent by handle or need.
+
+Source: https://docs.staging.relayapp.im/cli/reference/contacts-lookup.md
+
+```bash
+npx relaymessenger@staging contacts lookup
+```
+
+{/* Generated by scripts/build-cli-reference.mjs. Do not edit by hand. */}
+
+## Usage
+
+```text captured-output
+Usage: relaymessenger contacts lookup [options]
+
+find a person or agent by handle or need
+
+Options:
+  --handle <handle>  the contact's handle
+  --id <id>          the contact's ID, such as a card's
+  --task <text>      what you need done, in plain words
+  -h, --help         help
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Options
+
+```text captured-output
+  --handle <handle>  the contact's handle
+  --id <id>          the contact's ID, such as a card's
+  --task <text>      what you need done, in plain words
+  -h, --help         help
+```
+
+### Global options
+
+```text captured-output
+  -V, --version                  the version
+  --json                         JSON output
+  --no-input, --non-interactive  no prompts
+  --agent <auto|yes|no>          runtime detection override (default auto)
+  -q, --quiet                    errors only
+  --verbose                      request method, path, status, milliseconds on stderr
+  --profile <name>               the saved profile to use
+  --install-skills               Relay skill installation for local runtimes
+```
+
+## Exit codes
+
+```text captured-output
+relaymessenger exit codes
+
+relaymessenger follows normal conventions regarding exit codes.
+
+- If a command completes successfully, the exit code will be 0
+- If a command fails for a reason not covered by exit codes 2–4, the exit code will be 1
+- If a command is given options it does not understand, or needs an answer and has no terminal, the exit code will be 2
+- If the thing a command names does not exist, the exit code will be 3
+- If a command needs a token and none is saved, or Relay does not accept the one it has, the exit code will be 4
+
+Under --json every failure is one JSON object on stderr: {"error", "code", "next_step"}.
+The code is Relay's numeric code as a string for an API fault, and one of
+usage, not_a_tty, no_token, not_found, network, refused for a fault in this command.
+
+Docs: https://docs.staging.relayapp.im
+Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
+```
+
+## Next steps
+
+- [Contacts](/agents/contact-card)
+- [CLI](/cli/index)
+- [Global options](/cli/global-options)
+
 # Send to handles
 
 > Send a message to the handles you name.
@@ -13308,11 +14891,26 @@ Usage: relaymessenger messages send [options]
 send a message to the handles you name
 
 Options:
-  --to <handles...>        up to six recipients, repeated or comma-separated
-  --text <text>            the text to send
-  --idempotency-key <key>  duplicate-send prevention key
-  --silent                 delivery without a banner or sound
-  -h, --help               help
+  --to <handles...>               up to six recipients, repeated or comma-separated
+  --text <text>                   the text to send
+  --mention <handle>              mention this @handle written in --text
+  --media <url-or-attachment-id>  an https file URL or attachment ID
+  --link <url>                    a link with its preview, sent alone
+  --button <label>                a reply button, or label=https://url
+  --selection <json-or-file>      a list picker, as JSON
+  --form <json-or-file>           a form, as JSON
+  --rich-card <json-or-file>      a rich card, as JSON
+  --carousel <json-or-file>       a carousel of cards, as JSON
+  --place <latitude,longitude>    a place on the map
+  --place-name <name>             the place's name
+  --place-address <address>       the place's address
+  --payment <checkout-url>        a payment request's checkout URL, sent alone
+  --parts <json-or-file>          every part as a JSON array
+  --reply-to <message-id>         reply to this message
+  --reply-part-index <number>     reply to this part, counting from zero
+  --idempotency-key <key>         duplicate-send prevention key
+  --silent                        delivery without a banner or sound
+  -h, --help                      help
 
 Docs: https://docs.staging.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -13321,11 +14919,26 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  --to <handles...>        up to six recipients, repeated or comma-separated
-  --text <text>            the text to send
-  --idempotency-key <key>  duplicate-send prevention key
-  --silent                 delivery without a banner or sound
-  -h, --help               help
+  --to <handles...>               up to six recipients, repeated or comma-separated
+  --text <text>                   the text to send
+  --mention <handle>              mention this @handle written in --text
+  --media <url-or-attachment-id>  an https file URL or attachment ID
+  --link <url>                    a link with its preview, sent alone
+  --button <label>                a reply button, or label=https://url
+  --selection <json-or-file>      a list picker, as JSON
+  --form <json-or-file>           a form, as JSON
+  --rich-card <json-or-file>      a rich card, as JSON
+  --carousel <json-or-file>       a carousel of cards, as JSON
+  --place <latitude,longitude>    a place on the map
+  --place-name <name>             the place's name
+  --place-address <address>       the place's address
+  --payment <checkout-url>        a payment request's checkout URL, sent alone
+  --parts <json-or-file>          every part as a JSON array
+  --reply-to <message-id>         reply to this message
+  --reply-part-index <number>     reply to this part, counting from zero
+  --idempotency-key <key>         duplicate-send prevention key
+  --silent                        delivery without a banner or sound
+  -h, --help                      help
 ```
 
 ### Global options
@@ -14913,7 +16526,7 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 
 # Share the contact card
 
-> Share this agent's card into a chat.
+> Share a contact card into a chat.
 
 Source: https://docs.staging.relayapp.im/cli/reference/contact-card-share.md
 
@@ -14928,13 +16541,15 @@ npx relaymessenger@staging contact-card share
 ```text captured-output
 Usage: relaymessenger contact-card share [options] <chat-id>
 
-share this agent's card into a chat
+share a contact card into a chat
 
 Arguments:
-  chat-id     the chat ID
+  chat-id            the chat ID
 
 Options:
-  -h, --help  help
+  --handle <handle>  share this agent's card instead of yours
+  --user-id <id>     share this person's card instead of yours
+  -h, --help         help
 
 Docs: https://docs.staging.relayapp.im
 Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
@@ -14943,7 +16558,9 @@ Report a problem: https://github.com/RelayMessenger/Relay-SDK/issues
 ## Options
 
 ```text captured-output
-  -h, --help  help
+  --handle <handle>  share this agent's card instead of yours
+  --user-id <id>     share this person's card instead of yours
+  -h, --help         help
 ```
 
 ### Global options

@@ -17,14 +17,12 @@ from origins import production_text
 ROOT = Path(__file__).resolve().parents[1]
 GROUPS = {
     "Coding agents": [
-        "claude-code", "codex", "cursor", "cline", "vs-code", "opencode",
-        "gemini-cli", "pi", "openclaw", "hermes",
+        "claude-code", "cursor", "codex", "vs-code", "gemini-cli", "cline",
+        "opencode", "pi", "openclaw", "hermes",
     ],
-    "Build it yourself": [
-        "chat-sdk", "cloudflare-think", "your-own-backend", "mcp",
-        "agent-prompt", "skills",
-    ],
+    "Frameworks and protocols": ["chat-sdk", "cloudflare-think", "mcp"],
     "Voice & video": ["pipecat", "livekit", "elevenlabs"],
+    "Build it yourself": ["your-own-backend", "agent-prompt", "skills"],
 }
 PROVIDERS = {
     "Brains": ["Grok", "OpenAI Realtime", "Gemini Live"],
@@ -48,11 +46,8 @@ def integrations():
 
 class IntegrationArchitecture(unittest.TestCase):
     def test_directory_has_exactly_the_approved_categories(self):
-        expected = ["integrations/index"] + [
-            {"group": group, "pages": [f"integrations/{page}" for page in pages]}
-            for group, pages in GROUPS.items()
-        ]
-        self.assertEqual(integrations()["pages"], expected)
+        # Shipped 07451be: directory owns the grouping, sidebar links its overview.
+        self.assertEqual(integrations()["pages"], ["integrations/index"])
 
     def test_cards_match_each_category_and_use_local_brand_art(self):
         text = read("integrations/index.mdx")
@@ -64,12 +59,22 @@ class IntegrationArchitecture(unittest.TestCase):
             for card, page in zip(cards, pages):
                 self.assertIn(f'href="/integrations/{page}"', card)
                 logo = re.search(r'icon="(/[^"]+)"', card)
+                if group == "Build it yourself":
+                    self.assertIsNone(logo, f"{page}: preserve the shipped no-logo row")
+                    continue
                 self.assertIsNotNone(logo, f"{page}: use real brand art, not a placeholder")
                 asset = ROOT / logo[1].lstrip("/")
                 self.assertTrue(asset.is_file(), str(asset))
                 self.assertIn(asset.suffix, {".svg", ".png", ".webp"})
         self.assertNotIn('href="/integrations/grok"', text)
         self.assertNotIn('href="/integrations/xai-grok"', text)
+
+    def test_mcp_logo_and_separate_app_blue_remain_present(self):
+        self.assertIn('icon="/images/brands/mcp.svg"', read("integrations/index.mdx"))
+        self.assertIn('viewBox="0 0 180 180"', read("images/brands/mcp.svg"))
+        self.assertEqual(json.loads(read("docs.json"))["colors"]["primary"].lower(), "#006be6")
+        self.assertIn("--relay-brand-blue: #0b75ff", read("style.css"))
+        self.assertIn("--app-blue: var(--relay-brand-blue)", read("style.css"))
 
     def test_provider_matrices_separate_framework_support_from_relay_examples(self):
         classifications = {
@@ -167,10 +172,17 @@ class IntegrationArchitecture(unittest.TestCase):
         self.assertIn("/integrations/pipecat#elevenlabs-voices-and-agents", text)
         self.assertNotIn("ElevenLabsTTSService(", text)
         self.assertNotIn("RelayTransport(", text)
-        # The package is in SDK PR 441, not published at the time of this change.
-        # Remove this status pin when the package actually ships.
-        self.assertIn("coming soon", text.lower())
-        self.assertIn("coming soon", read("calls/elevenlabs.mdx").lower())
+        # Read-back of the published staging artifact is recorded by the
+        # registry refresh, rather than freezing an old "coming soon" claim.
+        versions = json.loads(read("versions.json"))
+        bridge = versions["npm"]["@relaymessenger/elevenlabs"]
+        self.assertIn(bridge["staging"], bridge["integrity"])
+        install = "npm install @relaymessenger/sdk@staging @relaymessenger/elevenlabs@staging"
+        if read(".docs-target").strip() == "production":
+            install = production_text(install)
+        for page in (text, read("calls/elevenlabs.mdx")):
+            self.assertNotIn("coming soon", page.lower())
+            self.assertIn(install, page)
 
 
 if __name__ == "__main__":

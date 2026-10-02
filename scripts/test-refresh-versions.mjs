@@ -40,6 +40,17 @@ test("an unobserved legacy package cannot silently retain stale metadata", () =>
   assert.throws(() => refreshHostedLock(lock, next, heads), /legacyCLI/);
 });
 
+test("newly published packages join the hosted validation inventory", () => {
+  const { lock, next, heads } = fixture();
+  next.npm.newBridge = { latest: "0.1.0-staging.0", staging: "0.1.0-staging.0",
+    integrity: { "0.1.0-staging.0": "bridge" } };
+  const updated = refreshHostedLock(lock, next, heads);
+  assert.deepEqual(updated.npm.newBridge.tags, {
+    latest: "0.1.0-staging.0", staging: "0.1.0-staging.0",
+  });
+  assert.deepEqual(updated.npm.newBridge.integrity, next.npm.newBridge.integrity);
+});
+
 test("an unobserved repository cannot silently retain a release-era pin", () => {
   const { lock, next, heads } = fixture();
   delete heads.Hermes;

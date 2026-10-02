@@ -197,8 +197,10 @@ class FormDocsTests(unittest.TestCase):
         self.assertIn("A user submits one answer to a form", source)
         self.assertIn("A matching retry returns the original answer", source)
         for forbidden in (r"\bA2A\b", r"/v1/tasks\b", r"\bexpires?[_ -]", r"\bexpiry\b",
-                          r"FormPreview", r"<svg", r"<canvas"):
+                          r"<svg", r"<canvas"):
             self.assertNotRegex(source, forbidden)
+        self.assertIn('import { FormPreview } from "/snippets/form-preview.jsx"', source)
+        self.assertIn('<FormPreview request={InteractionExamples().form} bubble={MessageBubble} />', source)
 
     def test_counter_review_rules_are_documented(self):
         source = read(PAGE)
