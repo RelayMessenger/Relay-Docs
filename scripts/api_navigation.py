@@ -24,6 +24,7 @@ EVENT_PAGES = [
     "events/call-created", "events/call-updated", "events/call-ended",
     "events/payment-succeeded", "events/payment-canceled", "events/payment-expired",
     "events/location-sharing-started", "events/location-sharing-stopped",
+    "events/rating-created", "events/rating-updated", "events/rating-deleted",
 ]
 # The tab groups events by subject, in the API reference's resource order.
 EVENT_TAB_GROUPS = [
@@ -36,6 +37,7 @@ EVENT_TAB_GROUPS = [
     ("Calls", ["events/call-created", "events/call-updated", "events/call-ended"]),
     ("Payments", ["events/payment-succeeded", "events/payment-canceled", "events/payment-expired"]),
     ("Location", ["events/location-sharing-started", "events/location-sharing-stopped"]),
+    ("Ratings", ["events/rating-created", "events/rating-updated", "events/rating-deleted"]),
 ]
 assert sorted(page for _, pages in EVENT_TAB_GROUPS for page in pages) == sorted(EVENT_PAGES)
 # Owner rulings 2026-10-01 ("only search agents should be public"; people rate
@@ -45,7 +47,7 @@ assert sorted(page for _, pages in EVENT_TAB_GROUPS for page in pages) == sorted
 # in step; validate-docs.py checks the bundle.
 HIDDEN_OPERATIONS = {
     "countAgentsInAddressBook", "listSuggestedAgents", "requestAgent",
-    "rateAgent", "deleteAgentRating",
+    "getMyAgentRating", "rateAgent", "deleteAgentRating",
 }
 
 

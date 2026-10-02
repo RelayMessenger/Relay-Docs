@@ -3302,6 +3302,9 @@ Only an agent can send an interaction. The app draws it, the person acts on it, 
   <Card title="Payments" href="/interactions/payments">
     Ask the person to pay with a Pay card, on your organization's own Stripe account.
   </Card>
+  <Card title="Ask for a rating" href="/interactions/rating">
+    Ask the people in a chat to rate your agent. Their stars and review arrive as rating events.
+  </Card>
 </CardGroup>
 
 New interactions are added here as parts, never as endpoints.
@@ -3313,6 +3316,7 @@ New interactions are added here as parts, never as endpoints.
 - [Rich cards](/interactions/rich-cards)
 - [Form](/interactions/form)
 - [Payments](/interactions/payments)
+- [Ask for a rating](/interactions/rating)
 - [Send a message](/messages/send)
 
 # Buttons
@@ -4365,7 +4369,7 @@ Use your existing event deduplication and durable processing path before acknowl
 
 ## Read whether someone answered
 
-A read-back `form` part includes its definition plus `has_responded`, `answers`, and `reactions: null`. These answer fields belong to the authenticated viewer.
+A read-back `form` part includes its definition plus `value`, `has_responded`, `answers`, and `reactions: null`. `value` is the form's `received_message.title`, else its `title`: the words a client that does not draw the form shows in its place. The answer fields belong to the authenticated viewer.
 
 - Before a user answers, `has_responded` is `false` and `answers` is `null`.
 - After the user answers, `has_responded` is `true` and `answers` holds that user's field-keyed values. A `message.upserted` for the prompt refreshes the user's other devices.
@@ -4675,6 +4679,69 @@ Relay answers `200` with the canceled request:
 - [Buttons](/interactions/buttons)
 - [Selection](/interactions/selection)
 - [Send a message](/messages/send)
+
+# Ask for a rating
+
+> Send a rating_request part to ask the people in a chat to rate your agent, then receive their stars and review as rating events.
+
+Source: https://docs.staging.relayapp.im/interactions/rating.md
+
+A `rating_request` part asks the people in a chat to rate your agent, the way an app asks for a rating. The part carries no words: Relay draws `Enjoying <your agent's name>?`, `Tell us what you think.` and a **Rate** button. The button opens one sheet with stars and an optional review. The rating is always of the agent that sent the request.
+
+## Send a rating request
+
+A rating request is the whole Message, so send it with no other part. It works in a one-to-one chat and in a group chat. Only an agent sends it.
+
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.chats.messages.send(chatId, {
+  message: { parts: [{ type: "rating_request" }] },
+});
+```
+
+```bash cURL
+curl -sS -X POST "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: <unique key>' \
+  -d '{"message":{"parts":[{"type":"rating_request"}]}}'
+```
+</CodeGroup>
+
+Relay answers `202` with the stored Message. When you read it back, the part carries `value` and `rating`:
+
+```json
+{"type":"rating_request","value":"Enjoying Sourdough Coach?","rating":null,"reactions":null}
+```
+
+`value` holds the words a client that does not draw the card shows in its place. `rating` is the reader's own rating of your agent, or `null`; nobody else's rating is shown in the part, so your agent always reads `null`.
+
+## Receive the rating
+
+The person's answer reaches your agent as an event, not as a Message:
+
+| Event | Fires when |
+| --- | --- |
+| [`rating.created`](/events/rating-created) | The person rates your agent for the first time |
+| [`rating.updated`](/events/rating-updated) | The person changes the stars or the review |
+| [`rating.deleted`](/events/rating-deleted) | The person takes the rating back |
+
+Each person has one rating of your agent. Sending the same stars and review again changes nothing and sends no event.
+
+## When it fails
+
+| Status | Code | What happened |
+| --- | --- | --- |
+| `400` | [1005](/api-reference/errors#1005) | The Message carries another part beside `rating_request`, or the part carries a field other than `type`. |
+| `409` | [2017](/api-reference/errors#2017) | The chat has no person in it. Only people rate agents. |
+
+Only a person rates an agent. An agent token on the rating routes under `/v1/contacts/{handle}/rating` is refused with `403`, code [2003](/api-reference/errors#2003). To read your agent's public ratings, use [`GET /v1/contacts/{handle}/ratings`](/api-reference/directory/read-an-agents-ratings).
+
+## Next steps
+
+- [Read the rating.created event](/events/rating-created)
+- [Send a message](/messages/send)
+- [Interactions](/interactions)
 
 # Direct and group chats
 
@@ -5893,7 +5960,7 @@ Relay shares the card only when all of these are true:
 
 Any other case returns the same `404`. Relay does not ask anyone before it shares. Ask both people first, for example with [buttons](/interactions/buttons), and share the card only after both agree.
 
-A person's card is a snapshot of their profile when you shared it: `id`, `handle`, name, photo, [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about). It never carries their email, birthdate, or age range. When the person deletes their account, every card of theirs reads "Deleted Account", with a `null` handle, no photo, no links, no about, and `is_active` `false`.
+A person's card is a snapshot of their profile when you shared it: `id`, `handle`, name, photo, [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about). It never carries their email, birthdate, or age range. When the person deletes their account, every card of theirs reads "Deleted Account", with an empty handle (`""`), no photo, no links, no about, and `is_active` `false`.
 
 ## What you get back
 
@@ -6323,6 +6390,8 @@ Relay answers `403` with error code [2003](/api-reference/errors#2003) and place
 | --- | --- |
 | `This person turned off calls from this agent.` | The person added your agent and turned off Allow Calls for it. |
 | `Call permission is required.` | The person has not added your agent, one of you blocked the other, or a member left the chat. |
+
+When none of the person's devices runs a Relay build that takes calls, Relay answers `422` with error code [1005](/api-reference/errors#1005) and the message `This person's Relay app cannot take calls yet. They need to update Relay.` Relay writes no call and no call marker, so the person sees no missed call. Tell the person in your own words, or send a message instead.
 
 A person already on another call gets a call with status `busy`, not an error.
 
@@ -17024,6 +17093,9 @@ Subscribe to the events your backend acts on and ignore the rest; a webhook subs
 | [`payment.expired`](/events/payment-expired) | A payment request reached `expires_at` unpaid | `PaymentRequest` |
 | [`location.sharing.started`](/events/location-sharing-started) | A person starts sharing their location with your agent | `LocationSharingStartedEvent` |
 | [`location.sharing.stopped`](/events/location-sharing-stopped) | A person stops sharing, or the share reaches its end | `LocationSharingStoppedEvent` |
+| [`rating.created`](/events/rating-created) | A person rates your agent | `RatingEvent` |
+| [`rating.updated`](/events/rating-updated) | A person changes the stars or the review of their rating | `RatingEvent` |
+| [`rating.deleted`](/events/rating-deleted) | A person takes their rating back | `RatingDeletedEvent` |
 
 ## List event types
 
@@ -17070,7 +17142,10 @@ Relay answers `200` with every event name and the URL of this catalog. The order
     "payment.canceled",
     "payment.expired",
     "location.sharing.started",
-    "location.sharing.stopped"
+    "location.sharing.stopped",
+    "rating.created",
+    "rating.updated",
+    "rating.deleted"
   ],
   "doc_url": "https://docs.relayapp.im/guides/webhooks/events"
 }
@@ -18197,6 +18272,110 @@ Stop reading the location for `data.chat_id` and discard any position you keep f
 - [Request a location again](/chats/location#send-a-location-request)
 - [Choose an event type](/events)
 
+# rating.created
+
+> Read the rating.created data payload and its fields.
+
+Source: https://docs.staging.relayapp.im/events/rating-created.md
+
+`rating.created` fires when a person rates your agent for the first time, or rates it again after taking an earlier rating back. The rating usually answers a [rating request](/interactions/rating) your agent sent; a person can also rate your agent without one.
+
+## Read the payload
+
+The `data` object is the `RatingEvent` schema from the API contract. The envelope around it is the same on every event and is described in the [event catalog](/events#read-the-envelope).
+
+| Field | Meaning |
+| --- | --- |
+| `contact` | The person's `id`, `handle`, `display_name`, [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
+| `stars` | From `1` to `5` |
+| `review` | The person's words, trimmed, at most 1,000 characters; `null` when they gave stars only |
+| `created_at` | When the person first rated your agent |
+| `updated_at` | When the stars or the review last changed |
+
+```json
+{
+  "contact": {
+    "id": "<person id>",
+    "handle": "<person handle>",
+    "display_name": "Maya",
+    "timezone": "America/Detroit",
+    "age_range": "18_plus",
+    "links": [],
+    "about": null
+  },
+  "stars": 5,
+  "review": "Fixed my sourdough in one chat.",
+  "created_at": "2026-10-02T15:04:00.000Z",
+  "updated_at": "2026-10-02T15:04:00.000Z"
+}
+```
+
+## Handle the event
+
+Store one rating per `contact.id`. Each person has one rating of your agent, so a later [`rating.updated`](/events/rating-updated) replaces it and [`rating.deleted`](/events/rating-deleted) removes it.
+
+## Next steps
+
+- [Ask for a rating](/interactions/rating)
+- [Read the rating.updated event](/events/rating-updated)
+- [Choose an event type](/events)
+
+# rating.updated
+
+> Read the rating.updated data payload and its fields.
+
+Source: https://docs.staging.relayapp.im/events/rating-updated.md
+
+`rating.updated` fires when a person changes the stars or the review of their rating of your agent. Sending the same stars and review again changes nothing and sends no event.
+
+## Read the payload
+
+The `data` object is the `RatingEvent` schema, the same as [`rating.created`](/events/rating-created). It carries the rating as it is now stored. The envelope around it is the same on every event and is described in the [event catalog](/events#read-the-envelope).
+
+| Field | Meaning |
+| --- | --- |
+| `contact` | The person's `id`, `handle`, `display_name`, [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
+| `stars` | From `1` to `5` |
+| `review` | The person's words, trimmed, at most 1,000 characters; `null` when they gave stars only |
+| `created_at` | When the person first rated your agent |
+| `updated_at` | When the stars or the review last changed |
+
+## Handle the event
+
+Replace the rating you stored for `contact.id`. Use `updated_at` to ignore an older event that arrives after a newer one.
+
+## Next steps
+
+- [Ask for a rating](/interactions/rating)
+- [Read the rating.deleted event](/events/rating-deleted)
+- [Choose an event type](/events)
+
+# rating.deleted
+
+> Read the rating.deleted data payload and its fields.
+
+Source: https://docs.staging.relayapp.im/events/rating-deleted.md
+
+`rating.deleted` fires when a person takes their rating of your agent back. A later rating by the same person arrives as [`rating.created`](/events/rating-created) again.
+
+## Read the payload
+
+The `data` object is the `RatingDeletedEvent` schema from the API contract. The envelope around it is the same on every event and is described in the [event catalog](/events#read-the-envelope).
+
+| Field | Meaning |
+| --- | --- |
+| `contact` | The person's `id`, `handle`, `display_name`, [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
+
+## Handle the event
+
+Remove the rating you stored for `contact.id`.
+
+## Next steps
+
+- [Ask for a rating](/interactions/rating)
+- [Read the rating.created event](/events/rating-created)
+- [Choose an event type](/events)
+
 # Error codes
 
 > Find the cause of a Relay API error and the next action.
@@ -18499,7 +18678,7 @@ Source: https://docs.staging.relayapp.im/error/codes/2xxx/2017.md
 
 | HTTP status | What to do |
 | --- | --- |
-| 409 | Request a location only in a chat with one person. |
+| 409 | Request a location only in a chat with one person. Send a [rating request](/interactions/rating) only into a chat with at least one person. |
 
 ## Error response
 
@@ -19306,6 +19485,18 @@ Common authentication, validation, and server errors apply alongside resource er
 Source: https://docs.staging.relayapp.im/changelog.md
 
 Follow changes that affect your agents and integrations. Dates use UTC.
+
+<Update label="2026-10-02" tags={["API", "SDK"]}>
+## Ask for a rating
+
+An agent can send a [`rating_request`](/interactions/rating) part, the whole Message, to ask the people in a one-to-one chat or a group to rate it. Relay draws the card and a sheet with stars and an optional review. The answer arrives as [`rating.created`](/events/rating-created), [`rating.updated`](/events/rating-updated) and [`rating.deleted`](/events/rating-deleted). Only people rate: an agent token on the rating routes is refused with `403`, code `2003`.
+</Update>
+
+<Update label="2026-10-02" tags={["API", "Breaking change"]}>
+## Calls to a person whose app cannot take calls
+
+An agent's call to a person none of whose devices runs a Relay build that takes calls is refused with `422`, code `1005`, and nothing is written, so the person sees no missed call. See [Call a person](/calls/call-a-person#when-it-fails). A shared person's card after they delete their account now carries an empty `handle` (`""`) instead of `null`, and a `form` part read back carries `value`, the words a client that does not draw the form shows in its place.
+</Update>
 
 <Update label="2026-10-01" tags={["API", "SDK"]}>
 ## Show Rive in a call
@@ -20540,9 +20731,9 @@ paths:
         you, into a chat with at least one active person in it, none of whom has
         blocked or been blocked by that person. Anything else returns the same
         404. When the person deletes their account, every shared card of theirs
-        keeps its id and reads first_name "Deleted Account" with handle,
-        last_name, image_url, image_color and about null, links empty, and
-        is_active false. Ask both people first, with ordinary
+        keeps its id and reads first_name "Deleted Account" with handle
+        empty (""), last_name, image_url, image_color and about null, links
+        empty, and is_active false. Ask both people first, with ordinary
         buttons; Relay does not ask for you. A person's card is a snapshot of what
         their profile shows: id, handle, kind (user), first_name, last_name,
         image_url, image_color, is_active, is_verified (always false), links
@@ -21466,6 +21657,12 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: A person cannot block a built-in agent such as `relay` (error code `2003`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: The Handle is not a registered Relay Handle that can be blocked (error code `2001`).
           content:
@@ -21506,6 +21703,9 @@ paths:
 
         `reason` is a free-text note returned on the list endpoint. Nothing is
         sent to the blocked Handle, so blocking is silent from their side.
+
+        A person cannot block a built-in agent, the one every account starts
+        with (`relay`); the request is refused with `403` (error code `2003`).
     delete:
       operationId: unblockHandle
       summary: Unblock a handle
@@ -22351,7 +22551,7 @@ paths:
         - Calls
       security:
         - BearerAuth: []
-      description: Start an audio Call in an existing individual Chat containing exactly one user and one agent. The caller comes from authentication. The user must have added the agent; sending or replying to a Message, or adding the agent, establishes that relationship. An agent calls only a person who added it and who has not turned off Allow Calls for it; Allow Calls is the person's own switch for each agent they added, on by default, and it never stops the person's own call to the agent. A block in either direction prevents the call. A group Chat is rejected even when it has only two current members. Reuse the same Idempotency-Key and body after an uncertain response. Relay emits `call.created` through the agent's configured event transport. Both Contacts use the authenticated Call room for signaling and publish one WebRTC `audio` track. The callee answers by sending `join` within the 32-second ring lease; silence ends `no-answer`. A Call to a person who is already ringing or in-progress on another Call is created and finished at once with status `busy`; an agent is never marked busy by Relay. An answered Call has no duration limit. When calls are switched off on this server, every create is refused with 503 and nothing is written; `calls_enabled` on GET /v1/me says whether calls are on.
+      description: Start an audio Call in an existing individual Chat containing exactly one user and one agent. The caller comes from authentication. The user must have added the agent; sending or replying to a Message, or adding the agent, establishes that relationship. An agent calls only a person who added it and who has not turned off Allow Calls for it; Allow Calls is the person's own switch for each agent they added, on by default, and it never stops the person's own call to the agent. A block in either direction prevents the call. A group Chat is rejected even when it has only two current members. Reuse the same Idempotency-Key and body after an uncertain response. Relay emits `call.created` through the agent's configured event transport. Both Contacts use the authenticated Call room for signaling and publish one WebRTC `audio` track. The callee answers by sending `join` within the 32-second ring lease; silence ends `no-answer`. A Call to a person who is already ringing or in-progress on another Call is created and finished at once with status `busy`; an agent is never marked busy by Relay. An answered Call has no duration limit. When calls are switched off on this server, every create is refused with 503 and nothing is written; `calls_enabled` on GET /v1/me says whether calls are on. An agent's call to a person none of whose devices runs a Relay build that takes calls is refused with 422 and nothing is written (no Call, no call marker, no missed call).
       parameters:
         - name: chatId
           in: path
@@ -22408,7 +22608,15 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
         "422":
-          description: The Chat cannot take a Call because it is not an individual Chat containing exactly one user and one agent (error code `1005`).
+          description: |-
+            The Call cannot be placed (error code `1005`). A Chat that is not
+            an individual Chat containing exactly one user and one agent is
+            refused. An agent's call to a person who has no device running a
+            Relay build that takes calls is refused with "This person's Relay
+            app cannot take calls yet. They need to update Relay."; no Call
+            and no call marker are written, so the person sees no missed
+            call. Tell the person in your own words, or send a Message
+            instead.
           content:
             application/json:
               schema:
@@ -23312,6 +23520,66 @@ components:
           description: Reactions on this message part
           items:
             $ref: "#/components/schemas/Reaction"
+    RatingRequestPart:
+      type: object
+      additionalProperties: false
+      description: >-
+        Ask the people in the chat to rate your agent, the way an app asks for
+        a rating. The part carries no words: Relay draws "Enjoying
+        <your agent's name>?", "Tell us what you think." and a Rate button.
+        The button opens one sheet with stars and an optional review.
+        It is the whole message and only an agent sends it, in a
+        one-to-one chat or a group; it always rates the agent that sent it.
+        Only people rate: a chat with no person is refused with 409 (error
+        code `2017`). The answer arrives as `rating.created`,
+        then `rating.updated` whenever the person changes it, and
+        `rating.deleted` when they take it back.
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [rating_request]
+    RatingRequestPartResponse:
+      type: object
+      description: >-
+        A rating request from an agent. A client that does not draw it shows
+        the Message's text, "Enjoying <agent display name>?".
+      required: [type, value, rating, reactions]
+      properties:
+        type:
+          type: string
+          enum: [rating_request]
+        value:
+          type: string
+          description: >-
+            "Enjoying <agent display name>?", the words a client that does
+            not draw the card shows in its place.
+        rating:
+          description: >-
+            The reader's own rating of the agent that asked, or null when the
+            reader has not rated it. Nobody else's rating is shown here.
+          oneOf:
+            - type: "null"
+            - type: object
+              additionalProperties: false
+              required: [stars, review]
+              properties:
+                stars:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                review:
+                  type:
+                    - string
+                    - "null"
+                  maxLength: 1000
+        reactions:
+          type:
+            - array
+            - "null"
+          description: Reactions on this message part
+          items:
+            $ref: "#/components/schemas/Reaction"
     PlacePart:
       type: object
       additionalProperties: false
@@ -23395,6 +23663,81 @@ components:
         name: Philz Coffee
         address: 101 Forest Ave, Palo Alto, CA 94301
         reactions: null
+    RatingEvent:
+      type: object
+      additionalProperties: false
+      required: [contact, stars, review, created_at, updated_at]
+      description: >-
+        A person's rating of your agent, as it is now stored. One rating per
+        person: a new one replaces the stars and the review.
+      properties:
+        contact:
+          $ref: "#/components/schemas/ContactEventContact"
+        stars:
+          type: integer
+          minimum: 1
+          maximum: 5
+        review:
+          type:
+            - string
+            - "null"
+          maxLength: 1000
+          description: The person's words, trimmed; null when they gave stars only.
+        created_at:
+          type: string
+          format: date-time
+          description: When the person first rated your agent.
+        updated_at:
+          type: string
+          format: date-time
+          description: When the stars or the review last changed.
+    RatingCreatedWebhook:
+      allOf:
+        - $ref: "#/components/schemas/WebhookEnvelopeBase"
+        - type: object
+          required:
+            - event_type
+            - data
+          properties:
+            event_type:
+              type: string
+              const: rating.created
+            data:
+              $ref: "#/components/schemas/RatingEvent"
+    RatingUpdatedWebhook:
+      allOf:
+        - $ref: "#/components/schemas/WebhookEnvelopeBase"
+        - type: object
+          required:
+            - event_type
+            - data
+          properties:
+            event_type:
+              type: string
+              const: rating.updated
+            data:
+              $ref: "#/components/schemas/RatingEvent"
+    RatingDeletedEvent:
+      type: object
+      additionalProperties: false
+      required: [contact]
+      description: A person took their rating of your agent back.
+      properties:
+        contact:
+          $ref: "#/components/schemas/ContactEventContact"
+    RatingDeletedWebhook:
+      allOf:
+        - $ref: "#/components/schemas/WebhookEnvelopeBase"
+        - type: object
+          required:
+            - event_type
+            - data
+          properties:
+            event_type:
+              type: string
+              const: rating.deleted
+            data:
+              $ref: "#/components/schemas/RatingDeletedEvent"
     LocationSharingStartedEvent:
       type: object
       required: [shared_by, shared_with, chat_id, began_at, ends_at]
@@ -24423,6 +24766,14 @@ components:
           description: Agents only.
         visibility:
           $ref: "#/components/schemas/AgentVisibility"
+        rive:
+          description: >-
+            The Rive file this agent shows in its calls, so the app can load it
+            before a call. Null when it has none. Present only when kind is
+            agent.
+          anyOf:
+            - $ref: "#/components/schemas/RiveFile"
+            - type: "null"
         creator:
           description: >-
             Who made the agent: its organization, by the name the organization
@@ -24923,12 +25274,10 @@ components:
           description: >-
             A shared person's about when the card was shared, at most 160 characters, or null when they wrote none or deleted their account. Present only on a person's card.
         handle:
-          type:
-            - string
-            - "null"
+          type: string
           description: >-
-            Relay Handle associated with this contact card. Null only on a
-            shared person's card after they deleted their account.
+            Relay Handle associated with this contact card. Empty ("") only
+            on a shared person's card after they deleted their account.
         kind:
           type: string
           enum:
@@ -25596,6 +25945,7 @@ components:
       type: object
       required:
         - type
+        - value
         - title
         - pages
         - has_responded
@@ -25606,6 +25956,10 @@ components:
           type: string
           enum:
             - form
+        value:
+          type: string
+          readOnly: true
+          description: The form's received_message.title, else its title; the words a client that does not draw the form shows in its place.
         title:
           type: string
           minLength: 1
@@ -26788,6 +27142,7 @@ components:
               - $ref: "#/components/schemas/PaymentPartResponse"
               - $ref: "#/components/schemas/PaymentReceiptPartResponse"
               - $ref: "#/components/schemas/LocationRequestPartResponse"
+              - $ref: "#/components/schemas/RatingRequestPartResponse"
               - $ref: "#/components/schemas/LocationPartResponse"
               - $ref: "#/components/schemas/PlacePartResponse"
               - $ref: "#/components/schemas/SystemPartResponse"
@@ -26974,6 +27329,7 @@ components:
               - $ref: "#/components/schemas/PaymentPartResponse"
               - $ref: "#/components/schemas/PaymentReceiptPartResponse"
               - $ref: "#/components/schemas/LocationRequestPartResponse"
+              - $ref: "#/components/schemas/RatingRequestPartResponse"
               - $ref: "#/components/schemas/LocationPartResponse"
               - $ref: "#/components/schemas/PlacePartResponse"
             discriminator:
@@ -26993,6 +27349,7 @@ components:
                 payment: "#/components/schemas/PaymentPartResponse"
                 payment_receipt: "#/components/schemas/PaymentReceiptPartResponse"
                 location_request: "#/components/schemas/LocationRequestPartResponse"
+                rating_request: "#/components/schemas/RatingRequestPartResponse"
                 location: "#/components/schemas/LocationPartResponse"
                 place: "#/components/schemas/PlacePartResponse"
         sent_at:
@@ -27057,6 +27414,7 @@ components:
           suggestion_response: "#/components/schemas/SuggestionResponsePart"
           payment: "#/components/schemas/PaymentPart"
           place: "#/components/schemas/PlacePart"
+          rating_request: "#/components/schemas/RatingRequestPart"
       oneOf:
         - $ref: "#/components/schemas/TextPart"
         - $ref: "#/components/schemas/MediaPart"
@@ -27071,6 +27429,7 @@ components:
         - $ref: "#/components/schemas/SuggestionResponsePart"
         - $ref: "#/components/schemas/PaymentPart"
         - $ref: "#/components/schemas/PlacePart"
+        - $ref: "#/components/schemas/RatingRequestPart"
     MessageReadWebhook:
       description: Complete webhook payload for message.read events (2026-08-30 format)
       allOf:
@@ -27631,6 +27990,7 @@ components:
               - $ref: "#/components/schemas/PaymentPartResponse"
               - $ref: "#/components/schemas/PaymentReceiptPartResponse"
               - $ref: "#/components/schemas/LocationRequestPartResponse"
+              - $ref: "#/components/schemas/RatingRequestPartResponse"
               - $ref: "#/components/schemas/LocationPartResponse"
               - $ref: "#/components/schemas/PlacePartResponse"
         created_at:
@@ -28617,6 +28977,9 @@ components:
         - payment.expired
         - location.sharing.started
         - location.sharing.stopped
+        - rating.created
+        - rating.updated
+        - rating.deleted
     WebhookEventsResult:
       type: object
       required:
@@ -29378,6 +29741,54 @@ x-relay-webhooks:
           application/json:
             schema:
               $ref: "#/components/schemas/LocationSharingStoppedWebhook"
+      responses:
+        "200":
+          description: Webhook received successfully
+  rating.created.v2026-08-30:
+    post:
+      tags:
+        - 2026-08-30
+      operationId: webhookRatingCreatedV20260830
+      summary: Rating created
+      description: A person rated your agent for the first time, with stars and maybe a review.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RatingCreatedWebhook"
+      responses:
+        "200":
+          description: Webhook received successfully
+  rating.updated.v2026-08-30:
+    post:
+      tags:
+        - 2026-08-30
+      operationId: webhookRatingUpdatedV20260830
+      summary: Rating updated
+      description: A person changed their rating of your agent, its stars or its review.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RatingUpdatedWebhook"
+      responses:
+        "200":
+          description: Webhook received successfully
+  rating.deleted.v2026-08-30:
+    post:
+      tags:
+        - 2026-08-30
+      operationId: webhookRatingDeletedV20260830
+      summary: Rating deleted
+      description: A person took their rating of your agent back.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RatingDeletedWebhook"
       responses:
         "200":
           description: Webhook received successfully

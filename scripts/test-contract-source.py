@@ -41,10 +41,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # Forms (Server #465, merged as ce3a45f5); suggested agents (#473); a person's Contact Card by user_id (#476); profile links on every person (#475); A2UI and the data part removed (#474), September 30, 2026.
 # Carried from Server staging fe702db3: #479 adds a person's about and the birthdate scope (#477 and #478 change no contract byte).
 # Carried from Server staging 736f112e: #488 an agent's Rive file (rive on Contact Card, chat handles and calls) and the rive DataChannel; #486 Message drops edited_at and unsent_at; #482 and #485 change no public schema they do not list, October 1, 2026.
-UPSTREAM_COMMIT = "736f112e78703f94751f8e5f36f0ae6fdf18ddd4"
-UPSTREAM_STAGING_COMMIT = "736f112e78703f94751f8e5f36f0ae6fdf18ddd4"
-UPSTREAM_SIZE = 349634
-UPSTREAM_SHA256 = "e3b40319f08398098f63a3847140f32f3d9b3c12e009eab4972db3b0e7eb4da8"
+# Carried from Server staging af7f1802: rating_request part and rating.created, rating.updated and rating.deleted; GET /v1/contacts/{handle}/rating; only people rate (403 for agents); no blocking the built-in relay agent (403); rive on contact list and lookup; an agent call to a person with no calls-capable build is 422; ContactCardItem.handle is a string; form parts carry value (Server #482, #492 and the rating and calls branches; #504 at 76713bfc changes no contract byte), October 2, 2026.
+UPSTREAM_COMMIT = "af7f1802cbad49485c8753cb1ad503dd97ae1ada"
+UPSTREAM_STAGING_COMMIT = "af7f1802cbad49485c8753cb1ad503dd97ae1ada"
+UPSTREAM_SIZE = 360139
+UPSTREAM_SHA256 = "7ca002357a04610ee2012ae59d8f0789e9d44a000388ca926ea1ed68f44d96d9"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
