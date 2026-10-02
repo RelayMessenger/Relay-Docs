@@ -400,6 +400,250 @@ The failures these rules prevent look alike from the outside: a reply sent twice
 - [Configure SDK retries](/live/retries)
 - [Handle SDK errors](/live/errors)
 
+# Log in with Relay
+
+> Let people log in to your website with their Relay account through standard OpenID Connect, and let your agent message them.
+
+Source: https://docs.relayapp.im/agents/log-in-with-relay.md
+
+Your website gets a **Connect Relay** button. A person taps it, confirms in the Relay app (or on Relay's page on a computer), and comes back logged in, with a verified ID token that names their Relay account.
+
+Logging in also lets your agent message the person in Relay: your agent gets [`contact.added`](/events) and can send the first message.
+
+## Follow a login
+
+These screens show a person, Ana, logging in to `acme.com`, a website whose agent is named Acme.
+
+<Steps>
+  <Step title="The person taps Connect Relay">
+    Your site sends the person to Relay's authorization endpoint.
+
+<Frame>
+  <img className="block dark:hidden" src="/images/log-in-with-relay/button-light.png" alt="The Connect Relay button" width="220" />
+  <img className="hidden dark:block" src="/images/log-in-with-relay/button-dark.png" alt="The Connect Relay button" width="220" />
+</Frame>
+  </Step>
+  <Step title="Relay asks which account logs in">
+    Relay's page names your site and the account that is signed in.
+
+<Frame>
+  <img src="/images/log-in-with-relay/computer-choose-account.png" alt="Relay's page: Choose an account to log in to acme.com, with Continue with Relay" width="392" />
+</Frame>
+  </Step>
+  <Step title="The person confirms">
+    The confirmation names your site, what it gets, and the device that asks. Email, phone number and birthday are off until the person turns them on, and only the ones your scopes ask for show.
+
+    On an iPhone, the Relay app shows the confirmation:
+
+<Frame>
+  <img className="block dark:hidden" src="/images/log-in-with-relay/iphone-confirm-light.png" alt="The Relay app's confirmation: Log in to acme.com, with switches to share email, phone number and birthday" width="280" />
+  <img className="hidden dark:block" src="/images/log-in-with-relay/iphone-confirm-dark.png" alt="The Relay app's confirmation: Log in to acme.com, with switches to share email, phone number and birthday" width="280" />
+</Frame>
+
+    On a computer, the same confirmation shows on Relay's page:
+
+<Frame>
+  <img src="/images/log-in-with-relay/computer-confirm.png" alt="Relay's page on a computer: Log in to acme.com, with the same switches and a Log in button" width="400" />
+</Frame>
+  </Step>
+  <Step title="The person is logged in">
+    Relay sends the person back to your redirect with a code. Your server exchanges it for an ID token.
+
+<Frame>
+  <img className="block dark:hidden" src="/images/log-in-with-relay/iphone-logged-in-light.png" alt="The Relay app: Logged in to acme.com" width="240" />
+  <img className="hidden dark:block" src="/images/log-in-with-relay/iphone-logged-in-dark.png" alt="The Relay app: Logged in to acme.com" width="240" />
+</Frame>
+  </Step>
+</Steps>
+
+The next login from the same person skips the confirmation, until they remove your site in **Settings › Account › Logged-in Websites**. Removing it signs them out of your site: every token Relay gave you for them stops working.
+
+## Set up your agent's client
+
+Open your agent's **OAuth2** tab in [Relay Console](/console/agents), or use the CLI after [`relaymessenger login`](/cli/reference/login): [`oauth create`](/cli/reference/oauth-create), [`oauth show`](/cli/reference/oauth-show), [`oauth redirects add`](/cli/reference/oauth-redirects-add), [`oauth redirects remove`](/cli/reference/oauth-redirects-remove), [`oauth scopes`](/cli/reference/oauth-scopes) and [`oauth reset-secret`](/cli/reference/oauth-reset-secret). Your client ID is your agent's ID.
+
+<Steps>
+  <Step title="Create the client">
+    Press **Create OAuth2 client**. Relay shows the client secret once; it starts with `rel_cs_`. Opening the tab never creates a client. **Reset Secret** makes a new secret, and the old one stops working at once.
+  </Step>
+  <Step title="Add a redirect">
+    Add every address Relay may send people back to. The `redirect_uri` of a login must match one exactly. Use `https`; `http` is allowed only on `localhost`. An agent has up to 10.
+  </Step>
+  <Step title="Choose scopes">
+    `openid` and `profile` are always on. Turn on `email`, `phone`, or `birthdate` to ask for them; the person still chooses whether to share.
+  </Step>
+</Steps>
+
+Your agent can manage the same client with its Agent Token:
+
+<CodeGroup>
+```ts TypeScript
+import Relay from "@relaymessenger/sdk";
+
+const relay = new Relay({ apiKey: process.env.RELAY_AGENT_TOKEN!, baseURL: "https://api.relayapp.im" });
+const { client, client_secret } = await relay.oauth2Client.create(); // once; keep the secret
+await relay.oauth2Client.update({
+  redirect_uris: ["https://example.com/auth/relay/callback"],
+  scopes: ["openid", "profile", "email"],
+});
+```
+
+```bash cURL
+curl -sS -X POST https://api.relayapp.im/v1/oauth2_client \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+
+curl -sS -X PATCH https://api.relayapp.im/v1/oauth2_client \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"redirect_uris":["https://example.com/auth/relay/callback"],"scopes":["openid","profile","email"]}'
+```
+</CodeGroup>
+
+## Add the button
+
+Paste the button into your login page. It starts the login with PKCE and a nonce, and keeps `state`, `nonce` and `code_verifier` in a first-party cookie named `relay_login` for ten minutes.
+
+<CodeGroup>
+```html HTML
+<script async src="https://auth.relayapp.im/js/relay-login.js"></script>
+<button class="relay-login"
+  data-client-id="YOUR_AGENT_ID"
+  data-redirect-uri="https://example.com/auth/relay/callback"
+  data-scope="openid profile email">
+  Connect Relay
+</button>
+```
+
+```tsx React
+import { RelayLoginButton } from "@relaymessenger/sdk/login-button";
+
+<RelayLoginButton
+  clientId="YOUR_AGENT_ID"
+  redirectUri="https://example.com/auth/relay/callback"
+  scope="openid profile email"
+  authOrigin="https://auth.relayapp.im"
+/>
+```
+</CodeGroup>
+
+You can also start the login with any OpenID Connect library instead of the button.
+
+## Verify the login on your server
+
+Relay is a standard OpenID Connect provider. Point any OpenID Connect library at the discovery document:
+
+```text
+https://auth.relayapp.im/api/auth/.well-known/openid-configuration
+```
+
+| Setting | Value |
+| --- | --- |
+| Issuer | `https://auth.relayapp.im/api/auth` |
+| Client ID | Your agent's ID |
+| Client authentication | `client_secret_basic` or `client_secret_post` |
+| Grant | Authorization code with PKCE (`S256`) |
+| ID token signature | `RS256` |
+
+This example uses [openid-client](https://github.com/panva/openid-client) and the `relay_login` cookie the button set:
+
+```ts TypeScript
+import * as oidc from "openid-client";
+
+const config = await oidc.discovery(
+  new URL("https://auth.relayapp.im/api/auth"),
+  process.env.RELAY_CLIENT_ID!,
+  process.env.RELAY_CLIENT_SECRET!,
+);
+
+// In your callback route:
+const saved = JSON.parse(Buffer.from(cookies.relay_login, "base64url").toString());
+const tokens = await oidc.authorizationCodeGrant(config, new URL(request.url), {
+  pkceCodeVerifier: saved.code_verifier,
+  expectedState: saved.state,
+  expectedNonce: saved.nonce,
+  idTokenExpected: true,
+});
+const person = tokens.claims(); // sub, name, preferred_username, picture, email?
+```
+
+If you only need to check an ID token, the SDKs verify its signature, issuer, audience and expiry against Relay's published keys:
+
+<CodeGroup>
+```ts TypeScript
+import { verifyRelayIdToken } from "@relaymessenger/sdk";
+
+const claims = await verifyRelayIdToken(idToken, {
+  clientId: process.env.RELAY_CLIENT_ID!,
+  issuer: "https://auth.relayapp.im/api/auth",
+});
+```
+
+```python Python
+# pip install 'relaymessenger[login]'
+from relaymessenger.login import verify_relay_id_token
+
+claims = verify_relay_id_token(
+    id_token,
+    client_id=RELAY_CLIENT_ID,
+    issuer="https://auth.relayapp.im/api/auth",
+)
+```
+</CodeGroup>
+
+## Keep logins safe
+
+The confirmation names your site (the host of the redirect you registered), which device is asking, and its city, so a person can refuse a login they did not start.
+
+On an iPhone the Relay app confirms the login, and two checks tie it to the browser that started it:
+
+- The person who confirms in the app must be the same Relay account the browser chose on the Relay page. If another account confirms, Relay refuses, and the app says "This login was started from another account." Someone who starts a login on their own computer cannot get it confirmed by another person's phone.
+- Only the browser that started the login can collect the code.
+
+Use the `state` and `nonce` your login set (the button does), and treat a Relay login like any new sign-in: notify the person and let them sign other sessions out.
+
+## What you get back
+
+| Scope | Claims | Present |
+| --- | --- | --- |
+| `openid` | `sub`: the person's Relay login ID | Always |
+| `profile` | `name`, `preferred_username` (their @handle, without the @), `picture` | Always |
+| `openid` and `profile` | `https://relayapp.im/user_id`: the person's `id` in chats | Only when the person has a Relay profile |
+| `email` | `email`, `email_verified` | Only when the person shares it |
+| `phone` | `phone_number` (E.164), `phone_number_verified` | Only when the person shares it |
+| `birthdate` | `birthdate`: `YYYY-MM-DD`, or `0000-MM-DD` when the person gave no year | Only from UserInfo, and only when the person has a birthday and shares it |
+| `offline_access` | A refresh token | When you ask for it |
+
+The same claims come from the UserInfo endpoint, except `birthdate`, which is never in the ID token. Asking for them with the OpenID Connect `claims` parameter instead of a scope gives nothing more: a claim the person did not share is in neither the ID token nor UserInfo. A person who signed up with only a phone number has no email to share. Every login must include the `openid` scope.
+
+### Match a login to a person in a chat
+
+`https://relayapp.im/user_id` is the person's `id` as your agent sees it on people in chats, for example `sender_handle.id` on [`message.received`](/events/message-received). Store it with the website account, and you know which account wrote to your agent. `sub` is a different ID and never appears in chats.
+
+```json
+{
+  "preferred_username": "ana",
+  "https://relayapp.im/user_id": "0199a3c4-5b6d-7e8f-9a0b-1c2d3e4f5a6b"
+}
+```
+
+Relay gives this claim in the ID token and from UserInfo, only to a Log in with Relay client, only when `openid` and `profile` are granted, and only when the person has a Relay profile.
+
+## When it fails
+
+| What happens | Why |
+| --- | --- |
+| Relay shows an error page instead of sending the person back | The `redirect_uri` is not one of your agent's redirects, character for character. |
+| The token request answers `401` with `invalid_client` | The client secret is wrong or was reset. |
+| The callback gets `error=access_denied` | The person tapped **Cancel**. |
+| The Relay app says "This login was started from another account." | The browser chose one Relay account and the app is signed in to another. Choose the same account in both. |
+| The person's page says the login request expired | They did not confirm within ten minutes. Start again. |
+
+## Next steps
+
+- [Who can message your agent](/agents/who-can-message)
+- [Events](/events)
+- [Authentication](/live/authentication)
+
 # Integrations
 
 > Choose where your agent runs, then connect it to Relay.
@@ -8003,211 +8247,6 @@ Each list is newest first, and each entry is a contact card, the same card a [ha
 - [Always allow or never allow a contact](/api-reference/agents/always-allow-or-never-allow-a-contact)
 - [Block a handle](/agents/blocked-handles)
 - [Send a message](/messages/send)
-
-# Log in with Relay
-
-> Let people log in to your website with their Relay account through standard OpenID Connect, and let your agent message them.
-
-Source: https://docs.relayapp.im/agents/log-in-with-relay.md
-
-Your website gets a **Connect Relay** button. A person taps it, confirms in the Relay app (or on Relay's page on a computer), and comes back logged in, with a verified ID token that names their Relay account.
-
-Logging in also lets your agent message the person in Relay: your agent gets [`contact.added`](/events) and can send the first message.
-
-## Follow a login
-
-1. Your site sends the person to Relay's authorization endpoint.
-2. Relay asks which account logs in to your site.
-3. On an iPhone, the Relay app shows the confirmation: your site, what it gets, and optional switches to share their email and phone number. On a computer, the same confirmation shows on Relay’s page.
-4. Relay sends the person back to your redirect with a code. Your server exchanges it for an ID token.
-
-The next login from the same person skips the confirmation, until they remove your site in **Settings › Account › Logged-in Websites**. Removing it signs them out of your site: every token Relay gave you for them stops working.
-
-## Set up your agent's client
-
-Open your agent's **OAuth2** tab in [Relay Console](/console/agents), or run `relaymessenger oauth create` after [`relaymessenger login`](/cli/reference/login). Your client ID is your agent's ID.
-
-<Steps>
-  <Step title="Create the client">
-    Press **Create OAuth2 client**. Relay shows the client secret once; it starts with `rel_cs_`. Opening the tab never creates a client. **Reset Secret** makes a new secret, and the old one stops working at once.
-  </Step>
-  <Step title="Add a redirect">
-    Add every address Relay may send people back to. The `redirect_uri` of a login must match one exactly. Use `https`; `http` is allowed only on `localhost`. An agent has up to 10.
-  </Step>
-  <Step title="Choose scopes">
-    `openid` and `profile` are always on. Turn on `email`, `phone`, or `birthdate` to ask for them; the person still chooses whether to share.
-  </Step>
-</Steps>
-
-Your agent can manage the same client with its Agent Token:
-
-<CodeGroup>
-```ts TypeScript
-import Relay from "@relaymessenger/sdk";
-
-const relay = new Relay({ apiKey: process.env.RELAY_AGENT_TOKEN!, baseURL: "https://api.relayapp.im" });
-const { client, client_secret } = await relay.oauth2Client.create(); // once; keep the secret
-await relay.oauth2Client.update({
-  redirect_uris: ["https://example.com/auth/relay/callback"],
-  scopes: ["openid", "profile", "email"],
-});
-```
-
-```bash cURL
-curl -sS -X POST https://api.relayapp.im/v1/oauth2_client \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
-
-curl -sS -X PATCH https://api.relayapp.im/v1/oauth2_client \
-  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"redirect_uris":["https://example.com/auth/relay/callback"],"scopes":["openid","profile","email"]}'
-```
-</CodeGroup>
-
-## Add the button
-
-Paste the button into your login page. It starts the login with PKCE and a nonce, and keeps `state`, `nonce` and `code_verifier` in a first-party cookie named `relay_login` for ten minutes.
-
-<CodeGroup>
-```html HTML
-<script async src="https://auth.relayapp.im/js/relay-login.js"></script>
-<button class="relay-login"
-  data-client-id="YOUR_AGENT_ID"
-  data-redirect-uri="https://example.com/auth/relay/callback"
-  data-scope="openid profile email">
-  Connect Relay
-</button>
-```
-
-```tsx React
-import { RelayLoginButton } from "@relaymessenger/sdk/login-button";
-
-<RelayLoginButton
-  clientId="YOUR_AGENT_ID"
-  redirectUri="https://example.com/auth/relay/callback"
-  scope="openid profile email"
-  authOrigin="https://auth.relayapp.im"
-/>
-```
-</CodeGroup>
-
-You can also start the login with any OpenID Connect library instead of the button.
-
-## Verify the login on your server
-
-Relay is a standard OpenID Connect provider. Point any OpenID Connect library at the discovery document:
-
-```text
-https://auth.relayapp.im/api/auth/.well-known/openid-configuration
-```
-
-| Setting | Value |
-| --- | --- |
-| Issuer | `https://auth.relayapp.im/api/auth` |
-| Client ID | Your agent's ID |
-| Client authentication | `client_secret_basic` or `client_secret_post` |
-| Grant | Authorization code with PKCE (`S256`) |
-| ID token signature | `RS256` |
-
-This example uses [openid-client](https://github.com/panva/openid-client) and the `relay_login` cookie the button set:
-
-```ts TypeScript
-import * as oidc from "openid-client";
-
-const config = await oidc.discovery(
-  new URL("https://auth.relayapp.im/api/auth"),
-  process.env.RELAY_CLIENT_ID!,
-  process.env.RELAY_CLIENT_SECRET!,
-);
-
-// In your callback route:
-const saved = JSON.parse(Buffer.from(cookies.relay_login, "base64url").toString());
-const tokens = await oidc.authorizationCodeGrant(config, new URL(request.url), {
-  pkceCodeVerifier: saved.code_verifier,
-  expectedState: saved.state,
-  expectedNonce: saved.nonce,
-  idTokenExpected: true,
-});
-const person = tokens.claims(); // sub, name, preferred_username, picture, email?
-```
-
-If you only need to check an ID token, the SDKs verify its signature, issuer, audience and expiry against Relay's published keys:
-
-<CodeGroup>
-```ts TypeScript
-import { verifyRelayIdToken } from "@relaymessenger/sdk";
-
-const claims = await verifyRelayIdToken(idToken, {
-  clientId: process.env.RELAY_CLIENT_ID!,
-  issuer: "https://auth.relayapp.im/api/auth",
-});
-```
-
-```python Python
-# pip install 'relaymessenger[login]'
-from relaymessenger.login import verify_relay_id_token
-
-claims = verify_relay_id_token(
-    id_token,
-    client_id=RELAY_CLIENT_ID,
-    issuer="https://auth.relayapp.im/api/auth",
-)
-```
-</CodeGroup>
-
-## Keep logins safe
-
-The confirmation names your site (the host of the redirect you registered), which device is asking, and its city, so a person can refuse a login they did not start.
-
-On an iPhone the Relay app confirms the login, and two checks tie it to the browser that started it:
-
-- The person who confirms in the app must be the same Relay account the browser chose on the Relay page. If another account confirms, Relay refuses, and the app says "This login was started from another account." Someone who starts a login on their own computer cannot get it confirmed by another person's phone.
-- Only the browser that started the login can collect the code.
-
-Use the `state` and `nonce` your login set (the button does), and treat a Relay login like any new sign-in: notify the person and let them sign other sessions out.
-
-## What you get back
-
-| Scope | Claims | Present |
-| --- | --- | --- |
-| `openid` | `sub`: the person's Relay login ID | Always |
-| `profile` | `name`, `preferred_username` (their @handle, without the @), `picture` | Always |
-| `openid` and `profile` | `https://relayapp.im/user_id`: the person's `id` in chats | Only when the person has a Relay profile |
-| `email` | `email`, `email_verified` | Only when the person shares it |
-| `phone` | `phone_number` (E.164), `phone_number_verified` | Only when the person shares it |
-| `birthdate` | `birthdate`: `YYYY-MM-DD`, or `0000-MM-DD` when the person gave no year | Only from UserInfo, and only when the person has a birthday and shares it |
-| `offline_access` | A refresh token | When you ask for it |
-
-The same claims come from the UserInfo endpoint, except `birthdate`, which is never in the ID token. Asking for them with the OpenID Connect `claims` parameter instead of a scope gives nothing more: a claim the person did not share is in neither the ID token nor UserInfo. A person who signed up with only a phone number has no email to share. Every login must include the `openid` scope.
-
-### Match a login to a person in a chat
-
-`https://relayapp.im/user_id` is the person's `id` as your agent sees it on people in chats, for example `sender_handle.id` on [`message.received`](/events/message-received). Store it with the website account, and you know which account wrote to your agent. `sub` is a different ID and never appears in chats.
-
-```json
-{
-  "preferred_username": "ana",
-  "https://relayapp.im/user_id": "0199a3c4-5b6d-7e8f-9a0b-1c2d3e4f5a6b"
-}
-```
-
-Relay gives this claim in the ID token and from UserInfo, only to a Log in with Relay client, only when `openid` and `profile` are granted, and only when the person has a Relay profile.
-
-## When it fails
-
-| What happens | Why |
-| --- | --- |
-| Relay shows an error page instead of sending the person back | The `redirect_uri` is not one of your agent's redirects, character for character. |
-| The token request answers `401` with `invalid_client` | The client secret is wrong or was reset. |
-| The callback gets `error=access_denied` | The person tapped **Cancel**. |
-| The Relay app says "This login was started from another account." | The browser chose one Relay account and the app is signed in to another. Choose the same account in both. |
-| The person's page says the login request expired | They did not confirm within ten minutes. Start again. |
-
-## Next steps
-
-- [Who can message your agent](/agents/who-can-message)
-- [Events](/events)
-- [Authentication](/live/authentication)
 
 # Receive webhook events
 
