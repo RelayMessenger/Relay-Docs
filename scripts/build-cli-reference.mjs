@@ -100,9 +100,34 @@ const GUIDE_LINKS = {
   docs: ['Quickstart', '/start/quickstart'],
   'config-path': ['Quickstart', '/start/quickstart'],
   help: ['Quickstart', '/start/quickstart'],
+  oauth: ['Log in with Relay', '/agents/log-in-with-relay'],
+  directory: ['Who can message an agent', '/agents/who-can-message'],
+  'payment-requests': ['Payments', '/interactions/payments'],
+  calls: ['Calls', '/calls/index'],
+  contacts: ['Contacts', '/agents/contact-card'],
+  me: ['Authentication', '/live/authentication'],
 };
 
 const TITLES = {
+  "oauth-create": "Create an OAuth client",
+  "oauth-show": "Show an OAuth client",
+  "oauth-redirects-add": "Add an OAuth redirect",
+  "oauth-redirects-remove": "Remove an OAuth redirect",
+  "oauth-scopes": "Set OAuth scopes",
+  "oauth-reset-secret": "Reset an OAuth client secret",
+  "directory-search": "Find public agents",
+  "chats-location-request": "Request a location",
+  "chats-location-get": "Read a shared location",
+  "payment-requests-create": "Create a payment request",
+  "payment-requests-list": "List payment requests",
+  "payment-requests-get": "Show a payment request",
+  "payment-requests-cancel": "Cancel a payment request",
+  "calls-create": "Start a call",
+  "calls-list": "List calls",
+  "calls-get": "Show a call",
+  "calls-end": "End a call",
+  "contacts-lookup": "Look up a contact",
+  "me": "Show the signed-in agent",
   "agents-create": "Create an agent",
   "agents-update": "Update an agent",
   "agents-list": "List agents",
@@ -185,6 +210,7 @@ const CLI_GROUPS = [
     "group": "Agents",
     "pages": [
       "cli/agents",
+      ...(program.commands.some((command) => command.name() === "directory") ? ["cli/reference/directory-search"] : []),
       "cli/reference/agents-create",
       "cli/reference/agents-update",
       "cli/reference/agents-list",
@@ -214,6 +240,7 @@ const CLI_GROUPS = [
       "cli/reference/login",
       "cli/reference/logout",
       "cli/reference/whoami",
+      ...(program.commands.some((command) => command.name() === "me") ? ["cli/reference/me"] : []),
       "cli/reference/phone-link",
       {
         "group": "Profiles",
@@ -236,6 +263,8 @@ const CLI_GROUPS = [
       "cli/reference/chats-leave",
       "cli/reference/chats-read",
       "cli/reference/chats-voice-memo",
+      ...(commandAt(["chats"]).commands.some((command) => command.name() === "location")
+        ? ["cli/reference/chats-location-request", "cli/reference/chats-location-get"] : []),
       {
         "group": "Messages in a chat",
         "pages": [
@@ -262,6 +291,16 @@ const CLI_GROUPS = [
       "cli/reference/chats-activity-clear"
     ]
   },
+  ...(program.commands.some((command) => command.name() === "oauth") ? [
+  {
+    "group": "OAuth",
+    "pages": [
+      "cli/reference/oauth-create", "cli/reference/oauth-show",
+      "cli/reference/oauth-redirects-add", "cli/reference/oauth-redirects-remove",
+      "cli/reference/oauth-scopes", "cli/reference/oauth-reset-secret"
+    ]
+  }
+  ] : []),
   {
     "group": "Organization",
     "pages": [
@@ -269,6 +308,20 @@ const CLI_GROUPS = [
       "cli/reference/organization-update"
     ]
   },
+  ...(program.commands.some((command) => command.name() === "payment-requests") ? [{
+    "group": "Payments",
+    "pages": ["cli/reference/payment-requests-create", "cli/reference/payment-requests-list",
+      "cli/reference/payment-requests-get", "cli/reference/payment-requests-cancel"]
+  }] : []),
+  ...(program.commands.some((command) => command.name() === "calls") ? [{
+    "group": "Calls",
+    "pages": ["cli/reference/calls-create", "cli/reference/calls-list",
+      "cli/reference/calls-get", "cli/reference/calls-end"]
+  }] : []),
+  ...(program.commands.some((command) => command.name() === "contacts") ? [{
+    "group": "Contacts",
+    "pages": ["cli/reference/contacts-lookup"]
+  }] : []),
   {
     "group": "Messages",
     "pages": [

@@ -257,12 +257,8 @@ assert.equal(channels.length, 2, "Open again for the new id after a restart");
         for page in [ROOT / "interactions/index.mdx",
                      ROOT / "interactions/selection.mdx",
                      *(ROOT / "integrations").glob("*.mdx")]:
-            # SDK PR 441 is a real but unpublished direct integration.
-            # Availability must stay honest; this is not a selection constraint.
-            if page == ROOT / "integrations/elevenlabs.mdx":
-                self.assertIn("coming soon", page.read_text().lower(), page)
-            else:
-                self.assertNotIn("coming soon", page.read_text().lower(), page)
+            # The staged ElevenLabs artifact is now observed in versions.json.
+            self.assertNotIn("coming soon", page.read_text().lower(), page)
         self.assertIn("literal `• `", selection)
         self.assertIn("exact selected source labels joined with `, `", selection)
         self.assertNotIn("**Clear**", selection)

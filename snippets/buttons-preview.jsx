@@ -12,7 +12,7 @@
 // text-balloon column, carries a title a step below body text, a smaller
 // second line or one line per chosen label, and a trailing chevron. `side`
 // mirrors the tail for an incoming balloon; the glyphs are never mirrored.
-export const MessageBubble = ({ text, rows, side = "trailing", chevron = false, width = 260 }) => {
+export const MessageBubble = ({ text, rows, side = "trailing", chevron = false, width = 260, measure }) => {
   // Everything lives inside the component: the snippet is compiled as MDX,
   // which keeps only exports in scope and reads a capitalised tag as an MDX
   // component.
@@ -149,13 +149,34 @@ export const MessageBubble = ({ text, rows, side = "trailing", chevron = false, 
   const ROW_METRICS = { title: 20, subtitle: 18, label: 20 };
 
   const cardBubble = (rows, side, showsChevron, w) => {
+    // Form previews opt in to browser-measured wrapping. Existing selection
+    // fixtures keep their original geometry. Typography never scales down.
+    const wrap = (row) => {
+      if (!measure) return [row.text];
+      const available = Math.max(1, w - CARD_INSET * 2 - (showsChevron ? CHEVRON.width + 8 : 0)
+        - (row.kind === "label" ? CARD_MARK_WIDTH : 0));
+      const lines = [];
+      let line = "";
+      for (const word of row.text.split(/\s+/)) {
+        const candidate = line ? line + " " + word : word;
+        if (measure(candidate, row.kind) <= available) { line = candidate; continue; }
+        if (line) { lines.push(line); line = ""; }
+        for (const { segment } of new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(word)) {
+          if (line && measure(line + segment, row.kind) > available) { lines.push(line); line = ""; }
+          line += segment;
+        }
+      }
+      if (line || !lines.length) lines.push(line);
+      return lines;
+    };
     let cursor = 0;
     const placed = rows.map((row, index) => {
       if (index > 0) cursor += rows[index - 1].kind === "title" ? CARD_TITLE_GAP : CARD_LINE_GAP;
       const line = ROW_METRICS[row.kind];
       const top = cursor;
-      cursor += line;
-      return { ...row, line, top };
+      const lines = wrap(row);
+      cursor += line * lines.length;
+      return { ...row, lines, line, top };
     });
     const interior = Math.max(cursor, showsChevron ? CHEVRON.height : 0);
     const h = Math.ceil(interior + CARD_VERTICAL * 2);
@@ -179,9 +200,9 @@ export const MessageBubble = ({ text, rows, side = "trailing", chevron = false, 
                 <path className="selection-card-mark"
                   d={`M ${CARD_INSET} ${f(stackTop + row.top + row.line / 2 + 0.6)} l 3.6 3.7 l 6.9 -8.5`} />
               ) : null}
-              <text className={`selection-card-${row.kind}`} dominantBaseline="central"
+              {row.lines.map((text, lineIndex) => <text key={lineIndex} className={`selection-card-${row.kind}`} dominantBaseline="central"
                 x={row.kind === "label" ? CARD_INSET + CARD_MARK_WIDTH : CARD_INSET}
-                y={middle}>{row.text}</text>
+                y={middle + lineIndex * row.line}>{text}</text>)}
             </g>
           );
         })}

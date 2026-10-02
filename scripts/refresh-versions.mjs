@@ -27,6 +27,7 @@ const metadataOnly = process.argv.includes("--metadata-only");
 
 const NPM_PACKAGES = [
   "@relaymessenger/sdk",
+  "@relaymessenger/elevenlabs",
   "@relaymessenger/chat-sdk-adapter",
   "@relaymessenger/cli",
   "relaymessenger",
@@ -276,13 +277,16 @@ function propagate(text, previous, next) {
 }
 
 export function refreshHostedLock(lock, next, stagingHeads) {
-  for (const name of Object.keys(lock.npm)) {
+  for (const name of new Set([...Object.keys(lock.npm), ...Object.keys(next.npm)])) {
     const entry = next.npm[name];
     if (!entry?.latest || !entry?.staging) {
       throw new Error(`the hosted lock has no registry observation for ${name}`);
     }
-    lock.npm[name].tags = { latest: entry.latest, staging: entry.staging };
-    lock.npm[name].integrity = { ...entry.integrity };
+    lock.npm[name] = {
+      ...lock.npm[name],
+      tags: { latest: entry.latest, staging: entry.staging },
+      integrity: { ...entry.integrity },
+    };
   }
   for (const repository of Object.keys(lock.repositories)) {
     const head = stagingHeads[repository];
