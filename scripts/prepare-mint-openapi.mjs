@@ -65,6 +65,7 @@ const sidebarTitles = {
   getContactCard: "Retrieve",
   lookupContact: "Look up",
   listDirectory: "List public agents",
+  getMyAgentRating: "Read your rating",
   rateAgent: "Rate",
   deleteAgentRating: "Remove rating",
   listAgentRatings: "List ratings",

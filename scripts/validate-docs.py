@@ -565,8 +565,9 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server 65c26f16 (PRs 465, 473, 476, 475, 474 and 477, merged); forms, suggested agents, a person's Contact Card by user_id, profile links, A2UI and the data part removed, September 30, 2026.
 # Source authority: Relay-Server fe702db3 (PR 479, merged); a person's about on every person object and Contact Card, and the birthdate scope in OAuth2Scope, October 1, 2026.
 # Source authority: Relay-Server 736f112e (PRs 488, 486, 485 and 482, merged); an agent's Rive file and the rive DataChannel; Message has no edited_at or unsent_at, October 1, 2026.
+# Source authority: Relay-Server af7f1802 (PRs 482, 492, 503 and the rating and calls branches, merged); ratings, rating_request, rating events, no blocking relay, rive on contacts, call capability 422, ContactCardItem.handle string, form value, October 2, 2026.
 expected_openapi_sha256 = (
-    "e3b40319f08398098f63a3847140f32f3d9b3c12e009eab4972db3b0e7eb4da8"
+    "7ca002357a04610ee2012ae59d8f0789e9d44a000388ca926ea1ed68f44d96d9"
 )
 # Local candidate provenance is shared with the guide and contract gates;
 # it does not relabel the historical Server release as selection-capable.
@@ -734,6 +735,7 @@ expected_operation_ids = {
     "getContactCard",
     "lookupContact",
     "listDirectory",
+    "getMyAgentRating",
     "rateAgent",
     "deleteAgentRating",
     "listAgentRatings",
@@ -857,7 +859,7 @@ contract_events = {
 event_catalog_text = webhook_events_text
 documented_events = set(
     re.findall(
-        r"`((?:message|reaction|participant|chat|contact|call|payment|location|task|community)\.[a-z_.]+)`",
+        r"`((?:message|reaction|participant|chat|contact|call|payment|location|rating|task|community)\.[a-z_.]+)`",
         event_catalog_text,
     )
 )
