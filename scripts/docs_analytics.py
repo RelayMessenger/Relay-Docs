@@ -56,7 +56,8 @@ def configuration(root: Path, environment: str) -> dict:
 
     visit(config["navigation"])
     endpoints = json.loads((root / "scripts/api-page-paths.json").read_text())
-    paths.update(entry["href"] for entry in endpoints.values())
+    from api_navigation import HIDDEN_OPERATIONS
+    paths.update(entry["href"] for operation, entry in endpoints.items() if operation not in HIDDEN_OPERATIONS)
     origin = "https://docs.staging.relayapp.im"
     return {
         "token": projects[environment]["token"],

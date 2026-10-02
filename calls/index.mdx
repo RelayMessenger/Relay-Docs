@@ -1,156 +1,231 @@
 ---
-title: "Audio calls"
+title: "Calls"
 sidebarTitle: "Overview"
-description: "Register a call address and answer calls with Twilio Media Streams."
-keywords: ["calls", "audio", "call_url", "WebSocket", "Twilio Media Streams"]
+description: "Answer a voice or video call from a person by joining its room, from TypeScript, Python, Pipecat or LiveKit Agents."
+keywords: ["calls", "voice calls", "video calls", "call.created", "call room", "WebRTC", "RelayCallTransport", "Pipecat", "LiveKit", "Rive", "data binding", "visemes"]
 ---
 
 import { ChatPreview } from "/snippets/chat-preview.jsx";
 
-## What a call is
+A person calls your agent from the Relay app, and your agent answers by joining the call's room. Relay sends `call.created` on the webhook or WebSocket your agent already uses for messages, and carries the voice and camera over WebRTC. Your backend runs the agent; it registers nothing for calls.
 
-A person calls your agent from the Relay app. Relay rings your agent's call address and carries the audio. Your backend runs the agent.
+```mermaid
+sequenceDiagram
+  participant P as Person (Relay app)
+  participant R as Relay
+  participant A as Your agent
+  P->>R: Calls your agent
+  R->>A: call.created, status ringing
+  A->>R: Joins the call room (this answers)
+  R->>A: call.updated, status in-progress
+  P-->>A: Voice and camera over WebRTC
+  A-->>P: Voice and video over WebRTC
+  A->>R: Ends the call, or the person hangs up
+  R->>A: call.ended, status completed
+```
 
-## Register your call address
+## Answer a call
 
-Register one `call_url` on your agent. It must be a `wss://` URL that accepts a WebSocket connection.
+When `call.created` arrives with `status: "ringing"`, join the room for `call.id` within 32 seconds. Joining is the answer: the call becomes `in-progress`. A call nobody joins ends `no-answer`.
 
-Set it in Relay Console, with the CLI, or with `PATCH /v1/contact_card?handle=<agent handle>`. The API request uses your Agent Token.
+Each package below joins the room and runs the WebRTC connection for you, so your code never handles SDP, ICE or TURN credentials. Choose the one that matches your agent's runtime.
+
+<Tabs>
+  <Tab title="TypeScript">
+    Install the SDK with the WebRTC packages it lists as optional peer dependencies. Add `node-webcodecs` only if your agent sends or receives video.
+
+    ```bash
+    npm install @relaymessenger/sdk werift @evan/opus rtp-packet
+    ```
+
+    ```typescript
+    import Relay from "@relaymessenger/sdk";
+    import { RelayCallTransport } from "@relaymessenger/sdk/calls";
+
+    const relay = new Relay({ apiKey: process.env.RELAY_AGENT_TOKEN!, baseURL: "https://api.relayapp.im" });
+
+    // In your call.created handler:
+    const transport = new RelayCallTransport({ relay, callId: event.data.call.id });
+
+    transport.on("audio", ({ samples, sampleRate, channelCount }) => {
+      // Interleaved PCM16 from the person, 48 kHz stereo by default.
+    });
+
+    await transport.connect(); // resolves once media is connected
+    await transport.writeAudio({ samples, sampleRate: 48_000, channelCount: 1 });
+    ```
+  </Tab>
+  <Tab title="Python">
+    The `calls` extra installs aiortc, PyAV and NumPy. Python 3.10 or newer.
+
+    ```bash
+    pip install "relaymessenger[calls] @ git+https://github.com/RelayMessenger/Relay-SDK@main#subdirectory=python/relaymessenger"
+    ```
+
+    ```python
+    import os
+
+    from relaymessenger.calls import RelayAudioFrame, RelayCallTransport
+
+
+    async def answer(call_id: str) -> RelayCallTransport:
+        call = RelayCallTransport(
+            api_key=os.environ["RELAY_AGENT_TOKEN"],
+            call_id=call_id,
+            base_url="https://api.relayapp.im",
+        )
+
+        @call.on("audio")
+        def heard(frame: RelayAudioFrame) -> None:
+            ...  # frame.samples, frame.sample_rate, frame.channel_count
+
+        await call.connect()  # returns once media is connected
+        return call
+    ```
+  </Tab>
+  <Tab title="Pipecat">
+    `RelayTransport` is a Pipecat transport: the person's voice and camera come into your pipeline, and your bot's audio and video go back into the call. Python 3.11 or newer, with `pipecat-ai` 1.11 or newer.
+
+    ```bash
+    pip install \
+      "relaymessenger[calls] @ git+https://github.com/RelayMessenger/Relay-SDK@main#subdirectory=python/relaymessenger" \
+      "relaymessenger-pipecat @ git+https://github.com/RelayMessenger/Relay-SDK@main#subdirectory=python/relaymessenger-pipecat"
+    ```
+
+    ```python
+    import os
+
+    from pipecat.frames.frames import LLMRunFrame
+    from pipecat.pipeline.pipeline import Pipeline
+    from pipecat.pipeline.worker import PipelineWorker
+    from pipecat.workers.runner import WorkerRunner
+    from relaymessenger_pipecat import RelayParams, RelayTransport
+
+
+    async def answer(call_id: str) -> None:
+        transport = RelayTransport(
+            api_key=os.environ["RELAY_AGENT_TOKEN"],
+            call_id=call_id,
+            base_url="https://api.relayapp.im",
+            params=RelayParams(audio_in_enabled=True, audio_out_enabled=True),
+        )
+        # stt, llm and tts are your Pipecat services; the aggregators hold the LLM context.
+        worker = PipelineWorker(
+            Pipeline([transport.input(), stt, user_aggregator, llm, tts, transport.output(), assistant_aggregator]),
+            cancel_on_idle_timeout=False,  # a quiet call is still a call
+        )
+
+        @transport.event_handler("on_first_participant_joined")
+        async def start(transport, participant_id):
+            await worker.queue_frames([LLMRunFrame()])  # the model speaks first, in its own words
+
+        @transport.event_handler("on_participant_left")
+        async def hang_up(transport, participant_id, reason):
+            await worker.cancel()
+
+        runner = WorkerRunner()
+        await runner.add_workers(worker)
+        await runner.run()
+    ```
+  </Tab>
+  <Tab title="LiveKit">
+    `RelayLiveKitCall` plugs a Relay call into a LiveKit Agents `AgentSession` in place of a LiveKit room. Both packages carry video too: Python hands the session the person's camera, and TypeScript exposes it as `call.videoInput` ([video calls](/calls/video)).
+
+    <CodeGroup>
+    ```python Python
+    # pip install \
+    #   "relaymessenger[calls] @ git+https://github.com/RelayMessenger/Relay-SDK@main#subdirectory=python/relaymessenger" \
+    #   "relaymessenger-livekit @ git+https://github.com/RelayMessenger/Relay-SDK@main#subdirectory=python/relaymessenger-livekit"
+    import asyncio
+    import os
+
+    from livekit.agents import Agent, AgentSession
+    from relaymessenger_livekit import RelayLiveKitCall
+
+
+    async def answer(call_id: str, session: AgentSession) -> RelayLiveKitCall:
+        call = await RelayLiveKitCall.connect(
+            api_key=os.environ["RELAY_AGENT_TOKEN"],
+            call_id=call_id,
+            base_url="https://api.relayapp.im",
+        )
+        call.attach(session)  # audio in, audio out, and the camera
+
+        @call.transport.on("ended")
+        def ended(_frame: dict) -> None:
+            asyncio.ensure_future(call.aclose())
+
+        await call.wait_for_peer_audio(15_000)
+        await session.start(Agent(instructions="You are a helpful voice agent."))
+        return call
+    ```
+
+    ```typescript TypeScript
+    // npm install @relaymessenger/sdk @relaymessenger/livekit @livekit/agents @livekit/rtc-node
+    import type { AgentSession } from "@livekit/agents";
+    import Relay from "@relaymessenger/sdk";
+    import { RelayLiveKitCall } from "@relaymessenger/livekit";
+
+    const relay = new Relay({ apiKey: process.env.RELAY_AGENT_TOKEN!, baseURL: "https://api.relayapp.im" });
+
+    async function answer(callId: string, session: AgentSession) {
+      const call = await RelayLiveKitCall.connect({ relay, callId });
+      call.attach(session); // audio in and audio out
+      call.transport.on("ended", () => void call.close());
+      await call.waitForPeerAudio(15_000);
+      // Start your AgentSession here.
+      return call;
+    }
+    ```
+    </CodeGroup>
+  </Tab>
+</Tabs>
+
+The person's audio reaches your agent once both sides are connected. Your agent's first words are held until the person can hear them, so nothing your agent says early is cut off. [Send and receive audio](/calls/audio) covers formats, playout and interruption; [video calls](/calls/video) covers the camera.
+
+## Show video or Rive in a call
+
+Your agent can show the person something while it talks. It sends live video, or it names a Rive file that the person's phone draws and your agent drives. When video from your agent is arriving, the phone shows the video; otherwise it shows the Rive file.
+
+### Video
+
+Publish a camera track and capture frames into it with `transport.publishTrack(LocalVideoTrack)` and `VideoSource.captureFrame`. [Video calls](/calls/video) covers frame formats, rates and bitrates. [Show a talking avatar](/calls/avatars) turns your agent's speech into a lip-synced face with Simli.
+
+### Rive
+
+Set a `.riv` file on your agent's Contact Card, then open the call's `rive` channel with `transport.rive()` to set View Model values, fire triggers and switch files, timed to your agent's speech. [Show Rive in a call](/calls/rive) walks through it.
+
+## Decline a call
+
+To decline a ringing call, end it without joining. A call your agent ends while it rings becomes `no-answer`.
 
 <CodeGroup>
 ```typescript TypeScript SDK
-const card = await relay.contactCard.update({
-  handle: "my_assistant",
-  call_url: "wss://your-agent.example/relay",
-});
+await relay.calls.end(callId);
 ```
 
 ```bash cURL
-curl -sS -X PATCH 'https://api.relayapp.im/v1/contact_card?handle=<agent handle>' \
+curl -sS -X POST "https://api.relayapp.im/v1/calls/$CALL_ID/end" \
   -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"call_url":"wss://your-agent.example/relay"}'
+  -d '{}'
 ```
 </CodeGroup>
 
-```http
-HTTP/1.1 200 OK
-```
+## End a call
 
-## How Relay rings you
+End the call for both sides with `end()` on the transport (`transport.end()` in Pipecat), with `relay.calls.end(callId)`, or with `POST /v1/calls/{callId}/end`. An answered call becomes `completed`. `close()` in TypeScript and `aclose()` in Python only clean up locally; the call goes on until someone ends it.
 
-When a person taps call, Relay opens a WebSocket to your `call_url`. The request is signed like a webhook.
+## The call room
 
-Accept the WebSocket with HTTP `101` within the 10-second ring lease to answer. The call becomes `in-progress`. Any other reply ends it `no-answer`, and so does silence.
+The room is a WebSocket at `GET /v1/calls/{callId}/room`, opened with your Agent Token. It carries only signaling: JSON frames with WebRTC session descriptions. Audio and video travel over WebRTC, never through this socket.
 
-Relay speaks Twilio Media Streams. The first message identifies the protocol.
+1. Send `{"type":"join"}` when the socket opens. Relay answers with `iceServers` and then `roomState`.
+2. Send an `offer` that publishes one track named `audio`. Relay answers with `answer`. The first time your camera turns on, send another `offer` that adds a track named `video`.
+3. Send `connected` when your peer connection is connected.
+4. Relay sends an `offer` for each of the person's tracks. Reply with `answer`.
 
-```json
-{"event":"connected","protocol":"Call","version":"1.0.0"}
-```
-
-The `start` message identifies the call, caller, callee, chat, and audio format. Both `streamSid` and `callSid` are the Relay call ID.
-
-```json
-{
-  "event": "start",
-  "sequenceNumber": "1",
-  "start": {
-    "streamSid": "<call id>",
-    "callSid": "<call id>",
-    "tracks": ["inbound"],
-    "mediaFormat": {
-      "encoding": "audio/x-mulaw",
-      "sampleRate": 8000,
-      "channels": 1
-    },
-    "customParameters": {
-      "from": "<caller handle>",
-      "to": "<callee handle>",
-      "chat_id": "<chat id>",
-      "direction": "inbound"
-    }
-  },
-  "streamSid": "<call id>"
-}
-```
-
-Then `media` messages carry base64-encoded mu-law audio at 8 kHz. The audio payload has this shape.
-
-```json
-{"event":"media","streamSid":"<call id>","media":{"payload":"<base64 mu-law 8 kHz>"}}
-```
-
-A `stop` message ends the stream.
-
-```json
-{"event":"stop","streamSid":"<call id>"}
-```
-
-## What you send back
-
-Send `media` to play audio to the caller. Encode raw mu-law audio at 8 kHz as base64, without audio file headers.
-
-```json
-{"event":"media","streamSid":"<call id>","media":{"payload":"<base64 mu-law 8 kHz>"}}
-```
-
-Send `clear` to drop buffered audio.
-
-```json
-{"event":"clear","streamSid":"<call id>"}
-```
-
-Send `mark` after audio to track playback. The returned mark has the same `name` when playback finishes or the buffer is cleared, as described in the [Twilio message reference](https://www.twilio.com/docs/voice/media-streams/websocket-messages#send-a-mark-message).
-
-```json
-{"event":"mark","streamSid":"<call id>","mark":{"name":"reply-finished"}}
-```
-
-## Use your framework's Twilio adapter
-
-On Cloudflare's Agents SDK, install `@cloudflare/voice-twilio` and route your call address to `TwilioAdapter.handleRequest`.
-
-```bash
-npm install @cloudflare/voice-twilio agents
-```
-
-```typescript
-import { Agent, routeAgentRequest } from "agents";
-import { withVoice, type VoiceTurnContext } from "agents/voice";
-import { TwilioAdapter } from "@cloudflare/voice-twilio";
-
-const VoiceAgent = withVoice(Agent);
-
-export class MyVoiceAgent extends VoiceAgent<Env> {
-  async onTurn(transcript: string, context: VoiceTurnContext) {
-    return "Hello! How can I help you?";
-  }
-}
-
-export default {
-  async fetch(request: Request, env: Env) {
-    const url = new URL(request.url);
-
-    if (url.pathname === "/relay") {
-      return TwilioAdapter.handleRequest(request, env, "MyVoiceAgent");
-    }
-
-    return (
-      (await routeAgentRequest(request, env)) ??
-      new Response("Not found", { status: 404 })
-    );
-  }
-};
-```
-
-Pipecat's Twilio transport accepts the same stream.
-
-OpenClaw's telephony provider accepts the same stream.
-
-## Ending a call
-
-Close the WebSocket to hang up. You can also end the call with `POST /v1/calls/{callId}/end`.
+The [room reference](/api-reference/calls/join-a-call-room) lists every frame. Use one of the packages above unless you run your own WebRTC stack.
 
 ## The call in the chat
 
@@ -218,16 +293,20 @@ Relay writes one system message into the chat with `is_system_message: true` and
 
 | Status | Meaning |
 | --- | --- |
-| `ringing` | Relay is waiting for your call address to accept the WebSocket. |
-| `in-progress` | Your call address accepted the WebSocket within the ring lease. |
+| `ringing` | Relay is waiting for the person or agent being called to join the room. |
+| `in-progress` | The person or agent being called joined the room within 32 seconds. |
 | `completed` | An answered call ended. |
-| `no-answer` | The ring lease passed with no answer, or the recipient declined. |
+| `no-answer` | Nobody joined within 32 seconds, or the recipient declined. |
 | `canceled` | The caller ended the call while it was ringing. |
 | `busy` | The person was already on another call. An agent is never busy. |
 | `failed` | Relay could not connect or keep the call. |
 
 ## See also
 
+- [Send and receive audio](/calls/audio)
+- [Video calls](/calls/video)
+- [Call events and connection](/calls/events)
 - [Call a person](/calls/call-a-person)
-- [Read call outcomes in messages](/api-reference/resources/messages/overview#system-events)
-- [Read chat history](/chats/history)
+- [Show a talking avatar](/calls/avatars)
+- [Show Rive in a call](/calls/rive)
+- [Answer calls with an ElevenLabs Agent](/calls/elevenlabs)

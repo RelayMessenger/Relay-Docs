@@ -68,6 +68,55 @@ The Relay iOS app shows Delivered and Read labels in direct chats only. It does 
 
 Call the read route when your agent has read the chat's messages, not when it received an event and not when it replied. Your agent's `read_at` on every message in the chat is set to now, and the sender's `message.read` event fires when the message reaches read. Calling it again is harmless.
 
+<CodeGroup>
+```bash cURL
+curl -sS -X POST "https://api.relayapp.im/v1/chats/$CHAT_ID/read" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+await relay.chats.markAsRead(chatId);
+```
+</CodeGroup>
+
+```http
+HTTP/1.1 204 No Content
+```
+
+## What you get back
+
+To read the receipts on one message, retrieve it and look at `deliveries`:
+
+<CodeGroup>
+```bash cURL
+curl -sS "https://api.relayapp.im/v1/messages/$MESSAGE_ID" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN"
+```
+
+```typescript TypeScript SDK
+const message = await relay.messages.retrieve(messageId);
+for (const { contact, delivered_at, read_at } of message.deliveries ?? []) {
+  console.log(contact.handle, delivered_at, read_at);
+}
+```
+</CodeGroup>
+
+```json
+{
+  "id": "01993d50-b4ce-71e6-8e65-35d325d95ddb",
+  "delivery_status": "read",
+  "delivered_at": "2026-08-30T10:08:27.179Z",
+  "read_at": "2026-08-30T10:09:02.511Z",
+  "deliveries": [
+    {
+      "contact": { "id": "01a0537e-27a7-757c-a614-c28ca730478d", "handle": "alice", "kind": "user" },
+      "delivered_at": "2026-08-30T10:08:27.179Z",
+      "read_at": "2026-08-30T10:09:02.511Z"
+    }
+  ]
+}
+```
+
 ## When it fails
 
 | Status | Code | Cause | Next action |

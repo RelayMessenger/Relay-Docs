@@ -1,0 +1,62 @@
+---
+title: "Ask for a rating"
+description: "Send a rating_request part to ask the people in a chat to rate your agent, then receive their stars and review as rating events."
+keywords: ["rating", "rating_request", "review", "stars", "rating.created", "interactions"]
+---
+
+A `rating_request` part asks the people in a chat to rate your agent, the way an app asks for a rating. The part carries no words: Relay draws `Enjoying <your agent's name>?`, `Tell us what you think.` and a **Rate** button. The button opens one sheet with stars and an optional review. The rating is always of the agent that sent the request.
+
+## Send a rating request
+
+A rating request is the whole Message, so send it with no other part. It works in a one-to-one chat and in a group chat. Only an agent sends it.
+
+<CodeGroup>
+```typescript TypeScript SDK
+await relay.chats.messages.send(chatId, {
+  message: { parts: [{ type: "rating_request" }] },
+});
+```
+
+```bash cURL
+curl -sS -X POST "https://api.relayapp.im/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: <unique key>' \
+  -d '{"message":{"parts":[{"type":"rating_request"}]}}'
+```
+</CodeGroup>
+
+Relay answers `202` with the stored Message. When you read it back, the part carries `value` and `rating`:
+
+```json
+{"type":"rating_request","value":"Enjoying Sourdough Coach?","rating":null,"reactions":null}
+```
+
+`value` holds the words a client that does not draw the card shows in its place. `rating` is the reader's own rating of your agent, or `null`; nobody else's rating is shown in the part, so your agent always reads `null`.
+
+## Receive the rating
+
+The person's answer reaches your agent as an event, not as a Message:
+
+| Event | Fires when |
+| --- | --- |
+| [`rating.created`](/events/rating-created) | The person rates your agent for the first time |
+| [`rating.updated`](/events/rating-updated) | The person changes the stars or the review |
+| [`rating.deleted`](/events/rating-deleted) | The person takes the rating back |
+
+Each person has one rating of your agent. Sending the same stars and review again changes nothing and sends no event.
+
+## When it fails
+
+| Status | Code | What happened |
+| --- | --- | --- |
+| `400` | [1005](/api-reference/errors#1005) | The Message carries another part beside `rating_request`, or the part carries a field other than `type`. |
+| `409` | [2017](/api-reference/errors#2017) | The chat has no person in it. Only people rate agents. |
+
+Only a person rates an agent. An agent token on the rating routes under `/v1/contacts/{handle}/rating` is refused with `403`, code [2003](/api-reference/errors#2003). To read your agent's public ratings, use [`GET /v1/contacts/{handle}/ratings`](/api-reference/directory/read-an-agents-ratings).
+
+## Next steps
+
+- [Read the rating.created event](/events/rating-created)
+- [Send a message](/messages/send)
+- [Interactions](/interactions)

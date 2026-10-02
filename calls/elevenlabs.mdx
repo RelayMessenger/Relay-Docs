@@ -1,0 +1,84 @@
+---
+title: "Answer calls with an ElevenLabs Agent"
+description: "Bridge each Relay call to an ElevenLabs Agent over the ElevenLabs Agents WebSocket with @relaymessenger/elevenlabs, and drive a Rive character's mouth from its voice."
+keywords: ["ElevenLabs", "ElevenLabs Agents", "Agents WebSocket", "signed URL", "@relaymessenger/elevenlabs", "Rive", "visemes", "calls"]
+---
+
+`@relaymessenger/elevenlabs` answers a Relay call with an [ElevenLabs Agent](https://elevenlabs.io/docs/eleven-agents). ElevenLabs runs the talking: speech recognition, the model, the voice and turn-taking. The package joins the call and carries the audio both ways over the ElevenLabs Agents WebSocket.
+
+## Before you start
+
+| Input | Requirement |
+| --- | --- |
+| Relay | An Agent Token, and a `call.created` event to answer ([answer a call](/calls/index#answer-a-call)) |
+| ElevenLabs | An agent ID, and an API key for a private agent |
+| Audio formats | The agent's `user_input_audio_format` is `pcm_16000` (the default) or the rate you pass as `inputSampleRate`; its output is `pcm_8000`, `pcm_16000`, `pcm_24000`, `pcm_44100` or `pcm_48000` |
+
+```bash
+npm install @relaymessenger/sdk @relaymessenger/elevenlabs
+```
+
+## Answer a call
+
+Call `ElevenLabsCall.connect` from your `call.created` handler. It joins the call (joining answers it), gets a signed URL with your API key, and opens the ElevenLabs session.
+
+```typescript
+import Relay from "@relaymessenger/sdk";
+import { ElevenLabsCall } from "@relaymessenger/elevenlabs";
+
+const relay = new Relay({ apiKey: process.env.RELAY_AGENT_TOKEN!, baseURL: "https://api.relayapp.im" });
+
+// In your call.created handler:
+const call = await ElevenLabsCall.connect({
+  relay,
+  callId: event.data.call.id,
+  elevenlabs: { apiKey: process.env.ELEVENLABS_API_KEY!, agentId: process.env.ELEVENLABS_AGENT_ID! },
+  onEvent: (message) => {
+    if (message.type === "user_transcript") console.log(message.user_transcription_event);
+  },
+});
+await call.closed;
+```
+
+`connect` resolves once the call's media and the ElevenLabs session are both up. `call.conversationId` is ElevenLabs' ID for that session.
+
+To keep your API key on another server, mint the URL there with `getSignedUrl({ apiKey, agentId })` and pass `elevenlabs: { agentId, signedUrl }`. A public agent needs only `agentId`.
+
+`initiationData` is sent as `conversation_initiation_client_data`, for overrides and dynamic variables.
+
+## What the bridge does
+
+| ElevenLabs event | Bridge |
+| --- | --- |
+| `audio` | Plays `audio_base_64` into the call. Audio from a reply the person already interrupted is dropped by `event_id`. |
+| `interruption` | Drops your agent's audio that has not played yet. |
+| `ping` | Answers with `pong` and the same `event_id`. |
+| Any event | Passes it to `onEvent`: transcripts, responses, tool calls. |
+
+The person's voice goes to ElevenLabs as `user_audio_chunk`. When ElevenLabs ends the session, the bridge ends the call; when the call ends, the bridge closes the session. `call.end()` ends the call for both sides, and `call.close()` leaves it without ending it.
+
+## Give the voice a face
+
+If your agent's Contact Card has a [Rive file](/calls/rive), the phone draws it during the call. Each `audio` event's `alignment` becomes a `viseme` number on the file's View Model, from `0` (rest) to `9` (W and Q), timed so the mouth moves when the words are heard. `speaking` is `true` while your agent talks.
+
+Rename the properties with `rive: { viseme: "mouth", speaking: "talking" }`, pass `null` for one you do not use, or pass `rive: false` to send nothing.
+
+`call.rive` is set once the channel opens, a moment after `connect` resolves, and stays unset if the channel fails or with `rive: false`. To set other values or fire triggers right away, use `await call.transport.rive()`.
+
+## When it fails
+
+| Failure | What happens |
+| --- | --- |
+| The agent's formats differ from `inputSampleRate`, or it speaks `pcm_22050` or `ulaw_8000` | `connect` rejects and leaves the call; change the agent's formats in ElevenLabs. |
+| ElevenLabs will not issue a signed URL | `connect` rejects with the HTTP status of `get-signed-url`. |
+| ElevenLabs refuses the WebSocket | `connect` rejects because the socket failed to open or closed before the session started, with the close code when there is one. |
+| The person hangs up while the session starts | `connect` rejects and leaves the call. |
+| Relay cannot open the Rive channel | The call goes on without mouth shapes, and `onWarning` says why. |
+
+## Next steps
+
+- [Show Rive in a call](/calls/rive)
+- [ElevenLabs recipes in Python](/integrations/pipecat#elevenlabs-voices-and-agents)
+- [Calls](/calls/index)
+- [Send and receive audio](/calls/audio)
+- [ElevenLabs Agent WebSockets](https://elevenlabs.io/docs/eleven-agents/libraries/web-sockets)

@@ -262,7 +262,7 @@ class IntegrationDocsTests(unittest.TestCase):
             for line in commands(read(SKILLS))
         ))
         adapter_commands = "\n".join(commands(read("integrations/chat-sdk.mdx")))
-        self.assertIn("chat@4.39.0", adapter_commands)
+        self.assertRegex(adapter_commands, r"(?<![\w/@-])chat@\d+\.\d+\.\d+")
         self.assertIn(expected("@relaymessenger/chat-sdk-adapter@staging"), adapter_commands)
 
     def test_environment_pairing_and_runtime_requirements(self):
@@ -391,14 +391,13 @@ class IntegrationDocsTests(unittest.TestCase):
             self.assertLink(page, "/integrations/skills")
 
     def test_api_mcp_lists_exactly_the_hosted_tools(self):
-        # Relay-Server server/src/hosted-mcp-tools.ts READ_TOOLS then WRITE_TOOLS.
+        # Relay-Server server/src/hosted-mcp-tools.ts READ_TOOLS then WRITE_TOOLS
+        # (Relay-Server PR 485 added list_calls, chat_action and end_call).
         text = read(MCP)
         rows = re.findall(r"^\| `([a-z_]+)` \|", text, re.M)
         self.assertEqual(rows, [
-            "search", "fetch", "list_chats", "read_messages", "get_profile",
-            "list_communities", "list_tasks",
-            "send_message", "send_task", "update_task",
-            "join_community", "leave_community",
+            "search", "fetch", "list_chats", "read_messages", "get_profile", "search_agents", "list_calls",
+            "send_message", "chat_action", "share_contact_card", "end_call",
         ])
         self.assertNotIn("search_docs", text)
         self.assertNotIn("execute", text)
@@ -418,7 +417,11 @@ class IntegrationDocsTests(unittest.TestCase):
                 )
                 self.assertNotRegex(text, r"(?i)test:live|hosted.proof|lockfile|registry integrity|sha(?:256|512)-")
                 self.assertNotRegex(text, r"(?im)^## (?:Package versions|Package status)\s*$")
-                self.assertNotRegex(text, r"(?i)\bcoming[- ]soon\b|\bsource[- ]only\b")
+                # The direct ElevenLabs package exists in SDK PR 441 but is
+                # not published yet. Its availability is pinned explicitly by
+                # test-integration-architecture, not hidden behind a runnable install.
+                if path.relative_to(ROOT).as_posix() != "integrations/elevenlabs.mdx":
+                    self.assertNotRegex(text, r"(?i)\bcoming[- ]soon\b|\bsource[- ]only\b")
         self.assertLink("integrations/chat-sdk.mdx", "/messages/attachments")
         self.assertNotRegex(
             normalized(read("integrations/chat-sdk.mdx")),

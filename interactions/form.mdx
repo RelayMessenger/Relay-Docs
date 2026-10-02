@@ -1,0 +1,273 @@
+---
+title: "Form"
+description: "Collect answers across native form pages and receive values keyed by field ID."
+keywords: ["form", "form_response", "answers", "fields", "show_summary", "has_responded", "interactions"]
+---
+
+import { FormPreview } from "/snippets/form-preview.jsx";
+import { MessageBubble } from "/snippets/buttons-preview.jsx";
+import { InteractionExamples } from "/snippets/interaction-examples.jsx";
+
+Send a `form` part to collect text, choices, and dates across pages in a native sheet.
+
+## Send a form
+
+Use an Agent Token and an existing chat ID. This example sends ordinary text followed by a form with two pages, an introduction, and a summary.
+
+<Tabs>
+<Tab title="Preview">
+<FormPreview request={InteractionExamples().form} bubble={MessageBubble} />
+</Tab>
+<Tab title="Code">
+<CodeGroup>
+```typescript TypeScript SDK
+import Relay, { type MessageSendParams } from "@relaymessenger/sdk";
+
+const relay = new Relay({
+  apiKey: process.env.RELAY_AGENT_TOKEN!,
+  baseURL: "https://api.relayapp.im",
+});
+
+const request = {
+  "message": {
+    "parts": [
+      {"type": "text", "value": "Please share your visit preferences."},
+      {
+        "type": "form",
+        "title": "Your visit",
+        "show_summary": true,
+        "splash": {
+          "title": "Plan your visit",
+          "text": "Share a few details before you arrive.",
+          "button_title": "Continue"
+        },
+        "received_message": {"title": "Visit details", "subtitle": "Complete two pages"},
+        "reply_message": {"title": "Form sent", "subtitle": "Tap to review your answers"},
+        "pages": [
+          {
+            "id": "about",
+            "title": "About you",
+            "fields": [
+              {"id": "name", "type": "text", "label": "Name", "placeholder": "Your name", "required": true},
+              {"id": "meal", "type": "select", "label": "Meal", "required": true, "options": [
+                {"value": "veg", "label": "Vegetarian"}, {"value": "fish", "label": "Fish"}
+              ]},
+              {"id": "extras", "type": "select", "label": "Extras", "multiple": true, "options": [
+                {"value": "tea", "label": "Tea"}, {"value": "cake", "label": "Cake"}
+              ]}
+            ]
+          },
+          {
+            "id": "visit",
+            "title": "Visit preferences",
+            "fields": [
+              {"id": "region", "type": "picker", "label": "Region", "options": [
+                {"value": "east", "label": "East"}, {"value": "west", "label": "West"}
+              ]},
+              {"id": "date", "type": "date", "label": "Visit date", "required": true, "min_date": "2026-10-01", "max_date": "2026-12-31"},
+              {"id": "notes", "type": "text", "label": "Notes", "multiline": true, "max_length": 500},
+              {"id": "updates", "type": "select", "label": "Visit updates", "multiple": true, "options": [
+                {"value": "yes", "label": "Send me visit updates"}
+              ]}
+            ]
+          }
+        ]
+      }
+    ],
+    "idempotency_key": "visit-form-001"
+  }
+} satisfies MessageSendParams;
+
+await relay.chats.messages.send("CHAT_ID", request);
+```
+
+```bash HTTPS
+curl -sS "https://api.relayapp.im/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": {
+      "parts": [
+        {"type": "text", "value": "Please share your visit preferences."},
+        {
+          "type": "form",
+          "title": "Your visit",
+          "show_summary": true,
+          "splash": {
+            "title": "Plan your visit",
+            "text": "Share a few details before you arrive.",
+            "button_title": "Continue"
+          },
+          "received_message": {"title": "Visit details", "subtitle": "Complete two pages"},
+          "reply_message": {"title": "Form sent", "subtitle": "Tap to review your answers"},
+          "pages": [
+            {
+              "id": "about",
+              "title": "About you",
+              "fields": [
+                {"id": "name", "type": "text", "label": "Name", "placeholder": "Your name", "required": true},
+                {"id": "meal", "type": "select", "label": "Meal", "required": true, "options": [
+                  {"value": "veg", "label": "Vegetarian"}, {"value": "fish", "label": "Fish"}
+                ]},
+                {"id": "extras", "type": "select", "label": "Extras", "multiple": true, "options": [
+                  {"value": "tea", "label": "Tea"}, {"value": "cake", "label": "Cake"}
+                ]}
+              ]
+            },
+            {
+              "id": "visit",
+              "title": "Visit preferences",
+              "fields": [
+                {"id": "region", "type": "picker", "label": "Region", "options": [
+                  {"value": "east", "label": "East"}, {"value": "west", "label": "West"}
+                ]},
+                {"id": "date", "type": "date", "label": "Visit date", "required": true, "min_date": "2026-10-01", "max_date": "2026-12-31"},
+                {"id": "notes", "type": "text", "label": "Notes", "multiline": true, "max_length": 500},
+                {"id": "updates", "type": "select", "label": "Visit updates", "multiple": true, "options": [
+                  {"value": "yes", "label": "Send me visit updates"}
+                ]}
+              ]
+            }
+          ]
+        }
+      ],
+      "idempotency_key": "visit-form-001"
+    }
+  }'
+```
+</CodeGroup>
+</Tab>
+</Tabs>
+
+Relay returns `202` after storing the Message. Save its ID to associate the answer with this form, and reuse the same request and idempotency key after an uncertain send.
+
+```http
+HTTP/1.1 202 Accepted
+```
+
+The card shows `received_message.title` when supplied, otherwise `form.title`. Tapping it opens the sheet. Each page uses its page title.
+
+The user opens the introduction, fills the pages in order with **Next** and **Back**, reviews the summary, and presses **Send**. The answered bubble reads **Form sent**; tapping it or reopening the prompt shows the answers read-only.
+
+## Choose fields and limits
+
+Each page has an `id`, a `title`, and 1 to 50 fields. Page IDs are unique within the form and contain 1 to 19 characters; field IDs are unique across all pages and contain 1 to 100 characters. Both use `^[A-Za-z0-9][A-Za-z0-9._:-]*$`.
+
+| Field type | Label limit | Options | Answer |
+| --- | --- | --- | --- |
+| `text` | 20 | Single line by default; set `multiline: true` for multiple lines, and `keyboard` for the keyboard | String |
+| `select` | 30 | 1 to 20; single choice by default, or `multiple: true` | String, or an array of strings for multiple choices |
+| `picker` | 20 | 1 to 200; one choice | String |
+| `date` | 40 | `min_date` and `max_date` bound the calendar | A valid calendar date in `YYYY-MM-DD` format |
+
+Limits count Unicode scalar characters. Each field requires a `label` with no leading or trailing spaces that is not only spaces or invisible characters such as a zero-width space; titles follow the same rule. `placeholder` is optional text shown in an empty field. `required` defaults to `false`; set it to `true` to require a nonempty answer before advancing or sending.
+
+Text `max_length` defaults to 30 for single-line text and 300 for multiline text. **These are defaults**: set a positive integer `max_length` to choose another length, such as the 500-character Notes field above. Single-line answers contain no line breaks. An explicit `max_length` can be at most `9007199254740991`, the API's safe-integer bound. Only text fields take `max_length`.
+
+A text field's `keyboard` chooses the keyboard the app shows: `default`, `email`, `phone`, `number` or `url`. Relay also checks two of them. An `email` answer must be an email address, and a `phone` answer must be an E.164 number such as `+13135550123`; any other answer is refused with [2006](/api-reference/errors#2006). `number` and `url` only choose the keyboard.
+
+Select and picker options have only `value` and `label`. An option's stable, case-sensitive `value` contains 1 to 100 characters using the field-ID pattern, and must be unique within that field; its label contains 1 to 30 characters.
+
+A date field's calendar runs from `min_date` to `max_date`, both `YYYY-MM-DD`. They default to `1900-01-01` and `2100-12-31`, and `min_date` must not be after `max_date`. An answer outside the range is refused.
+
+### Form presentation
+
+| Setting | Meaning |
+| --- | --- |
+| `title` | Required form title, 1 to 80 characters. Page titles use the same range. |
+| `pages` | At least one page, displayed in array order. |
+| `show_summary` | Show the answers for review before Send. `show_summary` defaults to `false`. |
+| `splash` | Optional introduction with a required `button_title` of 1 to 35 characters, an optional title of 1 to 80, and optional text up to 4096. |
+| `received_message` | Optional card text: a required title of 1 to 512 characters and an optional subtitle up to 512. |
+| `reply_message` | Optional answered card text: title must be `"Form sent"`; subtitle is optional, up to 512 characters. |
+
+Only an agent sends a form, and each Message carries at most one. **Only text may sit beside a form**: a Message with a form and media, a link, a place, a `data` card, buttons, a selection, a rich card or a carousel is refused with `400`. Send those in their own Messages. Text beside the form is an ordinary message shown above the card.
+
+## Receive answers
+
+**Read `answers` by field ID, together with `reply_to`, rather than parsing the visible text.** Your existing signed [webhook](/webhooks/verify-signatures) or [WebSocket](/websocket/index) handler receives an ordinary `message.received` event.
+
+This excerpt shows the answer to the example above. The submission has exactly two ordered parts: the plain text `Form sent`, then `form_response` metadata. `reply_to.part_index` is `1` because the source Message has text at index `0` and the form at index `1`.
+
+```json
+{
+  "event_type": "message.received",
+  "data": {
+    "parts": [
+      {"type": "text", "value": "Form sent"},
+      {
+        "type": "form_response",
+        "answers": {
+          "name": "Ada",
+          "meal": "veg",
+          "extras": ["tea", "cake"],
+          "region": "east",
+          "date": "2026-10-02",
+          "notes": "Window seat, please.",
+          "updates": ["yes"]
+        }
+      }
+    ],
+    "reply_to": {
+      "message_id": "01993d50-ef7b-7b37-886b-23fd80c7ec13",
+      "part_index": 1
+    }
+  }
+}
+```
+
+Text, date, picker, and single-select answers are strings. Multi-select answers are arrays of unique option values in source-option order. A one-option multi-select represents opt-in, as `updates` does here.
+
+Omit optional unanswered fields; an empty string or empty array of the appropriate answer type is also accepted. Required fields must have a nonempty answer. The server checks field IDs, value types, lengths, dates, and choices against the source form.
+
+Use the SDK's event type to keep the structured values intact:
+
+```typescript Application handler
+import type { RelayWebhookEvent } from "@relaymessenger/sdk";
+
+function formFrom(event: RelayWebhookEvent) {
+  if (event.event_type !== "message.received") return;
+  const response = event.data.parts.find(
+    (part) => part.type === "form_response",
+  );
+  if (!response || !event.data.reply_to) return;
+  return {
+    source: event.data.reply_to,
+    answers: response.answers,
+  };
+}
+```
+
+Use your existing event deduplication and durable processing path before acknowledging delivery.
+
+## Read whether someone answered
+
+A read-back `form` part includes its definition plus `value`, `has_responded`, `answers`, and `reactions: null`. `value` is the form's `received_message.title`, else its `title`: the words a client that does not draw the form shows in its place. The answer fields belong to the authenticated viewer.
+
+- Before a user answers, `has_responded` is `false` and `answers` is `null`.
+- After the user answers, `has_responded` is `true` and `answers` holds that user's field-keyed values. A `message.upserted` for the prompt refreshes the user's other devices.
+- If the answer Message no longer exists, `answers` is `null`.
+- For an agent, `has_responded` is always `false` and `answers` is always `null`. Read the incoming `form_response` Message to get the user's answers.
+
+A user submits one answer to a form. Reopening it shows the answers read-only. The `form_response` metadata adds no visible text and has no `reactions` key.
+
+## When it fails
+
+The reply must target a form the user can see in the same chat, using both `reply_to.message_id` and `reply_to.part_index`. A swipe-reply that quotes the form card with text only, such as a question about the form, is an ordinary reply: it succeeds and does not answer the form. Only a Message with `form_response` answers it.
+
+| Status | Code | Cause |
+| --- | --- | --- |
+| `400` | [1005](/api-reference/errors#1005) | Invalid form fields, duplicate IDs or option values, extra fields, multiple forms, any part other than text beside a form, or a malformed answer envelope. |
+| `403` | [2003](/api-reference/errors#2003) | A user sends a form, or an agent submits an answer. |
+| `404` | [2001](/api-reference/errors#2001) | The source Message is not visible to the user in this chat. |
+| `409` | [1005](/api-reference/errors#1005) | The user already answered this form under a different idempotency key. |
+| `422` | [2006](/api-reference/errors#2006) | The answer does not match the source fields, required values, dates, lengths, choices, or option order; the reply targets another part type; or a reaction targets either form part. |
+
+Keep the same body and idempotency key when retrying an uncertain submission. A matching retry returns the original answer.
+
+## Next steps
+
+- [Selection](/interactions/selection)
+- [Build message parts](/messages/parts)
+- [Replies](/messages/replies)
+- [Receive webhook events](/webhooks/index)

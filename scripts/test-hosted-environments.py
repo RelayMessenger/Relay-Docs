@@ -19,6 +19,11 @@ spec = importlib.util.spec_from_file_location(
 hosted = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(hosted)
 
+MINTLIFY_FOOTER = (
+    b"\n\nThis documentation is built and hosted on [Mintlify](https://mintlify.com), "
+    b"a developer documentation platform.\n"
+)
+
 
 def response(body):
     return {"body": body, "sha256": hashlib.sha256(body).hexdigest(),
@@ -145,6 +150,31 @@ class HostedEnvironmentTests(unittest.TestCase):
                                                 (index, complete.replace("listThings", "oldOperation"))):
             with self.assertRaises(SystemExit):
                 hosted.check_discovery(self.root, self.config, missing_index, missing_complete)
+
+    def test_discovery_requires_public_operations_not_person_only_operations(self):
+        self.fixture()
+        contract = self.root / "api-reference/openapi.yaml"
+        contract.write_text(contract.read_text()
+                            + "  /v1/agents/{agentId}/rating:\n"
+                              "    post:\n      operationId: rateAgent\n")
+        index = self.bodies["llms.txt"].decode()
+        complete = self.bodies["llms-full.txt"].decode()
+        _, operations = hosted.check_discovery(self.root, self.config, index, complete)
+        self.assertEqual(operations, ["listThings"])
+        with self.assertRaisesRegex(SystemExit, "missing current contract operation IDs"):
+            hosted.check_discovery(self.root, self.config, index,
+                                   complete.replace("listThings", "oldOperation"))
+        with self.assertRaisesRegex(SystemExit, "person-only operation IDs"):
+            hosted.check_discovery(self.root, self.config, index,
+                                   complete + "\n      operationId: rateAgent\n")
+
+    def test_current_checkout_generated_discovery_matches_public_contract(self):
+        root = hosted.ROOT
+        _, operations = hosted.check_discovery(
+            root, json.loads((root / "docs.json").read_text()),
+            (root / "llms.txt").read_text(), (root / "llms-full.txt").read_text())
+        self.assertTrue(operations)
+        self.assertNotIn("rateAgent", operations)
 
     def test_unnavigated_authored_route_cannot_escape_full_page_check(self):
         self.fixture()
@@ -308,14 +338,48 @@ class HostedEnvironmentTests(unittest.TestCase):
             b"when a step needs a page's full text. Use only the endpoints, commands, and files those "
             b"documents name; if a step cannot be verified there, stop and say so.\n"
         )
-        self.assertTrue(hosted.source_body_matches("agent-prompt.md", hosted_body, source))
-        self.assertFalse(
-            hosted.source_body_matches(
-                "agent-prompt.md",
-                hosted_body.replace(b"stop and say so", b"continue anyway"),
-                source,
-            )
-        )
+        for footer in (b"", MINTLIFY_FOOTER, MINTLIFY_FOOTER.rstrip(b"\n")):
+            actual = hosted_body + footer
+            with self.subTest(footer=footer):
+                self.assertTrue(hosted.source_body_matches("agent-prompt.md", actual, source))
+                for original, replacement in (
+                    (b"stop and say so", b"continue anyway"),
+                    (b"/llms-full.txt", b"/wrong.txt"),
+                    (b"](https://docs.staging.relayapp.im/llms-full.txt)",
+                     b"](https://other.test/llms-full.txt)"),
+                ):
+                    self.assertFalse(hosted.source_body_matches(
+                        "agent-prompt.md", actual.replace(original, replacement), source))
+                for path in ("skill.md", "llms.txt", "llms-full.txt"):
+                    self.assertFalse(hosted.source_body_matches(path, actual, source))
+                    self.assertFalse(hosted.source_body_matches(
+                        path, source + MINTLIFY_FOOTER, source))
+
+    def test_agent_prompt_footer_must_be_exact_and_terminal(self):
+        source = b"Keep the current instruction and its URL https://docs.test/llms.txt.\n"
+        for actual in (
+            source + MINTLIFY_FOOTER.replace(b"mintlify.com", b"other.test"),
+            source + MINTLIFY_FOOTER.replace(b"documentation platform", b"changed platform"),
+            source + MINTLIFY_FOOTER + b"\nExtra instruction.\n",
+            MINTLIFY_FOOTER + source,
+            source + MINTLIFY_FOOTER + MINTLIFY_FOOTER,
+            source + MINTLIFY_FOOTER.replace(b"\n\n", b"\n", 1).lstrip(b"\n"),
+        ):
+            with self.subTest(actual=actual):
+                self.assertFalse(hosted.source_body_matches("agent-prompt.md", actual, source))
+
+    def test_hosted_run_accepts_footer_but_rejects_changed_prompt(self):
+        fetch = self.fixture()
+        self.bodies["agent-prompt.md"] += MINTLIFY_FOOTER
+        with patch.object(hosted.origins, "target", return_value="staging"), \
+                patch.object(hosted, "png_color_counts",
+                             return_value={"opaque": 100, "black": 100, "blue": 0}):
+            receipt = hosted.run(self.args(), self.root, fetch)
+            self.assertEqual(receipt["verdict"], "passed")
+            self.bodies["agent-prompt.md"] = (
+                self.bodies["agent-prompt.md"].replace(b"Canonical", b"Changed"))
+            with self.assertRaisesRegex(SystemExit, "expected checkout prompt"):
+                hosted.run(self.args(), self.root, fetch)
 
     def test_rendered_image_alt_text_counts_as_page_content(self):
         page = {

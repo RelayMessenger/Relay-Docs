@@ -7,10 +7,10 @@ ROOT = Path(__file__).resolve().parents[1]
 # Owner ruling 2026-09-12: the webhook event pages are their own top tab,
 # "Webhook Events", next to API Reference. Their files never
 # moved, so every /events path still resolves.
-RESOURCE_GROUPS = ["Chats", "Messages", "Attachments", "Contacts", "Webhooks", "WebSocket", "Agents", "Calls", "Payments", "Tasks", "Communities"]
+RESOURCE_GROUPS = ["Chats", "Messages", "Attachments", "Contacts", "Webhooks", "WebSocket", "Agents", "Calls", "Payments"]
 # Resources whose group holds only generated endpoint pages, with no overview.
-ENDPOINT_ONLY_GROUPS = {"Calls", "Payments", "Tasks", "Communities"}
-RESOURCE_OBJECTS = {"Chats": "Chat", "Messages": "Message", "Attachments": "Attachment", "Contacts": "Contact", "Webhooks": "Webhook", "WebSocket": "WebSocket", "Agents": "Agent", "Calls": "Call", "Payments": "Payment", "Tasks": "Task", "Communities": "Community"}
+ENDPOINT_ONLY_GROUPS = {"Calls", "Payments"}
+RESOURCE_OBJECTS = {"Chats": "Chat", "Messages": "Message", "Attachments": "Attachment", "Contacts": "Contact", "Webhooks": "Webhook", "WebSocket": "WebSocket", "Agents": "Agent", "Calls": "Call", "Payments": "Payment"}
 EVENT_GROUP = "Webhook Events"
 EVENT_PAGES = [
     "events/index", "events/chat-created", "events/chat-group-icon-updated",
@@ -24,7 +24,7 @@ EVENT_PAGES = [
     "events/call-created", "events/call-updated", "events/call-ended",
     "events/payment-succeeded", "events/payment-canceled", "events/payment-expired",
     "events/location-sharing-started", "events/location-sharing-stopped",
-    "events/task-created", "events/task-message", "events/task-canceled", "events/task-updated",
+    "events/rating-created", "events/rating-updated", "events/rating-deleted",
 ]
 # The tab groups events by subject, in the API reference's resource order.
 EVENT_TAB_GROUPS = [
@@ -37,9 +37,45 @@ EVENT_TAB_GROUPS = [
     ("Calls", ["events/call-created", "events/call-updated", "events/call-ended"]),
     ("Payments", ["events/payment-succeeded", "events/payment-canceled", "events/payment-expired"]),
     ("Location", ["events/location-sharing-started", "events/location-sharing-stopped"]),
-    ("Tasks", ["events/task-created", "events/task-message", "events/task-canceled", "events/task-updated"]),
+    ("Ratings", ["events/rating-created", "events/rating-updated", "events/rating-deleted"]),
 ]
 assert sorted(page for _, pages in EVENT_TAB_GROUPS for page in pages) == sorted(EVENT_PAGES)
+# Owner rulings 2026-10-01 ("only search agents should be public"; people rate
+# agents, agents never rate): person-only routes stay out of the developer
+# docs. The generated Mintlify bundle and llms-full.txt drop their paths, so no
+# page is built and their URLs return 404. Keep scripts/prepare-mint-openapi.mjs
+# in step; validate-docs.py checks the bundle.
+HIDDEN_OPERATIONS = {
+    "countAgentsInAddressBook", "listSuggestedAgents", "requestAgent",
+    "getMyAgentRating", "rateAgent", "deleteAgentRating",
+}
+
+
+def hidden_endpoints():
+    return {entry["endpoint"] for operation, entry in page_paths().items() if operation in HIDDEN_OPERATIONS}
+
+
+def strip_hidden_paths(text):
+    """The OpenAPI text without the path blocks of person-only operations.
+
+    Every hidden operation's path must be hidden whole: a path that mixes
+    hidden and public methods would need method-level surgery, so it fails.
+    """
+    import re
+    hidden = hidden_endpoints()
+    paths = {}
+    for endpoint in hidden:
+        method, path = endpoint.split(" ", 1)
+        paths.setdefault(path, set()).add(method.lower())
+    for path, methods in paths.items():
+        match = re.search(rf"^  {re.escape(path)}:\n(?:(?:    .*|)\n)*?(?=^  \S|^\S|\Z)", text, re.M)
+        if match is None:
+            raise ValueError(f"hidden path missing from OpenAPI: {path}")
+        present = set(re.findall(r"^    (get|post|put|patch|delete):$", match.group(0), re.M))
+        if present != methods:
+            raise ValueError(f"{path} mixes hidden and public methods: {sorted(present)}")
+        text = text[:match.start()] + text[match.end():]
+    return text
 
 
 def walk_pages(items, parents=()):
@@ -69,7 +105,7 @@ def validate_api_navigation(config):
         raise ValueError("Webhook Events must be its own tab")
     events_groups = events_tab.get("groups", [])
     if [g["group"] for g in events_groups] != [name for name, _ in EVENT_TAB_GROUPS]:
-        raise ValueError("The Webhook Events tab groups events by subject: Overview, Messages, Chats, Participants, Contacts, Reactions, Calls, Payments, Location, Tasks")
+        raise ValueError("The Webhook Events tab groups events by subject: Overview, Messages, Chats, Participants, Contacts, Reactions, Calls, Payments, Location")
     for (name, expected_pages), group in zip(EVENT_TAB_GROUPS, events_groups):
         if group["pages"] != expected_pages:
             raise ValueError(f"Webhook Events group {name} must list exactly its event pages in order")
@@ -80,7 +116,7 @@ def validate_api_navigation(config):
     entries = list(walk_pages(groups))
     methods = ("GET ", "POST ", "PUT ", "PATCH ", "DELETE ")
     endpoints = [(parents, page) for parents, page in entries if page.startswith(methods)]
-    expected = {entry["endpoint"]: entry for entry in page_paths().values()}
+    expected = {entry["endpoint"]: entry for operation, entry in page_paths().items() if operation not in HIDDEN_OPERATIONS}
     found = [page for _, page in endpoints]
     if len(found) != len(set(found)) or set(found) != set(expected):
         raise ValueError("API navigation must contain every endpoint exactly once")

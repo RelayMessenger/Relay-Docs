@@ -1,0 +1,124 @@
+---
+title: "Call events and connection"
+description: "Receive call.created, call.updated and call.ended, follow a call's media from the transport, use your own TURN servers, and read diagnostics."
+keywords: ["call events", "call.created", "call.updated", "call.ended", "TURN", "ICE servers", "diagnostics", "restarted", "remoteVideo"]
+---
+
+A call reaches your agent through two channels. The call's state arrives as `call.*` events on your agent's webhook or WebSocket. The call's media, and what the other side is doing, arrive as events on the transport your agent joined the room with.
+
+## Receive call events
+
+| Event | When it fires |
+| --- | --- |
+| [`call.created`](/events/call-created) | A person calls your agent, or your agent's own call is placed. `status` is `ringing`. |
+| [`call.updated`](/events/call-updated) | The call changed state without ending, for example `ringing` to `in-progress`. |
+| [`call.ended`](/events/call-ended) | The call ended. `status` is terminal and `ended_at` is set. |
+
+Every event carries the whole [Call object](/calls/index#the-call-object-states). Keep the snapshot with the highest `revision` for each `call.id`. Answer in the background: the WebSocket acknowledges an event only after your handler returns, and a call lasts minutes.
+
+<CodeGroup>
+```typescript TypeScript
+import type { RelayWebhookEvent } from "@relaymessenger/sdk";
+
+// Pass this as onEvent to relay.websocket.run, or call it from your webhook handler.
+async function onEvent(event: RelayWebhookEvent) {
+  if (event.event_type === "call.created" && event.data.call.status === "ringing") {
+    void answer(event.data.call.id); // your code from "Answer a call"
+  }
+}
+```
+
+```python Python
+import asyncio
+
+
+# Pass this as on_event to relay.websocket.run, or call it from your webhook handler.
+async def on_event(event, context):
+    call = event["data"].get("call") if event["event_type"] == "call.created" else None
+    if call and call["status"] == "ringing":
+        asyncio.create_task(answer(call["id"]))  # your code from "Answer a call"
+```
+</CodeGroup>
+
+## Follow the call from the transport
+
+The transport emits events as media connects, the other side changes, and the call ends. Pipecat raises the same moments as `on_connected`, `on_first_participant_joined`, `on_call_state_updated` and `on_participant_left`.
+
+| TypeScript | Python | Fires when |
+| --- | --- | --- |
+| `connected` | `connected` | Media is connected. |
+| `peerAudio` | `peer_audio` | The person's audio has arrived and the room shows them connected. |
+| `roomState` | `room_state` | The room reports its participants, with their mute, camera and connection state. |
+| `remoteVideo` | `remote_video` | The person's camera started (`true`) or stopped (`false`) sending. |
+| `trackSubscribed` | `track_subscribed` | The person's camera track is ready to read. |
+| `restarted` | `restarted` | A dead media session was replaced by a new one; the call goes on. |
+| `ended` | `ended` | The call ended. The room socket closes right after. |
+| `error` | `error` | The room or the media connection reported an error. |
+
+## Use your own TURN servers
+
+By default the transport uses the STUN and TURN servers the room sends, which Relay mints for each call. An agent in a container or behind a firewall that blocks UDP connects through TURN with no setup. To use your own servers, pass `iceServers`; yours replace the room's.
+
+<CodeGroup>
+```typescript TypeScript
+const transport = new RelayCallTransport({
+  relay,
+  callId,
+  iceServers: [
+    {
+      urls: ["turn:turn.example.com:3478?transport=udp", "turns:turn.example.com:5349?transport=tcp"],
+      username: process.env.TURN_USERNAME!,
+      credential: process.env.TURN_CREDENTIAL!,
+    },
+  ],
+  iceTransportPolicy: "relay", // every path through TURN
+});
+```
+
+```python Python
+from relaymessenger.calls import RelayCallTransport, RelayIceServer
+
+call = RelayCallTransport(
+    api_key=os.environ["RELAY_AGENT_TOKEN"],
+    call_id=call_id,
+    base_url="https://api.relayapp.im",
+    ice_servers=[
+        RelayIceServer(
+            urls="turn:turn.example.com:3478?transport=tcp",
+            username=os.environ["TURN_USERNAME"],
+            credential=os.environ["TURN_CREDENTIAL"],
+        )
+    ],
+)
+```
+</CodeGroup>
+
+`iceServers` can also be a function that returns a fresh list before every connection attempt, so short-lived credentials are minted each time. Python uses only the first STUN and the first TURN URL, so a network that blocks all UDP needs a `transport=tcp` TURN URL first.
+
+## Read diagnostics when a call fails
+
+`connect()` has no overall deadline. A media session that does not connect within 5 seconds, fails, or stays disconnected for 7 seconds is replaced, for as long as the call is ringing or in progress, and each replacement emits `restarted`. `connect()` fails only when the call ends or the room closes.
+
+`diagnostics()` returns what happened, with a one-line `summary` to log: candidate counts, connection state changes, packets in each direction, and the room frames seen.
+
+<CodeGroup>
+```typescript TypeScript
+transport.on("restarted", ({ reason, summary }) => console.warn(reason, summary));
+transport.on("ended", () => console.log(transport.diagnostics().summary));
+```
+
+```python Python
+@call.on("ended")
+def log_summary(_frame: dict) -> None:
+    print(call.diagnostics().summary)
+```
+</CodeGroup>
+
+Outbound packets that are all `silence` mean your agent connected but wrote no audio.
+
+## See also
+
+- [Answer a call](/calls/index#answer-a-call)
+- [Send and receive audio](/calls/audio)
+- [Video calls](/calls/video)
+- [Choose an event type](/events)

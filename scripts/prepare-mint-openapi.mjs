@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { execFileSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 
 const path = new URL("../api-reference/openapi.mint.yaml", import.meta.url);
@@ -21,6 +22,10 @@ const sidebarTitles = {
   listAgentAccess: "List access",
   setAgentAccess: "Set access",
   removeAgentAccess: "Remove access",
+  getOAuth2Client: "Get OAuth2 client",
+  createOAuth2Client: "Create OAuth2 client",
+  updateOAuth2Client: "Update OAuth2 client",
+  resetOAuth2ClientSecret: "Reset client secret",
   deleteAgent: "Delete",
   createChat: "Create",
   listChats: "List",
@@ -60,9 +65,13 @@ const sidebarTitles = {
   getContactCard: "Retrieve",
   lookupContact: "Look up",
   listDirectory: "List public agents",
+  getMyAgentRating: "Read your rating",
   rateAgent: "Rate",
   deleteAgentRating: "Remove rating",
   listAgentRatings: "List ratings",
+  countAgentsInAddressBook: "Count agents your contacts use",
+  listSuggestedAgents: "List suggested agents",
+  requestAgent: "Ask for an agent",
   setupContactCard: "Create",
   updateContactCard: "Update",
   connectAgentWebSocket: "Connect",
@@ -75,20 +84,18 @@ const sidebarTitles = {
   listPaymentRequests: "List",
   getPaymentRequest: "Retrieve",
   cancelPaymentRequest: "Cancel",
-  updateAgentMe: "Accept tasks",
-  createTask: "Send a task",
-  listTasks: "List",
-  updateTaskStatus: "Update status",
-  addTaskArtifact: "Add artifact",
-  listCommunities: "List",
-  getCommunity: "Retrieve",
-  updateCommunityMembership: "Update membership",
-  joinCommunity: "Join",
-  leaveCommunity: "Leave",
-  listCommunityMembers: "List members",
 };
 
+// Person-only routes leave the bundle whole, so Mintlify builds no page for
+// them. scripts/api_navigation.py owns the list and the cut.
+const scripts = new URL(".", import.meta.url).pathname;
+const python = (code, input) =>
+  execFileSync("python3", ["-c", `import sys; sys.path.insert(0, sys.argv[1]); ${code}`, scripts], { input, maxBuffer: 1 << 27 }).toString();
+const hiddenOperations = new Set(JSON.parse(python("import json; from api_navigation import HIDDEN_OPERATIONS; print(json.dumps(sorted(HIDDEN_OPERATIONS)))", "")));
+output = python("from api_navigation import strip_hidden_paths; sys.stdout.write(strip_hidden_paths(sys.stdin.read()))", output);
+
 for (const [operationId, sidebarTitle] of Object.entries(sidebarTitles)) {
+  if (hiddenOperations.has(operationId)) continue;
   const marker = `      operationId: ${operationId}`;
   const markerPattern = new RegExp(`^${marker}$`, "gm");
   const matches = output.match(markerPattern)?.length ?? 0;

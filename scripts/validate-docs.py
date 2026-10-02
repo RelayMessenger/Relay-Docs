@@ -4,7 +4,7 @@ import hashlib
 import re
 import sys
 from pathlib import Path
-from api_navigation import validate_api_navigation, page_paths
+from api_navigation import validate_api_navigation, page_paths, hidden_endpoints, HIDDEN_OPERATIONS
 from origins import origin, production_text, source_ref, target, STAGING_INSTRUCTION_REFERENCE
 from docs_analytics import validate as validate_analytics
 
@@ -427,8 +427,17 @@ public_contact_route = re.compile(
     r"|/v1/contacts/\{handle\}/ratings"
     r"|/v1/contacts/\{handle\}/rating)(?=$|[\s`\"':#?])"
 )
+# Log in with Relay: Relay-Auth's OpenID Connect provider is public, and its
+# issuer is https://auth.relayapp.im/api/auth (OpenID Connect Discovery 1.0
+# puts discovery at issuer + /.well-known/openid-configuration). Only its
+# public OIDC endpoints on the auth host may be named; Relay-Server's private
+# /api/auth/ routes stay banned.
+public_oidc_route = re.compile(
+    r"https://auth\.(?:staging\.)?relayapp\.im/api/auth"
+    r"(?:/\.well-known/openid-configuration|/oauth2/authorize|/jwks)?(?=$|[\s`\"')#?])"
+)
 for path in public_contract_paths:
-    text = path.read_text()
+    text = public_oidc_route.sub("", path.read_text())
     without_public_routes = public_contact_route.sub("", text)
     if "/v1/contacts" in without_public_routes:
         raise SystemExit(
@@ -491,7 +500,7 @@ for path in [*mdx_paths, root / "skill.md", root / "agent-prompt.md"]:
                 "not a path in api-reference/openapi.yaml"
             )
 
-from docs_behavior import validate_behavior
+from docs_behavior import validate_behavior, validate_share_contract
 validate_behavior(root)
 webhook_events_text = (root / "events/index.mdx").read_text()
 
@@ -539,8 +548,26 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server 42356390 (PR 415); an agent calls only a person who added it and left Allow Calls on, and createCall's 403 names both refusals, September 27, 2026.
 # Source authority: Relay-Server 3972ba8a (PR 416); community posts, comments, upvotes, community.* events, the notifications switch and contributor_count are removed, September 27, 2026.
 # Source authority: Relay-Server 9448e92f (PR 418); the Browser component in Relay's A2UI catalog, A2uiBrowserComponent and A2uiBrowserActionName, September 27, 2026.
+# Source authority: Relay-Server 78eb6425 (PR 429, carrying PRs 421 and 428); each agent's A2A address is its own origin, https://<handle>.relayagent.im, September 29, 2026.
+# Source authority: Relay-Server 246da210 (PRs 437, 438, 444, 445); only the agent that made a card changes it, blocks stop typing and reactions, a WebSocket that names no subscribed_events gets every event type, the ring lease is 32 seconds, September 29, 2026.
+# Source authority: Relay-Server 61c53fac (PR 455, merged); an agent answers each A2A request with a Message or a Task, POST /v1/tasks/{taskId}/reply and message.received a2a, September 29, 2026.
+# Source authority: Relay-Server dd282289 (PR 456, merged); a message agent keeps a contextId the caller makes up and refuses another pair's, September 30, 2026.
+# Source authority: Relay-Server add9a085 (PR 457, merged); communities are removed, membership included, and agents_can_message is everyone or nobody, September 30, 2026.
+# Source authority: Relay-Server d14629ad (PR 464, merged, on top of PR 467); restore Server #373 fee behavior, and return the fee share once a refund succeeds, September 30, 2026.
+# Source authority: Relay-Server b4478d21 (PR 460, merged); rich_card, carousel and suggestion_response, September 30, 2026.
+# Source authority: Relay-Server a3e534d4 (PR 461, merged); every person object carries the person's IANA time zone as timezone, the device used last sets it, September 30, 2026.
+# Source authority: Relay-Server a184965a (PR 459, merged); Log in with Relay: /v1/oauth2_client, September 30, 2026.
+# Source authority: Relay-Server 269da7b5 (PR 462, merged); A2A and tasks are removed: no agent cards or JSON-RPC door, no /v1/tasks, no PATCH /v1/me, no task.* events, no message.received a2a, errors 2033 and 2034 retired, September 30, 2026.
+# Source authority: Relay-Server 11d8b582 (PR 468, open, on PR 462); every person object carries age_range beside timezone, agents carry age_rating, error 2035, September 30, 2026.
+# Source authority: Relay-Server bf085edc (PR 463, merged); share another agent's Contact Card as a snapshot, Idempotency-Key, lookup by id, system_event.actor name and picture, September 30, 2026.
+# Source authority: Relay-Server 34943159 (PR 466, merged); the list picker upgrade of selection, September 30, 2026.
+# Source authority: Relay-Server 744d715a (PR 465, form candidate on top of PR 470 and PR 471), not yet merged, September 30, 2026.
+# Source authority: Relay-Server 65c26f16 (PRs 465, 473, 476, 475, 474 and 477, merged); forms, suggested agents, a person's Contact Card by user_id, profile links, A2UI and the data part removed, September 30, 2026.
+# Source authority: Relay-Server fe702db3 (PR 479, merged); a person's about on every person object and Contact Card, and the birthdate scope in OAuth2Scope, October 1, 2026.
+# Source authority: Relay-Server 736f112e (PRs 488, 486, 485 and 482, merged); an agent's Rive file and the rive DataChannel; Message has no edited_at or unsent_at, October 1, 2026.
+# Source authority: Relay-Server af7f1802 (PRs 482, 492, 503 and the rating and calls branches, merged); ratings, rating_request, rating events, no blocking relay, rive on contacts, call capability 422, ContactCardItem.handle string, form value, October 2, 2026.
 expected_openapi_sha256 = (
-    "61bd07d26328a493fa3aca1ceef9bf1c43321d31fb3ba3c6e10f7d353b48218b"
+    "7ca002357a04610ee2012ae59d8f0789e9d44a000388ca926ea1ed68f44d96d9"
 )
 # Local candidate provenance is shared with the guide and contract gates;
 # it does not relabel the historical Server release as selection-capable.
@@ -708,9 +735,13 @@ expected_operation_ids = {
     "getContactCard",
     "lookupContact",
     "listDirectory",
+    "getMyAgentRating",
     "rateAgent",
     "deleteAgentRating",
     "listAgentRatings",
+    "countAgentsInAddressBook",
+    "listSuggestedAgents",
+    "requestAgent",
     "getMessage",
     "getMessages",
     "getMessageThread",
@@ -750,17 +781,10 @@ expected_operation_ids = {
     "listAgentAccess",
     "setAgentAccess",
     "removeAgentAccess",
-    "updateAgentMe",
-    "createTask",
-    "listTasks",
-    "updateTaskStatus",
-    "addTaskArtifact",
-    "listCommunities",
-    "getCommunity",
-    "updateCommunityMembership",
-    "joinCommunity",
-    "leaveCommunity",
-    "listCommunityMembers",
+    "getOAuth2Client",
+    "createOAuth2Client",
+    "updateOAuth2Client",
+    "resetOAuth2ClientSecret",
 }
 if len(operation_ids) != len(expected_operation_ids) or set(operation_ids) != expected_operation_ids:
     raise SystemExit(
@@ -782,11 +806,11 @@ for path_match in re.finditer(
         contract_endpoint_refs.append(f"{method.upper()} {endpoint}")
 if (
     len(configured_endpoint_refs) != len(set(configured_endpoint_refs))
-    or set(configured_endpoint_refs) != set(contract_endpoint_refs)
+    or set(configured_endpoint_refs) != set(contract_endpoint_refs) - hidden_endpoints()
 ):
     raise SystemExit(
         "API Reference endpoint order drifted from OpenAPI: "
-        f"{sorted(set(configured_endpoint_refs) ^ set(contract_endpoint_refs))}"
+        f"{sorted(set(configured_endpoint_refs) ^ (set(contract_endpoint_refs) - hidden_endpoints()))}"
     )
 mint_sidebar_operations = dict(re.findall(
     r"^      operationId: ([A-Za-z0-9]+)\n"
@@ -796,10 +820,10 @@ mint_sidebar_operations = dict(re.findall(
     mint_openapi_text,
     re.M,
 ))
-if set(mint_sidebar_operations) != expected_operation_ids:
+if set(mint_sidebar_operations) != expected_operation_ids - HIDDEN_OPERATIONS:
     raise SystemExit(
         "concise API sidebar inventory drifted: "
-        f"{sorted(set(mint_sidebar_operations) ^ expected_operation_ids)}"
+        f"{sorted(set(mint_sidebar_operations) ^ (expected_operation_ids - HIDDEN_OPERATIONS))}"
     )
 if re.search(
     r"^      x-mint:\n^        metadata:\n(?:^          .+\n)*^          title:",
@@ -808,6 +832,11 @@ if re.search(
 ):
     raise SystemExit("Mintlify presentation metadata must preserve endpoint H1 titles")
 for operation_id, metadata in page_paths().items():
+    if operation_id in HIDDEN_OPERATIONS:
+        # Person-only: no page, so the bundle must not carry the operation.
+        if re.search(rf"^      operationId: {re.escape(operation_id)}$", mint_openapi_text, re.M):
+            raise SystemExit(f"person-only operation entered the Mintlify bundle: {operation_id}")
+        continue
     operation = re.search(
         rf"^      operationId: {re.escape(operation_id)}\n(.*?)(?=^      summary:)",
         mint_openapi_text, re.M | re.S,
@@ -830,7 +859,7 @@ contract_events = {
 event_catalog_text = webhook_events_text
 documented_events = set(
     re.findall(
-        r"`((?:message|reaction|participant|chat|contact|call|payment|location|task|community)\.[a-z_.]+)`",
+        r"`((?:message|reaction|participant|chat|contact|call|payment|location|rating|task|community)\.[a-z_.]+)`",
         event_catalog_text,
     )
 )
@@ -839,13 +868,10 @@ if documented_events != contract_events:
         "Webhook Event Types page drifted from OpenAPI: "
         f"{sorted(documented_events ^ contract_events)}"
     )
-share_path_start = openapi_text.index("  /v1/chats/{chatId}/share_contact_card:")
-share_path_end = openapi_text.find("\n  /v1/", share_path_start + 2)
-share_operation = openapi_text[
-    share_path_start:share_path_end if share_path_end >= 0 else len(openapi_text)
-]
-if "requestBody:" in share_operation:
-    raise SystemExit("Contact Card sharing route must remain bodyless in OpenAPI")
+try:
+    validate_share_contract(openapi_text)
+except ValueError as error:
+    raise SystemExit(str(error)) from error
 disconnect = re.search(
     r"^    WebSocketDisconnectFrame:\n.*?^        reason:\n"
     r".*?^          enum:\n((?:^            - [^\n]+\n)+)",
@@ -899,9 +925,6 @@ all_contract_text = handwritten_text + "\n" + openapi_text
 # The contract cites PayPal Orders v2 for the payment categories; that is
 # PayPal's route, not Relay's, so route-version checks read around it.
 PAYPAL_ORDERS_CITATION = "developer.paypal.com/docs/api/orders/v2/"
-# Cloudflare's own API is v4; interactions/browser.mdx calls it to get a live
-# view address (Relay-Server PR 418, the Browser component).
-CLOUDFLARE_API_CITATION = "api.cloudflare.com/client/v4/"
 if target() == "production" and STAGING_INSTRUCTION_REFERENCE.search(handwritten_text):
     raise SystemExit("staging installation or credential guidance returned to production")
 generated_paths = [root / "llms.txt", root / "llms-full.txt"]
@@ -935,7 +958,7 @@ for field, expected in [
             )
 route_versions = set(re.findall(
     r"/v([0-9]+)/",
-    published_contract_text.replace(PAYPAL_ORDERS_CITATION, "").replace(CLOUDFLARE_API_CITATION, ""),
+    published_contract_text.replace(PAYPAL_ORDERS_CITATION, ""),
 ))
 if route_versions != {"1"}:
     raise SystemExit(
@@ -1004,7 +1027,11 @@ for name, pattern in {
     "mobile product namespace": r"\bmobile(?: API| namespace| endpoint| boundary)?\b",
     "realtime product name": r"\breal[ -]?time\b",
 }.items():
-    if re.search(pattern, handwritten_text, re.I):
+    # Provider names and a verbatim framework API are not Relay product names.
+    # Keep this exact-name exception local to the realtime vocabulary guard.
+    scanned = (re.sub(r"\bOpenAI Realtime\b|\bgoogle\.realtime\.RealtimeModel\b", "", handwritten_text)
+               if name == "realtime product name" else handwritten_text)
+    if re.search(pattern, scanned, re.I):
         raise SystemExit(f"stale {name}")
 
 for stale_hook in ["Implement this in the agent backend's connection flow", "## Backend connection greeting"]:
@@ -1034,6 +1061,9 @@ for name, pattern in {
     "removed Broadcast feature": r"\bbroadcasts?\b",
     "removed Proactive feature": r"\bproactive\b",
     "MFA surface": r"\bMFA\b",
+    # Relay-Server dropped `call_url` on 2026-09-22 (migration 0068): an agent
+    # answers by joining the Call room, and the Twilio stream is gone.
+    "removed call address": r"\bcall_url\b|\bcall address(?:es)?\b|Twilio Media Streams|voice-twilio",
 }.items():
     if re.search(pattern, handwritten_text, re.I):
         raise SystemExit(f"stale {name}")
@@ -1073,7 +1103,7 @@ print(
     "Console CTA, Copy agent prompt action, logo destination, Quickstart sidebar placement, "
     "atomic guide groups, "
     "focused page boundaries, "
-    "frontmatter, bodyless Contact Card sharing, exact delivery states and error pages, "
+    "frontmatter, optional Contact Card sharing body, exact delivery states and error pages, "
     "typing, exact OpenAPI event inventory, webhook retries, transport recovery, URL safety, "
     "message requests and exact idempotency scope, private Contact and route exclusion, Agent Read authentication, "
     "final automatic event paths, WebSocket disconnects, "

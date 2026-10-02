@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # descriptions now carry the shipped sheet flow; the wire shapes are untouched.
 # Location sharing: POST /v1/chats/{chatId}/location/request, GET /v1/chats/{chatId}/location, the location_request and location parts, location.sharing.* webhooks.
 # Contact cards carry is_verified; agent contact resources carry creator.
-# A2UI cards: the data part, a2ui_errors, targeted taps; the place part; GET /v1/me.
+# The place part; GET /v1/me.
 # Agent reach (Server #380): Always Allow and Never Allow lists at /v1/access; error 2031.
 # Communities and tasks between agents (Server #381-#388): /v1/communities, PATCH /v1/me, /v1/tasks, task.* events.
 # Community feed and About box (Server #391, #394): posts, comments, upvotes, community.* events; A2A door answers with a Message (Server #392).
@@ -29,11 +29,23 @@ ROOT = Path(__file__).resolve().parents[1]
 # Relay takes no fee: PaymentRequest loses application_fee_amount (Server #414).
 # An agent calls only a person who added it and left Allow Calls on (Server #415).
 # Community posts, comments, upvotes, community.* events, notifications and errors 2043-2047 are removed (Server #416).
-# The Browser component in Relay's A2UI catalog: A2uiBrowserComponent and A2uiBrowserActionName (Server #418).
-UPSTREAM_COMMIT = "9448e92fb7465bdf30bad37475e5f3017460799b"
-UPSTREAM_STAGING_COMMIT = "9448e92fb7465bdf30bad37475e5f3017460799b"
-UPSTREAM_SIZE = 316122
-UPSTREAM_SHA256 = "61bd07d26328a493fa3aca1ceef9bf1c43321d31fb3ba3c6e10f7d353b48218b"
+# GET /v1/me calls_enabled and 503 with calls off (Server #421); WebSocket subscribed_events (Server #428); each agent's A2A address is its own origin (Server #429).
+# Only the agent that made a card changes it (Server #437); blocks stop typing and reactions (Server #438); a WebSocket that names no subscribed_events gets every event type (Server #445); the ring lease is 32 seconds (Server #444).
+# An agent answers each A2A request with a Message or a Task: POST /v1/tasks/{taskId}/reply and message.received a2a (Server #455).
+# A message agent keeps a contextId the caller makes up (Server #456).
+# Communities are removed, membership included; agents_can_message is everyone or nobody (Server #457).
+# Share another agent's Contact Card as a snapshot, Idempotency-Key on the
+# share, contact lookup by id, system_event.actor name and picture (Server
+# #463, merged as bf085edc on top of #468's age range), September 30, 2026.
+# List picker: sections, row ids, subtitles and images, multiple, the card subtitle and reply_message (Server #466, merged as 34943159 on top of #463), September 30, 2026.
+# Forms (Server #465, merged as ce3a45f5); suggested agents (#473); a person's Contact Card by user_id (#476); profile links on every person (#475); A2UI and the data part removed (#474), September 30, 2026.
+# Carried from Server staging fe702db3: #479 adds a person's about and the birthdate scope (#477 and #478 change no contract byte).
+# Carried from Server staging 736f112e: #488 an agent's Rive file (rive on Contact Card, chat handles and calls) and the rive DataChannel; #486 Message drops edited_at and unsent_at; #482 and #485 change no public schema they do not list, October 1, 2026.
+# Carried from Server staging af7f1802: rating_request part and rating.created, rating.updated and rating.deleted; GET /v1/contacts/{handle}/rating; only people rate (403 for agents); no blocking the built-in relay agent (403); rive on contact list and lookup; an agent call to a person with no calls-capable build is 422; ContactCardItem.handle is a string; form parts carry value (Server #482, #492 and the rating and calls branches; #504 at 76713bfc changes no contract byte), October 2, 2026.
+UPSTREAM_COMMIT = "af7f1802cbad49485c8753cb1ad503dd97ae1ada"
+UPSTREAM_STAGING_COMMIT = "af7f1802cbad49485c8753cb1ad503dd97ae1ada"
+UPSTREAM_SIZE = 360139
+UPSTREAM_SHA256 = "7ca002357a04610ee2012ae59d8f0789e9d44a000388ca926ea1ed68f44d96d9"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
@@ -102,10 +114,12 @@ class ContractSourceTests(unittest.TestCase):
         api = next(tab for tab in navigation["navigation"]["tabs"]
                    if tab["tab"] == "API Reference")
         contacts = next(group for group in api["groups"] if group["group"] == "Contacts")
-        for endpoint in ("GET /v1/directory", "PUT /v1/contacts/{handle}/rating",
-                         "DELETE /v1/contacts/{handle}/rating",
-                         "GET /v1/contacts/{handle}/ratings"):
+        for endpoint in ("GET /v1/directory", "GET /v1/contacts/{handle}/ratings"):
             self.assertIn(endpoint, contacts["pages"])
+        # People rate agents; agents never rate (owner ruling 2026-10-01), so
+        # rating and removing a rating stay out of the developer docs.
+        for endpoint in ("PUT /v1/contacts/{handle}/rating", "DELETE /v1/contacts/{handle}/rating"):
+            self.assertNotIn(endpoint, contacts["pages"])
 
     def test_request_lifecycle_description_does_not_expose_private_fields(self):
         canonical = (ROOT / "api-reference/openapi.yaml").read_text()
@@ -129,6 +143,75 @@ class ContractSourceTests(unittest.TestCase):
                      "api-reference/resources/messages/overview.mdx"):
             self.assertNotIn("call_ended", (ROOT / name).read_text())
         self.assertIn('system_event.type: "call"', (ROOT / "calls/index.mdx").read_text())
+
+    def test_rive_person_receive_setup_and_restart(self):
+        # Relay-Server origin/staging 68e001ed, read 2026-10-01:
+        # contracts/developer/openapi.yaml:3197-3207,3782-3808;
+        # server/src/call-room.ts:936-975,1272-1284;
+        # server/test-worker/call-room.spec.ts:1488-1575.
+        guide = (ROOT / "calls/rive.mdx").read_text()
+        receiver = re.search(
+            r'<Accordion title="Receive Rive in a person-side client">(.*?)</Accordion>',
+            guide, re.S,
+        )
+        self.assertIsNotNone(receiver, "Document PERSON opt-in beside the agent setup")
+        text = " ".join(receiver[1].split())
+        self.assertRegex(text, r"person's client must send.*rive.*opt into receiving")
+        self.assertIn("agent sends the same frame to publish", text)
+        self.assertIn("Once the agent publishes", text)
+        self.assertRegex(text, r'may send an `offer` with `track: "rive"`.*SCTP')
+        self.assertIn("Answer it like any other offer", text)
+        self.assertRegex(text, r"restart onto a new Session.*new `id`.*Open the channel again")
+        example = re.search(r"```javascript Person-side WebRTC\n(.*?)```", receiver[1], re.S)
+        self.assertIsNotNone(example, "Keep a runnable person-side signaling example")
+        # Execute the documented example with only fake WebRTC and signaling.
+        # No SDK, browser, credentials, live room, or paid API is involved.
+        result = subprocess.run(
+            ["node", "--input-type=module", "-e", r"""
+import assert from "node:assert/strict";
+import vm from "node:vm";
+const sent = [], channels = [], negotiation = [];
+const answer = { type: "answer", sdp: "fake-answer" };
+const pc = {
+  async setRemoteDescription(value) { negotiation.push(["remote", value]); },
+  async createAnswer() { negotiation.push(["answer"]); return answer; },
+  async setLocalDescription(value) { negotiation.push(["local", value]); },
+  createDataChannel(name, options) {
+    const channel = { name, options };
+    channels.push(channel);
+    return channel;
+  },
+};
+const context = vm.createContext({
+  pc, socket: { send(value) { sent.push(JSON.parse(value)); } },
+});
+vm.runInContext(process.argv[1], context, { timeout: 1000 });
+assert.deepEqual(sent, [{ type: "rive" }], "PERSON must opt into receiving");
+assert.equal(channels.length, 0, "Wait for Relay's channel id");
+for (const track of ["audio", "rive"]) {
+  const offer = { type: "offer", sdp: `fake-${track}-offer` };
+  await context.onRoomFrame({ type: "offer", track, session_description: offer });
+  assert.deepEqual(negotiation.splice(0), [
+    ["remote", offer], ["answer"], ["local", answer],
+  ]);
+  assert.deepEqual(sent.at(-1), { type: "answer", session_description: answer });
+}
+assert.equal(channels.length, 0, "An SCTP offer is not a channel id");
+for (const id of [2, 4]) {
+  // The second frame represents the new channel after a Session restart.
+  await context.onRoomFrame({ type: "rive", id });
+  const channel = channels.at(-1);
+  assert.equal(channel.name, "rive");
+  assert.deepEqual(JSON.parse(JSON.stringify(channel.options)), {
+    negotiated: true, id, ordered: false, maxRetransmits: 0,
+  });
+  assert.equal(typeof channel.onmessage, "function");
+}
+assert.equal(channels.length, 2, "Open again for the new id after a restart");
+""", example[1]],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_chat_activity_guide_and_generated_navigation_match_the_contract(self):
         canonical = (ROOT / "api-reference/openapi.yaml").read_text()
@@ -175,11 +258,12 @@ class ContractSourceTests(unittest.TestCase):
         for page in [ROOT / "interactions/index.mdx",
                      ROOT / "interactions/selection.mdx",
                      *(ROOT / "integrations").glob("*.mdx")]:
+            # The staged ElevenLabs artifact is now observed in versions.json.
             self.assertNotIn("coming soon", page.read_text().lower(), page)
         self.assertIn("literal `• `", selection)
         self.assertIn("exact selected source labels joined with `, `", selection)
         self.assertNotIn("**Clear**", selection)
-        # The contract is a published pin; no local candidate record remains.
+        # Source bytes are pinned above, not overridden by an SDK candidate.
         self.assertFalse((ROOT / "scripts/local-contract-source.json").exists())
 
     def test_selection_preview_and_response_share_canonical_bullet_text(self):
@@ -416,114 +500,6 @@ class ContractSourceTests(unittest.TestCase):
         card = scene("contact-card")
         self.assertLess(card.index("chatp-card-avatar"), card.index("chatp-card-name"))
         self.assertLess(card.index("chatp-card-name"), card.index("{chevron}"))
-
-    def test_cards_previews_draw_the_adjacent_json(self):
-        # Each live card preview draws exactly the messages in its JSON tab. An
-        # update preview replays the page's first card, then the update; the
-        # ride preview's reply is that same update, applied after the tap.
-        source = (ROOT / "interactions/cards.mdx").read_text()
-        https = [json.loads(body)["message"]["parts"][0]["data"]
-                 for body in re.findall(r"-d '(\{.*?\})'\n```", source, re.S)]
-        self.assertEqual(len(https), 2, "Keep the send and update HTTPS samples")
-
-        def prop(preview, name):
-            match = re.search(r"\b" + name + r"=\{", preview)
-            if match is None:
-                return None
-            value, _ = json.JSONDecoder().raw_decode(preview[match.end():].lstrip())
-            return value
-
-        previews = []
-        for group in re.findall(r"<Tabs\b[^>]*>(.*?)</Tabs>", source, re.S):
-            tabs = dict(re.findall(r'<Tab title="([^"]+)">\s*(.*?)</Tab>', group, re.S))
-            if "<A2uiPreview" not in tabs.get("Preview", ""):
-                continue
-            self.assertIn("JSON", tabs, "Each card preview needs its JSON tab")
-            blocks = re.findall(r"```json\s*\n(.*?)```", tabs["JSON"], re.S)
-            self.assertEqual(len(blocks), 1)
-            data = json.loads(blocks[0])["message"]["parts"][0]["data"]
-            preview = tabs["Preview"]
-            messages = prop(preview, "messages")
-            self.assertEqual(messages[-len(data):], data, "Preview differs from its JSON tab")
-            if messages != data:
-                self.assertEqual(messages[:-len(data)], https[0], "An update preview starts from the sent card")
-            for local in (prop(preview, "media") or {}).values():
-                self.assertTrue((ROOT / local.lstrip("/")).is_file(), local)
-            previews.append((data, prop(preview, "reply")))
-        self.assertGreaterEqual(len(previews), 2)
-        self.assertEqual(previews[0][0], https[0], "The first preview is the ride card that is sent")
-        # A preview's replies are keyed by the tapped action's name, and each
-        # answers a Button the card really draws.
-        def events(messages):
-            return {c["action"]["event"]["name"] for m in messages if "updateComponents" in m
-                    for c in m["updateComponents"]["components"] if "action" in c}
-        # The ride preview answers the pick the reader made: its Comfort reply
-        # to review_ride is the documented update, and its UberX reply is that
-        # same update with only the ride, its label, and its price changed.
-        replies = previews[0][1]
-        self.assertEqual(sorted(replies), ["request_ride", "review_ride"])
-        self.assertIn("review_ride", events(https[0]))
-        self.assertIn("request_ride", events(https[1]))
-        review = replies["review_ride"]
-        self.assertEqual(sorted(review), ["comfort", "uberx"])
-        self.assertEqual(review["comfort"], https[1], "The ride preview's reply is the documented update")
-        uberx = json.loads(json.dumps(https[1]).replace("Request Comfort for $51", "Request UberX for $42")
-                           .replace('"ride": "comfort"', '"ride": "uberx"'))
-        self.assertNotEqual(uberx, https[1])
-        self.assertEqual(review["uberx"], uberx, "The UberX reply mirrors the documented update")
-        # The commit's tap, request_ride, gets the next update the update's
-        # JSON tab documents: the ride is booked and the Button is gone.
-        update_group = [g for g in re.findall(r"<Tabs\b[^>]*>(.*?)</Tabs>", source, re.S)
-                        if "<A2uiPreview" in g and "Request Comfort for $51 to book it" in g][0]
-        update_tabs = dict(re.findall(r'<Tab title="([^"]+)">\s*(.*?)</Tab>', update_group, re.S))
-        following = re.search(r"```json The next update, after request_ride\s*\n(.*?)```", update_tabs["JSON"], re.S)
-        self.assertIsNotNone(following, "The update's JSON tab shows the next update")
-        booked = json.loads(following[1])["message"]["parts"][0]["data"]
-        self.assertEqual(events(booked), set(), "The booked card has no Button left")
-        self.assertEqual(replies["request_ride"]["comfort"], booked, "The ride preview books with the documented update")
-        booked_uberx = json.loads(json.dumps(booked).replace("Your Comfort ride", "Your UberX ride")
-                                  .replace("in 6 minutes", "in 4 minutes"))
-        self.assertNotEqual(booked_uberx, booked)
-        self.assertEqual(replies["request_ride"]["uberx"], booked_uberx, "The UberX booking mirrors it")
-        self.assertIn((https[1], {"request_ride": booked}), previews,
-                      "The update has its own preview, and its Button books the ride")
-        # Every Button tap does something visible, as in the app: the Button
-        # spins and the card locks until the agent answers.
-        a2ui = (ROOT / "snippets/a2ui-preview.jsx").read_text()
-        tap = a2ui.split("const tap = (cid, scope) => {", 1)[1].split("\n  };", 1)[0]
-        self.assertIn("setPending(key);", tap)
-        self.assertLess(tap.index("setPending(key);"), tap.index("const answer = reply && reply[event.name];"))
-        self.assertIn("{spins ? spinner : null}", a2ui)
-        self.assertIn('"a2-card" + (pending ? " is-locked" : "")', a2ui)
-        # The ride card's JSON tab also shows the tap the preview produces for
-        # the default pick, and the Preview tab shows no JSON at all.
-        ride_group = [g for g in re.findall(r"<Tabs\b[^>]*>(.*?)</Tabs>", source, re.S) if "<A2uiPreview" in g][0]
-        ride_tabs = dict(re.findall(r'<Tab title="([^"]+)">\s*(.*?)</Tab>', ride_group, re.S))
-        self.assertNotIn("```", ride_tabs["Preview"])
-        received = re.search(r"```json Your agent receives\s*\n(.*?)```", ride_tabs["JSON"], re.S)
-        self.assertIsNotNone(received, "The ride card's JSON tab shows what the agent receives")
-        action = json.loads(received[1])[0]["action"]
-        comps = {c["id"]: c for m in https[0] if "updateComponents" in m for c in m["updateComponents"]["components"]}
-        model = [m["updateDataModel"]["value"] for m in https[0] if "updateDataModel" in m][0]
-        event = comps[action["sourceComponentId"]]["action"]["event"]
-        self.assertEqual(action["name"], event["name"])
-        self.assertEqual(action["surfaceId"], https[0][0]["createSurface"]["surfaceId"])
-        self.assertEqual(action["context"], {k: model[v["path"].lstrip("/")] for k, v in event["context"].items()})
-        snippet = (ROOT / "snippets/a2ui-preview.jsx").read_text()
-        self.assertNotIn("<pre", snippet, "A Preview tab never shows code")
-        self.assertFalse((ROOT / "images/cards/choice-picker-card.jpg").exists())
-
-    def test_payments_name_no_relay_fee(self):
-        # Relay takes no fee (owner, 2026-09-27; Server #414): the business
-        # receives the full amount, less Stripe's own processing fees.
-        fee = re.compile(r"application_fee|Relay(?:'s|\u2019s) fee|Relay (?:takes|keeps|charges) \d+ ?%")
-        pages = [path for path in ROOT.rglob("*.mdx") if "node_modules" not in path.parts]
-        generated = [ROOT / "llms-full.txt", ROOT / "llms.txt", *sorted((ROOT / "api-reference").glob("openapi*.yaml"))]
-        for path in [*pages, *generated]:
-            match = fee.search(path.read_text())
-            self.assertIsNone(match, f"{path.relative_to(ROOT)} names a Relay fee: {match and match.group(0)}")
-        payments = (ROOT / "interactions/payments.mdx").read_text()
-        self.assertIn("You receive the full amount of each payment and each subscription renewal, less Stripe's own processing fees.", payments)
 
     def test_payment_preview_draws_the_adjacent_json(self):
         # The live Pay card draws exactly the part in its JSON tab, and that

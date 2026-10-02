@@ -65,8 +65,7 @@ def requests(text):
             code = re.sub(r'\b(?:async\s+)?fetch\s*\([^)]*\)\s*\{', '', code)
             if re.search(r'\bcurl\s+(?:[^\n]*|\\\n)', code) and lang.split(' ')[0] in {'bash', 'sh', 'shell', 'console'}:
                 variants.append('curl')
-            # The SDK's A2UI helpers (sendA2uiSurface and its siblings) send a Message too.
-            if lang.split(' ')[0] in {'typescript', 'ts', 'javascript', 'js'} and re.search(r'\b(?:(?:relay|client)\.(?!(?:webhooks\.(?:verify|unwrap)|events\.(?:on|off))\b)[\w.]+|Relay\.createAgent|\w+\.getNextPage|(?:send|update|delete)A2uiSurface|fetch)\s*\(', code):
+            if lang.split(' ')[0] in {'typescript', 'ts', 'javascript', 'js'} and re.search(r'\b(?:(?:relay|client)\.(?!(?:webhooks\.(?:verify|unwrap)|events\.(?:on|off))\b)[\w.]+|Relay\.createAgent|\w+\.getNextPage|fetch)\s*\(', code):
                 variants.append('typescript')
         if variants:
             result.append((block.start(), block.end(), set(variants)))
@@ -114,8 +113,15 @@ def check_04(root):
 
 
 def check_05(root):
+    # Framework guides own a provider matrix and preserved provider examples.
+    # Pin their approved shape rather than applying a single-runtime walkthrough.
+    frameworks = {
+        'pipecat.mdx': ['Before you start', 'Connect', 'Providers', 'Grok',
+                        'ElevenLabs voices and Agents', 'Next steps'],
+        'livekit.mdx': ['Before you start', 'Connect', 'Providers', 'When it fails', 'Next steps'],
+    }
     for p in [q for q in (root / 'integrations').glob('*.mdx') if q.name not in {'index.mdx', 'agent-prompt.mdx'}]:  # the index is a card directory, not a connect walkthrough
-        assert heads(p.read_text()) == CONNECT, f'{p.relative_to(root)}: Connect skeleton out of order'
+        assert heads(p.read_text()) == frameworks.get(p.name, CONNECT), f'{p.relative_to(root)}: Connect skeleton out of order'
 
 
 def check_06(root):

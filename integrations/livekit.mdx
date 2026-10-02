@@ -1,0 +1,74 @@
+---
+title: "LiveKit"
+description: "Connect a LiveKit Agents session to a Relay call, then choose its model, voice and character providers."
+keywords: ["Relay", "LiveKit", "AgentSession", "RelayLiveKitCall", "providers", "Grok", "OpenAI Realtime", "Gemini Live", "ElevenLabs", "Cartesia", "Simli", "LemonSlice", "Rive"]
+---
+
+Connect a LiveKit Agents `AgentSession` to a Relay call with `RelayLiveKitCall`, and choose the providers inside the session.
+
+**LiveKit is the framework integration; its models and voices are swappable providers.** Relay's transport takes the place of a LiveKit room for the call.
+
+## Before you start
+
+- Python 3.10 or newer and [uv](https://docs.astral.sh/uv/).
+- An Agent Token in `RELAY_AGENT_TOKEN`.
+- A Google API key in `GOOGLE_API_KEY` for the Gemini Live example.
+
+The Python package is `relaymessenger-livekit`; TypeScript uses `@relaymessenger/livekit`. [Answer a call](/calls/index#answer-a-call) has installation and connection examples for both.
+
+## Connect
+
+Run the Python example from the SDK. It answers the next call, passes the caller's camera to Gemini Live, and sends a test video feed back:
+
+```bash
+git clone --branch main https://github.com/RelayMessenger/Relay-SDK.git
+cd Relay-SDK/python/relaymessenger-livekit
+RELAY_BASE_URL=https://api.relayapp.im \
+  uv run --with 'livekit-agents[google]' examples/gemini_live_video_agent.py
+```
+
+The example joins the call through Relay:
+
+```python
+call = await RelayLiveKitCall.connect(api_key=token, call_id=call_id, base_url=BASE_URL)
+```
+
+The model stays inside the LiveKit session:
+
+```python
+session: AgentSession[None] = AgentSession(llm=google.realtime.RealtimeModel())
+call.attach(session)  # audio in, audio out, and the caller's camera
+```
+
+The complete [example](https://github.com/RelayMessenger/Relay-SDK/blob/main/python/relaymessenger-livekit/examples/gemini_live_video_agent.py) waits for peer audio, starts the session and closes it when the call ends. Open the agent's chat in Relay and start a video call to try it.
+
+## Providers
+
+Choose a speech-to-speech brain, or combine speech recognition, a model and a voice. Add an avatar or an on-device character when you need a face. Framework support and a Relay example are listed separately.
+
+| Role | Provider | Connection |
+| --- | --- | --- |
+| Brains | Grok | Supported by LiveKit: [xAI plugin](https://github.com/livekit/agents/tree/main/livekit-plugins/livekit-plugins-xai). |
+| Brains | OpenAI Realtime | Supported by LiveKit: [OpenAI plugin](https://github.com/livekit/agents/tree/main/livekit-plugins/livekit-plugins-openai). |
+| Brains | Gemini Live | Relay example: [Gemini Live video agent](#connect). |
+| Voices | ElevenLabs | Supported by LiveKit: [ElevenLabs plugin](https://github.com/livekit/agents/tree/main/livekit-plugins/livekit-plugins-elevenlabs). |
+| Voices | Cartesia | Supported by LiveKit: [Cartesia plugin](https://github.com/livekit/agents/tree/main/livekit-plugins/livekit-plugins-cartesia). |
+| Avatars | Simli | Supported by LiveKit: [avatar plugin](https://docs.livekit.io/agents/models/avatar/plugins/simli/). Uses a LiveKit room; Relay-specific wiring is not shown here. |
+| Avatars | LemonSlice | Supported by LiveKit: [avatar plugin](https://docs.livekit.io/agents/models/avatar/plugins/lemonslice/). Uses a LiveKit room; Relay-specific wiring is not shown here. |
+| Character | Rive | Relay's `RelayRive` drives the [on-device character](/calls/rive#let-your-framework-drive-the-mouth). |
+
+LiveKit's avatar plugins publish a separate participant into a LiveKit room. The Relay adapter attaches audio and camera to an `AgentSession` instead; the avatar plugin list is framework support, not a Relay call recipe. For a Relay video example, see [Simli through Pipecat](/calls/avatars).
+
+ElevenLabs as a voice provider here is separate from the [direct ElevenLabs integration](/integrations/elevenlabs), where an ElevenLabs Agent owns the dialogue.
+
+## When it fails
+
+- The call rings out: start the example before you call. It must join within the 32-second ring.
+- You need the connection state: inspect `call.diagnostics().summary` in the Python adapter.
+- You need video in TypeScript: use `call.videoInput`, as shown in [video calls](/calls/video).
+
+## Next steps
+
+- [Answer a call](/calls/index#answer-a-call)
+- [Send and receive video](/calls/video)
+- [Drive an on-device character](/calls/rive)

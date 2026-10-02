@@ -1,0 +1,61 @@
+---
+title: "ElevenLabs"
+description: "Connect an ElevenLabs Agent directly to a Relay call with the @relaymessenger/elevenlabs WebSocket bridge."
+keywords: ["Relay", "ElevenLabs", "ElevenLabs Agents", "direct integration", "@relaymessenger/elevenlabs", "WebSocket", "voice", "calls", "Rive"]
+---
+
+Connect an ElevenLabs Agent to a Relay call through the direct `@relaymessenger/elevenlabs` package and the ElevenLabs Agents WebSocket.
+
+**ElevenLabs runs the dialogue; the Relay package carries the audio.** This direct path uses Relay's call transport rather than a Pipecat pipeline or LiveKit session.
+
+## Before you start
+
+- Node.js `22.22.3` or newer.
+- An Agent Token in `RELAY_AGENT_TOKEN`.
+- An ElevenLabs agent ID in `ELEVENLABS_AGENT_ID`, and `ELEVENLABS_API_KEY` for a private agent.
+- An agent configured with `pcm_16000` input audio. [Audio formats](/calls/elevenlabs#before-you-start) lists the supported output rates.
+
+## Connect
+
+```bash
+npm install @relaymessenger/sdk @relaymessenger/elevenlabs
+```
+
+The package's [answer-calls example](https://github.com/RelayMessenger/Relay-SDK/blob/11a913638ac52b8d1e0e4a497c4a7c2b44354c87/packages/elevenlabs/examples/answer-calls.ts) listens for `call.created` and passes the call ID to `ElevenLabsCall.connect`.
+
+The bridge joins the Relay call, gets a signed ElevenLabs URL for a private agent, and opens the Agents WebSocket. It sends the caller's audio as `user_audio_chunk` and plays ElevenLabs' `audio` events back into the call.
+
+Use [Answer calls with an ElevenLabs Agent](/calls/elevenlabs) for the package API and connection example.
+
+## Send it a message
+
+Run its answer-calls example, open the agent's chat in Relay and start a voice call.
+
+## What it can do
+
+| Relay feature | Direct bridge |
+| --- | --- |
+| Answer a call | `ElevenLabsCall.connect` joins the Relay call and starts the ElevenLabs session. |
+| Run the dialogue | ElevenLabs owns speech recognition, the model, the voice and turn-taking. |
+| Handle interruption | Clears queued audio and drops stale audio by `event_id`. |
+| Keep the session alive | Answers `ping` with `pong` and the same `event_id`. |
+| Receive events | Passes transcripts, responses and tool calls to `onEvent`. |
+| End the call | Ends the Relay call when ElevenLabs ends the session; closes the session when the Relay call ends. |
+| Animate a character | Audio alignment drives the [Rive character](/calls/rive) on the phone. |
+
+### Use ElevenLabs as a provider
+
+To give your own model an ElevenLabs voice, choose [Pipecat's ElevenLabs recipes](/integrations/pipecat#elevenlabs-voices-and-agents) or the [LiveKit voice provider](/integrations/livekit#providers).
+
+The Python `elevenlabs-voice-agent` and `elevenlabs-agents-call` recipes, including their setup, code samples, feature comparison and troubleshooting, are together on the Pipecat page.
+
+## When it fails
+
+- The call rings out: start the example before you call; it must join within the 32-second ring.
+- The audio formats differ: match the agent's input to `inputSampleRate` and choose a [supported output format](/calls/elevenlabs#when-it-fails).
+
+## Next steps
+
+- [Answer calls with an ElevenLabs Agent](/calls/elevenlabs)
+- [Use ElevenLabs in Pipecat](/integrations/pipecat#elevenlabs-voices-and-agents)
+- [Connect your runtime](/integrations/index)

@@ -22,6 +22,7 @@ from urllib.request import Request, urlopen
 import zlib
 
 import origins
+from api_navigation import HIDDEN_OPERATIONS
 from hosted_cache import CANONICAL_PATHS, canonical_cache_pairs
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -223,11 +224,18 @@ def normalize_hosted_agent_prompt(body):
     """Remove only Mintlify's generated wrapper from /agent-prompt.md.
 
     Mintlify publishes this one Markdown file through its documentation
-    renderer. The renderer prepends a Documentation Index and turns bare
-    Markdown URLs into links. The authored prompt remains strict: after those
-    presentation-only changes, every word and URL must still match.
+    renderer. The renderer prepends a Documentation Index, turns bare
+    Markdown URLs into links, and can append a Mintlify attribution footer.
+    The authored prompt remains strict: after those presentation-only changes,
+    every word and URL must still match.
     """
     text = body.decode("utf-8")
+    # Observed on staging 2026-10-01. Only this exact terminal paragraph is
+    # presentation, not arbitrary footer text or an instruction inside the body.
+    text = text.rstrip().removesuffix(
+        "\n\nThis documentation is built and hosted on [Mintlify](https://mintlify.com), "
+        "a developer documentation platform."
+    )
     text = re.sub(
         r"\A> ## Documentation Index\n"
         r"> Fetch the complete documentation index at: .+\n"
@@ -372,8 +380,14 @@ def check_discovery(root, config, index, complete):
             raise SystemExit(f"llms.txt is missing navigation route: {markdown}")
     contract = (root / "api-reference/openapi.yaml").read_text()
     pattern = r"^\s+operationId:\s*[\"']?([A-Za-z0-9_.-]+)"
-    expected_ids = set(re.findall(pattern, contract, re.M))
+    # Match the public inventory built by build-llms.py, not person-only
+    # operations retained in the byte-for-byte server contract.
+    expected_ids = set(re.findall(pattern, contract, re.M)) - HIDDEN_OPERATIONS
     carried_ids = set(re.findall(pattern, complete, re.M))
+    if carried_ids & HIDDEN_OPERATIONS:
+        raise SystemExit(
+            f"llms-full.txt contains person-only operation IDs: {sorted(carried_ids & HIDDEN_OPERATIONS)}"
+        )
     if not expected_ids or expected_ids - carried_ids:
         raise SystemExit(f"llms-full.txt is missing current contract operation IDs: {sorted(expected_ids - carried_ids)}")
     return authored, sorted(expected_ids)

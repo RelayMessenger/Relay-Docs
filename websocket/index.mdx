@@ -161,6 +161,14 @@ To run the TypeScript agent, run `npm install @relaymessenger/sdk tsx` in a new 
 
 Redact the `Authorization` header from logs. The reply's idempotency key comes from `event_id`, so an event Relay delivers again never sends a second reply. When a reply takes long, such as a model call, store the event in the event callback and reply from a separate worker, as in [acknowledge events](/websocket/acknowledgements); an agent that keeps state rebuilds it in the FULL sync callback, as in [reconnect and recover](/websocket/full-sync).
 
+Name each [event type](/events) you want with `subscribed_events`, once per type. The SDKs name every type they know; a raw client names its own:
+
+```text
+wss://api.relayapp.im/v1/websocket?subscribed_events=message.received&subscribed_events=call.created
+```
+
+A connection that names no types receives every type, including types Relay adds later. All connections of one agent share one stream, so Relay sends only the types that every open connection accepts, and a connection that names none accepts every type. An event of a type left out is not kept for later.
+
 <Warning>
 Two agents that both run one of these examples answer each other without end. Before you connect two of your own agents, reply only when the event's `data.sender_handle.kind` is `"user"`, or stop after a set number of turns.
 </Warning>
@@ -177,7 +185,7 @@ Upgrade: websocket
 
 ## When it fails
 
-A `400` means the query string is wrong: send none, or exactly `observe=true`. A `401` means the token is missing or revoked, and a `409` means a webhook subscription exists. If the connection closes after the upgrade, read the [disconnect reasons](/websocket/protocol#when-it-fails) and the [recovery procedure](/websocket/full-sync).
+A `400` means the query string is wrong: send only `observe=true` and `subscribed_events`, once per event type. A `401` means the token is missing or revoked, and a `409` means a webhook subscription exists. If the connection closes after the upgrade, read the [disconnect reasons](/websocket/protocol#when-it-fails) and the [recovery procedure](/websocket/full-sync).
 
 ## Next steps
 

@@ -1,0 +1,124 @@
+---
+title: "Selection fields"
+description: "List picker inputs, limits, identifier aliases, and server-owned answer metadata."
+keywords: ["list picker", "selection", "sections", "selected_ids", "selected_values", "reply_message"]
+---
+
+Send a `selection` part with exactly one of `options` or `sections`.
+
+```json Prompt
+{
+  "type": "selection",
+  "title": "Delivery",
+  "subtitle": "Choose your delivery speed.",
+  "multiple": false,
+  "sections": [{
+    "title": "Shipping",
+    "options": [{
+      "id": "express",
+      "label": "Express",
+      "subtitle": "Next business day",
+      "image_url": "https://example.com/express.png"
+    }]
+  }],
+  "reply_message": {
+    "title": "Delivery selected",
+    "subtitle": "We have your choice."
+  }
+}
+```
+
+## Prompt fields
+
+**`multiple` defaults to `true`; `false` requires exactly one chosen option.**
+
+<Note>
+Relay app versions released before the list picker ignore `multiple: false`: a person on one of them can check several options, and Relay refuses that answer with a 422. Prefer `multiple: true` until everyone has the new app, unless you need exactly one answer.
+</Note>
+
+| Field | Limit or meaning |
+| --- | --- |
+| `title` | Required, 1 to 60 characters. Heads the card and picker. |
+| `subtitle` | Optional, 0 to 512 characters. Supplies the card's second line. |
+| `multiple` | Optional boolean. Applies to the whole picker. |
+| `options` | Flat list, 1 to 25 options. Alternative to `sections`. |
+| `sections` | 1 to 10 groups, each with a `title` of 1 to 24 characters and at least one option. **1 to 25 options total**, across all sections. |
+| `reply_message.title` | Required when `reply_message` is supplied, 1 to 512 characters. Answered bubble title. |
+| `reply_message.subtitle` | Optional, 0 to 512 characters. Answered bubble subtitle. |
+
+Every length limit counts the text as sent, before trimming. Titles, labels, and subtitles are then trimmed for storage, and an optional subtitle that is blank after trimming is stored as absent. Array order determines section and option order. Only an agent sends the prompt, with at most one selection per Message; a selection and buttons cannot share a Message.
+
+### Option fields
+
+| Field | Limit or meaning |
+| --- | --- |
+| `id` | 1 to 200 characters. Stable, case-sensitive identifier, unique across the whole picker. Supply `id` or `value`. |
+| `value` | Compatibility alias for `id`. A value-only input accepts 1 to 100 characters matching `^[A-Za-z0-9][A-Za-z0-9._:-]*$`. If both fields are supplied, they must match; the alias can then use the full 200-character ID limit. |
+| `label` | Required, 1 to 24 characters when `id` is supplied. Value-only inputs retain 1 to 80 characters. |
+| `subtitle` | Optional row description, 0 to 72 characters. |
+| `image_url` | Optional HTTPS URL, at most 2,048 characters. Image beside the option inside the picker. |
+
+## Reply input
+
+The user's Message contains plain text followed by this metadata part, with `reply_to.message_id` and `reply_to.part_index` pointing to the source selection.
+
+```json Reply input
+{
+  "type": "selection_response",
+  "selected_values": ["express"],
+  "selected_ids": ["express"]
+}
+```
+
+**`selected_values` is required, including for id-only options.** `selected_ids` is optional; when supplied, `selected_ids` must equal `selected_values`, in the same order.
+
+Each array has 1 to 25 unique identifiers of 1 to 200 characters, chosen from the source in source order. The source's `multiple: false` permits exactly one.
+
+The text is literal `• ` plus each chosen source label joined with `\n`. Exact legacy labels joined with `, ` remain accepted. Use the identifiers and `reply_to` to handle the answer.
+
+## Stored answer
+
+Relay derives `selected_ids` from the source, including for value-only prompts, and copies `reply_message` from the source when supplied.
+
+```json Stored reply
+{
+  "type": "selection_response",
+  "selected_values": ["express"],
+  "selected_ids": ["express"],
+  "reply_message": {
+    "title": "Delivery selected",
+    "subtitle": "We have your choice."
+  }
+}
+```
+
+This server-owned copy keeps the configured answered text available after the source Message is deleted. Set `reply_message` on the prompt; it is not an accepted reply input. Without it, the answered bubble uses the source title and chosen labels. The portable text remains the selected-label bullets in either case.
+
+## Prompt response
+
+Relay always includes flat `options` in display order, plus `sections` when supplied. Every returned option includes equal `id` and `value` fields, including legacy options; stored legacy labels up to 80 characters remain readable.
+
+```json Prompt response
+{
+  "type": "selection",
+  "title": "Topics",
+  "options": [
+    {"id": "research", "value": "research", "label": "Research"},
+    {"id": "design", "value": "design", "label": "Design"}
+  ],
+  "has_responded": false,
+  "selected_values": null,
+  "selected_ids": null,
+  "reactions": null
+}
+```
+
+The response echoes supplied `subtitle`, `multiple`, and `reply_message`. An omitted `multiple` still means `true`.
+
+`has_responded`, `selected_values`, and `selected_ids` are scoped to the authenticated viewer. Both arrays are equal and in source order; they are `null` before the viewer answers or when their answer Message no longer exists, and always `null` for an agent. An agent's `has_responded` is always `false`; read received answer Messages instead.
+
+## See also
+
+- [Send a selection](/interactions/selection)
+- [Message parts](/messages/parts)
+- [Replies](/messages/replies)
