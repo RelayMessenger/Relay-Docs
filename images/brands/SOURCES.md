@@ -11,6 +11,7 @@ the 256 px resize of `hermes.png`; each such edit is named in the notes below.
 | `anthropic.svg` | Anthropic | https://github.com/simple-icons/simple-icons/blob/develop/icons/anthropic.svg | CC0 1.0, https://github.com/simple-icons/simple-icons#license | 2026-09-11 |
 | `claude.svg` | Claude | https://github.com/simple-icons/simple-icons/blob/develop/icons/claude.svg | CC0 1.0, https://github.com/simple-icons/simple-icons#license | 2026-09-11 |
 | `cline.svg` | Cline | https://cline.bot/assets/branding/brand/cline-brand-assets.zip, `General Logos/Bot/SVG/BOT_LIGHT.svg` | https://cline.bot/brand | 2026-09-11 |
+| `pipecat.svg`, `livekit.svg`, `elevenlabs.svg` | Black marks from each brand kit (added in #279); `fill` set to `currentColor` on 2026-10-02 so the sidebar icon shows on dark. Paths unchanged. |
 | `cloudflare.svg` | Cloudflare | https://github.com/simple-icons/simple-icons/blob/develop/icons/cloudflare.svg | CC0 1.0, https://github.com/simple-icons/simple-icons#license | 2026-09-11 |
 | `cursor.svg` | Cursor | https://ptht05hbb1ssoooe.public.blob.vercel-storage.com/assets/brand/cursor-brand-assets.zip, `General Logos/Cube/SVG/CUBE_25D.svg` | https://cursor.com/brand | 2026-09-11 |
 | `gemini.svg` | Google Gemini | https://www.gstatic.com/lamda/images/gemini_sparkle_aurora_33f86dc0c0257da337c63.svg | https://about.google/brand-resource-center/ | 2026-09-11 |
