@@ -143,6 +143,7 @@ INSTRUCTION_REWRITES = {
     '"staging profile"': '"production profile"',
     '"RELAY_PROFILE": "staging"': '"RELAY_PROFILE": "production"',
     "| npm tags | `latest`, `staging` |": "| npm tag | `latest` |",
+    '"environment":"staging",': '"environment":"production",',
 }
 PROSE_REWRITES = (
     (re.compile(r"The `staging` tag\s+selects the current prerelease, which the command above installs\."), "The command above installs the `latest` release."),
@@ -155,6 +156,10 @@ STAGING_INSTRUCTION_REFERENCE = re.compile(
     + r"|(?<![\w-])staging[-\s]+(?:agent[-\s]+)?token\b"
     r"|token\s+from\s+staging\b|staging\s+API\s+(?:root|origin)\b"
     r"|STAGING_RELAY_AGENT_TOKEN\b"
+    # Prose that tells a production reader to use staging (a MHacks student
+    # built a staging agent from "A staging agent" on 2026-10-03 and the
+    # production app could never reach it).
+    r"|(?<![\w@-])staging\s+(?:agent|CLI|address|settings)\b"
     r'|"RELAY_PROFILE":\s*"staging"'
     r"|Configure staging\b|Staging package\b|published staging tag\b"
     r'|<span id="staging-package" />|"profile":\s*"staging"|\benv\.staging\.vars\b',

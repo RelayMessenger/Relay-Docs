@@ -93,7 +93,7 @@ both light and dark. See the notes above for each.
 ## Marks that still need a second file for dark backgrounds
 
 These publish one mark per background. The file here is the light-background one,
-so it disappears on dark. Left as-is on staging.
+so it disappears on dark. Left as-is for now.
 
 | File | Dark-background twin |
 | --- | --- |

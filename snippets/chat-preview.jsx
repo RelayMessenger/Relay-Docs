@@ -1,6 +1,6 @@
 // A Relay chat drawn the way the Relay iOS app draws it, for the Messages,
 // Chats and Calls pages. Every number below is read from Relay-iOS
-// origin/staging 0517992d; each comment names the Swift file and line.
+// 0517992d; each comment names the Swift file and line.
 //
 // The page passes the exact JSON its "JSON" tab shows as `json`, and the
 // preview reads its words from that object, so the two cannot drift
@@ -23,7 +23,7 @@
 // (RelayMediaRowView.swift:99-113, 336-371). Several photos in a row carry
 // no tail.
 //
-// The place card and the document card follow Relay-iOS origin/staging
+// The place card and the document card follow Relay-iOS
 // 1ef73e93 (Views/Transcript/RelayLocationRows.swift,
 // Views/Transcript/RelayFileMessageRow.swift). The place map is a crop of
 // the app's own map, marker included, from Relay-iOS .context/forensics/
@@ -422,7 +422,7 @@ export const ChatPreview = ({ scene, json, label }) => {
   };
 
   // Tapback pile over a bubble's top corner, copied from Relay-iOS
-  // origin/staging 1ef73e93 Views/Transcript/RelayTapbackBalloon.swift
+  // 1ef73e93 Views/Transcript/RelayTapbackBalloon.swift
   // (RelayTapbackGeometry and layoutSubviews): one balloon per reactor, Ø34,
   // centred 2.83pt inside the corner edge and 10.33pt above the top edge;
   // older balloons step 19.985419pt toward the screen centre; only the front
