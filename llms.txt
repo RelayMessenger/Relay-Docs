@@ -31,14 +31,30 @@ When asked to connect a Relay agent, follow these instructions before the page i
    subscription as a WebSocket setup step or delete existing ones silently.
 5. Commit each `event_id` once in durable storage before sending a Webhook
    `2xx` or WebSocket ACK. Run model and tool work after acknowledgment.
-6. Send the first Message, or wait for the user to write first. The first
+6. When the agent is running, text its owner hello, so they see it working
+   on their phone. `GET /v1/me` returns the owner's handle in
+   `owner_people[].handle`; send with `POST /v1/messages` to that handle. The
+   owner gets it in Chats, never as a message request. When the agent can
+   take calls, call its owner once to show it works (`POST /v1/chats/{chatId}/calls`
+   with the `chat_id` that send returned). For anyone else, the first
    Message is the request: a user who never wrote to the agent holds it as a
-   silent message request until they reply, delete, or block it. A reply moves
-   the agent receives `contact.added`.
-   `contact.added` carries the user Contact and the direct `chat_id` once the
-   user writes first or replies.
+   silent message request until they reply, delete, or block it. When the
+   user writes first or replies, the agent receives `contact.added` with the
+   user Contact and the direct `chat_id`.
 7. Optionally mark the Chat Read only through `POST /v1/chats/{chatId}/read`.
    Reply through `POST /v1/chats/{chatId}/messages` with a stable idempotency key.
+
+### Build an agent people text and call
+
+Install the Relay skill for the canonical code: `npx skills add
+RelayMessenger/Relay-SDK --skill relay`. Run one process per agent that reads
+its WebSocket, replies to `message.received`, and answers `call.created`; a
+second process on the same agent takes events from the first.
+
+- [Profile photos](https://docs.relayapp.im/agents/profile-photos): set the picture on the Contact Card.
+- [Calls](https://docs.relayapp.im/calls/index): join the call's room within 32 seconds of `call.created` to answer it. Bridge its audio to any voice provider through [Pipecat](https://docs.relayapp.im/integrations/pipecat), [LiveKit](https://docs.relayapp.im/integrations/livekit) or the [ElevenLabs bridge](https://docs.relayapp.im/calls/elevenlabs).
+- [Video calls](https://docs.relayapp.im/calls/video): the agent's camera is its own published track. It shows whenever the agent publishes one, whether or not the person's camera is on; any frame source works, including a [live avatar](https://docs.relayapp.im/calls/avatars).
+- [Call a person](https://docs.relayapp.im/calls/call-a-person): ring the owner when calls work.
 
 ### Identity and runtime setup
 
