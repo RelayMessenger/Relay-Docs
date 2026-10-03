@@ -120,6 +120,25 @@ class RegressionTests(unittest.TestCase):
                     ["staging origin in production content"],
                 )
 
+    def test_production_mode_rejects_staging_environment_prose(self):
+        for text in (
+            "- A staging agent, Agent Token, and webhook signing secret.",
+            "Its non-secret staging settings use `https://api.relayapp.im`.",
+            "The staging CLI includes the signed local forwarder:",
+            "The staging address is `https://api.relayapp.im`.",
+            "This is the staging agent's first page.",
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(
+                    example_errors(text + "\n", "production"),
+                    ["staging origin in production content"],
+                )
+
+    def test_production_mode_keeps_command_and_handle_spellings(self):
+        self.assertFalse(example_errors(
+            "npx relaymessenger agents create\n\"handle\": \"acme_support\"\n", "production"
+        ))
+
     def test_production_mode_accepts_plain_package_references(self):
         self.assertFalse(example_errors(
             "npm install @relaymessenger/sdk\n`@relaymessenger/cli` is `latest`\n"

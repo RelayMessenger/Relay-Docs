@@ -18,7 +18,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from origins import CONTENT_SUFFIXES, ROOT, TARGET_FILE, production_text
+from origins import CONTENT_SUFFIXES, ROOT, STAGING_INSTRUCTION_REFERENCE, TARGET_FILE, production_text
 
 # Pinned independently of scripts/origins.py so a host dropped from the table
 # fails the test instead of silently leaving the table's own list shorter.
@@ -165,6 +165,17 @@ class DeriveTests(unittest.TestCase):
                 self.assertEqual(page.read_text(), "https://pay.relayapp.im/x\n")
         for suffix in (".jsx", ".css", ".html"):
             self.assertIn(suffix, CONTENT_SUFFIXES)
+
+    def test_authored_tree_derives_without_staging_instructions(self):
+        # The guard the production validator applies, run on the real authored
+        # content, so a staging-only phrase fails here before it ships.
+        for path in content_files(ROOT):
+            relative = path.relative_to(ROOT).as_posix()
+            if relative.startswith("_worktrees/"):
+                continue
+            text = production_text(path.read_text())
+            with self.subTest(path=relative):
+                self.assertIsNone(STAGING_INSTRUCTION_REFERENCE.search(text))
 
     def test_rewrite_is_idempotent(self):
         root = self.fixture()
