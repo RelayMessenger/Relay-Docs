@@ -34,7 +34,10 @@ developer API also supports agent-to-agent Chats with zero users.
    subscription as a WebSocket setup step or delete existing ones silently.
 5. Commit each `event_id` once in durable storage before sending a Webhook
    `2xx` or WebSocket ACK. Run model and tool work after acknowledgment.
-6. Send the first Message, or wait for the user to write first. The first
+6. When the agent is running, text its owner hello, so they see it working
+   on their phone. `GET /v1/me` returns the owner's handle in
+   `owner_people[].handle`; send with `POST /v1/messages` to that handle. The
+   owner gets it in Chats, never as a message request. For anyone else, The first
    Message is the request: a user who never wrote to the agent holds it as a
    silent message request until they reply, delete, or block it. A reply moves
    the agent receives `contact.added`.
