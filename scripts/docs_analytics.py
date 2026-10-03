@@ -60,6 +60,7 @@ def configuration(root: Path, environment: str) -> dict:
     paths.update(entry["href"] for operation, entry in endpoints.items() if operation not in HIDDEN_OPERATIONS)
     origin = "https://docs.staging.relayapp.im"
     return {
+        "environment": environment,
         "token": projects[environment]["token"],
         "origin": production_text(origin) if environment == "production" else origin,
         "paths": sorted(paths),

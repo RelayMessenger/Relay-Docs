@@ -238,7 +238,7 @@ def render_full(
                 "",
                 f"HTTP reference: {BASE_URL}/api-reference/openapi.mint.yaml",
                 "",
-                "````yaml api-reference/openapi.staging.yaml (person-only operations left out)",
+                "````yaml api-reference/openapi.mint.yaml (person-only operations left out)",
                 strip_hidden_paths(openapi_text).rstrip(),
                 "````",
             ]
