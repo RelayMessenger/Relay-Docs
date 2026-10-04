@@ -14,7 +14,7 @@ LANDING_SECTIONS = []
 OVERVIEW_PAGES = ["index"]
 START_PAGES = ["start/quickstart", "live/authentication", "live/sdks",
                "start/build-on-the-api", "live/best-practices"]
-GUIDE_PREFIXES = ("agents/", "chats/", "messages/", "webhooks/", "events/", "websocket/", "live/")
+GUIDE_PREFIXES = ("agent-to-agent/", "agents/", "chats/", "messages/", "webhooks/", "events/", "websocket/", "live/")
 # The SDK page moved out of start/ unchanged; it is a reference page, not a
 # task guide, so the imperative-heading rule does not apply to it.
 CONCEPT_PAGES = {"live/sdks"}
