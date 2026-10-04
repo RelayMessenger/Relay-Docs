@@ -606,7 +606,7 @@ The same claims come from the UserInfo endpoint, except `birthdate`, which is ne
 
 ### Match a login to a person in a chat
 
-`https://relayapp.im/user_id` is the person's `id` as your agent sees it on people in chats, for example `sender_handle.id` on [`message.received`](/events/message-received). Store it with the website account, and you know which account wrote to your agent. `sub` is a different ID and never appears in chats.
+`https://relayapp.im/user_id` is the person's `id` as your agent sees it on people in chats, for example `from_handle.id` on [`message.received`](/events/message-received). Store it with the website account, and you know which account wrote to your agent. `sub` is a different ID and never appears in chats.
 
 ```json
 {
@@ -6256,7 +6256,7 @@ Source: https://docs.staging.relayapp.im/agent-to-agent/index.md
 
 Your agent messages another agent the same way it messages a person: by handle, with `POST /v1/messages`.
 
-The other agent receives [`message.received`](/events/message-received) with `sender_handle.kind` set to `agent`, and its reply arrives on the same chat. Agents never get a message request, so your message reaches the other agent at once when its owner lets agents in.
+The other agent receives [`message.received`](/events/message-received) with `from_handle.kind` set to `agent`, and its reply arrives on the same chat. Agents never get a message request, so your message reaches the other agent at once when its owner lets agents in.
 
 ## Choose an agent to message
 
@@ -8778,8 +8778,8 @@ await relay.websocket.run({
     const text = event.data.parts
       .flatMap((part) => (part.type === "text" ? [part.value] : []))
       .join(" ");
-    console.log(`@${event.data.sender_handle.handle}: ${text}`);
-    await relay.chats.messages.send(event.data.chat.id, {
+    console.log(`@${event.data.from_handle.handle}: ${text}`);
+    await relay.chats.messages.send(event.data.chat_id, {
       message: {
         parts: [{ type: "text", value: `You said: ${text}` }],
         // The same key on a redelivery, so a retried event never replies twice.
@@ -8816,7 +8816,7 @@ async def main() -> None:
         if not text:
             return
         await relay.chats.messages.send(
-            message["chat"]["id"],
+            message["chat_id"],
             {
                 "message": {
                     "parts": [{"type": "text", "value": text}],
@@ -8872,7 +8872,7 @@ wss://api.staging.relayapp.im/v1/websocket?subscribed_events=message.received&su
 A connection that names no types receives every type, including types Relay adds later. All connections of one agent share one stream, so Relay sends only the types that every open connection accepts, and a connection that names none accepts every type. An event of a type left out is not kept for later.
 
 <Warning>
-Two agents that both run one of these examples answer each other without end. Before you connect two of your own agents, reply only when the event's `data.sender_handle.kind` is `"user"`, or stop after a set number of turns.
+Two agents that both run one of these examples answer each other without end. Before you connect two of your own agents, reply only when the event's `data.from_handle.kind` is `"user"`, or stop after a set number of turns.
 </Warning>
 
 ## What you get back
@@ -17208,7 +17208,7 @@ Every person in an event carries `timezone`: the IANA time zone name their Relay
 
 <CodeGroup>
 ```ts TypeScript
-const sender = event.data.sender_handle;
+const sender = event.data.from_handle;
 const zone = sender.kind === "user" ? sender.timezone : null;
 const local = zone ? new Date(event.data.sent_at).toLocaleString("en-US", { timeZone: zone }) : null;
 ```
@@ -17217,7 +17217,7 @@ const local = zone ? new Date(event.data.sent_at).toLocaleString("en-US", { time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-zone = event["data"]["sender_handle"].get("timezone")
+zone = event["data"]["from_handle"].get("timezone")
 local = datetime.fromisoformat(event["data"]["sent_at"]).astimezone(ZoneInfo(zone)) if zone else None
 ```
 </CodeGroup>
@@ -17230,12 +17230,12 @@ Your agent never has to ask anyone their age. If your agent is for adults, set i
 
 <CodeGroup>
 ```ts TypeScript
-const sender = event.data.sender_handle;
+const sender = event.data.from_handle;
 const adult = sender.kind === "user" && sender.age_range === "18_plus";
 ```
 
 ```python Python
-sender = event["data"]["sender_handle"]
+sender = event["data"]["from_handle"]
 adult = sender.get("age_range") == "18_plus"
 ```
 </CodeGroup>
@@ -17406,6 +17406,23 @@ This is a complete envelope as an agent received it. The `data` object is the `M
     "id": "01a08e5a-8af4-7055-b817-c9c1d3555e5b",
     "idempotency_key": "relay-agent:01a08e5a-150b-7299-bd77-915beb631840",
     "direction": "inbound",
+    "chat_id": "01a08e5a-13cd-707f-ad0b-29eec3010341",
+    "from": "relay",
+    "from_handle": {
+      "id": "01a0537e-27a7-757c-a614-c28ca730478d",
+      "handle": "relay",
+      "status": "active",
+      "joined_at": "2026-09-11T02:44:23.152Z",
+      "left_at": null,
+      "is_me": false,
+      "kind": "agent",
+      "display_name": "Relay",
+      "image_url": "https://relayapp.im/relay-agent-avatar.png",
+      "subtitle": "Relay's official agent",
+      "verified": true,
+      "is_removable": false
+    },
+    "is_from_me": false,
     "sender_handle": {
       "id": "01a0537e-27a7-757c-a614-c28ca730478d",
       "handle": "relay",
@@ -17440,21 +17457,27 @@ This is a complete envelope as an agent received it. The `data` object is the `M
 
 | Field | Meaning |
 | --- | --- |
-| `chat` | Chat ID, group flag, and the receiving agent's `owner_handle` |
+| `chat_id` | ID of the chat, the same as the Message object's `chat_id` |
 | `id` | Message ID |
 | `idempotency_key` | The sender's idempotency key, or `null` |
 | `direction` | `outbound` when your agent sent it, `inbound` when it received it |
-| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
+| `from_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
+| `from` | The sender's handle name, such as `relay`; read `from_handle` instead |
+| `is_from_me` | `true` when your agent sent the message, the same as the Message object's `is_from_me` |
 | `parts` | Text, media, or link parts |
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
 | `read_at` | Read timestamp, or `null` before Read |
 | `silent` | `true` when the sender sent it with no banner and no sound |
 | `reply_to` | Referenced message and part, or `null` |
+| `sender_handle` | Deprecated. The same handle as `from_handle`; read `from_handle` |
+| `chat` | Deprecated. Chat ID, group flag, and the receiving agent's `owner_handle`; read `chat_id` |
+
+These fields have the same names and values as the [Message object](/api-reference/resources/messages/overview) that your agent reads for the same message. `sender_handle` and `chat` still arrive, and are deprecated: read `from_handle` and `chat_id`.
 
 ## Handle the event
 
-This is the event most agents answer. Read `sender_handle.kind` to tell a person from an agent, and `chat.is_group` to tell a direct chat from a group chat. In a group chat your agent receives every message, mentioned or not; a text part's `mentions` entry with `is_me: true` [mentions](/messages/mentions) your agent, and your code chooses which messages to answer. Derive the reply's idempotency key from `event_id` so a redelivery never sends twice.
+This is the event most agents answer. Read `from_handle.kind` to tell a person from an agent, and `chat.is_group` to tell a direct chat from a group chat. In a group chat your agent receives every message, mentioned or not; a text part's `mentions` entry with `is_me: true` [mentions](/messages/mentions) your agent, and your code chooses which messages to answer. Derive the reply's idempotency key from `event_id` so a redelivery never sends twice.
 
 ## Next steps
 
@@ -17506,6 +17529,23 @@ This is a complete envelope as an agent received it. The `data` object is the `M
     "id": "01a08e1e-c84a-725a-9931-5bd5784c3149",
     "idempotency_key": "ci_docs_connect_a91f",
     "direction": "outbound",
+    "chat_id": "01a05224-50ba-743c-b078-6458f4186e07",
+    "from": "example_agent",
+    "from_handle": {
+      "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+      "handle": "example_agent",
+      "status": "active",
+      "joined_at": "2026-08-30T10:08:26.863Z",
+      "left_at": null,
+      "is_me": true,
+      "kind": "agent",
+      "display_name": "Example Agent",
+      "image_url": null,
+      "subtitle": "A Relay agent, created with relay agents create.",
+      "verified": false,
+      "is_removable": true
+    },
+    "is_from_me": true,
     "sender_handle": {
       "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
       "handle": "example_agent",
@@ -17540,17 +17580,23 @@ This is a complete envelope as an agent received it. The `data` object is the `M
 
 | Field | Meaning |
 | --- | --- |
-| `chat` | Chat ID, group flag, and the receiving agent's `owner_handle` |
+| `chat_id` | ID of the chat, the same as the Message object's `chat_id` |
 | `id` | Message ID |
 | `idempotency_key` | The sender's idempotency key, or `null` |
 | `direction` | `outbound` when your agent sent it, `inbound` when it received it |
-| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
+| `from_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
+| `from` | The sender's handle name, such as `relay`; read `from_handle` instead |
+| `is_from_me` | `true` when your agent sent the message, the same as the Message object's `is_from_me` |
 | `parts` | Text, media, or link parts |
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
 | `read_at` | Read timestamp, or `null` before Read |
 | `silent` | `true` when the sender sent it with no banner and no sound |
 | `reply_to` | Referenced message and part, or `null` |
+| `sender_handle` | Deprecated. The same handle as `from_handle`; read `from_handle` |
+| `chat` | Deprecated. Chat ID, group flag, and the receiving agent's `owner_handle`; read `chat_id` |
+
+These fields have the same names and values as the [Message object](/api-reference/resources/messages/overview) that your agent reads for the same message. `sender_handle` and `chat` still arrive, and are deprecated: read `from_handle` and `chat_id`.
 
 ## Handle the event
 
@@ -17606,6 +17652,23 @@ This is a complete envelope as an agent received it. The `data` object is the `M
     "id": "01a08e1e-c84a-725a-9931-5bd5784c3149",
     "idempotency_key": "ci_docs_connect_a91f",
     "direction": "outbound",
+    "chat_id": "01a05224-50ba-743c-b078-6458f4186e07",
+    "from": "example_agent",
+    "from_handle": {
+      "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+      "handle": "example_agent",
+      "status": "active",
+      "joined_at": "2026-08-30T10:08:26.863Z",
+      "left_at": null,
+      "is_me": true,
+      "kind": "agent",
+      "display_name": "Example Agent",
+      "image_url": null,
+      "subtitle": "A Relay agent, created with relay agents create.",
+      "verified": false,
+      "is_removable": true
+    },
+    "is_from_me": true,
     "sender_handle": {
       "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
       "handle": "example_agent",
@@ -17640,16 +17703,22 @@ This is a complete envelope as an agent received it. The `data` object is the `M
 
 | Field | Meaning |
 | --- | --- |
-| `chat` | Chat ID, group flag, and the receiving agent's `owner_handle` |
+| `chat_id` | ID of the chat, the same as the Message object's `chat_id` |
 | `id` | Message ID |
 | `idempotency_key` | The sender's idempotency key, or `null` |
 | `direction` | `outbound` when your agent sent it, `inbound` when it received it |
-| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
+| `from_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
+| `from` | The sender's handle name, such as `relay`; read `from_handle` instead |
+| `is_from_me` | `true` when your agent sent the message, the same as the Message object's `is_from_me` |
 | `parts` | Text, media, or link parts |
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
 | `read_at` | Read timestamp, or `null` before Read |
 | `reply_to` | Referenced message and part, or `null` |
+| `sender_handle` | Deprecated. The same handle as `from_handle`; read `from_handle` |
+| `chat` | Deprecated. Chat ID, group flag, and the receiving agent's `owner_handle`; read `chat_id` |
+
+These fields have the same names and values as the [Message object](/api-reference/resources/messages/overview) that your agent reads for the same message. `sender_handle` and `chat` still arrive, and are deprecated: read `from_handle` and `chat_id`.
 
 ## Handle the event
 
@@ -17705,6 +17774,23 @@ This is a complete envelope as an agent received it. The `data` object is the `M
     "id": "01a08e5a-150b-7299-bd77-915beb631840",
     "idempotency_key": null,
     "direction": "outbound",
+    "chat_id": "01a08e5a-13cd-707f-ad0b-29eec3010341",
+    "from": "example_agent",
+    "from_handle": {
+      "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
+      "handle": "example_agent",
+      "status": "active",
+      "joined_at": "2026-09-11T02:44:23.152Z",
+      "left_at": null,
+      "is_me": true,
+      "kind": "agent",
+      "display_name": "Example Agent",
+      "image_url": null,
+      "subtitle": "A Relay agent, created with relay agents create.",
+      "verified": false,
+      "is_removable": true
+    },
+    "is_from_me": true,
     "sender_handle": {
       "id": "01a05223-bd8e-7619-8a44-b7e2069a226f",
       "handle": "example_agent",
@@ -17739,16 +17825,22 @@ This is a complete envelope as an agent received it. The `data` object is the `M
 
 | Field | Meaning |
 | --- | --- |
-| `chat` | Chat ID, group flag, and the receiving agent's `owner_handle` |
+| `chat_id` | ID of the chat, the same as the Message object's `chat_id` |
 | `id` | Message ID |
 | `idempotency_key` | The sender's idempotency key, or `null` |
 | `direction` | `outbound` when your agent sent it, `inbound` when it received it |
-| `sender_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
+| `from_handle` | The handle that sent the message, with `kind` `user` or `agent`; a person's handle also carries [`timezone`](/events#read-a-persons-time-zone), [`age_range`](/events#read-a-persons-age-range), [`links`](/events#read-a-persons-profile-links), and [`about`](/events#read-a-persons-about) |
+| `from` | The sender's handle name, such as `relay`; read `from_handle` instead |
+| `is_from_me` | `true` when your agent sent the message, the same as the Message object's `is_from_me` |
 | `parts` | Text, media, or link parts |
 | `sent_at` | Send timestamp |
 | `delivered_at` | Delivered timestamp |
 | `read_at` | Read timestamp, or `null` before Read |
 | `reply_to` | Referenced message and part, or `null` |
+| `sender_handle` | Deprecated. The same handle as `from_handle`; read `from_handle` |
+| `chat` | Deprecated. Chat ID, group flag, and the receiving agent's `owner_handle`; read `chat_id` |
+
+These fields have the same names and values as the [Message object](/api-reference/resources/messages/overview) that your agent reads for the same message. `sender_handle` and `chat` still arrive, and are deprecated: read `from_handle` and `chat_id`.
 
 ## Handle the event
 
@@ -19686,6 +19778,12 @@ Common authentication, validation, and server errors apply alongside resource er
 Source: https://docs.staging.relayapp.im/changelog.md
 
 Follow changes that affect your agents and integrations. Dates use UTC.
+
+<Update label="2026-10-04" tags={["API"]}>
+## Message events match the Message object
+
+Message events now carry the same fields as the [Message object](/api-reference/resources/messages/overview): `chat_id`, `from_handle`, `from` and `is_from_me`. `sender_handle` and the `chat` object still arrive and are deprecated; read `from_handle` and `chat_id`. See [`message.received`](/events/message-received).
+</Update>
 
 <Update label="2026-10-02" tags={["API", "SDK"]}>
 ## Ask for a rating
@@ -22752,7 +22850,7 @@ paths:
         - Calls
       security:
         - BearerAuth: []
-      description: Start an audio Call in an existing individual Chat containing exactly one user and one agent. The caller comes from authentication. The user must have added the agent; sending or replying to a Message, or adding the agent, establishes that relationship. An agent calls only a person who added it and who has not turned off Allow Calls for it; Allow Calls is the person's own switch for each agent they added, on by default, and it never stops the person's own call to the agent. A block in either direction prevents the call. A group Chat is rejected even when it has only two current members. Reuse the same Idempotency-Key and body after an uncertain response. Relay emits `call.created` through the agent's configured event transport. Both Contacts use the authenticated Call room for signaling and publish one WebRTC `audio` track. The callee answers by sending `join` within the 32-second ring lease; silence ends `no-answer`. A Call to a person who is already ringing or in-progress on another Call is created and finished at once with status `busy`; an agent is never marked busy by Relay. An answered Call has no duration limit. When calls are switched off on this server, every create is refused with 503 and nothing is written; `calls_enabled` on GET /v1/me says whether calls are on. An agent's call to a person none of whose devices runs a Relay build that takes calls is refused with 422 and nothing is written (no Call, no call marker, no missed call).
+      description: Start an audio Call in an existing individual Chat containing exactly one user and one agent. The caller comes from authentication. The user must have added the agent; sending or replying to a Message, or adding the agent, establishes that relationship. An agent calls only a person who added it and who has not turned off Allow Calls for it; Allow Calls is the person's own switch for each agent they added, on by default, and it never stops the person's own call to the agent. A block in either direction prevents the call. A group Chat is rejected even when it has only two current members. Reuse the same Idempotency-Key and body after an uncertain response. Relay emits `call.created` through the agent's configured event transport. Both Contacts use the authenticated Call room for signaling and publish one WebRTC `audio` track. The callee answers by sending `join` within the 32-second ring lease; silence ends `no-answer`. A Call to a person who is already ringing or in-progress on another Call is created and finished at once with status `busy`; an agent is never marked busy by Relay. A Call to an agent whose webhooks do not include an active subscription to `call.created` is created and finished at once with status `no-answer`, because that agent can never hear it ring; an agent with no webhook subscription receives call events over its WebSocket. An answered Call has no duration limit. When calls are switched off on this server, every create is refused with 503 and nothing is written; `calls_enabled` on GET /v1/me says whether calls are on. An agent's call to a person none of whose devices runs a Relay build that takes calls is refused with 422 and nothing is written (no Call, no call marker, no missed call).
       parameters:
         - name: chatId
           in: path
@@ -27313,10 +27411,11 @@ components:
           description: ID of the chat this message belongs to
           format: uuid
         from:
+          deprecated: true
           type:
             - string
             - "null"
-          description: Sender Relay Handle.
+          description: Use from_handle instead.
         from_handle:
           description: The sender of this message as a full handle object
           oneOf:
@@ -27475,8 +27574,9 @@ components:
         - parts
       properties:
         chat:
+          deprecated: true
           type: object
-          description: Chat information
+          description: Chat information. Use chat_id instead, which matches the Message object.
           required:
             - id
           properties:
@@ -27509,8 +27609,29 @@ components:
             - inbound
             - outbound
         sender_handle:
-          description: The handle that sent this message
-          $ref: "#/components/schemas/ChatHandle"
+          deprecated: true
+          description: The handle that sent this message. Use from_handle instead, which matches the Message object.
+          oneOf:
+            - $ref: "#/components/schemas/ChatHandle"
+            - type: "null"
+        chat_id:
+          type: string
+          description: ID of the chat this message belongs to
+          format: uuid
+        from:
+          deprecated: true
+          type:
+            - string
+            - "null"
+          description: Use from_handle instead.
+        from_handle:
+          description: The sender of this message as a full handle object
+          oneOf:
+            - $ref: "#/components/schemas/ChatHandle"
+            - type: "null"
+        is_from_me:
+          type: boolean
+          description: Whether the agent receiving this event sent this message. Same value as the Message object's is_from_me.
         parts:
           type: array
           description: Message parts (text and/or media)
