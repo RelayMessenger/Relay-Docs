@@ -45,7 +45,7 @@ ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM_COMMIT = "af7f1802cbad49485c8753cb1ad503dd97ae1ada"
 UPSTREAM_STAGING_COMMIT = "af7f1802cbad49485c8753cb1ad503dd97ae1ada"
 UPSTREAM_SIZE = 360139
-UPSTREAM_SHA256 = "7ca002357a04610ee2012ae59d8f0789e9d44a000388ca926ea1ed68f44d96d9"
+UPSTREAM_SHA256 = "7ccdbec7f61f841a0ec0ffe8c2fe937aad7396fb449a069be46a50538620fbb1"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
