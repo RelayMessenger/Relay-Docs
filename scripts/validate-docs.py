@@ -568,8 +568,9 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server af7f1802 (PRs 482, 492, 503 and the rating and calls branches, merged); ratings, rating_request, rating events, no blocking relay, rive on contacts, call capability 422, ContactCardItem.handle string, form value, October 2, 2026.
 # Source authority: Relay-Server ed5608a1 (PR 519, merged); message events carry chat_id, from, from_handle and is_from_me, sender_handle and chat deprecated; a call to an agent that cannot hear it ends as no-answer, October 4, 2026.
 # Source authority: Relay-Server 78e958bd (PR 520, merged); MessageEvent.chat is not deprecated, it is the only place is_group lives, October 4, 2026.
+# Source authority: Relay-Server 6f50fcb6 (PR 516, merged); handles may be 2 to 32 characters, pattern ^[a-z][a-z0-9_]{1,31}$, October 4, 2026.
 expected_openapi_sha256 = (
-    "abe76bc8feadd85462ff4293eba9bc1b2cea44b9929b0fbc772a120d84efb365"
+    "79bd85b0150ef45ea4bbe5f498507dd86d784e7fbf6c3b299a5a81db091aacdd"
 )
 # Local candidate provenance is shared with the guide and contract gates;
 # it does not relabel the historical Server release as selection-capable.

@@ -43,10 +43,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # Carried from Server staging 736f112e: #488 an agent's Rive file (rive on Contact Card, chat handles and calls) and the rive DataChannel; #486 Message drops edited_at and unsent_at; #482 and #485 change no public schema they do not list, October 1, 2026.
 # Carried from Server staging af7f1802: rating_request part and rating.created, rating.updated and rating.deleted; GET /v1/contacts/{handle}/rating; only people rate (403 for agents); no blocking the built-in relay agent (403); rive on contact list and lookup; an agent call to a person with no calls-capable build is 422; ContactCardItem.handle is a string; form parts carry value (Server #482, #492 and the rating and calls branches; #504 at 76713bfc changes no contract byte), October 2, 2026.
 # Carried from Server staging 78e958bd: MessageEvent.chat is not deprecated, it carries is_group (Server #520); and from ed5608a1: message events carry the Message object's chat_id, from, from_handle and is_from_me, with sender_handle and chat deprecated (Server #519); a call to an agent with no call.created webhook ends at once as no-answer (1fd72a0a), October 4, 2026.
-UPSTREAM_COMMIT = "78e958bd35f5e7f33c1ce9b77ac11be1dac3afc8"
-UPSTREAM_STAGING_COMMIT = "78e958bd35f5e7f33c1ce9b77ac11be1dac3afc8"
-UPSTREAM_SIZE = 361290
-UPSTREAM_SHA256 = "abe76bc8feadd85462ff4293eba9bc1b2cea44b9929b0fbc772a120d84efb365"
+# Carried from Server staging 6f50fcb6: handles may be 2 characters, pattern ^[a-z][a-z0-9_]{1,31}$ (Server #516; #526 changes no contract byte), October 4, 2026.
+UPSTREAM_COMMIT = "6f50fcb69d1ce6dde8bf0fb0e12bd2ef379f0b09"
+UPSTREAM_STAGING_COMMIT = "6f50fcb69d1ce6dde8bf0fb0e12bd2ef379f0b09"
+UPSTREAM_SIZE = 362330
+UPSTREAM_SHA256 = "79bd85b0150ef45ea4bbe5f498507dd86d784e7fbf6c3b299a5a81db091aacdd"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
