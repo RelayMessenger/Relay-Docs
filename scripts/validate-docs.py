@@ -566,9 +566,11 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server fe702db3 (PR 479, merged); a person's about on every person object and Contact Card, and the birthdate scope in OAuth2Scope, October 1, 2026.
 # Source authority: Relay-Server 736f112e (PRs 488, 486, 485 and 482, merged); an agent's Rive file and the rive DataChannel; Message has no edited_at or unsent_at, October 1, 2026.
 # Source authority: Relay-Server af7f1802 (PRs 482, 492, 503 and the rating and calls branches, merged); ratings, rating_request, rating events, no blocking relay, rive on contacts, call capability 422, ContactCardItem.handle string, form value, October 2, 2026.
-# Source authority: owner ruling October 4, 2026; af7f1802 bytes with the handle pattern ^[a-z][a-z0-9_]{1,31}$ (2 to 32), the Relay-Server handle change landing in parallel, not yet merged, October 4, 2026.
+# Source authority: Relay-Server ed5608a1 (PR 519, merged); message events carry chat_id, from, from_handle and is_from_me, sender_handle and chat deprecated; a call to an agent that cannot hear it ends as no-answer, October 4, 2026.
+# Source authority: Relay-Server 78e958bd (PR 520, merged); MessageEvent.chat is not deprecated, it is the only place is_group lives, October 4, 2026.
+# Source authority: Relay-Server 6f50fcb6 (PR 516, merged); handles may be 2 to 32 characters, pattern ^[a-z][a-z0-9_]{1,31}$, October 4, 2026.
 expected_openapi_sha256 = (
-    "7ccdbec7f61f841a0ec0ffe8c2fe937aad7396fb449a069be46a50538620fbb1"
+    "79bd85b0150ef45ea4bbe5f498507dd86d784e7fbf6c3b299a5a81db091aacdd"
 )
 # Local candidate provenance is shared with the guide and contract gates;
 # it does not relabel the historical Server release as selection-capable.
@@ -643,12 +645,17 @@ if not delivery_status:
 delivery_values = re.findall(r"^        - (.+)$", delivery_status.group(1), re.M)
 if delivery_values != ["sent", "delivered", "read"]:
     raise SystemExit(f"DeliveryStatus drifted: {delivery_values}")
-# PR 214 keeps exactly these response mirrors deprecated; all other legacy
-# compatibility surfaces remain forbidden.
+# PR 214 keeps exactly these response mirrors deprecated; Server PR 519 keeps
+# the message event's sender_handle and from, and Message.from, deprecated
+# (owner ruling 2026-10-04; chat stays, Server PR 520). All other legacy compatibility surfaces remain forbidden.
 allowed_deprecated = {
     (schema, field)
     for schema in ("TextPartResponse", "schemas-TextPartResponse")
     for field in ("mention", "mention_range")
+} | {
+    ("Message", "from"),
+    ("MessageEvent", "sender_handle"),
+    ("MessageEvent", "from"),
 }
 actual_deprecated = set()
 schema = field = None
