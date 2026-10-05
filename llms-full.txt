@@ -7737,7 +7737,7 @@ To get a token without the CLI, open the agent in Relay Console and choose **Rot
 
 Use the options in the [CLI creation reference](/cli/reference/agents-create).
 
-For `--handle`, pass one word, such as `assistant`: 3 to 32 lowercase letters,
+For `--handle`, pass one word, such as `assistant`: 2 to 32 lowercase letters,
 numbers or underscores, starting with a letter. `--name` accepts 1 to 30 characters.
 `--subtitle <text>` is required for every agent: the line under the agent's name, 60 characters. `--description <text>` is what it can do, 2000 characters, and is required for public agents.
 To change the picture after creation, follow [Profile photos](/agents/profile-photos).
@@ -7886,7 +7886,7 @@ Keep local credentials while you investigate; the CLI retains them on every fail
 
 | Status | Cause | Next action |
 | --- | --- | --- |
-| `400` | The handle in the path is not a valid handle. | Send the agent's handle: one word, 3 to 32 lowercase letters, numbers, or underscores. |
+| `400` | The handle in the path is not a valid handle. | Send the agent's handle: one word, 2 to 32 lowercase letters, numbers, or underscores. |
 | `401` | The token is invalid, from another environment, or already revoked. | Check the token and its origin. |
 | `403` | The token belongs to another agent, or the agent is organization-managed. | Use the agent's own token, or Relay Console. |
 | `404` | No agent has that handle. | Check the handle with [List agents](/agents/list-agents). |
@@ -9236,7 +9236,7 @@ Choose **Create agent** on the grid and fill in the fields.
 | Field | What to enter |
 | --- | --- |
 | Name | The name people see beside the agent on their phone. |
-| Handle | One word: 3 to 32 lowercase letters, numbers or underscores, starting with a letter. Taken handles are refused. |
+| Handle | One word: 2 to 32 lowercase letters, numbers or underscores, starting with a letter. Taken handles are refused. |
 | Subtitle | Required. One line of up to 60 characters, shown under the agent's name. |
 | Description | What the agent can do, up to 2,000 characters. Optional for an unlisted agent, required for a public one. |
 | Category | Optional for an unlisted agent, required for a public one. |
@@ -19874,6 +19874,10 @@ Source: https://docs.staging.relayapp.im/changelog.md
 Follow changes that affect your agents and integrations. Dates use UTC.
 
 <Update label="2026-10-04" tags={["API"]}>
+## Handles may be 2 characters
+
+Agent handles may now be 2 characters: one word of 2 to 32 lowercase letters, numbers or underscores. See [Create an agent](/agents/create-agent).
+
 ## Message events match the Message object
 
 Message events now carry the same fields as the [Message object](/api-reference/resources/messages/overview): `chat_id`, `from_handle` and `is_from_me`. `sender_handle` still arrives and is deprecated; read `from_handle`. `from` is deprecated everywhere; read `from_handle`. See [`message.received`](/events/message-received).
@@ -20345,7 +20349,7 @@ paths:
           description: The authenticated developer agent's complete Handle.
           schema:
             type: string
-            pattern: '^[a-z][a-z0-9_]{2,31}$'
+            pattern: '^[a-z][a-z0-9_]{1,31}$'
           example: brave_cangoo
       responses:
         "204":
@@ -21588,6 +21592,15 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: Optional 1–255 character key for safe retries. The same key and body return the first voice memo; the same
+            key with a different body is refused with 409.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 255
       requestBody:
         required: true
         content:
@@ -21609,6 +21622,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "413":
           description: Voice memo file too large
           content:
@@ -22944,7 +22959,7 @@ paths:
         - Calls
       security:
         - BearerAuth: []
-      description: Start an audio Call in an existing individual Chat containing exactly one user and one agent. The caller comes from authentication. The user must have added the agent; sending or replying to a Message, or adding the agent, establishes that relationship. An agent calls only a person who added it and who has not turned off Allow Calls for it; Allow Calls is the person's own switch for each agent they added, on by default, and it never stops the person's own call to the agent. A block in either direction prevents the call. A group Chat is rejected even when it has only two current members. Reuse the same Idempotency-Key and body after an uncertain response. Relay emits `call.created` through the agent's configured event transport. Both Contacts use the authenticated Call room for signaling and publish one WebRTC `audio` track. The callee answers by sending `join` within the 32-second ring lease; silence ends `no-answer`. A Call to a person who is already ringing or in-progress on another Call is created and finished at once with status `busy`; an agent is never marked busy by Relay. A Call to an agent whose webhooks do not include an active subscription to `call.created` is created and finished at once with status `no-answer`, because that agent can never hear it ring; an agent with no webhook subscription receives call events over its WebSocket. An answered Call has no duration limit. When calls are switched off on this server, every create is refused with 503 and nothing is written; `calls_enabled` on GET /v1/me says whether calls are on. An agent's call to a person none of whose devices runs a Relay build that takes calls is refused with 422 and nothing is written (no Call, no call marker, no missed call).
+      description: Start an audio Call in an existing individual Chat containing exactly one user and one agent. The caller comes from authentication. The user must have added the agent; sending or replying to a Message, or adding the agent, establishes that relationship. An agent calls only a person who added it and who has not turned off Allow Calls for it; Allow Calls is the person's own switch for each agent they added, on by default, and it never stops the person's own call to the agent. A block in either direction prevents the call. A group Chat is rejected even when it has only two current members. Reuse the same Idempotency-Key and body after an uncertain response. Relay emits `call.created` through the agent's configured event transport. Both Contacts use the authenticated Call room for signaling and publish one WebRTC `audio` track. The callee answers by sending `join` within the 32-second ring lease; silence ends `no-answer`. When the other Contact's Call to you in this Chat is still ringing, a create answers 200 with that Call instead of starting a second one; joining its room answers it. A Call to a person who is already ringing or in-progress on another Call is created and finished at once with status `busy`; an agent is never marked busy by Relay. A Call to an agent whose webhooks do not include an active subscription to `call.created` is created and finished at once with status `no-answer`, because that agent can never hear it ring; an agent with no webhook subscription receives call events over its WebSocket. An answered Call has no duration limit. When calls are switched off on this server, every create is refused with 503 and nothing is written; `calls_enabled` on GET /v1/me says whether calls are on. An agent's call to a person none of whose devices runs a Relay build that takes calls is refused with 422 and nothing is written (no Call, no call marker, no missed call).
       parameters:
         - name: chatId
           in: path
@@ -22967,7 +22982,14 @@ paths:
               $ref: "#/components/schemas/CallCreateRequest"
       responses:
         "200":
-          description: The original Call for the same idempotent request.
+          description: |-
+            Nothing was created. Either the original Call for the same
+            idempotent request, or, when the other Contact in this Chat is
+            already calling you and that Call still rings, that ringing Call
+            (`from` is the other Contact). You are its callee: send `join` in
+            its Call room, as you would after any create, and the join answers
+            it. Two Contacts that call each other at the same moment therefore
+            end up on one Call.
           content:
             application/json:
               schema:
@@ -23207,7 +23229,7 @@ components:
       description: The agent's complete Handle.
       schema:
         type: string
-        pattern: '^[a-z][a-z0-9_]{2,31}$'
+        pattern: '^[a-z][a-z0-9_]{1,31}$'
       example: brave_cangoo
   schemas:
     CallContact:
