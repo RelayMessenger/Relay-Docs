@@ -1117,7 +1117,7 @@ export const ChatPreview = ({ scene, json, label }) => {
       <div key={key} style={{ width: size, height: size, borderRadius: size * 0.225, display: "flex", alignItems: "center", justifyContent: "center",
         background: "#0B75FF", ...extra }}>
         {/* The agent's picture is the Relay message ball (Relay-Website LandingHeader.astro). */}
-        <svg viewBox="0 0 1024 1024" style={{ width: "72%", height: "72%" }} aria-hidden="true" focusable="false">
+        <svg viewBox="0 0 1024 1024" style={{ width: "94%", height: "94%" }} aria-hidden="true" focusable="false">
           <path fill="#fff" d="M512 185C701 185 854 314 854 475C854 656 695 827 523 827C493 827 467 824 446 815C369 861 302 883 284 865C268 848 300 773 317 720C246 665 210 582 210 484C210 319 344 185 512 185Z" />
           <path fill="none" stroke="#0B75FF" strokeWidth="40" strokeLinecap="round" d="M372 514C372 470 408 434 452 434C496 434 532 470 532 514M600 514C600 470 636 434 680 434C724 434 760 470 760 514" />
         </svg>
@@ -1151,7 +1151,7 @@ export const ChatPreview = ({ scene, json, label }) => {
 .chatp-cs-word, .chatp-cs-back span { text-shadow: 0 0 8px rgba(0,0,0,.3); }
 .chatp-cs-back { position: absolute; left: 19.5px; top: 62px; height: 46px; box-sizing: border-box; padding: 0 16px 0 11px; border-radius: 23px; display: flex; align-items: center; font-size: 17px; font-weight: 600; letter-spacing: -0.43px; }
 .chatp-cs-back svg { width: 9px; height: 18px; fill: none; stroke: rgba(235,235,245,.6); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.chatp-cs-glass, .chatp-cs-disc.is-glass { background: rgba(255,255,255,.16); -webkit-backdrop-filter: blur(12px) saturate(1.6); backdrop-filter: blur(12px) saturate(1.6); box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); }
+.chatp-cs-glass, .chatp-cs-disc.is-glass { background: rgba(0,16,56,.42); -webkit-backdrop-filter: blur(12px) saturate(1.4); backdrop-filter: blur(12px) saturate(1.4); box-shadow: inset 0 0 0 1px rgba(120,170,255,.22); }
 .chatp-cs-word { position: absolute; left: 16px; right: 16px; top: ${picTop + PIC + 14}px; height: 26px; text-align: center; font-size: 20px; font-variant-numeric: tabular-nums; }
 .chatp-cs-col { position: absolute; right: 24px; bottom: 24px; display: flex; flex-direction: column; gap: 13px; }
 .chatp-cs-disc { width: 55px; height: 55px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
