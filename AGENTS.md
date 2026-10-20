@@ -66,7 +66,7 @@ Then follow the shape for the page type:
   clipboard access is unavailable. Do not embed that block in a human
   onboarding or installation page.
 - Keep Mintlify's native **Copy page** label honest.
-- Use `https://api.staging.relayapp.im` and `$RELAY_AGENT_TOKEN` in examples.
+- Use `https://api.relayapp.im` and `$RELAY_AGENT_TOKEN` in examples.
 - Show the maintained TypeScript SDK and equivalent raw HTTPS side by side,
   with the SDK first. Do not imply an unsupported framework, model provider,
   or host.
