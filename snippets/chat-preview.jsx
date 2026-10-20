@@ -893,6 +893,104 @@ export const ChatPreview = ({ scene, json, label }) => {
         ))}
       </div>
     );
+  } else if (scene === "call-incoming" || scene === "call-video" || scene === "call-avatar" || scene === "call-rive") {
+    // The call screen, every number from Relay-iOS 7cc3368e
+    // Relay/Calls/RelayCallView.swift (RelayCallScreenMetrics, 774-938), on
+    // the 17 Pro's 402 x 874 pt screen drawn at 0.6. The screen is always
+    // dark (RelayCallView.swift:109-110).
+    const call = json.call;
+    const agent = call.from.kind === "agent" ? call.from : call.to[0];
+    const name = agent.handle.charAt(0).toUpperCase() + agent.handle.slice(1);
+    title = name;
+    // The agent's video fills the screen aspect-filled
+    // (RelayCallSelfView.swift:62, scaleAspectFill), and so does its Rive
+    // (RelayCallRive.swift:613, fit .cover); either hides the picture
+    // (RelayCallView.swift:172). A still frame stands in for the feed.
+    const feeds = {
+      "call-video": "/images/chat/photo-mountain-lake.jpg",
+      "call-avatar": "/images/chat/call-avatar-face.jpg",
+      "call-rive": "/images/chat/call-rive-character.jpg",
+    };
+    const feed = feeds[scene];
+    const incoming = call.status === "ringing";
+    const S = 0.6;
+    const W = 402;
+    const H = 874;
+    // The picture centred (pictureTopInset: (874 - 161) / 2), its word line
+    // 14 pt under it; a ringing call shows no word (stateWord, .incoming:
+    // nil), a live one its elapsed time ("0:12", as the call bubble's
+    // in-progress state above).
+    const PIC = 161;
+    const picTop = (H - PIC) / 2;
+    const ground = GROUNDS.blue;
+    // AgentBackdrop.swift:36-46: the tint, four blurred copies of the picture
+    // sized and offset by the screen width, blur 48, saturate 1.7, opacity
+    // 0.32, then a 0.12 black scrim.
+    const copies = [[0.25, -0.18, -0.18], [0.5, 0.14, 0.14], [0.8, 0, 0], [1.25, 0, -0.06]];
+    const picture = (size, extra, key) => (
+      <div key={key} style={{ width: size, height: size, borderRadius: size * 0.225, display: "flex", alignItems: "center", justifyContent: "center",
+        background: `linear-gradient(${ground[0]}, ${ground[1]})`, color: "#fff", fontWeight: 700, fontSize: size * 0.38, ...extra }}>
+        {name.slice(0, 1)}
+      </div>
+    );
+    const glyphs = {
+      phone: <path d="M6.6 10.8a15.2 15.2 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z" />,
+      cameraOff: <g><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h9A1.5 1.5 0 0 1 15 7.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 3 16.5zM16 10l5-3v10l-5-3z" /><path d="M3 3l18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></g>,
+      mic: <g><rect x="9" y="2.5" width="6" height="12" rx="3" /><path d="M6 11a6 6 0 0 0 12 0M12 17v4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></g>,
+      more: <g><circle cx="5" cy="12" r="1.9" /><circle cx="12" cy="12" r="1.9" /><circle cx="19" cy="12" r="1.9" /></g>,
+      end: <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />,
+    };
+    // RelayCallControlStyle (RelayCallView.swift:940-1012): glass with a
+    // white glyph; camera off, glass with a red glyph (255, 34, 36); End and
+    // Decline red (227, 27, 29); Accept green.
+    const disc = (key, glyph, fill, color, rotate) => (
+      <div key={key} className={"chatp-cs-disc" + (fill ? "" : " is-glass")} style={{ background: fill || undefined, color }}>
+        <svg viewBox="0 0 24 24" style={{ transform: rotate ? `rotate(${rotate}deg)` : undefined }} aria-hidden="true" focusable="false">{glyphs[glyph]}</svg>
+      </div>
+    );
+    // RelayCallView.swift:346-367: Decline then Accept while it rings;
+    // otherwise camera (off: RelayCallController.swift:109), Mute, More, End.
+    const column = incoming
+      ? [disc("decline", "phone", "#E31B1D", "#fff", 135), disc("accept", "phone", "#34C759", "#fff")]
+      : [disc("camera", "cameraOff", null, "#FF2224"), disc("mute", "mic", null, "#fff"), disc("more", "more", null, "#fff"), disc("end", "end", "#E31B1D", "#fff")];
+    const CS = `
+.chatp-cs { position: relative; margin: 0 auto; width: ${W * S}px; height: ${H * S}px; border-radius: ${44 * S}px; overflow: hidden; background: #000; color: #fff; }
+.chatp-cs-in { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform: scale(${S}); transform-origin: 0 0; }
+.chatp-cs-layer { position: absolute; inset: -1px; }
+.chatp-cs-feed { position: absolute; inset: -1px; width: calc(100% + 2px) !important; height: calc(100% + 2px) !important; object-fit: cover; }
+.chatp-cs-word, .chatp-cs-back span { text-shadow: 0 0 8px rgba(0,0,0,.3); }
+.chatp-cs-back { position: absolute; left: 19.5px; top: 62px; height: 46px; box-sizing: border-box; padding: 0 16px 0 11px; border-radius: 23px; display: flex; align-items: center; font-size: 17px; font-weight: 600; letter-spacing: -0.43px; }
+.chatp-cs-back svg { width: 9px; height: 18px; fill: none; stroke: rgba(235,235,245,.6); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.chatp-cs-glass, .chatp-cs-disc.is-glass { background: rgba(255,255,255,.16); -webkit-backdrop-filter: blur(12px) saturate(1.6); backdrop-filter: blur(12px) saturate(1.6); box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); }
+.chatp-cs-word { position: absolute; left: 16px; right: 16px; top: ${picTop + PIC + 14}px; height: 26px; text-align: center; font-size: 20px; font-variant-numeric: tabular-nums; }
+.chatp-cs-col { position: absolute; right: 24px; bottom: 24px; display: flex; flex-direction: column; gap: 13px; }
+.chatp-cs-disc { width: 55px; height: 55px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.chatp-cs-disc svg { width: 25px; height: 25px; fill: currentColor; }
+`;
+    body = (
+      <div className="chatp-cs" role="img" aria-label={label}>
+        <style dangerouslySetInnerHTML={{ __html: CS }} />
+        <div className="chatp-cs-in">
+          <div className="chatp-cs-layer" style={{ background: `linear-gradient(${ground[0]}, ${ground[1]})` }}>
+            {copies.map(([size, x, y], i) => picture(size * W, {
+              position: "absolute", left: "50%", top: "50%", filter: "blur(48px) saturate(1.7)", opacity: 0.32,
+              transform: `translate(calc(-50% + ${x * W}px), calc(-50% + ${y * W}px))`,
+            }, i))}
+            <div className="chatp-cs-layer" style={{ background: "rgba(0,0,0,.12)" }} />
+          </div>
+          {feed ? <img className="chatp-cs-feed" src={feed} alt="" /> : picture(PIC, {
+            position: "absolute", left: (W - PIC) / 2, top: picTop, boxShadow: "inset 0 0 0 1px rgba(255,255,255,.18)",
+          })}
+          {incoming ? null : <div className="chatp-cs-word">0:12</div>}
+          <div className="chatp-cs-back chatp-cs-glass">
+            <svg viewBox="0 0 9 18" aria-hidden="true"><path d="M7.5 1.5L1.5 9l6 7.5" /></svg>
+            {picture(28, { marginLeft: 4, fontSize: 11 })}
+            <span style={{ marginLeft: 8.5 }}>{name}</span>
+          </div>
+          <div className="chatp-cs-col">{column}</div>
+        </div>
+      </div>
+    );
   }
 
   useEffect(() => () => { if (root.current && root.current.__raf) cancelAnimationFrame(root.current.__raf); }, []);

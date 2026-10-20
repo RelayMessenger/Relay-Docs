@@ -460,6 +460,23 @@ assert.equal(channels.length, 2, "Open again for the new id after a restart");
                 seen.add(scene)
         self.assertEqual(seen, scenes, "Every chat scene is used on a page")
 
+    def test_call_pages_draw_the_call_screen(self):
+        # Each Calls page about something the person sees on the call screen
+        # carries that screen, drawn from the Call object in its JSON tab: a
+        # ringing call shows Decline and Accept, a live one the agent's feed
+        # as a still frame, never a playing video.
+        snippet = (ROOT / "snippets/chat-preview.jsx").read_text()
+        for page, scene, status in (("calls/call-a-person.mdx", "call-incoming", "ringing"),
+                                    ("calls/video.mdx", "call-video", "in-progress"),
+                                    ("calls/avatars.mdx", "call-avatar", "in-progress"),
+                                    ("calls/rive.mdx", "call-rive", "in-progress")):
+            source = (ROOT / page).read_text()
+            self.assertIn(f'<ChatPreview scene="{scene}"', source, page)
+            self.assertIn(f'"status": "{status}"', source, page)
+        self.assertNotIn("<video", snippet)
+        self.assertIn('call.status === "ringing"', snippet)
+        self.assertIn('"rive"', (ROOT / "calls/rive.mdx").read_text())
+
     def test_reply_preview_answers_a_photo_sent_alone(self):
         # The example reply names part 0 of a message that holds only the
         # photo, so the app draws the photo once, joined by its reply line,
