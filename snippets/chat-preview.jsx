@@ -326,6 +326,69 @@ export const ChatPreview = ({ scene, json, label }) => {
 .chatp-ql-bar { position: relative; padding: 18px 56px 12px; text-align: center; font-size: 17px; font-weight: 600; letter-spacing: -0.43px; }
 .chatp-ql-page { flex: 1; min-height: 0; margin: 4px 28px 28px; overflow: hidden; line-height: 0; }
 .chatp-ql-page img { display: block; width: 100% !important; height: auto; box-shadow: 0 2px 12px rgba(0,0,0,.12); }
+/* Conversation header: ChatView.swift:3691-3694 (60pt avatar, the name
+   capsule tucked 5pt under it, 5 x 14 padding), 3717 and 3726 (activity
+   15pt secondary, emoji 4pt before it), 3793 (capsule radius 20);
+   ChatNavigationChrome.swift:706-733 (name 17pt bold, chevron 4pt after it,
+   tertiary). Agents are squircles, 0.225 of the side (ChatView.swift
+   :4229-4231, SharedViews.swift:296). The glass is drawn as a soft platter. */
+.chatp-head { display: flex; flex-direction: column; align-items: center; padding-bottom: 4px; }
+.chatp-head-avatar { position: relative; z-index: 1; line-height: 0; }
+.chatp-head-pill { position: relative; margin-top: -5px; max-width: 300px; box-sizing: border-box; padding: 5px 14px; border-radius: 20px; text-align: center; background: rgba(255,255,255,.78); box-shadow: 0 2px 10px rgba(0,0,0,.08), inset 0 0 0 .5px rgba(0,0,0,.06); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+.dark .chatp-head-pill { background: rgba(58,58,60,.78); box-shadow: 0 2px 10px rgba(0,0,0,.3), inset 0 0 0 .5px rgba(255,255,255,.08); }
+.chatp-head-name { display: inline-flex; align-items: center; gap: 4px; font-size: 17px; line-height: 22px; font-weight: 700; letter-spacing: -0.43px; }
+.chatp-head-name svg { width: 6px; height: 11px; fill: none; stroke: rgba(60,60,67,.3); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.dark .chatp-head-name svg { stroke: rgba(235,235,245,.3); }
+.chatp-head-activity { display: flex; justify-content: center; gap: 4px; font-size: 15px; line-height: 20px; color: rgba(60,60,67,.6); }
+.dark .chatp-head-activity { color: rgba(235,235,245,.6); }
+.chatp-agentpic { flex: none; display: flex; align-items: center; justify-content: center; overflow: hidden; line-height: 1; font-weight: 400; }
+/* Group avatar: GroupAvatarView.swift:73-97 (systemGray5 squircle, a set
+   photo wins, 0.5pt hairline at 8%), 154-156 (two members' slots). */
+.chatp-groupav { display: block; position: relative; flex: none; overflow: hidden; background: #E5E5EA; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.08); }
+.dark .chatp-groupav { background: #2C2C2E; box-shadow: inset 0 0 0 .5px rgba(255,255,255,.08); }
+.chatp-groupav img { display: block; width: 100% !important; height: 100% !important; object-fit: cover; }
+.chatp-groupav .chatp-agentpic { position: absolute; }
+/* A system line: TranscriptMessageCell.swift:56-63 (Caption2, 11pt,
+   centred, 28pt inside the row), RelayTextMessageCell.swift:103 (20pt
+   around it). */
+.chatp-system { padding: 0 28px; text-align: center; font-size: 11px; line-height: 13px; letter-spacing: 0.06px; color: rgba(60,60,67,.6); }
+.dark .chatp-system { color: rgba(235,235,245,.6); }
+/* Rating request: RelayRatingRequestRow.swift:61-62, 117-146, the rich
+   card's 18 radius, 16 inset and 40pt capsule (RelayRichCardRow.swift:74-84). */
+.chatp-rating { box-sizing: border-box; width: ${BALLOON_MAX}px; padding: 16px; border-radius: 18px; white-space: normal; }
+.chatp-rating-title { font-size: 17px; line-height: 22px; font-weight: 600; letter-spacing: -0.43px; }
+.chatp-rating-body { margin-top: 12px; font-size: 15px; line-height: 20px; letter-spacing: -0.23px; color: rgba(60,60,67,.6); }
+.dark .chatp-rating-body { color: rgba(235,235,245,.6); }
+.chatp-rate { margin-top: 16px; display: block; width: 100%; min-height: 40px; border: 0; border-radius: 20px; padding: 8px 12px; background: rgba(11,117,255,.15); color: #0B75FF; font-family: inherit; font-size: 17px; line-height: 22px; font-weight: 600; letter-spacing: -0.43px; cursor: pointer; }
+.dark .chatp-rate { background: rgba(0,126,255,.2); color: #3D99FF; }
+/* Message request footer: RelayRequestFooterRow.swift:8, 23-50, 87-93
+   (11pt medium caption 24pt inside the row, 32pt grey capsules 12pt apart,
+   17pt medium, Add in the accent blue, Delete in system red). */
+.chatp-reqfoot { margin-top: 10px; }
+.chatp-reqfoot-text { padding: 0 24px; text-align: center; font-size: 11px; line-height: 13px; font-weight: 500; color: rgba(60,60,67,.6); }
+.dark .chatp-reqfoot-text { color: rgba(235,235,245,.6); }
+.chatp-reqfoot-buttons { display: flex; gap: 12px; margin-top: 10px; }
+.chatp-reqfoot-buttons button { flex: 1; height: 32px; border: 0; border-radius: 16px; background: rgba(120,120,128,.16); font-family: inherit; font-size: 17px; font-weight: 500; letter-spacing: -0.43px; cursor: pointer; }
+.dark .chatp-reqfoot-buttons button { background: rgba(120,120,128,.24); }
+.chatp-reqfoot-add { color: #0B75FF; }
+.dark .chatp-reqfoot-add { color: #007EFF; }
+.chatp-reqfoot-delete { color: #FF3B30; }
+.dark .chatp-reqfoot-delete { color: #FF453A; }
+/* The agent's Contact page header: ContactView+Agent.swift:605, 630-631,
+   762-794 (80pt picture, 8pt, the name 26pt semibold with the seal, 2pt, the
+   @handle 15pt secondary), 1132-1149 and 1188-1206 (the About card, radius
+   28, label subheadline secondary over the body text, 16 x 11 padding),
+   1078-1095 (its fill, secondarySystemBackground, 25,26,29 in dark). */
+.chatp-profile { display: flex; flex-direction: column; align-items: center; padding: 10px 0 4px; }
+.chatp-profile-name { margin-top: 8px; display: flex; align-items: center; gap: 6px; font-size: 26px; line-height: 32px; font-weight: 600; text-align: center; }
+.chatp-profile-name .chatp-card-seal { width: 20px; height: 20px; margin: 0; }
+.chatp-profile-handle { margin-top: 2px; font-size: 15px; line-height: 20px; color: rgba(60,60,67,.6); }
+.dark .chatp-profile-handle { color: rgba(235,235,245,.6); }
+.chatp-about { align-self: stretch; margin-top: 20px; padding: 11px 16px; border-radius: 28px; background: #F2F2F7; text-align: left; }
+.dark .chatp-about { background: #191A1D; }
+.chatp-about-label { font-size: 15px; line-height: 20px; letter-spacing: -0.23px; color: rgba(60,60,67,.6); }
+.dark .chatp-about-label { color: rgba(235,235,245,.6); }
+.chatp-about-value { margin-top: 2px; font-size: 17px; line-height: 22px; letter-spacing: -0.43px; }
 @media (prefers-reduced-motion: reduce) {
   .chatp *, .chatp *::before, .chatp *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   .chatp-typing i { opacity: .325; }
@@ -345,6 +408,7 @@ export const ChatPreview = ({ scene, json, label }) => {
   const [status, setStatus] = useState("completed");
   const [ranged, setRanged] = useState(true);
   const [maps, setMaps] = useState(null);
+  const [chatKind, setChatKind] = useState("direct");
   const root = useRef(null);
 
   // ---------- Pieces ----------
@@ -572,6 +636,44 @@ export const ChatPreview = ({ scene, json, label }) => {
 
   const parts = json && json.message && json.message.parts;
 
+  // An agent's picture: its one emoji on a soft ground (owner, 2026-09-26),
+  // or its initials on the default ground, as a squircle 0.225 of the side.
+  const agentPic = (handle, name, size, ground) => {
+    const emoji = EMOJI[handle];
+    const pair = GROUNDS[ground || "green"];
+    const initials = name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+    return (
+      <span className="chatp-agentpic" aria-hidden="true" style={{
+        width: size, height: size, borderRadius: size * 0.225, color: "#fff",
+        fontSize: emoji ? Math.round(size * 0.6) : Math.round(size * 0.38), fontWeight: emoji ? 400 : 700,
+        background: emoji ? `${pair[0]}33` : `linear-gradient(${pair[0]}, ${pair[1]})`,
+      }}>{emoji || initials}</span>
+    );
+  };
+  // A group's picture: the set photo, else its members on the grey
+  // squircle in Messages' two-member slots (GroupAvatarView.swift:154-156).
+  const groupPic = (size, photo, members) => (
+    <span className="chatp-groupav" aria-hidden="true" style={{ width: size, height: size, borderRadius: size * 0.225 }}>
+      {photo ? <img src={photo} alt="" /> : [[0.545, -0.119], [0.318, 0.199]].map(([d, o], i) => (
+        <span key={i} style={{ position: "absolute", left: size * (0.5 + o - d / 2), top: size * (0.5 + o - d / 2) }}>
+          {agentPic(members[i][0], members[i][1], size * d, members[i][2])}
+        </span>
+      ))}
+    </span>
+  );
+  // The conversation header: the picture, then the name capsule tucked
+  // under it, with the agent's activity under the name.
+  const header = (pic, name, activity) => (
+    <div className="chatp-head">
+      <div className="chatp-head-avatar">{pic}</div>
+      <div className="chatp-head-pill">
+        <div className="chatp-head-name">{name}<svg viewBox="0 0 6 11" aria-hidden="true" focusable="false"><path d="M1.2 1.2l3.6 4.3-3.6 4.3" /></svg></div>
+        {activity}
+      </div>
+    </div>
+  );
+  const systemLine = (text, key) => <div key={key} className="chatp-system" role="note" style={{ margin: "20px 0" }}>{text}</div>;
+
   if (scene === "send" || scene === "markdown") {
     const text = parts[0].value;
     body = row("in", bubble("in", scene === "markdown" ? markdown(text) : text));
@@ -748,6 +850,91 @@ export const ChatPreview = ({ scene, json, label }) => {
       </div>
     )) : <div role="status" aria-label="Not typing" style={{ height: 42 }} />;
     controls = segmented("Typing", [[true, "Typing"], [false, "Stopped"]], typing, setTyping);
+  } else if (scene === "activity") {
+    // The activity rides the direct chat's header, under the agent's name
+    // (ChatView.swift:3717-3727): the emoji, 4pt, then the text, wrapped and
+    // never cut. A group shows no activity in its header.
+    const act = json.activity;
+    body = header(agentPic("echo", "Echo", 60, "rose"), "Echo", act ? (
+      <div className="chatp-head-activity" role="status">{act.emoji ? <span aria-hidden="true">{act.emoji}</span> : null}<span>{act.text}</span></div>
+    ) : null);
+  } else if (scene === "group-profile" || scene === "group-photo") {
+    // The group's header and the system line the rename or new photo leaves
+    // in the transcript. The words are Relay Server's eventText
+    // (server/src/projection.ts:1366-1369): "<actor> changed the group name
+    // to <name>" and "<actor> changed the group photo".
+    isGroup = true;
+    const ev = json.data;
+    const actor = ev.changed_by_handle ? ev.changed_by_handle.display_name || ev.changed_by_handle.handle : "Relay";
+    const named = scene === "group-profile";
+    // The photo is a stand-in for the image at new_value: the person's
+    // mountain lake photo from the replies scene.
+    const pic = groupPic(60, named ? null : "/images/chat/photo-mountain-lake.jpg",
+      [["planner", "Planner", "teal"], ["echo", "Echo", "rose"]]);
+    body = [
+      <div key="h">{header(pic, named ? ev.new_value : "Weekend plans")}</div>,
+      systemLine(named ? `${actor} changed the group name to ${ev.new_value}` : `${actor} changed the group photo`, "s"),
+    ];
+  } else if (scene === "participants") {
+    // Each membership change is a system row in history; the app draws its
+    // system part as a centred line (TranscriptMessageCell.swift:37-63).
+    isGroup = true;
+    body = json.messages.map((m) => systemLine(m.parts[0].value, m.id));
+  } else if (scene === "rating") {
+    // The app draws the card from the agent's name (RatingRequest.swift
+    // :33-37); `value` carries the same title for any other client.
+    body = row("in", bubble("in", (
+      <div className="chatp-rating">
+        <div className="chatp-rating-title">{json.value}</div>
+        <div className="chatp-rating-body">Tell us what you think.</div>
+        <button type="button" className="chatp-rate">Rate</button>
+      </div>
+    ), { style: { padding: 0, borderRadius: 18 } }));
+  } else if (scene === "agent-card") {
+    // The card as a person opens it: the agent's Contact page header and
+    // the About card, which shows the description (ContactView+Agent.swift
+    // :319-324, else the subtitle).
+    const card = json;
+    const name = [card.first_name, card.last_name].filter(Boolean).join(" ");
+    title = name;
+    body = (
+      <div className="chatp-profile">
+        {agentPic(card.handle, name, 80, "green")}
+        <div className="chatp-profile-name">{name}{card.is_verified ? seal : null}</div>
+        <div className="chatp-profile-handle">@{card.handle}</div>
+        {card.description ? (
+          <div className="chatp-about"><div className="chatp-about-label">About</div><div className="chatp-about-value">{card.description}</div></div>
+        ) : null}
+      </div>
+    );
+  } else if (scene === "profile-photos") {
+    // The picture leads the direct chat's header, and in a group it sits
+    // beside the agent's last message (RelayTextMessageCell.swift:191-192).
+    const card = json;
+    const name = [card.first_name, card.last_name].filter(Boolean).join(" ");
+    const text = "Your forecast for tomorrow is ready.";
+    isGroup = chatKind === "group";
+    body = isGroup ? row("in", [
+      <div key="s" className="chatp-sender">{name}</div>,
+      <div key="b">{bubble("in", text)}</div>,
+    ], { avatar: <div className="chatp-avatar" style={{ background: "none" }}>{agentPic(card.handle, name, AVATAR, "green")}</div> })
+      : [<div key="h">{header(agentPic(card.handle, name, 60, "green"), name)}</div>, <div key="m" style={{ marginTop: 12 }}>{row("in", bubble("in", text))}</div>];
+    controls = segmented("Chat", [["direct", "Direct chat"], ["group", "Group chat"]], chatKind, setChatKind);
+  } else if (scene === "message-requests") {
+    // The chat waits in Requests; under the agent's first message the app
+    // explains it and offers Add and Delete (RelayRequestFooterRow.swift
+    // :8, 87-93). Block is on the agent's Contact page.
+    body = [
+      <div key="h">{header(agentPic("echo", "Echo", 60, "rose"), "Echo")}</div>,
+      <div key="m" style={{ marginTop: 12 }}>{row("in", bubble("in", json.message.parts[0].value))}</div>,
+      <div key="f" className="chatp-reqfoot">
+        <div className="chatp-reqfoot-text">This conversation is from someone you haven’t added.</div>
+        <div className="chatp-reqfoot-buttons">
+          <button type="button" className="chatp-reqfoot-add">Add</button>
+          <button type="button" className="chatp-reqfoot-delete">Delete</button>
+        </div>
+      </div>,
+    ];
   } else if (scene === "location") {
     // Request card, the Share My Location menu, then the person's card.
     // Models/LocationSharing.swift:141-163: Once first, then the three
@@ -891,6 +1078,104 @@ export const ChatPreview = ({ scene, json, label }) => {
         {Object.keys(states).map((s) => (
           <button type="button" key={s} aria-pressed={status === s} onClick={() => setStatus(s)}>{s}</button>
         ))}
+      </div>
+    );
+  } else if (scene === "call-incoming" || scene === "call-video" || scene === "call-avatar" || scene === "call-rive") {
+    // The call screen, every number from Relay-iOS 7cc3368e
+    // Relay/Calls/RelayCallView.swift (RelayCallScreenMetrics, 774-938), on
+    // the 17 Pro's 402 x 874 pt screen drawn at 0.6. The screen is always
+    // dark (RelayCallView.swift:109-110).
+    const call = json.call;
+    const agent = call.from.kind === "agent" ? call.from : call.to[0];
+    const name = agent.handle.charAt(0).toUpperCase() + agent.handle.slice(1);
+    title = name;
+    // The agent's video fills the screen aspect-filled
+    // (RelayCallSelfView.swift:62, scaleAspectFill), and so does its Rive
+    // (RelayCallRive.swift:613, fit .cover); either hides the picture
+    // (RelayCallView.swift:172). A still frame stands in for the feed.
+    const feeds = {
+      "call-video": "/images/chat/photo-mountain-lake.jpg",
+      "call-avatar": "/images/chat/call-avatar-face.jpg",
+      "call-rive": "/images/chat/call-rive-character.jpg",
+    };
+    const feed = feeds[scene];
+    const incoming = call.status === "ringing";
+    const S = 0.6;
+    const W = 402;
+    const H = 874;
+    // The picture centred (pictureTopInset: (874 - 161) / 2), its word line
+    // 14 pt under it; a ringing call shows no word (stateWord, .incoming:
+    // nil), a live one its elapsed time ("0:12", as the call bubble's
+    // in-progress state above).
+    const PIC = 161;
+    const picTop = (H - PIC) / 2;
+    const ground = GROUNDS.blue;
+    // AgentBackdrop.swift:36-46: the tint, four blurred copies of the picture
+    // sized and offset by the screen width, blur 48, saturate 1.7, opacity
+    // 0.32, then a 0.12 black scrim.
+    const copies = [[0.25, -0.18, -0.18], [0.5, 0.14, 0.14], [0.8, 0, 0], [1.25, 0, -0.06]];
+    const picture = (size, extra, key) => (
+      <div key={key} style={{ width: size, height: size, borderRadius: size * 0.225, display: "flex", alignItems: "center", justifyContent: "center",
+        background: `linear-gradient(${ground[0]}, ${ground[1]})`, color: "#fff", fontWeight: 700, fontSize: size * 0.38, ...extra }}>
+        {name.slice(0, 1)}
+      </div>
+    );
+    const glyphs = {
+      phone: <path d="M6.6 10.8a15.2 15.2 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z" />,
+      cameraOff: <g><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h9A1.5 1.5 0 0 1 15 7.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 3 16.5zM16 10l5-3v10l-5-3z" /><path d="M3 3l18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></g>,
+      mic: <g><rect x="9" y="2.5" width="6" height="12" rx="3" /><path d="M6 11a6 6 0 0 0 12 0M12 17v4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></g>,
+      more: <g><circle cx="5" cy="12" r="1.9" /><circle cx="12" cy="12" r="1.9" /><circle cx="19" cy="12" r="1.9" /></g>,
+      end: <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />,
+    };
+    // RelayCallControlStyle (RelayCallView.swift:940-1012): glass with a
+    // white glyph; camera off, glass with a red glyph (255, 34, 36); End and
+    // Decline red (227, 27, 29); Accept green.
+    const disc = (key, glyph, fill, color, rotate) => (
+      <div key={key} className={"chatp-cs-disc" + (fill ? "" : " is-glass")} style={{ background: fill || undefined, color }}>
+        <svg viewBox="0 0 24 24" style={{ transform: rotate ? `rotate(${rotate}deg)` : undefined }} aria-hidden="true" focusable="false">{glyphs[glyph]}</svg>
+      </div>
+    );
+    // RelayCallView.swift:346-367: Decline then Accept while it rings;
+    // otherwise camera (off: RelayCallController.swift:109), Mute, More, End.
+    const column = incoming
+      ? [disc("decline", "phone", "#E31B1D", "#fff", 135), disc("accept", "phone", "#34C759", "#fff")]
+      : [disc("camera", "cameraOff", null, "#FF2224"), disc("mute", "mic", null, "#fff"), disc("more", "more", null, "#fff"), disc("end", "end", "#E31B1D", "#fff")];
+    const CS = `
+.chatp-cs { position: relative; margin: 0 auto; width: ${W * S}px; height: ${H * S}px; border-radius: ${44 * S}px; overflow: hidden; background: #000; color: #fff; }
+.chatp-cs-in { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform: scale(${S}); transform-origin: 0 0; }
+.chatp-cs-layer { position: absolute; inset: -1px; }
+.chatp-cs-feed { position: absolute; inset: -1px; width: calc(100% + 2px) !important; height: calc(100% + 2px) !important; object-fit: cover; }
+.chatp-cs-word, .chatp-cs-back span { text-shadow: 0 0 8px rgba(0,0,0,.3); }
+.chatp-cs-back { position: absolute; left: 19.5px; top: 62px; height: 46px; box-sizing: border-box; padding: 0 16px 0 11px; border-radius: 23px; display: flex; align-items: center; font-size: 17px; font-weight: 600; letter-spacing: -0.43px; }
+.chatp-cs-back svg { width: 9px; height: 18px; fill: none; stroke: rgba(235,235,245,.6); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.chatp-cs-glass, .chatp-cs-disc.is-glass { background: rgba(255,255,255,.16); -webkit-backdrop-filter: blur(12px) saturate(1.6); backdrop-filter: blur(12px) saturate(1.6); box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); }
+.chatp-cs-word { position: absolute; left: 16px; right: 16px; top: ${picTop + PIC + 14}px; height: 26px; text-align: center; font-size: 20px; font-variant-numeric: tabular-nums; }
+.chatp-cs-col { position: absolute; right: 24px; bottom: 24px; display: flex; flex-direction: column; gap: 13px; }
+.chatp-cs-disc { width: 55px; height: 55px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.chatp-cs-disc svg { width: 25px; height: 25px; fill: currentColor; }
+`;
+    body = (
+      <div className="chatp-cs" role="img" aria-label={label}>
+        <style dangerouslySetInnerHTML={{ __html: CS }} />
+        <div className="chatp-cs-in">
+          <div className="chatp-cs-layer" style={{ background: `linear-gradient(${ground[0]}, ${ground[1]})` }}>
+            {copies.map(([size, x, y], i) => picture(size * W, {
+              position: "absolute", left: "50%", top: "50%", filter: "blur(48px) saturate(1.7)", opacity: 0.32,
+              transform: `translate(calc(-50% + ${x * W}px), calc(-50% + ${y * W}px))`,
+            }, i))}
+            <div className="chatp-cs-layer" style={{ background: "rgba(0,0,0,.12)" }} />
+          </div>
+          {feed ? <img className="chatp-cs-feed" src={feed} alt="" /> : picture(PIC, {
+            position: "absolute", left: (W - PIC) / 2, top: picTop, boxShadow: "inset 0 0 0 1px rgba(255,255,255,.18)",
+          })}
+          {incoming ? null : <div className="chatp-cs-word">0:12</div>}
+          <div className="chatp-cs-back chatp-cs-glass">
+            <svg viewBox="0 0 9 18" aria-hidden="true"><path d="M7.5 1.5L1.5 9l6 7.5" /></svg>
+            {picture(28, { marginLeft: 4, fontSize: 11 })}
+            <span style={{ marginLeft: 8.5 }}>{name}</span>
+          </div>
+          <div className="chatp-cs-col">{column}</div>
+        </div>
       </div>
     );
   }

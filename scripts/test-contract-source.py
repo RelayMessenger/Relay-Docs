@@ -460,6 +460,110 @@ assert.equal(channels.length, 2, "Open again for the new id after a restart");
                 seen.add(scene)
         self.assertEqual(seen, scenes, "Every chat scene is used on a page")
 
+    def test_call_pages_draw_the_call_screen(self):
+        # Each Calls page about something the person sees on the call screen
+        # carries that screen, drawn from the Call object in its JSON tab: a
+        # ringing call shows Decline and Accept, a live one the agent's feed
+        # as a still frame, never a playing video.
+        snippet = (ROOT / "snippets/chat-preview.jsx").read_text()
+        for page, scene, status in (("calls/call-a-person.mdx", "call-incoming", "ringing"),
+                                    ("calls/video.mdx", "call-video", "in-progress"),
+                                    ("calls/avatars.mdx", "call-avatar", "in-progress"),
+                                    ("calls/rive.mdx", "call-rive", "in-progress")):
+            source = (ROOT / page).read_text()
+            self.assertIn(f'<ChatPreview scene="{scene}"', source, page)
+            self.assertIn(f'"status": "{status}"', source, page)
+        self.assertNotIn("<video", snippet)
+        self.assertIn('call.status === "ringing"', snippet)
+        self.assertIn('"rive"', (ROOT / "calls/rive.mdx").read_text())
+
+    def test_on_screen_pages_show_their_preview(self):
+        # Each page about something a person sees carries the preview of it,
+        # and each scene draws the app's own words (Relay-iOS origin/staging
+        # 7cc3368e; Relay Server projection.ts eventText).
+        pages = {
+            "chats/activity.mdx": "activity", "chats/group-profile.mdx": "group-profile",
+            "chats/group-photo.mdx": "group-photo", "chats/participants.mdx": "participants",
+            "interactions/rating.mdx": "rating", "agents/contact-card.mdx": "agent-card",
+            "agents/profile-photos.mdx": "profile-photos", "agents/message-requests.mdx": "message-requests",
+        }
+        for page, name in pages.items():
+            self.assertIn(f'<ChatPreview scene="{name}"', (ROOT / page).read_text(), page)
+        snippet = (ROOT / "snippets/chat-preview.jsx").read_text()
+        def scene(name):
+            return snippet.split(f'scene === "{name}"', 1)[1].split("} else if (scene ===", 1)[0]
+        self.assertIn("act.text", scene("activity"))
+        self.assertIn("act.emoji", scene("activity"))
+        names = scene("group-profile")
+        self.assertIn("changed the group name to ${ev.new_value}", names)
+        self.assertIn("changed the group photo", names)
+        self.assertIn("m.parts[0].value", scene("participants"))
+        rating = scene("rating")
+        self.assertIn("{json.value}", rating)
+        self.assertIn("Tell us what you think.", rating)
+        self.assertIn(">Rate<", rating)
+        request = scene("message-requests")
+        self.assertIn("This conversation is from someone you haven\u2019t added.", request)
+        self.assertLess(request.index(">Add<"), request.index(">Delete<"))
+        self.assertIn('[["direct", "Direct chat"], ["group", "Group chat"]]', scene("profile-photos"))
+
+    def test_every_guide_page_is_classified_for_a_preview(self):
+        # Owner, 2026-10-20: the Activity page shipped with no mockup because
+        # nothing asked for one. Every Guides page now shows a preview of what
+        # the person sees, or is listed here as a page with nothing on screen.
+        # A new page fails until someone makes that choice.
+        no_screen = {
+            "setup and accounts": ["index", "start/quickstart", "start/build-on-the-api", "live/authentication",
+                                   "live/sdks", "live/best-practices", "console/index", "console/agents",
+                                   "console/organization", "agents/lifecycle", "agents/create-agent",
+                                   "agents/list-agents", "agents/delete-agent"],
+            "integrations": ["integrations/index", "integrations/claude-code", "integrations/cursor",
+                             "integrations/codex", "integrations/vs-code", "integrations/gemini-cli",
+                             "integrations/cline", "integrations/opencode", "integrations/pi",
+                             "integrations/openclaw", "integrations/hermes", "integrations/chat-sdk",
+                             "integrations/cloudflare-think", "integrations/mcp", "integrations/pipecat",
+                             "integrations/livekit", "integrations/elevenlabs", "integrations/your-own-backend",
+                             "integrations/agent-prompt", "integrations/skills"],
+            "transport and reliability": ["webhooks/index", "webhooks/subscriptions", "webhooks/verify-signatures",
+                                          "webhooks/delivery", "websocket/index", "websocket/observe-events",
+                                          "websocket/protocol", "websocket/acknowledgements", "websocket/full-sync",
+                                          "live/rate-limits", "live/idempotency", "live/retries", "live/errors",
+                                          "live/debugging", "live/examples", "calls/events", "calls/audio",
+                                          "calls/elevenlabs", "agent-to-agent/index"],
+            "reading data and limits": ["messages/message-details", "messages/attachment-types",
+                                        "messages/import-media", "messages/delete-attachments", "chats/history",
+                                        "interactions/selection-reference", "agents/blocked-handles",
+                                        "agents/who-can-message"],
+            "overviews whose child pages show the screen": ["messages/index", "chats/index", "interactions/index",
+                                                            "agents/image-recipes"],
+            "migration guides": ["resources/migrate-from-linq", "resources/migrate-from-photon",
+                                 "resources/migrate-from-telegram"],
+        }
+        listed = [page for pages in no_screen.values() for page in pages]
+        self.assertEqual(len(listed), len(set(listed)), "A page is listed twice")
+        def walk(node, tab, out):
+            if isinstance(node, str):
+                out.append((tab, node))
+            elif isinstance(node, list):
+                for child in node:
+                    walk(child, tab, out)
+            elif isinstance(node, dict):
+                for key in ("pages", "groups", "tabs", "anchors"):
+                    for child in node.get(key, []):
+                        walk(child, node.get("tab", tab), out)
+        nav = []
+        walk(json.loads((ROOT / "docs.json").read_text())["navigation"], None, nav)
+        guides = [page for tab, page in nav if tab == "Guides" and not re.match(r"(GET|POST|PUT|PATCH|DELETE) ", page)]
+        preview = re.compile(r'^import \{[^}]+\} from "/snippets/(?!hero-art)[a-z0-9-]+\.jsx";', re.M)
+        for page in guides:
+            shows = bool(preview.search((ROOT / f"{page}.mdx").read_text()))
+            if page in listed:
+                self.assertFalse(shows, f"{page} shows a preview; remove it from the no-screen list")
+            else:
+                self.assertTrue(shows, f"{page} needs a Preview tab of what the person sees, "
+                                       "or a place in the no-screen list")
+        self.assertEqual(set(listed) - set(guides), set(), "The no-screen list names a page not in Guides")
+
     def test_reply_preview_answers_a_photo_sent_alone(self):
         # The example reply names part 0 of a message that holds only the
         # photo, so the app draws the photo once, joined by its reply line,
