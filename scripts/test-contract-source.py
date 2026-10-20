@@ -44,10 +44,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # Carried from Server staging af7f1802: rating_request part and rating.created, rating.updated and rating.deleted; GET /v1/contacts/{handle}/rating; only people rate (403 for agents); no blocking the built-in relay agent (403); rive on contact list and lookup; an agent call to a person with no calls-capable build is 422; ContactCardItem.handle is a string; form parts carry value (Server #482, #492 and the rating and calls branches; #504 at 76713bfc changes no contract byte), October 2, 2026.
 # Carried from Server staging 78e958bd: MessageEvent.chat is not deprecated, it carries is_group (Server #520); and from ed5608a1: message events carry the Message object's chat_id, from, from_handle and is_from_me, with sender_handle and chat deprecated (Server #519); a call to an agent with no call.created webhook ends at once as no-answer (1fd72a0a), October 4, 2026.
 # Carried from Server staging 6f50fcb6: handles may be 2 characters, pattern ^[a-z][a-z0-9_]{1,31}$ (Server #516; #526 changes no contract byte), October 4, 2026.
-UPSTREAM_COMMIT = "6f50fcb69d1ce6dde8bf0fb0e12bd2ef379f0b09"
-UPSTREAM_STAGING_COMMIT = "6f50fcb69d1ce6dde8bf0fb0e12bd2ef379f0b09"
-UPSTREAM_SIZE = 362330
-UPSTREAM_SHA256 = "79bd85b0150ef45ea4bbe5f498507dd86d784e7fbf6c3b299a5a81db091aacdd"
+# Carried from Server 83e51c0d: a shared contact card reaches the chat's other agents as message.received with a system part and system_event (Server #542); POST /v1/messages takes every MessagePart type (Server #560), October 19, 2026.
+UPSTREAM_COMMIT = "83e51c0d3863c1a1355e56f32c496ef0ab952ee6"
+UPSTREAM_STAGING_COMMIT = "83e51c0d3863c1a1355e56f32c496ef0ab952ee6"
+UPSTREAM_SIZE = 363326
+UPSTREAM_SHA256 = "49361dfe61b97e7063b1edee9dc7cda5417688d05715ef3e6f2b885c51eb0a11"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
