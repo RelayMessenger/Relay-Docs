@@ -477,6 +477,36 @@ assert.equal(channels.length, 2, "Open again for the new id after a restart");
         self.assertIn('call.status === "ringing"', snippet)
         self.assertIn('"rive"', (ROOT / "calls/rive.mdx").read_text())
 
+    def test_on_screen_pages_show_their_preview(self):
+        # Each page about something a person sees carries the preview of it,
+        # and each scene draws the app's own words (Relay-iOS origin/staging
+        # 7cc3368e; Relay Server projection.ts eventText).
+        pages = {
+            "chats/activity.mdx": "activity", "chats/group-profile.mdx": "group-profile",
+            "chats/group-photo.mdx": "group-photo", "chats/participants.mdx": "participants",
+            "interactions/rating.mdx": "rating", "agents/contact-card.mdx": "agent-card",
+            "agents/profile-photos.mdx": "profile-photos", "agents/message-requests.mdx": "message-requests",
+        }
+        for page, name in pages.items():
+            self.assertIn(f'<ChatPreview scene="{name}"', (ROOT / page).read_text(), page)
+        snippet = (ROOT / "snippets/chat-preview.jsx").read_text()
+        def scene(name):
+            return snippet.split(f'scene === "{name}"', 1)[1].split("} else if (scene ===", 1)[0]
+        self.assertIn("act.text", scene("activity"))
+        self.assertIn("act.emoji", scene("activity"))
+        names = scene("group-profile")
+        self.assertIn("changed the group name to ${ev.new_value}", names)
+        self.assertIn("changed the group photo", names)
+        self.assertIn("m.parts[0].value", scene("participants"))
+        rating = scene("rating")
+        self.assertIn("{json.value}", rating)
+        self.assertIn("Tell us what you think.", rating)
+        self.assertIn(">Rate<", rating)
+        request = scene("message-requests")
+        self.assertIn("This conversation is from someone you haven\u2019t added.", request)
+        self.assertLess(request.index(">Add<"), request.index(">Delete<"))
+        self.assertIn('[["direct", "Direct chat"], ["group", "Group chat"]]', scene("profile-photos"))
+
     def test_reply_preview_answers_a_photo_sent_alone(self):
         # The example reply names part 0 of a message that holds only the
         # photo, so the app draws the photo once, joined by its reply line,
