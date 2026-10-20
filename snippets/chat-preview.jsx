@@ -1094,7 +1094,6 @@ export const ChatPreview = ({ scene, json, label }) => {
     // (RelayCallRive.swift:613, fit .cover); either hides the picture
     // (RelayCallView.swift:172). A still frame stands in for the feed.
     const feeds = {
-      "call-video": "/images/chat/photo-mountain-lake.jpg",
       "call-avatar": "/images/chat/call-avatar-face.jpg",
       "call-rive": "/images/chat/call-rive-character.jpg",
     };
@@ -1116,8 +1115,12 @@ export const ChatPreview = ({ scene, json, label }) => {
     const copies = [[0.25, -0.18, -0.18], [0.5, 0.14, 0.14], [0.8, 0, 0], [1.25, 0, -0.06]];
     const picture = (size, extra, key) => (
       <div key={key} style={{ width: size, height: size, borderRadius: size * 0.225, display: "flex", alignItems: "center", justifyContent: "center",
-        background: `linear-gradient(${ground[0]}, ${ground[1]})`, color: "#fff", fontWeight: 700, fontSize: size * 0.38, ...extra }}>
-        {name.slice(0, 1)}
+        background: "#0B75FF", ...extra }}>
+        {/* The agent's picture is the Relay message ball (Relay-Website LandingHeader.astro). */}
+        <svg viewBox="0 0 1024 1024" style={{ width: "72%", height: "72%" }} aria-hidden="true" focusable="false">
+          <path fill="#fff" d="M512 185C701 185 854 314 854 475C854 656 695 827 523 827C493 827 467 824 446 815C369 861 302 883 284 865C268 848 300 773 317 720C246 665 210 582 210 484C210 319 344 185 512 185Z" />
+          <path fill="none" stroke="#0B75FF" strokeWidth="40" strokeLinecap="round" d="M372 514C372 470 408 434 452 434C496 434 532 470 532 514M600 514C600 470 636 434 680 434C724 434 760 470 760 514" />
+        </svg>
       </div>
     );
     const glyphs = {
