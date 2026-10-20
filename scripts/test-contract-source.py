@@ -466,7 +466,7 @@ assert.equal(channels.length, 2, "Open again for the new id after a restart");
         # ringing call shows Decline and Accept, a live one the agent's feed
         # as a still frame, never a playing video.
         snippet = (ROOT / "snippets/chat-preview.jsx").read_text()
-        for page, scene, status in (("calls/call-a-person.mdx", "call-incoming", "ringing"),
+        for page, scene, status in (("calls/call-a-user.mdx", "call-incoming", "ringing"),
                                     ("calls/video.mdx", "call-video", "in-progress"),
                                     ("calls/avatars.mdx", "call-avatar", "in-progress"),
                                     ("calls/rive.mdx", "call-rive", "in-progress")):

@@ -57,7 +57,7 @@ second process on the same agent takes events from the first.
 - [Profile photos](https://docs.relayapp.im/agents/profile-photos): set the picture on the Contact Card.
 - [Calls](https://docs.relayapp.im/calls/index): join the call's room within 32 seconds of `call.created` to answer it. Bridge its audio to any voice provider through [Pipecat](https://docs.relayapp.im/integrations/pipecat), [LiveKit](https://docs.relayapp.im/integrations/livekit) or the [ElevenLabs bridge](https://docs.relayapp.im/calls/elevenlabs).
 - [Video calls](https://docs.relayapp.im/calls/video): the agent's camera is its own published track. It shows whenever the agent publishes one, whether or not the person's camera is on; any frame source works, including a [live avatar](https://docs.relayapp.im/calls/avatars).
-- [Call a person](https://docs.relayapp.im/calls/call-a-person): ring the owner when calls work.
+- [Call a user](https://docs.relayapp.im/calls/call-a-user): ring the owner when calls work.
 
 ## Identity and runtime setup
 
