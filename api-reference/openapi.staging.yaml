@@ -4087,6 +4087,67 @@ components:
           description: Reactions on this message part
           items:
             $ref: "#/components/schemas/Reaction"
+    DataPart:
+      type: object
+      additionalProperties: false
+      description: >-
+        A card drawn with A2UI v1.0 (https://a2ui.org): from an agent, `data` is a list of A2UI agent-to-renderer messages (createSurface,
+        updateComponents, updateDataModel, deleteSurface); only an agent sends
+        those. From a person's app, `data` holds A2UI renderer-to-agent
+        `action` messages (a tap: `{"version":"v1.0","action":{...}}`) about
+        a surface in the chat; an unknown surfaceId is refused with 404. A tap
+        reaches only the agent that created its surface (A2UI "Targeted
+        Delivery"): a message holding only taps is delivered to that agent
+        alone, and every other reader sees its data part empty. createSurface's catalogId is the A2UI basic catalog
+        (`https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json`) or
+        Relay's (`https://relayapp.im/a2ui/catalogs/relay/v1/catalog.json`).
+        Relay checks each message against the A2UI v1.0 schema and its
+        surface's catalog, applies the list in order, and reports each message
+        it could not apply in the response's `a2ui_errors`, in A2UI's standard
+        validation error format; when none applied, the send is refused with
+        that status and `a2ui_errors`. A later updateComponents,
+        updateDataModel or deleteSurface for a surface in the chat changes the
+        card that drew it, in place: the send adds no message, the response
+        carries the card, and every member receives `message.upserted`. Only
+        the agent that created a surface may change it.
+      required: [type, media_type, data]
+      properties:
+        type:
+          type: string
+          enum: [data]
+        media_type:
+          type: string
+          enum: [application/a2ui+json]
+        data:
+          type: array
+          minItems: 1
+          items:
+            type: object
+    DataPartResponse:
+      type: object
+      description: >-
+        An A2UI v1.0 card: every accepted message for each surface the part
+        created, in order, exactly as sent, so every reader replays the same
+        list.
+      required: [type, media_type, data, reactions]
+      properties:
+        type:
+          type: string
+          enum: [data]
+        media_type:
+          type: string
+          enum: [application/a2ui+json]
+        data:
+          type: array
+          items:
+            type: object
+        reactions:
+          type:
+            - array
+            - "null"
+          description: Reactions on this message part
+          items:
+            $ref: "#/components/schemas/Reaction"
     RatingRequestPart:
       type: object
       additionalProperties: false
@@ -7711,6 +7772,7 @@ components:
               - $ref: "#/components/schemas/PaymentReceiptPartResponse"
               - $ref: "#/components/schemas/LocationRequestPartResponse"
               - $ref: "#/components/schemas/RatingRequestPartResponse"
+              - $ref: "#/components/schemas/DataPartResponse"
               - $ref: "#/components/schemas/LocationPartResponse"
               - $ref: "#/components/schemas/PlacePartResponse"
               - $ref: "#/components/schemas/SystemPartResponse"
@@ -7899,6 +7961,26 @@ components:
         is_from_me:
           type: boolean
           description: Whether the agent receiving this event sent this message. Same value as the Message object's is_from_me.
+        metadata:
+          type: object
+          description: >-
+            Message metadata. On message.received it carries A2UI's
+            `a2uiRendererCapabilities` (renderer_capabilities.json): the
+            catalogs the Relay app draws, Relay's catalog first, as
+            `{"v1.0":{"supportedCatalogIds":["https://relayapp.im/a2ui/catalogs/relay/v1/catalog.json","https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json"]}}`.
+          properties:
+            a2uiRendererCapabilities:
+              type: object
+              required: [v1.0]
+              properties:
+                v1.0:
+                  type: object
+                  required: [supportedCatalogIds]
+                  properties:
+                    supportedCatalogIds:
+                      type: array
+                      items:
+                        type: string
         parts:
           type: array
           description: Message parts (text and/or media)
@@ -7919,6 +8001,7 @@ components:
               - $ref: "#/components/schemas/PaymentReceiptPartResponse"
               - $ref: "#/components/schemas/LocationRequestPartResponse"
               - $ref: "#/components/schemas/RatingRequestPartResponse"
+              - $ref: "#/components/schemas/DataPartResponse"
               - $ref: "#/components/schemas/LocationPartResponse"
               - $ref: "#/components/schemas/PlacePartResponse"
               - $ref: "#/components/schemas/SystemPartResponse"
@@ -7940,6 +8023,7 @@ components:
                 payment_receipt: "#/components/schemas/PaymentReceiptPartResponse"
                 location_request: "#/components/schemas/LocationRequestPartResponse"
                 rating_request: "#/components/schemas/RatingRequestPartResponse"
+                data: "#/components/schemas/DataPartResponse"
                 location: "#/components/schemas/LocationPartResponse"
                 place: "#/components/schemas/PlacePartResponse"
                 system: "#/components/schemas/SystemPartResponse"
@@ -8016,6 +8100,7 @@ components:
           payment: "#/components/schemas/PaymentPart"
           place: "#/components/schemas/PlacePart"
           rating_request: "#/components/schemas/RatingRequestPart"
+          data: "#/components/schemas/DataPart"
       oneOf:
         - $ref: "#/components/schemas/TextPart"
         - $ref: "#/components/schemas/MediaPart"
@@ -8031,6 +8116,7 @@ components:
         - $ref: "#/components/schemas/PaymentPart"
         - $ref: "#/components/schemas/PlacePart"
         - $ref: "#/components/schemas/RatingRequestPart"
+        - $ref: "#/components/schemas/DataPart"
     MessageReadWebhook:
       description: Complete webhook payload for message.read events (2026-08-30 format)
       allOf:
@@ -8592,6 +8678,7 @@ components:
               - $ref: "#/components/schemas/PaymentReceiptPartResponse"
               - $ref: "#/components/schemas/LocationRequestPartResponse"
               - $ref: "#/components/schemas/RatingRequestPartResponse"
+              - $ref: "#/components/schemas/DataPartResponse"
               - $ref: "#/components/schemas/LocationPartResponse"
               - $ref: "#/components/schemas/PlacePartResponse"
         created_at:
