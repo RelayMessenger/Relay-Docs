@@ -441,7 +441,7 @@ export const PaymentPreview = ({ part, label, controls = true, receipt = false, 
                   <rect x="1.5" y="6" width="9" height="7" rx="1.5" />
                   <path d="M3.5 6V4.5a2.5 2.5 0 0 1 5 0V6" />
                 </svg>
-                <span>{(() => { try { return new URL(part.checkout_url).host; } catch (error) { return "pay.staging.relayapp.im"; } })()}</span>
+                <span>{(() => { try { return new URL(part.checkout_url).host; } catch (error) { return "pay.relayapp.im"; } })()}</span>
               </div>
               <span aria-hidden="true" />
             </div>
