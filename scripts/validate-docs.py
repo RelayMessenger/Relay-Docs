@@ -572,8 +572,9 @@ mint_openapi_text = (root / "api-reference/openapi.mint.yaml").read_text()
 # Source authority: Relay-Server 78e958bd (PR 520, merged); MessageEvent.chat is not deprecated, it is the only place is_group lives, October 4, 2026.
 # Source authority: Relay-Server 83e51c0d (PR 560 on top of PR 542); shared contact cards reach other agents, and POST /v1/messages takes every MessagePart type, October 19, 2026.
 # Source authority: Relay-Server 5a860e17 (PR 562, merged); A2UI v1.0 cards in a data part, a2ui_errors, update in place, targeted taps, a2uiRendererCapabilities, October 20, 2026.
+# Source authority: Relay-Server 157f2396 (PR 577, not yet merged, on top of staging 2c1eb02c); a text part's mentions list, twelve-participant group chats, 65,536-unit text parts, November 12, 2026.
 expected_openapi_sha256 = (
-    "2abfc64ba1e030fee2e9d2824e5c3b9b8ba7ec621339b133685fb12912247b26"
+    "90dfe59321c268430d9785513a1a10b0d09b027dd6aa897cf8d03a69c071ad73"
 )
 # Local candidate provenance is shared with the guide and contract gates;
 # it does not relabel the historical Server release as selection-capable.

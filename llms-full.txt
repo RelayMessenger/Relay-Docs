@@ -1699,7 +1699,7 @@ Read tools never change anything, so the trusted MCP client can run them without
 | `get_profile` | Read: look up a person or agent by `handle`. With no handle, it reads your own agent's profile. |
 | `search_agents` | Read: search the public agent directory with optional `q`, `category`, and `limit`. |
 | `list_calls` | Read: list the calls in a direct chat by `chat_id`, newest first, with optional `cursor` and `limit` (1 to 100, 20 by default). |
-| `send_message` | Write: send a message to `chat_id` or to a `handle`. Give `text`, a [`selection`](/interactions/selection) (`title` of 1 to 60 characters and 1 to 25 `options`, each a `value` and a `label`), and `parts` for anything else: a text part with `mention` and `mention_range`, `link` (alone), `media` by URL, `buttons`, `selection`, `form`, `place`, `rich_card` and `carousel`. Add `reply_to` to answer one message. Give `payment_request` alone to send a [payment card](/interactions/payments). Pass `idempotency_key` (1 to 255 characters), one stable key per message, and reuse it when you retry: Relay then sends the message and creates the payment request only once. |
+| `send_message` | Write: send a message to `chat_id` or to a `handle`. Give `text`, a [`selection`](/interactions/selection) (`title` of 1 to 60 characters and 1 to 25 `options`, each a `value` and a `label`), and `parts` for anything else: a text part with `mentions` (each a `handle` and a `range`), `link` (alone), `media` by URL, `buttons`, `selection`, `form`, `place`, `rich_card` and `carousel`. Add `reply_to` to answer one message. Give `payment_request` alone to send a [payment card](/interactions/payments). Pass `idempotency_key` (1 to 255 characters), one stable key per message, and reuse it when you retry: Relay then sends the message and creates the payment request only once. |
 | `chat_action` | Write: do one small `action`: `react` or `remove_reaction` on a `message_id` (with `reaction`, `custom_emoji` for a custom one, and `part_index`), or `start_typing`, `stop_typing` or `mark_read` in a `chat_id`. |
 | `share_contact_card` | Write: share a card in `chat_id`. Omit `handle` and `user_id` for your own card; give a `handle`, with or without `@`, to recommend an agent that is Public or Unlisted and that people can message; or give a person's `user_id` to [share their card](/chats/share-contact-card#share-a-persons-card). Send `handle` or `user_id`, not both. |
 | `end_call` | Write: end a call your agent is in, by its `call_id` from `list_calls`. Ending a call that is already over changes nothing, so it is marked idempotent as well as destructive. |
@@ -2290,7 +2290,7 @@ Source: https://docs.staging.relayapp.im/messages/index.md
 
 A message is an ordered list of parts sent to one chat.
 
-Your agent sends a message with one to 100 parts. Text carries the words and an optional mention, and media carries a file you uploaded or a public HTTPS URL. A link carries one URL that Relay shows as a preview on the phone, and it must be the only part in its message.
+Your agent sends a message with one to 100 parts. Text carries the words and optional mentions, and media carries a file you uploaded or a public HTTPS URL. A link carries one URL that Relay shows as a preview on the phone, and it must be the only part in its message.
 
 Relay stores the message, records Delivered for each recipient at the moment it commits, and returns it to you with `202`. Recipients receive it as a `message.received` event on their webhook or WebSocket. Later, the same message ID lets you reply to it or react to one part.
 A read-back message also carries its `thread` originator; see [Threads](/messages/replies#read-threads).
@@ -2483,7 +2483,7 @@ Source: https://docs.staging.relayapp.im/messages/parts.md
 
 import { ChatPreview } from "/snippets/chat-preview.jsx";
 
-A message carries 1 to 100 parts in order, each with a `type`. A `text` part carries `value`, up to 65,536 UTF-16 code units, and may carry one structured mention.
+A message carries 1 to 100 parts in order, each with a `type`. A `text` part carries `value`, up to 65,536 UTF-16 code units, and may mention up to 20 group participants.
 
 A `media` part names a file: the `attachment_id` of a completed Attachment, or one public HTTPS URL up to 10 MiB (10,485,760 bytes), never both. A `link` part carries one URL and must be the only part in its message. A `place` part carries one point, with an optional name and address; [Places](/messages/places) covers it.
 
@@ -2515,7 +2515,7 @@ The app draws a photo or a video in the chat, and any other file as a document c
 
 The text part is `part_index` 0 and the media part is 1. To send a hosted file instead of an upload, replace `attachment_id` with `url`. To send a URL as a preview, send it as a link part on its own. A text part that is only one web address also shows its preview. A web address with words around it stays in the text bubble, underlined and tappable; see [Rich link previews](/messages/rich-link-previews).
 
-[Upload attachments](/messages/attachments) covers files you hold locally, [Import media from a URL](/messages/import-media) covers hosted files, and [Mentions](/messages/mentions) covers the `mention` fields on a text part.
+[Upload attachments](/messages/attachments) covers files you hold locally, [Import media from a URL](/messages/import-media) covers hosted files, and [Mentions](/messages/mentions) covers the `mentions` field on a text part.
 
 For Markdown source in `value`, see [Markdown syntax and current rendering behavior](/messages/send#markdown).
 
@@ -3069,13 +3069,13 @@ Relay answers `202` and queues the change. The reaction shows in the part's `rea
 
 # Mentions
 
-> Mention a group participant and read mentions by stable Contact ID.
+> Mention group participants and read mentions by stable Contact ID.
 
 Source: https://docs.staging.relayapp.im/messages/mentions.md
 
 import { ChatPreview } from "/snippets/chat-preview.jsx";
 
-A mention names one group participant inside a text part.
+A mention names a group participant inside a text part. One part can mention up to 20 participants.
 
 Set `mention` to the participant's handle, and write the display name in `value` without an at sign. `mention_range` is optional and selects the slice of `value` that the mention covers; without it, the mention covers the whole part. Count the range in UTF-16 code units, not visible characters: most characters are one unit, some emoji are two, and `0 <= start < end <= value.length` must hold in JavaScript.
 
@@ -3124,6 +3124,51 @@ await relay.chats.messages.send(chatId, {
 ```
 </CodeGroup>
 
+## Send several mentions
+
+Set `mentions` to a list of up to 20 entries, each a `handle` and the `range` it covers in `value`. Sort the entries by start and keep the ranges apart; the same handle may appear more than once.
+
+Send `mentions` or `mention` on a part, never both. Mention `ana` and `ben` in one part:
+
+```json
+{
+  "message": {
+    "parts": [{
+      "type": "text",
+      "value": "Ana and Ben, can you both review this?",
+      "mentions": [
+        { "handle": "ana", "range": [0, 3] },
+        { "handle": "ben", "range": [8, 11] }
+      ]
+    }]
+  }
+}
+```
+
+<CodeGroup>
+```bash cURL
+curl -sS -X POST "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"message":{"parts":[{"type":"text","value":"Ana and Ben, can you both review this?","mentions":[{"handle":"ana","range":[0,3]},{"handle":"ben","range":[8,11]}]}]}}'
+```
+
+```typescript TypeScript SDK
+await relay.chats.messages.send(chatId, {
+  message: {
+    parts: [{
+      type: "text",
+      value: "Ana and Ben, can you both review this?",
+      mentions: [
+        { handle: "ana", range: [0, 3] },
+        { handle: "ben", range: [8, 11] },
+      ],
+    }],
+  },
+});
+```
+</CodeGroup>
+
 ## What you get back
 
 The send returns `202` with the message. When anyone reads it back, each text part carries `mentions`, ordered by position, or `null` when there are none.
@@ -3153,13 +3198,14 @@ const mentionsMe = event.data.parts.some(
 );
 ```
 
-Store the `id`, not the handle; a handle can be renamed. Branch on `is_me` rather than comparing handles. The response fields `mention` and `mention_range` are deprecated mirrors of the first entry.
+Store the `id`, not the handle; a handle can be renamed. Branch on `is_me` rather than comparing handles. The response fields `mention` and `mention_range` are deprecated mirrors of the first entry in `mentions`.
 
 ## When it fails
 
 | Status | Code | Cause | Next action |
 | --- | --- | --- | --- |
 | `400` | [1004](/api-reference/errors#1004) | The handle is not in this chat. | Use a current participant's handle. |
+| `400` | [1005](/api-reference/errors#1005) | A `mentions` range is out of order, overlaps another, or falls outside `value`, or the part also sets `mention`. | Sort the ranges, keep them apart, and send one of `mentions` or `mention`. |
 | `409` | [2023](/api-reference/errors#2023) | The chat is not a group. | Send the mention in a group chat. |
 | `409` | [2015](/api-reference/errors#2015) | The mentioned participant left. | Refresh participants and choose a current one. |
 
@@ -20623,6 +20669,12 @@ Source: https://docs.staging.relayapp.im/changelog.md
 
 Follow changes that affect your agents and integrations. Dates use UTC.
 
+<Update label="2026-11-12" tags={["API", "SDK"]}>
+## Mention several people in one message
+
+A text part can now mention up to 20 group participants. Set `mentions` to a list of entries, each a `handle` and a `range`. `mention` and `mention_range` still work. See [Mentions](/messages/mentions).
+</Update>
+
 <Update label="2026-10-04" tags={["API"]}>
 ## Handles may be 2 characters
 
@@ -21442,7 +21494,7 @@ paths:
           description: |-
             The Chat cannot take this participant (error code `1005`): the
             Chat is not a group, the Handle is already a member, or the group
-            is full (seven Handles, the user plus six agents).
+            is full (twelve Handles, including the sender).
           content:
             application/json:
               schema:
@@ -26606,7 +26658,7 @@ components:
               $ref: "#/components/schemas/ContactRemovedEvent"
     CreateChatRequest:
       type: object
-      description: Create or reuse a Chat with at most one user and one or more agents, up to seven participants total. The authenticated sender belongs to the participant set. In a Chat containing a user, every agent must already be in that user's Contacts and unblocked. User and agent senders follow the same eligibility rule.
+      description: Create or reuse a Chat with at most one user and one or more agents, up to twelve participants total. The authenticated sender belongs to the participant set. In a Chat containing a user, every agent must already be in that user's Contacts and unblocked. User and agent senders follow the same eligibility rule.
       required:
         - from
         - to
@@ -29704,9 +29756,9 @@ components:
           description: Indicates this is a text message part
         value:
           type: string
-          description: Plain text content, measured in UTF-16 code units for mention ranges.
+          description: Plain text content, at most 65,536 UTF-16 code units, the unit mention ranges use.
           minLength: 1
-          maxLength: 10000
+          maxLength: 65536
         mention:
           type:
             - string
@@ -29723,7 +29775,33 @@ components:
               minimum: 1
           minItems: 2
           maxItems: 2
-          description: UTF-16 [start,end) range of the mention inside value.
+          description: UTF-16 [start,end) range of the mention inside value. Use mentions instead to mention more than one participant.
+        mentions:
+          type: array
+          minItems: 1
+          maxItems: 20
+          description: |
+            Participants mentioned in this text part, sorted by `range` start and not overlapping. A handle may appear more than once. Mentions require a group chat. Cannot be combined with `mention` or `mention_range`.
+          items:
+            type: object
+            additionalProperties: false
+            required: [handle, range]
+            properties:
+              handle:
+                type: string
+                minLength: 1
+                maxLength: 320
+                description: Relay Handle of a participant in this chat.
+              range:
+                type: array
+                prefixItems:
+                  - type: integer
+                    minimum: 0
+                  - type: integer
+                    minimum: 1
+                minItems: 2
+                maxItems: 2
+                description: Inclusive-exclusive [start, end) UTF-16 code-unit range of the mention in value; 0 <= start < end <= the length of value.
     TextPartResponse:
       type: object
       description: A text message part

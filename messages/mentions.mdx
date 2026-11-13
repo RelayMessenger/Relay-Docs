@@ -1,12 +1,12 @@
 ---
 title: "Mentions"
-description: "Mention a group participant and read mentions by stable Contact ID."
-keywords: ["mentions", "group Chat", "Contact ID", "is_me", "mention_range", "UTF-16"]
+description: "Mention group participants and read mentions by stable Contact ID."
+keywords: ["mentions", "group Chat", "Contact ID", "is_me", "mention_range", "UTF-16", "multiple mentions"]
 ---
 
 import { ChatPreview } from "/snippets/chat-preview.jsx";
 
-A mention names one group participant inside a text part.
+A mention names a group participant inside a text part. One part can mention up to 20 participants.
 
 Set `mention` to the participant's handle, and write the display name in `value` without an at sign. `mention_range` is optional and selects the slice of `value` that the mention covers; without it, the mention covers the whole part. Count the range in UTF-16 code units, not visible characters: most characters are one unit, some emoji are two, and `0 <= start < end <= value.length` must hold in JavaScript.
 
@@ -55,6 +55,51 @@ await relay.chats.messages.send(chatId, {
 ```
 </CodeGroup>
 
+## Send several mentions
+
+Set `mentions` to a list of up to 20 entries, each a `handle` and the `range` it covers in `value`. Sort the entries by start and keep the ranges apart; the same handle may appear more than once.
+
+Send `mentions` or `mention` on a part, never both. Mention `ana` and `ben` in one part:
+
+```json
+{
+  "message": {
+    "parts": [{
+      "type": "text",
+      "value": "Ana and Ben, can you both review this?",
+      "mentions": [
+        { "handle": "ana", "range": [0, 3] },
+        { "handle": "ben", "range": [8, 11] }
+      ]
+    }]
+  }
+}
+```
+
+<CodeGroup>
+```bash cURL
+curl -sS -X POST "https://api.staging.relayapp.im/v1/chats/$CHAT_ID/messages" \
+  -H "Authorization: Bearer $RELAY_AGENT_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"message":{"parts":[{"type":"text","value":"Ana and Ben, can you both review this?","mentions":[{"handle":"ana","range":[0,3]},{"handle":"ben","range":[8,11]}]}]}}'
+```
+
+```typescript TypeScript SDK
+await relay.chats.messages.send(chatId, {
+  message: {
+    parts: [{
+      type: "text",
+      value: "Ana and Ben, can you both review this?",
+      mentions: [
+        { handle: "ana", range: [0, 3] },
+        { handle: "ben", range: [8, 11] },
+      ],
+    }],
+  },
+});
+```
+</CodeGroup>
+
 ## What you get back
 
 The send returns `202` with the message. When anyone reads it back, each text part carries `mentions`, ordered by position, or `null` when there are none.
@@ -84,13 +129,14 @@ const mentionsMe = event.data.parts.some(
 );
 ```
 
-Store the `id`, not the handle; a handle can be renamed. Branch on `is_me` rather than comparing handles. The response fields `mention` and `mention_range` are deprecated mirrors of the first entry.
+Store the `id`, not the handle; a handle can be renamed. Branch on `is_me` rather than comparing handles. The response fields `mention` and `mention_range` are deprecated mirrors of the first entry in `mentions`.
 
 ## When it fails
 
 | Status | Code | Cause | Next action |
 | --- | --- | --- | --- |
 | `400` | [1004](/api-reference/errors#1004) | The handle is not in this chat. | Use a current participant's handle. |
+| `400` | [1005](/api-reference/errors#1005) | A `mentions` range is out of order, overlaps another, or falls outside `value`, or the part also sets `mention`. | Sort the ranges, keep them apart, and send one of `mentions` or `mention`. |
 | `409` | [2023](/api-reference/errors#2023) | The chat is not a group. | Send the mention in a group chat. |
 | `409` | [2015](/api-reference/errors#2015) | The mentioned participant left. | Refresh participants and choose a current one. |
 
