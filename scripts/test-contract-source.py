@@ -46,10 +46,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # Carried from Server staging 6f50fcb6: handles may be 2 characters, pattern ^[a-z][a-z0-9_]{1,31}$ (Server #516; #526 changes no contract byte), October 4, 2026.
 # Carried from Server 83e51c0d: a shared contact card reaches the chat's other agents as message.received with a system part and system_event (Server #542); POST /v1/messages takes every MessagePart type (Server #560), October 19, 2026.
 # Carried from Server staging 5a860e17: A2UI v1.0 cards in a data part (application/a2ui+json), a2ui_errors, update in place, taps reach only the surface's agent, and metadata.a2uiRendererCapabilities on message events (Server #562), October 20, 2026.
-UPSTREAM_COMMIT = "5a860e171be2812f510610831fd50695ba3230ad"
-UPSTREAM_STAGING_COMMIT = "5a860e171be2812f510610831fd50695ba3230ad"
-UPSTREAM_SIZE = 367171
-UPSTREAM_SHA256 = "2abfc64ba1e030fee2e9d2824e5c3b9b8ba7ec621339b133685fb12912247b26"
+# Carried from Server fix/multi-mention 157f2396 (Server #577, on top of staging 2c1eb02c): a text part's mentions list (1 to 20 handle and range entries); also carries staging's twelve-participant group chats (#574) and 65,536-unit text parts (#568), November 12, 2026.
+UPSTREAM_COMMIT = "157f2396cced6a5a006cc94bcde907d0e0f00fac"
+UPSTREAM_STAGING_COMMIT = "157f2396cced6a5a006cc94bcde907d0e0f00fac"
+UPSTREAM_SIZE = 368314
+UPSTREAM_SHA256 = "90dfe59321c268430d9785513a1a10b0d09b027dd6aa897cf8d03a69c071ad73"
 CANDIDATE_RECORD = {
     "status": "local-candidate-not-published",
     "repository": "Relay-SDK",
