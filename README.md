@@ -137,12 +137,9 @@ npm run dev
 
 ## Staging preview
 
-`.github/workflows/preview.yml` validates every push to `staging`, every ready
-pull request, and any branch chosen by a manual run, then creates a Mintlify preview
-deployment.
-
-Draft pull requests skip both validation workflows and their hosted preview step. Run
-their checks in Daytona before requesting review.
+`.github/workflows/preview.yml` is the only pull request check. It validates every
+push to `staging`, every pull request into `staging`, and any branch chosen by a
+manual run, then creates a Mintlify preview deployment.
 
 Configure these GitHub values:
 
