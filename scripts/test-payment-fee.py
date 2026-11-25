@@ -8,7 +8,6 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACTS = (
     "api-reference/openapi.yaml",
-    "api-reference/openapi.staging.yaml",
     "api-reference/openapi.mint.yaml",
 )
 

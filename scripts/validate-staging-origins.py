@@ -10,7 +10,7 @@ import json
 import re
 import unittest
 from pathlib import Path
-from origins import CONTENT_SUFFIXES, STAGING_HOSTS, STAGING_PACKAGE_REFERENCE, STAGING_INSTRUCTION_REFERENCE, ROOT, origin, target
+from origins import CONTENT_SUFFIXES, STAGING_HOSTS, STAGING_PACKAGE_REFERENCE, STAGING_INSTRUCTION_REFERENCE, ROOT, origin, project_openapi, target
 
 PRODUCTION = re.compile(r"(?:https|wss)://(?:api|console|docs|go)\.relayapp\.im")
 STAGING = re.compile(
@@ -180,8 +180,12 @@ def validate() -> None:
                 continue
             if STAGING.search(path.read_text()):
                 failures.append(f"{relative}: staging origin in production content")
-    for name in ("openapi.staging.yaml", "openapi.mint.yaml"):
-        text = (ROOT / "api-reference" / name).read_text()
+    if (ROOT / "api-reference/openapi.staging.yaml").exists():
+        failures.append("openapi.staging.yaml: redundant projected OpenAPI copy must not be committed")
+    for name, text in (
+        ("projected openapi.yaml", project_openapi((ROOT / "api-reference/openapi.yaml").read_text())),
+        ("openapi.mint.yaml", (ROOT / "api-reference/openapi.mint.yaml").read_text()),
+    ):
         if mode == "staging" and PRODUCTION.search(text):
             failures.append(f"{name}: production target in staging API presentation")
         if f"url: https://{api}\n" not in text:

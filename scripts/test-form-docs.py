@@ -241,14 +241,12 @@ class FormDocsTests(unittest.TestCase):
             self.assertEqual((ROOT / "api-reference/openapi.yaml").read_bytes(), Path(source).read_bytes())
         self.check_contract_limits()
 
-    def test_staging_and_mintlify_projections_keep_form(self):
-        for path in ("api-reference/openapi.staging.yaml", "api-reference/openapi.mint.yaml"):
-            with self.subTest(path=path):
-                contract = read(path)
-                for name in ("FormPart", "FormResponsePart", "FormPartResponse", "FormResponsePartResponse"):
-                    self.assertRegex(contract, rf"(?m)^    {name}:$")
-                for value in ("form", "form_response"):
-                    self.assertRegex(contract, rf"(?m)^\s+{value}: ['\"]?#/components/schemas/Form")
+    def test_mintlify_projection_keeps_form(self):
+        contract = read("api-reference/openapi.mint.yaml")
+        for name in ("FormPart", "FormResponsePart", "FormPartResponse", "FormResponsePartResponse"):
+            self.assertRegex(contract, rf"(?m)^    {name}:$")
+        for value in ("form", "form_response"):
+            self.assertRegex(contract, rf"(?m)^\s+{value}: ['\"]?#/components/schemas/Form")
 
     def check_contract_limits(self):
         for name, label_limit in (("FormTextField", 20), ("FormSelectField", 30),

@@ -63,8 +63,9 @@ API Reference
 
 `api-reference/openapi.yaml` is copied byte-for-byte from the Relay Server contract.
 
-Staging presentation is generated separately by `scripts/build-staging-openapi.py`.
-It changes only the HTTPS and WebSocket API origins in `openapi.staging.yaml`;
+Staging presentation is projected in memory by `scripts/origins.py` (`project_openapi`)
+when building `api-reference/openapi.mint.yaml` and `llms-full.txt`.
+It changes only the HTTPS and WebSocket API origins;
 the canonical contract and its checksum remain unchanged. The Mintlify playground
 and LLM files consume that staging projection. Guides and SDK constructors must
 explicitly use the staging API, and Console actions must open staging Console.

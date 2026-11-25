@@ -4,7 +4,7 @@ import json
 import re
 from pathlib import Path
 from api_navigation import hidden_endpoints, page_paths, strip_hidden_paths, walk_pages
-from origins import origin
+from origins import origin, project_openapi
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -264,7 +264,7 @@ def main() -> None:
 
     config = json.loads((ROOT / "docs.json").read_text())
     entries = navigation_entries(config)
-    openapi_text = (ROOT / "api-reference/openapi.staging.yaml").read_text()
+    openapi_text = project_openapi((ROOT / "api-reference/openapi.yaml").read_text(), root=ROOT)
     operations = openapi_operations(openapi_text)
 
     configured_endpoints = {

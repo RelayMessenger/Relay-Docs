@@ -175,7 +175,6 @@ class EnvironmentTests(unittest.TestCase):
         # Full Redocly/Mintlify rebuild is also exercised by npm run validate.
         for command in (
             ["python3", "scripts/docs_analytics.py"],
-            ["python3", "scripts/build-staging-openapi.py"],
             ["python3", "scripts/build-agent-prompt.py"],
             ["python3", "scripts/build-llms.py"],
         ):
