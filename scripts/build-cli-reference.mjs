@@ -100,6 +100,7 @@ const GUIDE_LINKS = {
   docs: ['Quickstart', '/start/quickstart'],
   'config-path': ['Quickstart', '/start/quickstart'],
   help: ['Quickstart', '/start/quickstart'],
+  beta: ['Quickstart', '/start/quickstart'],
   oauth: ['Log in with Relay', '/agents/log-in-with-relay'],
   directory: ['Who can message an agent', '/agents/who-can-message'],
   'payment-requests': ['Payments', '/interactions/payments'],
@@ -193,7 +194,8 @@ const TITLES = {
   "contact-card-share": "Share the contact card",
   "docs": "Print the docs",
   "config-path": "Print the config path",
-  "help": "Help"
+  "help": "Help",
+  "beta": "Join the beta"
 };
 
 const CLI_GROUPS = [
@@ -378,6 +380,7 @@ const CLI_GROUPS = [
     "group": "Tools",
     "pages": [
       "cli/doctor",
+      ...(program.commands.some((command) => command.name() === "beta") ? ["cli/reference/beta"] : []),
       "cli/reference/docs",
       "cli/reference/config-path",
       "cli/reference/help"
