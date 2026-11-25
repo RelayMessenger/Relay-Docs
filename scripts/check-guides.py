@@ -16,6 +16,7 @@ import subprocess
 from pathlib import Path
 from urllib.parse import urlsplit
 from docs_structure import TASK_VERBS, authored_paths, is_task_guide, prose
+from origins import project_openapi
 
 ROOT = Path(__file__).resolve().parents[1]
 FENCES = re.compile(r'^(`{3,})([^\n]*)\n(.*?)^\1[ \t]*$', re.M | re.S)
@@ -254,7 +255,7 @@ def check_17(root):
     module = load('build-llms'); module.ROOT = root
     config = json.loads((root / 'docs.json').read_text())
     entries = module.navigation_entries(config)
-    spec = (root / 'api-reference/openapi.staging.yaml').read_text()
+    spec = project_openapi((root / 'api-reference/openapi.yaml').read_text(), root=root)
     outputs = {'llms.txt': module.render_index(config, entries, module.openapi_operations(spec)), 'llms-full.txt': module.render_full(config, entries, spec)}
     for name, expected in outputs.items():
         assert (root / name).read_text() == expected, f'{name}: stale page set'

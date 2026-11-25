@@ -10,7 +10,7 @@ from unittest.mock import patch
 import unittest
 from pathlib import Path
 
-from origins import target
+from origins import project_openapi, target
 from contract_source import verify_contract_source
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -891,7 +891,11 @@ assert.equal(openedURL, null);
                         f"{scheme}://{host}.relayapp.im".encode(),
                         f"{scheme}://{host}.staging.relayapp.im".encode(),
                     )
-        self.assertEqual((ROOT / "api-reference/openapi.staging.yaml").read_bytes(), expected)
+        self.assertEqual(
+            project_openapi((ROOT / "api-reference/openapi.yaml").read_text()).encode(),
+            expected,
+        )
+        self.assertFalse((ROOT / "api-reference/openapi.staging.yaml").exists())
 
     def test_error_is_integrated_in_navigation_and_generated_surfaces(self):
         page = "api-reference/errors"

@@ -167,12 +167,13 @@ STAGING_INSTRUCTION_REFERENCE = re.compile(
 )
 
 
-def target() -> str:
+def target(root: Path = ROOT) -> str:
     """`production` when asked explicitly or recorded in `.docs-target`."""
     if "--production" in sys.argv[1:]:
         return "production"
-    if TARGET_FILE.is_file():
-        value = TARGET_FILE.read_text().strip()
+    target_file = TARGET_FILE if root == ROOT else root / TARGET_FILE.name
+    if target_file.is_file():
+        value = target_file.read_text().strip()
         if value not in ("staging", "production"):
             raise SystemExit(f".docs-target must be staging or production, not {value!r}")
         return value
@@ -199,8 +200,22 @@ def source_ref() -> str:
     return "main" if target() == "production" else "staging"
 
 
-def origin(host: str) -> str:
+def origin(host: str, root: Path = ROOT) -> str:
     """The host to expect in this checkout, given its staging spelling."""
     if host not in STAGING_TO_PRODUCTION:
         raise KeyError(host)
-    return STAGING_TO_PRODUCTION[host] if target() == "production" else host
+    return STAGING_TO_PRODUCTION[host] if target(root) == "production" else host
+
+
+def project_openapi(source: str, root: Path = ROOT) -> str:
+    """Project deployment origins onto canonical OpenAPI text without editing it.
+
+    On staging the API origins become api.staging.relayapp.im. On the derived
+    production branch (`.docs-target` = production, or `--production`) the
+    projection is the identity, so the presented contract equals the canonical one.
+    """
+    for host in ("api", "docs", "go"):
+        destination = origin(f"{host}.staging.relayapp.im", root=root)
+        source = source.replace(f"https://{host}.relayapp.im", f"https://{destination}")
+        source = source.replace(f"wss://{host}.relayapp.im", f"wss://{destination}")
+    return source
